@@ -18,6 +18,8 @@ function applyBuildVersion(attempt) {
         const seed = seedMatch?.[1]?.trim();
         seedChip.textContent = seed ? `BUILD ${buildVersion} · SEED ${seed}` : `BUILD ${buildVersion}`;
         document.title = pageTitle;
+        window.setTimeout(() => document.title = pageTitle, 500);
+        window.setTimeout(() => document.title = pageTitle, 2_000);
         return;
     }
 
