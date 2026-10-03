@@ -32,8 +32,18 @@ public sealed class PlanetLocalSurfaceMeshBuilder
             }
         }
 
-        var key = FormattableString.Invariant($"{patch.Frame.Up.X:R}:{patch.Frame.Up.Y:R}:{patch.Frame.Up.Z:R}:{patch.SizeMeters:R}:{patch.CellsPerAxis}");
-        return new PlanetLocalSurfaceMesh(key, positions, normals, elevations, triangleCount, patch.SizeMeters, cameraAltitudeMeters);
+        var anchorAddress = PlanetSurfaceAddressing.Encode(patch.Frame.Up);
+        var key = FormattableString.Invariant($"{anchorAddress}:{patch.SizeMeters:R}:{patch.CellsPerAxis}");
+        return new PlanetLocalSurfaceMesh(
+            key,
+            anchorAddress,
+            patch.Frame.Up,
+            positions,
+            normals,
+            elevations,
+            triangleCount,
+            patch.SizeMeters,
+            cameraAltitudeMeters);
     }
 
     private static void WriteTriangle(
