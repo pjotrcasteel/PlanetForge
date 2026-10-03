@@ -35,7 +35,7 @@ public sealed class PlanetPhysicsCalculatorTests
         var baseline = PlanetPhysicsCalculator.Calculate(earth);
         var darker = PlanetPhysicsCalculator.Calculate(earth with { BondAlbedo = 0.1 });
 
-        Assert.IsGreaterThan(darker.EquilibriumTemperatureKelvin, baseline.EquilibriumTemperatureKelvin);
+        Assert.IsGreaterThan(baseline.EquilibriumTemperatureKelvin, darker.EquilibriumTemperatureKelvin);
     }
 
     [TestMethod]
