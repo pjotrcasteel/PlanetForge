@@ -32,7 +32,7 @@ public sealed class PlanetSurfaceMeshBuilderTests
         {
             var position = new Vector3(tile.Positions[offset], tile.Positions[offset + 1], tile.Positions[offset + 2]);
             var normal = new Vector3(tile.Normals[offset], tile.Normals[offset + 1], tile.Normals[offset + 2]);
-            Assert.IsGreaterThan(Vector3.Dot(position, normal), 0f);
+            Assert.IsGreaterThan(0f, Vector3.Dot(position, normal));
         }
     }
 
