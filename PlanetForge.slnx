@@ -1,0 +1,17 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/PlanetForge.Domain/PlanetForge.Domain.csproj" />
+    <Project Path="src/PlanetForge.Application/PlanetForge.Application.csproj" />
+    <Project Path="src/PlanetForge.Infrastructure/PlanetForge.Infrastructure.csproj" />
+    <Project Path="src/PlanetForge.Bootstrap/PlanetForge.Bootstrap.csproj" />
+    <Project Path="src/PlanetForge.Presentation.Web/PlanetForge.Presentation.Web.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/PlanetForge.Domain.Tests/PlanetForge.Domain.Tests.csproj" />
+    <Project Path="tests/PlanetForge.Application.Tests/PlanetForge.Application.Tests.csproj" />
+  </Folder>
+  <Folder Name="/Solution Items/">
+    <File Path="Directory.Build.props" />
+    <File Path="README.md" />
+  </Folder>
+</Solution>

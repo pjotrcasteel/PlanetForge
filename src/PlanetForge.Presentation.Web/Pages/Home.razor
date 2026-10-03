@@ -1,0 +1,112 @@
+@implements IAsyncDisposable
+@inject LivingRockExperience Experience
+@inject IJSRuntime JsRuntime
+
+<main class="game-shell">
+    <section class="hero-copy">
+        <div>
+            <span class="eyebrow">MILESTONE 0.0.1 · LIVING ROCK</span>
+            <h1>PlanetForge</h1>
+            <p>Forge a world from first principles. For now: touch the rock, turn it, flood it, strip its atmosphere and generate another world.</p>
+        </div>
+        <div class="seed-chip">SEED @snapshot?.Seed</div>
+    </section>
+
+    <section class="planet-stage">
+        <canvas id="planet-canvas" aria-label="Interactive low-poly planet"></canvas>
+        <div class="stage-hint">DRAG TO ORBIT · SCROLL / PINCH TO ZOOM</div>
+    </section>
+
+    <section class="control-grid">
+        <article class="control-card">
+            <span class="control-label">SEA LEVEL</span>
+            <strong>@FormatSeaLevel()</strong>
+            <div class="button-row">
+                <button @onclick="LowerSeaLevelAsync">− Water</button>
+                <button @onclick="RaiseSeaLevelAsync">+ Water</button>
+            </div>
+        </article>
+
+        <article class="control-card">
+            <span class="control-label">ATMOSPHERE</span>
+            <strong>@FormatAtmosphere()</strong>
+            <div class="button-row">
+                <button @onclick="DecreaseAtmosphereAsync">Thin</button>
+                <button @onclick="IncreaseAtmosphereAsync">Thicken</button>
+            </div>
+        </article>
+
+        <article class="control-card accent-card">
+            <span class="control-label">WORLD</span>
+            <strong>Procedural</strong>
+            <button class="wide-button" @onclick="ReseedAsync">Forge another planet</button>
+        </article>
+    </section>
+
+    <footer>
+        <span>PURE C# CORE</span>
+        <span>WEBGL RENDERER</span>
+        <span>NO COMMERCIAL ENGINE</span>
+    </footer>
+</main>
+
+@code {
+    private readonly CancellationTokenSource disposeCancellationTokenSource = new();
+    private IJSObjectReference? rendererModule;
+    private PlanetRenderSnapshot? snapshot;
+
+    protected override void OnInitialized() => snapshot = Experience.CreateSnapshot();
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender || snapshot is null)
+        {
+            return;
+        }
+
+        rendererModule = await JsRuntime.InvokeAsync<IJSObjectReference>("import", disposeCancellationTokenSource.Token, "./js/planetRenderer.js");
+        await rendererModule.InvokeVoidAsync("initialize", disposeCancellationTokenSource.Token, "planet-canvas", snapshot);
+    }
+
+    private Task RaiseSeaLevelAsync() => UpdateAsync(Experience.RaiseSeaLevel());
+
+    private Task LowerSeaLevelAsync() => UpdateAsync(Experience.LowerSeaLevel());
+
+    private Task IncreaseAtmosphereAsync() => UpdateAsync(Experience.IncreaseAtmosphere());
+
+    private Task DecreaseAtmosphereAsync() => UpdateAsync(Experience.DecreaseAtmosphere());
+
+    private Task ReseedAsync() => UpdateAsync(Experience.Reseed());
+
+    private async Task UpdateAsync(PlanetRenderSnapshot nextSnapshot)
+    {
+        snapshot = nextSnapshot;
+
+        if (rendererModule is not null)
+        {
+            await rendererModule.InvokeVoidAsync("setPlanet", disposeCancellationTokenSource.Token, snapshot);
+        }
+    }
+
+    private string FormatSeaLevel() => snapshot is null ? "—" : $"{snapshot.SeaLevel * 100:+0.0;-0.0;0.0}%";
+
+    private string FormatAtmosphere() => snapshot is null ? "—" : $"{snapshot.AtmosphereDensity * 100:0}%";
+
+    public async ValueTask DisposeAsync()
+    {
+        disposeCancellationTokenSource.Cancel();
+
+        if (rendererModule is not null)
+        {
+            try
+            {
+                await rendererModule.DisposeAsync();
+            }
+            catch (JSDisconnectedException)
+            {
+            }
+        }
+
+        disposeCancellationTokenSource.Dispose();
+    }
+}

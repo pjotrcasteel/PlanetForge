@@ -1,0 +1,7 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <ProjectReference Include="../PlanetForge.Application/PlanetForge.Application.csproj" />
+    <ProjectReference Include="../PlanetForge.Infrastructure/PlanetForge.Infrastructure.csproj" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.0" />
+  </ItemGroup>
+</Project>

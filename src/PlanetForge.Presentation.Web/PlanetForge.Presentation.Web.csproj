@@ -1,0 +1,8 @@
+<Project Sdk="Microsoft.NET.Sdk.BlazorWebAssembly">
+  <ItemGroup>
+    <ProjectReference Include="../PlanetForge.Application/PlanetForge.Application.csproj" />
+    <ProjectReference Include="../PlanetForge.Bootstrap/PlanetForge.Bootstrap.csproj" />
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly" Version="10.0.0" />
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly.DevServer" Version="10.0.0" PrivateAssets="all" />
+  </ItemGroup>
+</Project>
