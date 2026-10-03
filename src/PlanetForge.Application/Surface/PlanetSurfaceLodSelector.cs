@@ -4,9 +4,17 @@ namespace PlanetForge.Application.Surface;
 
 public sealed class PlanetSurfaceLodSelector(PlanetSurfaceLodOptions options)
 {
+    private const int FarOrbitLevel = 1;
+    private const double FarOrbitDistanceFromCenter = 1.35;
+
     public IReadOnlyList<PlanetTileId> Select(PlanetSurfaceView view)
     {
         Validate(view);
+        if (view.CameraDistanceFromCenter >= FarOrbitDistanceFromCenter)
+        {
+            return CreateGlobalCoverage(FarOrbitLevel);
+        }
+
         var normalizedDirection = PlanetVector.Normalize(view.CameraDirection);
         var normalizedView = view with { CameraDirection = normalizedDirection };
         var result = new List<PlanetTileId>();
@@ -40,6 +48,24 @@ public sealed class PlanetSurfaceLodSelector(PlanetSurfaceLodOptions options)
         }
 
         result.Add(id);
+    }
+
+    private static IReadOnlyList<PlanetTileId> CreateGlobalCoverage(int level)
+    {
+        var tilesPerAxis = 1 << level;
+        var result = new List<PlanetTileId>(6 * tilesPerAxis * tilesPerAxis);
+        foreach (var face in Enum.GetValues<CubeFace>())
+        {
+            for (var y = 0; y < tilesPerAxis; y++)
+            {
+                for (var x = 0; x < tilesPerAxis; x++)
+                {
+                    result.Add(new PlanetTileId(face, level, x, y));
+                }
+            }
+        }
+
+        return result;
     }
 
     private bool IsVisible(PlanetTileBounds bounds, PlanetSurfaceView view)
