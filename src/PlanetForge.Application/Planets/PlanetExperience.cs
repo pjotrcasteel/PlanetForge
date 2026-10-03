@@ -1,4 +1,5 @@
 using PlanetForge.Application.Rendering;
+using PlanetForge.Application.Surface;
 using PlanetForge.Domain.Atmosphere;
 using PlanetForge.Domain.Climate;
 using PlanetForge.Domain.Hydrology;
@@ -7,10 +8,10 @@ using PlanetForge.Domain.Planets;
 
 namespace PlanetForge.Application.Planets;
 
-public sealed class PlanetExperience(PlanetSurfaceMeshCache surfaceMeshCache)
+public sealed class PlanetExperience(PlanetSurfaceMeshCache surfaceMeshCache, PlanetSurfaceLodSelector surfaceLodSelector)
 {
     private const int GlobalSurfaceLevel = 1;
-    private const int GlobalSurfaceCellsPerAxis = 12;
+    private const int SurfaceCellsPerAxis = 12;
     private const double MinimumOrbitalDistanceAu = 0.25;
     private const double MaximumOrbitalDistanceAu = 3.0;
     private const double MinimumStellarLuminositySolar = 0.2;
@@ -31,6 +32,7 @@ public sealed class PlanetExperience(PlanetSurfaceMeshCache surfaceMeshCache)
     private const double MaximumVisualSeaLevelMeters = 6_000.0;
 
     private readonly PlanetState state = new();
+    private PlanetSurfaceView? surfaceView;
 
     public PlanetRenderSnapshot CreateSnapshot()
     {
@@ -41,7 +43,7 @@ public sealed class PlanetExperience(PlanetSurfaceMeshCache surfaceMeshCache)
         var seaLevelMeters = CalculateVisualSeaLevelMeters(water);
         var atmosphereDensity = CalculateAtmosphereDensity(atmosphere.SurfacePressurePascals);
         var radiusMeters = state.PhysicalParameters.RadiusMeters;
-        var surfaceTiles = surfaceMeshCache.GetOrBuildGlobal(GlobalSurfaceLevel, GlobalSurfaceCellsPerAxis, state.Seed, radiusMeters);
+        var surfaceTiles = CreateSurfaceTiles(radiusMeters);
 
         return new PlanetRenderSnapshot(
             surfaceTiles,
@@ -55,6 +57,12 @@ public sealed class PlanetExperience(PlanetSurfaceMeshCache surfaceMeshCache)
             climate,
             state.WaterParameters,
             water);
+    }
+
+    public PlanetRenderSnapshot UpdateSurfaceView(PlanetSurfaceView view)
+    {
+        surfaceView = view;
+        return CreateSnapshot();
     }
 
     public PlanetRenderSnapshot MoveOrbitInward()
@@ -165,6 +173,17 @@ public sealed class PlanetExperience(PlanetSurfaceMeshCache surfaceMeshCache)
     {
         state.ResetEarthReference();
         return CreateSnapshot();
+    }
+
+    private IReadOnlyList<PlanetSurfaceTileMesh> CreateSurfaceTiles(double radiusMeters)
+    {
+        if (surfaceView is null)
+        {
+            return surfaceMeshCache.GetOrBuildGlobal(GlobalSurfaceLevel, SurfaceCellsPerAxis, state.Seed, radiusMeters);
+        }
+
+        var selectedTiles = surfaceLodSelector.Select(surfaceView);
+        return surfaceMeshCache.GetOrBuild(selectedTiles, SurfaceCellsPerAxis, state.Seed, radiusMeters);
     }
 
     private void ChangeOrbitalDistance(double deltaAstronomicalUnits)
