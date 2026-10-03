@@ -20,6 +20,38 @@ public sealed class PlanetSurfaceMeshCacheTests
     }
 
     [TestMethod]
+    public void GetOrBuild_SameTileSetTwice_ReturnsReferencesWithoutGeometryOnSecondRequest()
+    {
+        var cache = CreateCache();
+        PlanetTileId[] ids =
+        [
+            new(CubeFace.PositiveZ, 1, 0, 0),
+            new(CubeFace.PositiveZ, 1, 1, 0),
+        ];
+
+        var first = cache.GetOrBuild(ids, 8, 42, 6_371_000.0);
+        var second = cache.GetOrBuild(ids, 8, 42, 6_371_000.0);
+
+        Assert.IsTrue(first.All(mesh => mesh.IncludesGeometry));
+        Assert.IsTrue(second.All(mesh => !mesh.IncludesGeometry));
+        Assert.IsTrue(first.Select(mesh => mesh.Key).SequenceEqual(second.Select(mesh => mesh.Key)));
+        Assert.IsTrue(first.Select(mesh => mesh.SurfaceVertexCount).SequenceEqual(second.Select(mesh => mesh.SurfaceVertexCount)));
+    }
+
+    [TestMethod]
+    public void GetOrBuild_DifferentTileSet_ReturnsGeometryForNewRequest()
+    {
+        var cache = CreateCache();
+        PlanetTileId[] firstIds = [new(CubeFace.PositiveZ, 1, 0, 0)];
+        PlanetTileId[] secondIds = [new(CubeFace.PositiveZ, 1, 1, 0)];
+
+        _ = cache.GetOrBuild(firstIds, 8, 42, 6_371_000.0);
+        var second = cache.GetOrBuild(secondIds, 8, 42, 6_371_000.0);
+
+        Assert.IsTrue(second.All(mesh => mesh.IncludesGeometry));
+    }
+
+    [TestMethod]
     public void GetOrBuild_SeedChange_InvalidatesCachedMeshes()
     {
         var cache = CreateCache();
