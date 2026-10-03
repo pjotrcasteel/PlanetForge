@@ -54,6 +54,48 @@ public sealed class PlanetExperienceSurfaceLodTests
     }
 
     [TestMethod]
+    public void MoveLocalSurfaceAnchor_ChangesCanonicalAddressAndPreservesTravelDistance()
+    {
+        var experience = CreateExperience();
+        var cameraDistance = 1.0 + (10.0 / EarthRadiusMeters);
+        var view = new PlanetSurfaceView(PlanetVector.UnitZ, cameraDistance, 1080, Math.PI / 4.2) { ViewportAspectRatio = 16.0 / 9.0 };
+        var initial = experience.UpdateSurfaceView(view);
+
+        var moved = experience.MoveLocalSurfaceAnchor(100.0, 0.0);
+
+        Assert.IsNotNull(initial.LocalSurface);
+        Assert.IsNotNull(moved.LocalSurface);
+        Assert.AreNotEqual(initial.LocalSurface.AnchorAddress, moved.LocalSurface.AnchorAddress);
+        var angularDistance = Math.Acos(Math.Clamp(PlanetVector.Dot(initial.LocalSurface.AnchorDirection, moved.LocalSurface.AnchorDirection), -1.0, 1.0));
+        Assert.AreEqual(100.0, angularDistance * EarthRadiusMeters, 0.01);
+    }
+
+    [TestMethod]
+    public void UpdateSurfaceView_WhileLocal_DoesNotReplaceTravelledAnchorWithCameraDirection()
+    {
+        var experience = CreateExperience();
+        var cameraDistance = 1.0 + (10.0 / EarthRadiusMeters);
+        var view = new PlanetSurfaceView(PlanetVector.UnitZ, cameraDistance, 1080, Math.PI / 4.2) { ViewportAspectRatio = 16.0 / 9.0 };
+        experience.UpdateSurfaceView(view);
+        var travelled = experience.MoveLocalSurfaceAnchor(250.0, 125.0);
+
+        var afterCameraUpdate = experience.UpdateSurfaceView(view with { CameraDirection = PlanetVector.UnitX });
+
+        Assert.IsNotNull(travelled.LocalSurface);
+        Assert.IsNotNull(afterCameraUpdate.LocalSurface);
+        Assert.AreEqual(travelled.LocalSurface.AnchorAddress, afterCameraUpdate.LocalSurface.AnchorAddress);
+        Assert.AreEqual(travelled.LocalSurface.AnchorDirection, afterCameraUpdate.LocalSurface.AnchorDirection);
+    }
+
+    [TestMethod]
+    public void MoveLocalSurfaceAnchor_WithoutLocalView_Throws()
+    {
+        var experience = CreateExperience();
+
+        Assert.ThrowsExactly<InvalidOperationException>(() => experience.MoveLocalSurfaceAnchor(1.0, 0.0));
+    }
+
+    [TestMethod]
     public void CreateSnapshot_BeforeCameraView_UsesCompleteGlobalFallback()
     {
         var experience = CreateExperience();
