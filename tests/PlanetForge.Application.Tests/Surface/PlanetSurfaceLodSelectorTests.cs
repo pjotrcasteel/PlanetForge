@@ -18,14 +18,14 @@ public sealed class PlanetSurfaceLodSelectorTests
     }
 
     [TestMethod]
-    public void Select_OppositeRootFace_IsHorizonCulled()
+    public void Select_OppositeRootFace_KeepsCoarseFallbackCoverage()
     {
-        var selector = new PlanetSurfaceLodSelector(new PlanetSurfaceLodOptions(0, 10_000.0, 0.0));
+        var selector = new PlanetSurfaceLodSelector(new PlanetSurfaceLodOptions(3, 220.0, 0.0));
 
-        var tiles = selector.Select(new PlanetSurfaceView(new PlanetVector(0.0, 0.0, 1.0), 2.0, 1080, Math.PI / 4.0));
+        var tiles = selector.Select(new PlanetSurfaceView(new PlanetVector(0.0, 0.0, 1.0), 1.4, 1080, Math.PI / 4.0));
 
-        Assert.IsFalse(tiles.Any(tile => tile.Face == CubeFace.NegativeZ));
-        Assert.IsTrue(tiles.Any(tile => tile.Face == CubeFace.PositiveZ));
+        Assert.IsTrue(tiles.Any(tile => tile.Face == CubeFace.NegativeZ && tile.Level == 0));
+        Assert.IsTrue(tiles.Any(tile => tile.Face == CubeFace.PositiveZ && tile.Level > 0));
     }
 
     [TestMethod]
