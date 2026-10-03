@@ -32,6 +32,13 @@ public partial class Home
         return snapshot;
     }
 
+    [JSInvokable("MoveLocalSurfaceAnchor")]
+    public PlanetRenderSnapshot MoveLocalSurfaceAnchor(double eastMeters, double northMeters)
+    {
+        snapshot = Experience.MoveLocalSurfaceAnchor(eastMeters, northMeters);
+        return snapshot;
+    }
+
     private DotNetObjectReference<Home> GetOrCreateSurfaceLodReference() => surfaceLodReference ??= DotNetObjectReference.Create(this);
 
     private void DisposeSurfaceLodReference()
