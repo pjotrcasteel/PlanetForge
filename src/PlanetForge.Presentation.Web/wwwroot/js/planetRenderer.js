@@ -15,22 +15,26 @@ export function setPlanet(snapshot) {
     if (!state) return;
     state.seaLevel = snapshot.seaLevel;
     state.atmosphereDensity = snapshot.atmosphereDensity;
+    state.equilibriumTemperature = snapshot.physics.equilibriumTemperatureKelvin;
     state.surfaceTemperature = snapshot.climate.surfaceTemperatureKelvin;
     state.solarFlux = snapshot.physics.solarFluxWattsPerSquareMeter;
     state.iceFraction = snapshot.water.iceFraction;
     state.liquidFraction = snapshot.water.liquidFraction;
     state.vaporFraction = snapshot.water.vaporFraction;
-    state.pressurePascals = snapshot.atmosphere.surfacePressurePascals;
-    uploadMesh(state, snapshot.mesh.positions, snapshot.mesh.normals);
+
+    if (state.seed !== snapshot.seed) {
+        state.seed = snapshot.seed;
+        uploadSurface(state, snapshot.surfaceTiles);
+    }
 }
 
 function createState(canvas, gl) {
     const program = createProgram(gl, vertexShaderSource, fragmentShaderSource);
     return {
-        canvas, gl, program, vertexCount: 0, yaw: -0.65, pitch: 0.24, distance: 3.15,
-        dragging: false, lastX: 0, lastY: 0, seaLevel: -0.004, atmosphereDensity: 0.62,
-        surfaceTemperature: 288, solarFlux: 1361, iceFraction: 0, liquidFraction: 1, vaporFraction: 0, pressurePascals: 101325,
-        positionBuffer: gl.createBuffer(), normalBuffer: gl.createBuffer(),
+        canvas, gl, program, seed: null, tiles: [], yaw: -0.65, pitch: 0.24, distance: 3.15,
+        dragging: false, lastX: 0, lastY: 0, seaLevel: 0, atmosphereDensity: 0.6,
+        equilibriumTemperature: 255, surfaceTemperature: 288, solarFlux: 1361,
+        iceFraction: 0, liquidFraction: 1, vaporFraction: 0,
         attributes: {
             position: gl.getAttribLocation(program, 'aPosition'),
             normal: gl.getAttribLocation(program, 'aNormal')
@@ -41,38 +45,39 @@ function createState(canvas, gl) {
             light: gl.getUniformLocation(program, 'uLightDirection'),
             seaLevel: gl.getUniformLocation(program, 'uSeaLevel'),
             atmosphere: gl.getUniformLocation(program, 'uAtmosphere'),
+            equilibriumTemperature: gl.getUniformLocation(program, 'uEquilibriumTemperature'),
             surfaceTemperature: gl.getUniformLocation(program, 'uSurfaceTemperature'),
             solarFlux: gl.getUniformLocation(program, 'uSolarFlux'),
             iceFraction: gl.getUniformLocation(program, 'uIceFraction'),
             liquidFraction: gl.getUniformLocation(program, 'uLiquidFraction'),
             vaporFraction: gl.getUniformLocation(program, 'uVaporFraction'),
-            pressure: gl.getUniformLocation(program, 'uPressure'),
             mode: gl.getUniformLocation(program, 'uMode')
         }
     };
 }
 
-function uploadMesh(s, positions, normals) {
+function uploadSurface(s, surfaceTiles) {
     const gl = s.gl;
-    gl.bindBuffer(gl.ARRAY_BUFFER, s.positionBuffer);
-    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(positions), gl.STATIC_DRAW);
-    gl.bindBuffer(gl.ARRAY_BUFFER, s.normalBuffer);
-    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(normals), gl.STATIC_DRAW);
-    s.vertexCount = positions.length / 3;
+    for (const tile of s.tiles) {
+        gl.deleteBuffer(tile.positionBuffer);
+        gl.deleteBuffer(tile.normalBuffer);
+    }
+
+    s.tiles = surfaceTiles.map(tile => {
+        const positionBuffer = gl.createBuffer();
+        const normalBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(tile.positions), gl.STATIC_DRAW);
+        gl.bindBuffer(gl.ARRAY_BUFFER, normalBuffer);
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(tile.normals), gl.STATIC_DRAW);
+        return { key: tile.key, positionBuffer, normalBuffer, vertexCount: tile.positions.length / 3 };
+    });
 }
 
 function installInput(s) {
     const canvas = s.canvas;
-    canvas.addEventListener('pointerdown', event => {
-        s.dragging = true;
-        s.lastX = event.clientX;
-        s.lastY = event.clientY;
-        canvas.setPointerCapture(event.pointerId);
-    });
-    canvas.addEventListener('pointerup', event => {
-        s.dragging = false;
-        canvas.releasePointerCapture(event.pointerId);
-    });
+    canvas.addEventListener('pointerdown', event => { s.dragging = true; s.lastX = event.clientX; s.lastY = event.clientY; canvas.setPointerCapture(event.pointerId); });
+    canvas.addEventListener('pointerup', event => { s.dragging = false; canvas.releasePointerCapture(event.pointerId); });
     canvas.addEventListener('pointercancel', () => { s.dragging = false; });
     canvas.addEventListener('pointermove', event => {
         if (!s.dragging) return;
@@ -81,10 +86,7 @@ function installInput(s) {
         s.lastX = event.clientX;
         s.lastY = event.clientY;
     });
-    canvas.addEventListener('wheel', event => {
-        event.preventDefault();
-        s.distance = clamp(s.distance + event.deltaY * 0.002, 2.05, 5.2);
-    }, { passive: false });
+    canvas.addEventListener('wheel', event => { event.preventDefault(); s.distance = clamp(s.distance + event.deltaY * 0.002, 2.05, 5.2); }, { passive: false });
 }
 
 function render(time) {
@@ -98,7 +100,6 @@ function render(time) {
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
     gl.useProgram(program);
 
-    bindAttributes(state);
     const aspect = canvas.width / Math.max(canvas.height, 1);
     const projection = perspective(Math.PI / 4.2, aspect, 0.1, 20);
     const eye = orbitEye(state.yaw, state.pitch, state.distance);
@@ -111,34 +112,39 @@ function render(time) {
     gl.uniform3f(state.uniforms.light, 0.7, 0.35, 0.6);
     gl.uniform1f(state.uniforms.seaLevel, state.seaLevel);
     gl.uniform1f(state.uniforms.atmosphere, state.atmosphereDensity);
+    gl.uniform1f(state.uniforms.equilibriumTemperature, state.equilibriumTemperature);
     gl.uniform1f(state.uniforms.surfaceTemperature, state.surfaceTemperature);
     gl.uniform1f(state.uniforms.solarFlux, state.solarFlux);
     gl.uniform1f(state.uniforms.iceFraction, state.iceFraction);
     gl.uniform1f(state.uniforms.liquidFraction, state.liquidFraction);
     gl.uniform1f(state.uniforms.vaporFraction, state.vaporFraction);
-    gl.uniform1f(state.uniforms.pressure, state.pressurePascals);
     gl.uniform1i(state.uniforms.mode, 0);
-    gl.drawArrays(gl.TRIANGLES, 0, state.vertexCount);
+    drawTiles(state);
 
-    if (state.atmosphereDensity > 0.001) {
-        gl.enable(gl.BLEND);
-        gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
-        gl.disable(gl.CULL_FACE);
-        gl.uniform1i(state.uniforms.mode, 1);
-        gl.uniformMatrix4fv(state.uniforms.model, false, scaleMatrix(1.065));
-        gl.drawArrays(gl.TRIANGLES, 0, state.vertexCount);
-        gl.disable(gl.BLEND);
-    }
+    gl.enable(gl.BLEND);
+    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+    gl.disable(gl.CULL_FACE);
+    gl.uniform1i(state.uniforms.mode, 1);
+    gl.uniformMatrix4fv(state.uniforms.model, false, scaleMatrix(1.065));
+    drawTiles(state);
+    gl.disable(gl.BLEND);
 
     requestAnimationFrame(render);
 }
 
-function bindAttributes(s) {
+function drawTiles(s) {
+    for (const tile of s.tiles) {
+        bindTileAttributes(s, tile);
+        s.gl.drawArrays(s.gl.TRIANGLES, 0, tile.vertexCount);
+    }
+}
+
+function bindTileAttributes(s, tile) {
     const gl = s.gl;
-    gl.bindBuffer(gl.ARRAY_BUFFER, s.positionBuffer);
+    gl.bindBuffer(gl.ARRAY_BUFFER, tile.positionBuffer);
     gl.enableVertexAttribArray(s.attributes.position);
     gl.vertexAttribPointer(s.attributes.position, 3, gl.FLOAT, false, 0, 0);
-    gl.bindBuffer(gl.ARRAY_BUFFER, s.normalBuffer);
+    gl.bindBuffer(gl.ARRAY_BUFFER, tile.normalBuffer);
     gl.enableVertexAttribArray(s.attributes.normal);
     gl.vertexAttribPointer(s.attributes.normal, 3, gl.FLOAT, false, 0, 0);
 }
@@ -147,10 +153,7 @@ function resize(s) {
     const ratio = Math.min(window.devicePixelRatio || 1, 2);
     const width = Math.floor(s.canvas.clientWidth * ratio);
     const height = Math.floor(s.canvas.clientHeight * ratio);
-    if (s.canvas.width !== width || s.canvas.height !== height) {
-        s.canvas.width = width;
-        s.canvas.height = height;
-    }
+    if (s.canvas.width !== width || s.canvas.height !== height) { s.canvas.width = width; s.canvas.height = height; }
 }
 
 function createProgram(gl, vertexSource, fragmentSource) {
@@ -224,52 +227,50 @@ in vec3 vWorldPosition;
 uniform vec3 uLightDirection;
 uniform float uSeaLevel;
 uniform float uAtmosphere;
+uniform float uEquilibriumTemperature;
 uniform float uSurfaceTemperature;
 uniform float uSolarFlux;
 uniform float uIceFraction;
 uniform float uLiquidFraction;
 uniform float uVaporFraction;
-uniform float uPressure;
 uniform int uMode;
 out vec4 outColor;
 void main() {
     if (uMode == 1) {
         float rim = pow(1.0 - abs(dot(normalize(vNormal), normalize(-vWorldPosition))), 2.2);
         float fluxGlow = clamp(sqrt(max(uSolarFlux, 1.0) / 1361.0), 0.65, 1.35);
-        float pressureGlow = clamp(sqrt(max(uPressure, 0.0) / 101325.0), 0.0, 1.6);
-        vec3 dryAtmosphere = vec3(0.20, 0.72, 0.78);
-        vec3 wetAtmosphere = vec3(0.66, 0.78, 0.82);
-        vec3 atmosphereColor = mix(dryAtmosphere, wetAtmosphere, clamp(uVaporFraction, 0.0, 1.0));
-        outColor = vec4(atmosphereColor, rim * 0.24 * uAtmosphere * fluxGlow * pressureGlow);
+        float steam = clamp(uVaporFraction * 0.7, 0.0, 0.7);
+        vec3 atmosphereColor = mix(vec3(0.20, 0.72, 0.72), vec3(0.72, 0.78, 0.72), steam);
+        outColor = vec4(atmosphereColor, rim * 0.24 * uAtmosphere * fluxGlow);
         return;
     }
 
     float radius = length(vWorldPosition);
     float elevation = radius - 1.0;
-    float latitude = abs(normalize(vWorldPosition).y);
-    vec3 deepOcean = vec3(0.025, 0.12, 0.22);
-    vec3 shallowOcean = vec3(0.05, 0.30, 0.38);
+    float sea = uSeaLevel;
+    vec3 deepOcean = vec3(0.035, 0.16, 0.23);
+    vec3 shallowOcean = vec3(0.06, 0.31, 0.36);
     vec3 lowland = vec3(0.18, 0.38, 0.22);
     vec3 highland = vec3(0.39, 0.36, 0.22);
     vec3 peak = vec3(0.62, 0.65, 0.59);
     vec3 baseColor;
 
-    if (elevation < uSeaLevel - 0.012 && uLiquidFraction > 0.001) baseColor = deepOcean;
-    else if (elevation < uSeaLevel && uLiquidFraction > 0.001) baseColor = shallowOcean;
+    if (uLiquidFraction > 0.001 && elevation < sea - 0.012) baseColor = deepOcean;
+    else if (uLiquidFraction > 0.001 && elevation < sea) baseColor = shallowOcean;
     else if (elevation < 0.018) baseColor = lowland;
     else if (elevation < 0.038) baseColor = highland;
     else baseColor = peak;
 
-    float polarIce = smoothstep(0.40, 0.94, latitude);
-    float globalIce = clamp(uIceFraction, 0.0, 1.0);
-    float frost = clamp(globalIce * (0.40 + 0.85 * polarIce), 0.0, 1.0);
-    baseColor = mix(baseColor, vec3(0.78, 0.90, 0.93), frost * 0.94);
+    float latitude = abs(normalize(vWorldPosition).y);
+    float temperatureCold = 1.0 - smoothstep(265.0, 292.0, uSurfaceTemperature);
+    float polar = smoothstep(0.42, 0.92, latitude);
+    float phaseIce = clamp(uIceFraction, 0.0, 1.0);
+    float frost = max(phaseIce * (0.52 + 0.48 * polar), temperatureCold * polar * 0.45);
+    baseColor = mix(baseColor, vec3(0.77, 0.88, 0.90), clamp(frost, 0.0, 0.96));
 
-    float heat = smoothstep(320.0, 430.0, uSurfaceTemperature);
-    if (elevation >= uSeaLevel || uLiquidFraction <= 0.001) baseColor = mix(baseColor, vec3(0.52, 0.25, 0.10), heat * 0.78);
-
-    float desiccation = clamp(uVaporFraction, 0.0, 1.0);
-    baseColor = mix(baseColor, vec3(0.45, 0.30, 0.17), desiccation * 0.45);
+    float heat = smoothstep(315.0, 430.0, uSurfaceTemperature);
+    if (elevation >= sea || uLiquidFraction <= 0.001) baseColor = mix(baseColor, vec3(0.48, 0.25, 0.11), heat * 0.76);
+    baseColor = mix(baseColor, vec3(0.56, 0.45, 0.31), clamp(uVaporFraction * 0.28, 0.0, 0.28));
 
     float light = max(dot(normalize(vNormal), normalize(uLightDirection)), 0.0);
     float fluxFactor = clamp(sqrt(max(uSolarFlux, 1.0) / 1361.0), 0.45, 1.55);

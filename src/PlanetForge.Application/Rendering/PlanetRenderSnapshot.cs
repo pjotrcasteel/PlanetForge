@@ -6,7 +6,7 @@ using PlanetForge.Domain.Planets;
 namespace PlanetForge.Application.Rendering;
 
 public sealed record PlanetRenderSnapshot(
-    PlanetMesh Mesh,
+    IReadOnlyList<PlanetSurfaceTileMesh> SurfaceTiles,
     double SeaLevel,
     double AtmosphereDensity,
     int Seed,
@@ -14,6 +14,6 @@ public sealed record PlanetRenderSnapshot(
     PlanetPhysicsSnapshot Physics,
     AtmosphereParameters AtmosphereParameters,
     AtmosphereSnapshot Atmosphere,
-    ClimateSnapshot Climate,
+    SurfaceClimateSnapshot Climate,
     WaterParameters WaterParameters,
     WaterPhaseSnapshot Water);

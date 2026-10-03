@@ -1,8 +1,9 @@
 using Microsoft.Extensions.DependencyInjection;
 using PlanetForge.Application.Planets;
 using PlanetForge.Application.Rendering;
-using PlanetForge.Application.Terrain;
-using PlanetForge.Infrastructure.Terrain;
+using PlanetForge.Application.Surface;
+using PlanetForge.Domain.Surface;
+using PlanetForge.Infrastructure.Surface;
 
 namespace PlanetForge.Bootstrap;
 
@@ -10,8 +11,9 @@ public static class ServiceCollectionExtensions
 {
     public static IServiceCollection AddPlanetForge(this IServiceCollection services)
     {
-        services.AddSingleton<IPlanetTerrainNoise, SeededTerrainNoise>();
-        services.AddSingleton<PlanetMeshBuilder>();
+        services.AddSingleton<IPlanetElevationSource, ProceduralPlanetElevationSource>();
+        services.AddSingleton<PlanetSurfaceTileSampler>();
+        services.AddSingleton<PlanetSurfaceMeshBuilder>();
         services.AddSingleton<PlanetExperience>();
         return services;
     }

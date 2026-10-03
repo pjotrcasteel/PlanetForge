@@ -7,8 +7,10 @@ using PlanetForge.Domain.Planets;
 
 namespace PlanetForge.Application.Planets;
 
-public sealed class PlanetExperience(PlanetMeshBuilder meshBuilder)
+public sealed class PlanetExperience(PlanetSurfaceMeshBuilder surfaceMeshBuilder)
 {
+    private const int GlobalSurfaceLevel = 1;
+    private const int GlobalSurfaceCellsPerAxis = 12;
     private const double MinimumOrbitalDistanceAu = 0.25;
     private const double MaximumOrbitalDistanceAu = 3.0;
     private const double MinimumStellarLuminositySolar = 0.2;
@@ -38,9 +40,10 @@ public sealed class PlanetExperience(PlanetMeshBuilder meshBuilder)
         var water = WaterPhaseCalculator.Calculate(state.WaterParameters, climate.SurfaceTemperatureKelvin, atmosphere.SurfacePressurePascals);
         var seaLevel = CalculateVisualSeaLevel(water);
         var atmosphereDensity = CalculateAtmosphereDensity(atmosphere.SurfacePressurePascals);
+        var surfaceTiles = surfaceMeshBuilder.BuildGlobal(GlobalSurfaceLevel, GlobalSurfaceCellsPerAxis, state.Seed);
 
         return new PlanetRenderSnapshot(
-            meshBuilder.Build(state.Seed),
+            surfaceTiles,
             seaLevel,
             atmosphereDensity,
             state.Seed,

@@ -9,6 +9,7 @@
   <Folder Name="/tests/">
     <Project Path="tests/PlanetForge.Domain.Tests/PlanetForge.Domain.Tests.csproj" />
     <Project Path="tests/PlanetForge.Application.Tests/PlanetForge.Application.Tests.csproj" />
+    <Project Path="tests/PlanetForge.Infrastructure.Tests/PlanetForge.Infrastructure.Tests.csproj" />
   </Folder>
   <Folder Name="/Solution Items/">
     <File Path="Directory.Build.props" />
