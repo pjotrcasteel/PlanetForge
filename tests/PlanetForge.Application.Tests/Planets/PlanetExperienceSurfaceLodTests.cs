@@ -83,7 +83,7 @@ public sealed class PlanetExperienceSurfaceLodTests
     }
 
     [TestMethod]
-    public void UpdateSurfaceView_SameLocalGeometryBand_ReusesGeneratedTerrain()
+    public void UpdateSurfaceView_SameLocalGeometryBand_ReusesGeneratedTerrainAndReturnsReferenceOnly()
     {
         var elevationSource = new CountingElevationSource();
         var experience = CreateExperience(elevationSource);
@@ -101,6 +101,12 @@ public sealed class PlanetExperienceSurfaceLodTests
         Assert.AreEqual(first.LocalSurface.Key, second.LocalSurface.Key);
         Assert.AreEqual(callsAfterFirst, elevationSource.SampleCount);
         Assert.AreNotEqual(first.LocalSurface.CameraAltitudeMeters, second.LocalSurface.CameraAltitudeMeters);
+        Assert.IsGreaterThan(0, first.LocalSurface.PositionsMeters.Length);
+        Assert.IsGreaterThan(0, first.LocalSurface.Normals.Length);
+        Assert.IsGreaterThan(0, first.LocalSurface.ElevationsMeters.Length);
+        Assert.AreEqual(0, second.LocalSurface.PositionsMeters.Length);
+        Assert.AreEqual(0, second.LocalSurface.Normals.Length);
+        Assert.AreEqual(0, second.LocalSurface.ElevationsMeters.Length);
     }
 
     [TestMethod]

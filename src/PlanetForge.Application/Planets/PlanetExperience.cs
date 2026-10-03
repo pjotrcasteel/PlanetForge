@@ -251,7 +251,7 @@ public sealed class PlanetExperience(
 
         if (cachedLocalSurfaceKey == cacheKey && cachedLocalSurface is not null)
         {
-            return cachedLocalSurface with { CameraAltitudeMeters = cameraAltitudeMeters };
+            return cachedLocalSurface.AsReference(cameraAltitudeMeters);
         }
 
         var patch = localSurfacePatchSampler.Sample(anchorDirection, patchSizeMeters, cellsPerAxis, state.Seed, radiusMeters, CancellationToken.None);

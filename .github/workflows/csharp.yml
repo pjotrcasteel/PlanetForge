@@ -33,7 +33,7 @@ jobs:
         run: dotnet build PlanetForge.slnx -c Release --no-restore
 
       - name: Validate browser JavaScript
-        run: node --check src/PlanetForge.Presentation.Web/wwwroot/js/planetRenderer.js
+        run: find src/PlanetForge.Presentation.Web/wwwroot/js -name '*.js' -print0 | xargs -0 -n1 node --check
 
       - name: Test
         run: dotnet test PlanetForge.slnx -c Release --no-build
