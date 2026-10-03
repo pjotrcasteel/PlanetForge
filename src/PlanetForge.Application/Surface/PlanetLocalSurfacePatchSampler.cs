@@ -9,9 +9,11 @@ public sealed class PlanetLocalSurfacePatchSampler(IPlanetElevationSource elevat
         double patchSizeMeters,
         int cellsPerAxis,
         int seed,
-        double planetRadiusMeters)
+        double planetRadiusMeters,
+        CancellationToken cancellationToken)
     {
         Validate(patchSizeMeters, cellsPerAxis, planetRadiusMeters);
+        cancellationToken.ThrowIfCancellationRequested();
         var normalizedAnchor = PlanetVector.Normalize(anchorDirection);
         var anchorElevationMeters = elevationSource.SampleElevationMeters(normalizedAnchor, seed);
         var frame = PlanetLocalFrame.Create(normalizedAnchor, planetRadiusMeters, anchorElevationMeters);
@@ -21,6 +23,7 @@ public sealed class PlanetLocalSurfacePatchSampler(IPlanetElevationSource elevat
 
         for (var y = 0; y < pointsPerAxis; y++)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             var northMeters = ToLocalCoordinate(y, cellsPerAxis, patchSizeMeters, halfSizeMeters);
 
             for (var x = 0; x < pointsPerAxis; x++)
