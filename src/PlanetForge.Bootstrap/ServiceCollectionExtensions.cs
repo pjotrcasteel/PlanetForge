@@ -21,6 +21,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<PlanetHydrologyModelBuilder>();
         services.AddSingleton<PlanetSurfaceMeshBuilder>();
         services.AddSingleton<PlanetSurfaceMeshCache>();
+        services.AddSingleton<PlanetLocalSurfaceMeshBuilder>();
         services.AddSingleton<PlanetExperience>();
         return services;
     }
