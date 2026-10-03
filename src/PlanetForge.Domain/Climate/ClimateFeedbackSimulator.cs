@@ -1,5 +1,6 @@
 using PlanetForge.Domain.Atmosphere;
 using PlanetForge.Domain.Hydrology;
+using PlanetForge.Domain.Physics;
 using PlanetForge.Domain.Planets;
 
 namespace PlanetForge.Domain.Climate;
