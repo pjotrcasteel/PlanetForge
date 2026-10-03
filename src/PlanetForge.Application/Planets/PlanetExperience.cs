@@ -17,10 +17,15 @@ public sealed class PlanetExperience(
 {
     private const int GlobalSurfaceLevel = 1;
     private const int SurfaceCellsPerAxis = 24;
-    private const int LocalSurfaceCellsPerAxis = 32;
+    private const int CoarseLocalSurfaceCellsPerAxis = 8;
+    private const int MediumLocalSurfaceCellsPerAxis = 16;
+    private const int DetailedLocalSurfaceCellsPerAxis = 24;
+    private const int FineLocalSurfaceCellsPerAxis = 32;
     private const double MinimumLocalPatchSizeMeters = 16.0;
-    private const double MaximumLocalViewAltitudeMeters = 150_000.0;
-    private const double MaximumLocalViewRadiusFraction = 0.03;
+    private const double MaximumLocalViewAltitudeMeters = 20_000.0;
+    private const double MediumLocalResolutionAltitudeMeters = 5_000.0;
+    private const double DetailedLocalResolutionAltitudeMeters = 1_500.0;
+    private const double FineLocalResolutionAltitudeMeters = 250.0;
     private const double MaximumLocalPatchRadiusFraction = 0.18;
     private const double LocalPatchMarginFactor = 1.5;
     private const double MinimumOrbitalDistanceAu = 0.25;
@@ -45,6 +50,8 @@ public sealed class PlanetExperience(
     private readonly PlanetState state = new();
     private PlanetSurfaceView? surfaceView;
     private PlanetVector? localAnchorDirection;
+    private LocalSurfaceCacheKey? cachedLocalSurfaceKey;
+    private PlanetLocalSurfaceMesh? cachedLocalSurface;
 
     public PlanetRenderSnapshot CreateSnapshot()
     {
@@ -235,24 +242,48 @@ public sealed class PlanetExperience(
             return null;
         }
 
-        var cameraAltitudeMeters = (surfaceView.CameraDistanceFromCenter - 1.0) * radiusMeters;
+        var cameraAltitudeMeters = Math.Max((surfaceView.CameraDistanceFromCenter - 1.0) * radiusMeters, 1.0);
         var patchSizeMeters = CalculateLocalPatchSize(surfaceView, cameraAltitudeMeters, radiusMeters);
+        var cellsPerAxis = CalculateLocalCellsPerAxis(cameraAltitudeMeters);
         var anchorDirection = localAnchorDirection ?? surfaceView.CameraDirection;
-        var patch = localSurfacePatchSampler.Sample(
-            anchorDirection,
-            patchSizeMeters,
-            LocalSurfaceCellsPerAxis,
-            state.Seed,
-            radiusMeters,
-            CancellationToken.None);
-        return localSurfaceMeshBuilder.Build(patch, Math.Max(cameraAltitudeMeters, 1.0));
+        var anchorAddress = PlanetSurfaceAddressing.Encode(anchorDirection);
+        var cacheKey = new LocalSurfaceCacheKey(anchorAddress, patchSizeMeters, cellsPerAxis, state.Seed, radiusMeters);
+
+        if (cachedLocalSurfaceKey == cacheKey && cachedLocalSurface is not null)
+        {
+            return cachedLocalSurface with { CameraAltitudeMeters = cameraAltitudeMeters };
+        }
+
+        var patch = localSurfacePatchSampler.Sample(anchorDirection, patchSizeMeters, cellsPerAxis, state.Seed, radiusMeters, CancellationToken.None);
+        cachedLocalSurface = localSurfaceMeshBuilder.Build(patch, cameraAltitudeMeters);
+        cachedLocalSurfaceKey = cacheKey;
+        return cachedLocalSurface;
     }
 
     private static bool IsLocalView(PlanetSurfaceView view, double radiusMeters)
     {
         var cameraAltitudeMeters = (view.CameraDistanceFromCenter - 1.0) * radiusMeters;
-        var transitionAltitudeMeters = Math.Min(MaximumLocalViewAltitudeMeters, radiusMeters * MaximumLocalViewRadiusFraction);
-        return cameraAltitudeMeters <= transitionAltitudeMeters;
+        return cameraAltitudeMeters <= MaximumLocalViewAltitudeMeters;
+    }
+
+    private static int CalculateLocalCellsPerAxis(double cameraAltitudeMeters)
+    {
+        if (cameraAltitudeMeters <= FineLocalResolutionAltitudeMeters)
+        {
+            return FineLocalSurfaceCellsPerAxis;
+        }
+
+        if (cameraAltitudeMeters <= DetailedLocalResolutionAltitudeMeters)
+        {
+            return DetailedLocalSurfaceCellsPerAxis;
+        }
+
+        if (cameraAltitudeMeters <= MediumLocalResolutionAltitudeMeters)
+        {
+            return MediumLocalSurfaceCellsPerAxis;
+        }
+
+        return CoarseLocalSurfaceCellsPerAxis;
     }
 
     private static double CalculateLocalPatchSize(PlanetSurfaceView view, double cameraAltitudeMeters, double radiusMeters)
@@ -343,4 +374,11 @@ public sealed class PlanetExperience(
         var pressureRatio = surfacePressurePascals / 101_325.0;
         return Math.Clamp(0.62 * Math.Sqrt(Math.Max(pressureRatio, 0.0)), 0.0, 1.0);
     }
+
+    private readonly record struct LocalSurfaceCacheKey(
+        PlanetSurfaceAddress AnchorAddress,
+        double PatchSizeMeters,
+        int CellsPerAxis,
+        int Seed,
+        double PlanetRadiusMeters);
 }
