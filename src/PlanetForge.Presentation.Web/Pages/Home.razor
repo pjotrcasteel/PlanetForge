@@ -186,7 +186,7 @@
         }
 
         rendererModule = await JsRuntime.InvokeAsync<IJSObjectReference>("import", disposeCancellationTokenSource.Token, "./js/planetRenderer.js");
-        await rendererModule.InvokeVoidAsync("initialize", disposeCancellationTokenSource.Token, "planet-canvas", snapshot);
+        await rendererModule.InvokeVoidAsync("initialize", disposeCancellationTokenSource.Token, "planet-canvas", snapshot, GetOrCreateSurfaceLodReference());
     }
 
     private Task MoveOrbitInwardAsync() => UpdateAsync(Experience.MoveOrbitInward());
@@ -286,6 +286,7 @@
         {
             try
             {
+                await rendererModule.InvokeVoidAsync("dispose", CancellationToken.None);
                 await rendererModule.DisposeAsync();
             }
             catch (JSDisconnectedException)
@@ -293,6 +294,7 @@
             }
         }
 
+        DisposeSurfaceLodReference();
         disposeCancellationTokenSource.Dispose();
     }
 }
