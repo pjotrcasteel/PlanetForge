@@ -4,6 +4,7 @@ const verticalFieldOfViewRadians = Math.PI / 4.2;
 const surfaceUpdateDebounceMilliseconds = 240;
 const localSurfaceUpdateDebounceMilliseconds = 650;
 const maximumCachedSurfaceTiles = 512;
+const maximumRenderPixelRatio = 1.5;
 const minimumCameraAltitudeMeters = 3.0;
 const maximumCameraAltitudeRatio = 4.2;
 const localTransitionAltitudeMeters = 20_000.0;
@@ -20,7 +21,7 @@ export function initialize(canvasId, snapshot, dotNetReference) {
     const gl = canvas?.getContext('webgl2', { antialias: true, alpha: true });
     if (!canvas || !gl) throw new Error('PlanetForge requires WebGL 2.');
 
-    document.title = 'PlanetForge 0.0.3.11 — Local Trees & Exit Performance';
+    document.title = 'PlanetForge 0.0.3.12 — Transition Hitch Fix';
     state = createState(canvas, gl, dotNetReference);
     installInput(state);
     setPlanet(snapshot);
@@ -360,8 +361,18 @@ function installInput(s) {
 
         if (s.renderMode === 'local' && s.localSurface) {
             const currentAltitude = s.localCameraAltitudeMeters ?? localTransitionAltitudeMeters;
-            s.localCameraAltitudeMeters = clamp(currentAltitude * zoomFactor, minimumCameraAltitudeMeters, localExitAltitudeMeters);
-            s.distance = 1.0 + (s.localCameraAltitudeMeters / Math.max(s.planetRadiusMeters, 1.0));
+            const nextAltitude = clamp(currentAltitude * zoomFactor, minimumCameraAltitudeMeters, localExitAltitudeMeters);
+            s.localCameraAltitudeMeters = nextAltitude;
+            s.distance = 1.0 + (nextAltitude / Math.max(s.planetRadiusMeters, 1.0));
+
+            if (nextAltitude >= localExitAltitudeMeters) {
+                s.renderMode = 'globe';
+                s.localCameraAltitudeMeters = null;
+                updateLocalScaleHud(s);
+                scheduleSurfaceUpdate(s, surfaceUpdateDebounceMilliseconds);
+                return;
+            }
+
             updateLocalScaleHud(s);
             scheduleSurfaceUpdate(s, localSurfaceUpdateDebounceMilliseconds);
             return;
@@ -564,7 +575,7 @@ function bindLocalAttributes(s, positionBuffer, normalBuffer, elevationBuffer) {
 }
 
 function resize(s) {
-    const ratio = Math.min(window.devicePixelRatio || 1, s.renderMode === 'local' ? 1.5 : 2.0);
+    const ratio = Math.min(window.devicePixelRatio || 1, maximumRenderPixelRatio);
     const width = Math.floor(s.canvas.clientWidth * ratio);
     const height = Math.floor(s.canvas.clientHeight * ratio);
     if (s.canvas.width === width && s.canvas.height === height) return;
