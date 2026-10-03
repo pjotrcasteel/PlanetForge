@@ -23,9 +23,9 @@ public sealed class PlanetExperience(
     private const int FineLocalSurfaceCellsPerAxis = 32;
     private const double MinimumLocalPatchSizeMeters = 16.0;
     private const double MaximumLocalViewAltitudeMeters = 20_000.0;
-    private const double MediumLocalResolutionAltitudeMeters = 5_000.0;
-    private const double DetailedLocalResolutionAltitudeMeters = 1_500.0;
-    private const double FineLocalResolutionAltitudeMeters = 250.0;
+    private const double MediumLocalResolutionAltitudeMeters = 3_000.0;
+    private const double DetailedLocalResolutionAltitudeMeters = 800.0;
+    private const double FineLocalResolutionAltitudeMeters = 60.0;
     private const double MaximumLocalPatchRadiusFraction = 0.18;
     private const double LocalPatchMarginFactor = 1.5;
     private const double MinimumOrbitalDistanceAu = 0.25;

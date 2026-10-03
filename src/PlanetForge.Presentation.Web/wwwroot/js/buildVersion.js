@@ -1,6 +1,6 @@
-const buildVersion = '0.0.3.9';
-const buildLabel = 'LOAD HOTFIX';
-const pageTitle = `PlanetForge ${buildVersion} — Load Hotfix`;
+const buildVersion = '0.0.3.10';
+const buildLabel = 'LOCAL SCALE & PERFORMANCE';
+const pageTitle = `PlanetForge ${buildVersion} — Local Scale & Performance`;
 const maximumAttempts = 100;
 const retryDelayMilliseconds = 100;
 

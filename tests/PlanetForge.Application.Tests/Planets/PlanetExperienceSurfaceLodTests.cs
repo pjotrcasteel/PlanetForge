@@ -67,6 +67,19 @@ public sealed class PlanetExperienceSurfaceLodTests
     }
 
     [TestMethod]
+    public void UpdateSurfaceView_HundredMetresAboveEarth_DoesNotUseFineGroundMesh()
+    {
+        var experience = CreateExperience();
+        var cameraDistance = 1.0 + (100.0 / EarthRadiusMeters);
+        var view = new PlanetSurfaceView(PlanetVector.UnitZ, cameraDistance, 1080, Math.PI / 4.2) { ViewportAspectRatio = 16.0 / 9.0 };
+
+        var snapshot = experience.UpdateSurfaceView(view);
+
+        Assert.IsNotNull(snapshot.LocalSurface);
+        Assert.AreEqual(1_152, snapshot.LocalSurface.TriangleCount);
+    }
+
+    [TestMethod]
     public void UpdateSurfaceView_ThreeMetresAboveEarth_UsesSubMetreTerrainCells()
     {
         var experience = CreateExperience();
