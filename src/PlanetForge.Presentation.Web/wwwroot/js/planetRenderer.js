@@ -3,6 +3,8 @@ let state;
 const verticalFieldOfViewRadians = Math.PI / 4.2;
 const surfaceUpdateDebounceMilliseconds = 120;
 const maximumCachedSurfaceTiles = 512;
+const minimumCameraAltitudeRatio = 0.00001;
+const maximumCameraAltitudeRatio = 4.2;
 
 export function initialize(canvasId, snapshot, dotNetReference) {
     const canvas = document.getElementById(canvasId);
@@ -31,9 +33,17 @@ export function setPlanet(snapshot) {
     const geometryKey = `${snapshot.seed}:${snapshot.physicalParameters.radiusMeters}`;
     if (state.geometryKey !== geometryKey) {
         clearSurfaceBufferCache(state);
+        clearLocalSurfaceBuffer(state);
         state.geometryKey = geometryKey;
     }
 
+    if (snapshot.localSurface) {
+        state.renderMode = 'local';
+        activateLocalSurface(state, snapshot.localSurface);
+        return;
+    }
+
+    state.renderMode = 'globe';
     const surfaceKey = snapshot.surfaceTiles.map(tile => tile.key).join('|');
     if (state.surfaceKey !== surfaceKey) {
         state.surfaceKey = surfaceKey;
@@ -47,36 +57,55 @@ export function dispose() {
     state.lodSequence++;
     state.dotNetReference = null;
     clearSurfaceBufferCache(state);
+    clearLocalSurfaceBuffer(state);
+    state.gl.deleteProgram(state.globeProgram);
+    state.gl.deleteProgram(state.localProgram);
     state = null;
 }
 
 function createState(canvas, gl, dotNetReference) {
-    const program = createProgram(gl, vertexShaderSource, fragmentShaderSource);
+    const globeProgram = createProgram(gl, globeVertexShaderSource, globeFragmentShaderSource);
+    const localProgram = createProgram(gl, localVertexShaderSource, localFragmentShaderSource);
     return {
-        canvas, gl, program, dotNetReference, geometryKey: null, surfaceKey: null, tileBufferCache: new Map(), tiles: [],
+        canvas, gl, dotNetReference, globeProgram, localProgram, renderMode: 'globe', geometryKey: null,
+        surfaceKey: null, tileBufferCache: new Map(), tiles: [], localSurface: null,
         yaw: -0.65, pitch: 0.24, distance: 3.15, dragging: false, lastX: 0, lastY: 0,
         lodTimer: null, lodSequence: 0, lastSurfaceRequestSignature: null,
         seaLevelMeters: 0, planetRadiusMeters: 6371000, atmosphereDensity: 0.6,
         equilibriumTemperature: 255, surfaceTemperature: 288, solarFlux: 1361,
         iceFraction: 0, liquidFraction: 1, vaporFraction: 0,
-        attributes: {
-            position: gl.getAttribLocation(program, 'aPosition'),
-            normal: gl.getAttribLocation(program, 'aNormal')
+        globeAttributes: {
+            position: gl.getAttribLocation(globeProgram, 'aPosition'),
+            normal: gl.getAttribLocation(globeProgram, 'aNormal')
         },
-        uniforms: {
-            model: gl.getUniformLocation(program, 'uModel'),
-            viewProjection: gl.getUniformLocation(program, 'uViewProjection'),
-            light: gl.getUniformLocation(program, 'uLightDirection'),
-            seaLevelMeters: gl.getUniformLocation(program, 'uSeaLevelMeters'),
-            planetRadiusMeters: gl.getUniformLocation(program, 'uPlanetRadiusMeters'),
-            atmosphere: gl.getUniformLocation(program, 'uAtmosphere'),
-            equilibriumTemperature: gl.getUniformLocation(program, 'uEquilibriumTemperature'),
-            surfaceTemperature: gl.getUniformLocation(program, 'uSurfaceTemperature'),
-            solarFlux: gl.getUniformLocation(program, 'uSolarFlux'),
-            iceFraction: gl.getUniformLocation(program, 'uIceFraction'),
-            liquidFraction: gl.getUniformLocation(program, 'uLiquidFraction'),
-            vaporFraction: gl.getUniformLocation(program, 'uVaporFraction'),
-            mode: gl.getUniformLocation(program, 'uMode')
+        globeUniforms: {
+            model: gl.getUniformLocation(globeProgram, 'uModel'),
+            viewProjection: gl.getUniformLocation(globeProgram, 'uViewProjection'),
+            light: gl.getUniformLocation(globeProgram, 'uLightDirection'),
+            seaLevelMeters: gl.getUniformLocation(globeProgram, 'uSeaLevelMeters'),
+            planetRadiusMeters: gl.getUniformLocation(globeProgram, 'uPlanetRadiusMeters'),
+            atmosphere: gl.getUniformLocation(globeProgram, 'uAtmosphere'),
+            equilibriumTemperature: gl.getUniformLocation(globeProgram, 'uEquilibriumTemperature'),
+            surfaceTemperature: gl.getUniformLocation(globeProgram, 'uSurfaceTemperature'),
+            solarFlux: gl.getUniformLocation(globeProgram, 'uSolarFlux'),
+            iceFraction: gl.getUniformLocation(globeProgram, 'uIceFraction'),
+            liquidFraction: gl.getUniformLocation(globeProgram, 'uLiquidFraction'),
+            vaporFraction: gl.getUniformLocation(globeProgram, 'uVaporFraction'),
+            mode: gl.getUniformLocation(globeProgram, 'uMode')
+        },
+        localAttributes: {
+            position: gl.getAttribLocation(localProgram, 'aPositionMeters'),
+            normal: gl.getAttribLocation(localProgram, 'aNormal'),
+            elevation: gl.getAttribLocation(localProgram, 'aElevationMeters')
+        },
+        localUniforms: {
+            viewProjection: gl.getUniformLocation(localProgram, 'uViewProjection'),
+            light: gl.getUniformLocation(localProgram, 'uLightDirection'),
+            seaLevelMeters: gl.getUniformLocation(localProgram, 'uSeaLevelMeters'),
+            surfaceTemperature: gl.getUniformLocation(localProgram, 'uSurfaceTemperature'),
+            iceFraction: gl.getUniformLocation(localProgram, 'uIceFraction'),
+            liquidFraction: gl.getUniformLocation(localProgram, 'uLiquidFraction'),
+            vaporFraction: gl.getUniformLocation(localProgram, 'uVaporFraction')
         }
     };
 }
@@ -113,6 +142,33 @@ function createBufferedTile(gl, tile) {
     };
 }
 
+function activateLocalSurface(s, localSurface) {
+    if (s.localSurface?.key === localSurface.key) {
+        s.localSurface.cameraAltitudeMeters = localSurface.cameraAltitudeMeters;
+        return;
+    }
+
+    clearLocalSurfaceBuffer(s);
+    const positionBuffer = s.gl.createBuffer();
+    const normalBuffer = s.gl.createBuffer();
+    const elevationBuffer = s.gl.createBuffer();
+    s.gl.bindBuffer(s.gl.ARRAY_BUFFER, positionBuffer);
+    s.gl.bufferData(s.gl.ARRAY_BUFFER, new Float32Array(localSurface.positionsMeters), s.gl.STATIC_DRAW);
+    s.gl.bindBuffer(s.gl.ARRAY_BUFFER, normalBuffer);
+    s.gl.bufferData(s.gl.ARRAY_BUFFER, new Float32Array(localSurface.normals), s.gl.STATIC_DRAW);
+    s.gl.bindBuffer(s.gl.ARRAY_BUFFER, elevationBuffer);
+    s.gl.bufferData(s.gl.ARRAY_BUFFER, new Float32Array(localSurface.elevationsMeters), s.gl.STATIC_DRAW);
+    s.localSurface = {
+        key: localSurface.key,
+        positionBuffer,
+        normalBuffer,
+        elevationBuffer,
+        vertexCount: localSurface.vertexCount,
+        sizeMeters: localSurface.sizeMeters,
+        cameraAltitudeMeters: localSurface.cameraAltitudeMeters
+    };
+}
+
 function clearSurfaceBufferCache(s) {
     for (const tile of s.tileBufferCache.values()) {
         deleteBufferedTile(s.gl, tile);
@@ -121,6 +177,14 @@ function clearSurfaceBufferCache(s) {
     s.tileBufferCache.clear();
     s.tiles = [];
     s.surfaceKey = null;
+}
+
+function clearLocalSurfaceBuffer(s) {
+    if (!s.localSurface) return;
+    s.gl.deleteBuffer(s.localSurface.positionBuffer);
+    s.gl.deleteBuffer(s.localSurface.normalBuffer);
+    s.gl.deleteBuffer(s.localSurface.elevationBuffer);
+    s.localSurface = null;
 }
 
 function trimSurfaceBufferCache(s, activeKeys) {
@@ -166,7 +230,9 @@ function installInput(s) {
     });
     canvas.addEventListener('wheel', event => {
         event.preventDefault();
-        s.distance = clamp(s.distance + event.deltaY * 0.0016, 1.055, 5.2);
+        const altitudeRatio = clamp(s.distance - 1.0, minimumCameraAltitudeRatio, maximumCameraAltitudeRatio);
+        const zoomFactor = Math.exp(event.deltaY * 0.0015);
+        s.distance = 1.0 + clamp(altitudeRatio * zoomFactor, minimumCameraAltitudeRatio, maximumCameraAltitudeRatio);
         scheduleSurfaceUpdate(s, surfaceUpdateDebounceMilliseconds);
     }, { passive: false });
 }
@@ -185,8 +251,9 @@ async function requestSurfaceUpdate(s, sequence) {
 
     const eye = orbitEye(s.yaw, s.pitch, s.distance);
     const direction = normalize(eye);
+    const viewportWidth = Math.max(s.canvas.width, 1);
     const viewportHeight = Math.max(s.canvas.height, 1);
-    const signature = `${direction[0].toFixed(5)}:${direction[1].toFixed(5)}:${direction[2].toFixed(5)}:${s.distance.toFixed(4)}:${viewportHeight}`;
+    const signature = `${direction[0].toFixed(5)}:${direction[1].toFixed(5)}:${direction[2].toFixed(5)}:${s.distance.toFixed(7)}:${viewportWidth}:${viewportHeight}`;
     if (signature === s.lastSurfaceRequestSignature) return;
 
     s.lastSurfaceRequestSignature = signature;
@@ -197,6 +264,7 @@ async function requestSurfaceUpdate(s, sequence) {
             direction[1],
             direction[2],
             s.distance,
+            viewportWidth,
             viewportHeight,
             verticalFieldOfViewRadians);
 
@@ -210,45 +278,80 @@ async function requestSurfaceUpdate(s, sequence) {
 function render() {
     if (!state) return;
     resize(state);
-    const { gl, canvas, program } = state;
+
+    if (state.renderMode === 'local' && state.localSurface) renderLocal(state);
+    else renderGlobe(state);
+
+    requestAnimationFrame(render);
+}
+
+function renderGlobe(s) {
+    const { gl, canvas, globeProgram } = s;
+    prepareFrame(gl, canvas);
+    gl.useProgram(globeProgram);
+
+    const aspect = canvas.width / Math.max(canvas.height, 1);
+    const projection = perspective(verticalFieldOfViewRadians, aspect, 0.002, 20);
+    const eye = orbitEye(s.yaw, s.pitch, s.distance);
+    const view = lookAt(eye, [0, 0, 0], [0, 1, 0]);
+    const viewProjection = multiply(projection, view);
+    const model = identityMatrix();
+
+    gl.uniformMatrix4fv(s.globeUniforms.model, false, model);
+    gl.uniformMatrix4fv(s.globeUniforms.viewProjection, false, viewProjection);
+    gl.uniform3f(s.globeUniforms.light, 0.7, 0.35, 0.6);
+    gl.uniform1f(s.globeUniforms.seaLevelMeters, s.seaLevelMeters);
+    gl.uniform1f(s.globeUniforms.planetRadiusMeters, s.planetRadiusMeters);
+    gl.uniform1f(s.globeUniforms.atmosphere, s.atmosphereDensity);
+    gl.uniform1f(s.globeUniforms.equilibriumTemperature, s.equilibriumTemperature);
+    gl.uniform1f(s.globeUniforms.surfaceTemperature, s.surfaceTemperature);
+    gl.uniform1f(s.globeUniforms.solarFlux, s.solarFlux);
+    gl.uniform1f(s.globeUniforms.iceFraction, s.iceFraction);
+    gl.uniform1f(s.globeUniforms.liquidFraction, s.liquidFraction);
+    gl.uniform1f(s.globeUniforms.vaporFraction, s.vaporFraction);
+    gl.uniform1i(s.globeUniforms.mode, 0);
+    drawTerrain(s);
+
+    gl.enable(gl.BLEND);
+    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+    gl.disable(gl.CULL_FACE);
+    gl.uniform1i(s.globeUniforms.mode, 1);
+    gl.uniformMatrix4fv(s.globeUniforms.model, false, scaleMatrix(1.065));
+    drawAtmosphere(s);
+    gl.disable(gl.BLEND);
+}
+
+function renderLocal(s) {
+    const { gl, canvas, localProgram, localSurface } = s;
+    prepareFrame(gl, canvas);
+    gl.useProgram(localProgram);
+
+    const aspect = canvas.width / Math.max(canvas.height, 1);
+    const cameraHeightMeters = Math.max(localSurface.cameraAltitudeMeters, 2.0);
+    const nearMeters = Math.max(0.05, cameraHeightMeters * 0.001);
+    const farMeters = Math.max(localSurface.sizeMeters * 3.0, cameraHeightMeters * 4.0);
+    const projection = perspective(verticalFieldOfViewRadians, aspect, nearMeters, farMeters);
+    const view = lookAt([0, cameraHeightMeters, 0], [0, 0, 0], [0, 0, -1]);
+    const viewProjection = multiply(projection, view);
+
+    gl.uniformMatrix4fv(s.localUniforms.viewProjection, false, viewProjection);
+    gl.uniform3f(s.localUniforms.light, 0.45, 0.82, 0.35);
+    gl.uniform1f(s.localUniforms.seaLevelMeters, s.seaLevelMeters);
+    gl.uniform1f(s.localUniforms.surfaceTemperature, s.surfaceTemperature);
+    gl.uniform1f(s.localUniforms.iceFraction, s.iceFraction);
+    gl.uniform1f(s.localUniforms.liquidFraction, s.liquidFraction);
+    gl.uniform1f(s.localUniforms.vaporFraction, s.vaporFraction);
+
+    bindLocalAttributes(s);
+    gl.drawArrays(gl.TRIANGLES, 0, localSurface.vertexCount);
+}
+
+function prepareFrame(gl, canvas) {
     gl.viewport(0, 0, canvas.width, canvas.height);
     gl.enable(gl.DEPTH_TEST);
     gl.enable(gl.CULL_FACE);
     gl.clearColor(0, 0, 0, 0);
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-    gl.useProgram(program);
-
-    const aspect = canvas.width / Math.max(canvas.height, 1);
-    const projection = perspective(verticalFieldOfViewRadians, aspect, 0.002, 20);
-    const eye = orbitEye(state.yaw, state.pitch, state.distance);
-    const view = lookAt(eye, [0, 0, 0], [0, 1, 0]);
-    const viewProjection = multiply(projection, view);
-    const model = identityMatrix();
-
-    gl.uniformMatrix4fv(state.uniforms.model, false, model);
-    gl.uniformMatrix4fv(state.uniforms.viewProjection, false, viewProjection);
-    gl.uniform3f(state.uniforms.light, 0.7, 0.35, 0.6);
-    gl.uniform1f(state.uniforms.seaLevelMeters, state.seaLevelMeters);
-    gl.uniform1f(state.uniforms.planetRadiusMeters, state.planetRadiusMeters);
-    gl.uniform1f(state.uniforms.atmosphere, state.atmosphereDensity);
-    gl.uniform1f(state.uniforms.equilibriumTemperature, state.equilibriumTemperature);
-    gl.uniform1f(state.uniforms.surfaceTemperature, state.surfaceTemperature);
-    gl.uniform1f(state.uniforms.solarFlux, state.solarFlux);
-    gl.uniform1f(state.uniforms.iceFraction, state.iceFraction);
-    gl.uniform1f(state.uniforms.liquidFraction, state.liquidFraction);
-    gl.uniform1f(state.uniforms.vaporFraction, state.vaporFraction);
-    gl.uniform1i(state.uniforms.mode, 0);
-    drawTerrain(state);
-
-    gl.enable(gl.BLEND);
-    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
-    gl.disable(gl.CULL_FACE);
-    gl.uniform1i(state.uniforms.mode, 1);
-    gl.uniformMatrix4fv(state.uniforms.model, false, scaleMatrix(1.065));
-    drawAtmosphere(state);
-    gl.disable(gl.BLEND);
-
-    requestAnimationFrame(render);
 }
 
 function drawTerrain(s) {
@@ -278,11 +381,24 @@ function drawAtmosphere(s) {
 function bindTileAttributes(s, tile) {
     const gl = s.gl;
     gl.bindBuffer(gl.ARRAY_BUFFER, tile.positionBuffer);
-    gl.enableVertexAttribArray(s.attributes.position);
-    gl.vertexAttribPointer(s.attributes.position, 3, gl.FLOAT, false, 0, 0);
+    gl.enableVertexAttribArray(s.globeAttributes.position);
+    gl.vertexAttribPointer(s.globeAttributes.position, 3, gl.FLOAT, false, 0, 0);
     gl.bindBuffer(gl.ARRAY_BUFFER, tile.normalBuffer);
-    gl.enableVertexAttribArray(s.attributes.normal);
-    gl.vertexAttribPointer(s.attributes.normal, 3, gl.FLOAT, false, 0, 0);
+    gl.enableVertexAttribArray(s.globeAttributes.normal);
+    gl.vertexAttribPointer(s.globeAttributes.normal, 3, gl.FLOAT, false, 0, 0);
+}
+
+function bindLocalAttributes(s) {
+    const gl = s.gl;
+    gl.bindBuffer(gl.ARRAY_BUFFER, s.localSurface.positionBuffer);
+    gl.enableVertexAttribArray(s.localAttributes.position);
+    gl.vertexAttribPointer(s.localAttributes.position, 3, gl.FLOAT, false, 0, 0);
+    gl.bindBuffer(gl.ARRAY_BUFFER, s.localSurface.normalBuffer);
+    gl.enableVertexAttribArray(s.localAttributes.normal);
+    gl.vertexAttribPointer(s.localAttributes.normal, 3, gl.FLOAT, false, 0, 0);
+    gl.bindBuffer(gl.ARRAY_BUFFER, s.localSurface.elevationBuffer);
+    gl.enableVertexAttribArray(s.localAttributes.elevation);
+    gl.vertexAttribPointer(s.localAttributes.elevation, 1, gl.FLOAT, false, 0, 0);
 }
 
 function resize(s) {
@@ -345,7 +461,7 @@ function cross(a,b) { return [a[1]*b[2]-a[2]*b[1], a[2]*b[0]-a[0]*b[2], a[0]*b[1
 function dot(a,b) { return a[0]*b[0]+a[1]*b[1]+a[2]*b[2]; }
 function clamp(value,min,max) { return Math.max(min, Math.min(max, value)); }
 
-const vertexShaderSource = `#version 300 es
+const globeVertexShaderSource = `#version 300 es
 precision highp float;
 in vec3 aPosition;
 in vec3 aNormal;
@@ -360,7 +476,7 @@ void main() {
     gl_Position = uViewProjection * world;
 }`;
 
-const fragmentShaderSource = `#version 300 es
+const globeFragmentShaderSource = `#version 300 es
 precision highp float;
 in vec3 vNormal;
 in vec3 vWorldPosition;
@@ -417,5 +533,56 @@ void main() {
     float ambient = 0.14 + 0.04 * fluxFactor;
     float terminator = smoothstep(-0.12, 0.18, light);
     vec3 color = baseColor * (ambient + (0.78 + 0.16 * fluxFactor) * terminator);
+    outColor = vec4(color, 1.0);
+}`;
+
+const localVertexShaderSource = `#version 300 es
+precision highp float;
+in vec3 aPositionMeters;
+in vec3 aNormal;
+in float aElevationMeters;
+uniform mat4 uViewProjection;
+out vec3 vNormal;
+out float vElevationMeters;
+void main() {
+    vNormal = normalize(aNormal);
+    vElevationMeters = aElevationMeters;
+    gl_Position = uViewProjection * vec4(aPositionMeters, 1.0);
+}`;
+
+const localFragmentShaderSource = `#version 300 es
+precision highp float;
+in vec3 vNormal;
+in float vElevationMeters;
+uniform vec3 uLightDirection;
+uniform float uSeaLevelMeters;
+uniform float uSurfaceTemperature;
+uniform float uIceFraction;
+uniform float uLiquidFraction;
+uniform float uVaporFraction;
+out vec4 outColor;
+void main() {
+    vec3 deepOcean = vec3(0.035, 0.16, 0.23);
+    vec3 shallowOcean = vec3(0.06, 0.31, 0.36);
+    vec3 lowland = vec3(0.18, 0.38, 0.22);
+    vec3 highland = vec3(0.39, 0.36, 0.22);
+    vec3 peak = vec3(0.62, 0.65, 0.59);
+    vec3 baseColor;
+
+    if (uLiquidFraction > 0.001 && vElevationMeters < uSeaLevelMeters - 1500.0) baseColor = deepOcean;
+    else if (uLiquidFraction > 0.001 && vElevationMeters < uSeaLevelMeters) baseColor = shallowOcean;
+    else if (vElevationMeters < 1200.0) baseColor = lowland;
+    else if (vElevationMeters < 3500.0) baseColor = highland;
+    else baseColor = peak;
+
+    float phaseIce = clamp(uIceFraction, 0.0, 1.0);
+    float cold = 1.0 - smoothstep(265.0, 292.0, uSurfaceTemperature);
+    baseColor = mix(baseColor, vec3(0.77, 0.88, 0.90), clamp(max(phaseIce * 0.7, cold * 0.2), 0.0, 0.92));
+    float heat = smoothstep(315.0, 430.0, uSurfaceTemperature);
+    if (vElevationMeters >= uSeaLevelMeters || uLiquidFraction <= 0.001) baseColor = mix(baseColor, vec3(0.48, 0.25, 0.11), heat * 0.76);
+    baseColor = mix(baseColor, vec3(0.56, 0.45, 0.31), clamp(uVaporFraction * 0.22, 0.0, 0.22));
+
+    float light = max(dot(normalize(vNormal), normalize(uLightDirection)), 0.0);
+    vec3 color = baseColor * (0.18 + 0.82 * light);
     outColor = vec4(color, 1.0);
 }`;
