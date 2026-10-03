@@ -12,7 +12,7 @@ public static class ServiceCollectionExtensions
     {
         services.AddSingleton<IPlanetTerrainNoise, SeededTerrainNoise>();
         services.AddSingleton<PlanetMeshBuilder>();
-        services.AddSingleton<LivingRockExperience>();
+        services.AddSingleton<PlanetExperience>();
         return services;
     }
 }

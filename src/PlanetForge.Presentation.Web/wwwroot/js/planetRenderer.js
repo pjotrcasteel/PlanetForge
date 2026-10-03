@@ -15,6 +15,8 @@ export function setPlanet(snapshot) {
     if (!state) return;
     state.seaLevel = snapshot.seaLevel;
     state.atmosphereDensity = snapshot.atmosphereDensity;
+    state.equilibriumTemperature = snapshot.physics.equilibriumTemperatureKelvin;
+    state.solarFlux = snapshot.physics.solarFluxWattsPerSquareMeter;
     uploadMesh(state, snapshot.mesh.positions, snapshot.mesh.normals);
 }
 
@@ -23,6 +25,7 @@ function createState(canvas, gl) {
     return {
         canvas, gl, program, vertexCount: 0, yaw: -0.65, pitch: 0.24, distance: 3.15,
         dragging: false, lastX: 0, lastY: 0, seaLevel: 0, atmosphereDensity: 0.6,
+        equilibriumTemperature: 255, solarFlux: 1361,
         positionBuffer: gl.createBuffer(), normalBuffer: gl.createBuffer(),
         attributes: {
             position: gl.getAttribLocation(program, 'aPosition'),
@@ -34,6 +37,8 @@ function createState(canvas, gl) {
             light: gl.getUniformLocation(program, 'uLightDirection'),
             seaLevel: gl.getUniformLocation(program, 'uSeaLevel'),
             atmosphere: gl.getUniformLocation(program, 'uAtmosphere'),
+            equilibriumTemperature: gl.getUniformLocation(program, 'uEquilibriumTemperature'),
+            solarFlux: gl.getUniformLocation(program, 'uSolarFlux'),
             mode: gl.getUniformLocation(program, 'uMode')
         }
     };
@@ -87,6 +92,8 @@ function render(time) {
     gl.uniform3f(state.uniforms.light, 0.7, 0.35, 0.6);
     gl.uniform1f(state.uniforms.seaLevel, state.seaLevel);
     gl.uniform1f(state.uniforms.atmosphere, state.atmosphereDensity);
+    gl.uniform1f(state.uniforms.equilibriumTemperature, state.equilibriumTemperature);
+    gl.uniform1f(state.uniforms.solarFlux, state.solarFlux);
     gl.uniform1i(state.uniforms.mode, 0);
     gl.drawArrays(gl.TRIANGLES, 0, state.vertexCount);
 
@@ -148,9 +155,9 @@ function perspective(fov, aspect, near, far) {
 }
 
 function lookAt(eye, center, up) {
-    let z = normalize([eye[0]-center[0], eye[1]-center[1], eye[2]-center[2]]);
-    let x = normalize(cross(up, z));
-    let y = cross(z, x);
+    const z = normalize([eye[0]-center[0], eye[1]-center[1], eye[2]-center[2]]);
+    const x = normalize(cross(up, z));
+    const y = cross(z, x);
     return new Float32Array([x[0],y[0],z[0],0, x[1],y[1],z[1],0, x[2],y[2],z[2],0, -dot(x,eye),-dot(y,eye),-dot(z,eye),1]);
 }
 
@@ -189,14 +196,18 @@ in vec3 vWorldPosition;
 uniform vec3 uLightDirection;
 uniform float uSeaLevel;
 uniform float uAtmosphere;
+uniform float uEquilibriumTemperature;
+uniform float uSolarFlux;
 uniform int uMode;
 out vec4 outColor;
 void main() {
     if (uMode == 1) {
         float rim = pow(1.0 - abs(dot(normalize(vNormal), normalize(-vWorldPosition))), 2.2);
-        outColor = vec4(0.20, 0.72, 0.72, rim * 0.24 * uAtmosphere);
+        float fluxGlow = clamp(sqrt(max(uSolarFlux, 1.0) / 1361.0), 0.65, 1.35);
+        outColor = vec4(0.20, 0.72, 0.72, rim * 0.24 * uAtmosphere * fluxGlow);
         return;
     }
+
     float radius = length(vWorldPosition);
     float elevation = radius - 1.0;
     float sea = uSeaLevel;
@@ -206,14 +217,26 @@ void main() {
     vec3 highland = vec3(0.39, 0.36, 0.22);
     vec3 peak = vec3(0.62, 0.65, 0.59);
     vec3 baseColor;
+
     if (elevation < sea - 0.012) baseColor = deepOcean;
     else if (elevation < sea) baseColor = shallowOcean;
     else if (elevation < 0.018) baseColor = lowland;
     else if (elevation < 0.038) baseColor = highland;
     else baseColor = peak;
+
+    float latitude = abs(normalize(vWorldPosition).y);
+    float cold = 1.0 - smoothstep(235.0, 278.0, uEquilibriumTemperature);
+    float polar = smoothstep(0.50, 0.92, latitude);
+    float frost = cold * (0.22 + 0.78 * polar);
+    baseColor = mix(baseColor, vec3(0.77, 0.88, 0.90), clamp(frost, 0.0, 0.92));
+
+    float heat = smoothstep(305.0, 420.0, uEquilibriumTemperature);
+    if (elevation >= sea) baseColor = mix(baseColor, vec3(0.48, 0.25, 0.11), heat * 0.72);
+
     float light = max(dot(normalize(vNormal), normalize(uLightDirection)), 0.0);
-    float ambient = 0.17;
+    float fluxFactor = clamp(sqrt(max(uSolarFlux, 1.0) / 1361.0), 0.45, 1.55);
+    float ambient = 0.14 + 0.04 * fluxFactor;
     float terminator = smoothstep(-0.12, 0.18, light);
-    vec3 color = baseColor * (ambient + 0.92 * terminator);
+    vec3 color = baseColor * (ambient + (0.78 + 0.16 * fluxFactor) * terminator);
     outColor = vec4(color, 1.0);
 }`;

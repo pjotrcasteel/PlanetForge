@@ -1,3 +1,11 @@
+using PlanetForge.Domain.Planets;
+
 namespace PlanetForge.Application.Rendering;
 
-public sealed record PlanetRenderSnapshot(PlanetMesh Mesh, double SeaLevel, double AtmosphereDensity, int Seed);
+public sealed record PlanetRenderSnapshot(
+    PlanetMesh Mesh,
+    double SeaLevel,
+    double AtmosphereDensity,
+    int Seed,
+    PlanetPhysicalParameters PhysicalParameters,
+    PlanetPhysicsSnapshot Physics);
