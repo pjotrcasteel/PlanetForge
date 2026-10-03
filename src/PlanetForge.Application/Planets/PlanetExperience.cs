@@ -51,14 +51,16 @@ public sealed class PlanetExperience(
     private PlanetVector? localAnchorDirection;
     private LocalSurfaceCacheKey? cachedLocalSurfaceKey;
     private PlanetLocalSurfaceMesh? cachedLocalSurface;
+    private ClimateFeedbackState? climateState;
 
     public PlanetRenderSnapshot CreateSnapshot()
     {
-        var physics = PlanetPhysicsCalculator.Calculate(state.PhysicalParameters);
-        var atmosphere = AtmosphereCalculator.Calculate(state.AtmosphereParameters, state.PhysicalParameters, physics);
-        var climate = SurfaceClimateCalculator.Calculate(physics, atmosphere);
-        var water = WaterPhaseCalculator.Calculate(state.WaterParameters, climate.SurfaceTemperatureKelvin, atmosphere.SurfacePressurePascals);
-        var seaLevelMeters = CalculateVisualSeaLevelMeters(water);
+        var basePhysics = PlanetPhysicsCalculator.Calculate(state.PhysicalParameters);
+        var atmosphere = AtmosphereCalculator.Calculate(state.AtmosphereParameters, state.PhysicalParameters, basePhysics);
+        climateState ??= ClimateFeedbackSimulator.Initialize(state.PhysicalParameters, atmosphere, state.WaterParameters);
+        var climateResult = ClimateFeedbackSimulator.Evaluate(state.PhysicalParameters, atmosphere, state.WaterParameters, climateState);
+        climateState = climateResult.State;
+        var seaLevelMeters = CalculateVisualSeaLevelMeters(climateResult.Water);
         var atmosphereDensity = CalculateAtmosphereDensity(atmosphere.SurfacePressurePascals);
         var radiusMeters = state.PhysicalParameters.RadiusMeters;
         var localSurface = CreateLocalSurface(radiusMeters);
@@ -72,12 +74,13 @@ public sealed class PlanetExperience(
             atmosphereDensity,
             state.Seed,
             state.PhysicalParameters,
-            physics,
+            climateResult.Physics,
             state.AtmosphereParameters,
             atmosphere,
-            climate,
+            climateResult.Climate,
+            climateResult.Feedback,
             state.WaterParameters,
-            water,
+            climateResult.Water,
             localSurface);
     }
 
@@ -112,6 +115,15 @@ public sealed class PlanetExperience(
         var radiusMeters = state.PhysicalParameters.RadiusMeters;
         localAnchorDirection = PlanetSurfaceNavigator.Move(localAnchorDirection.Value, eastMeters, northMeters, radiusMeters);
         surfaceView = surfaceView with { CameraDirection = localAnchorDirection.Value };
+        return CreateSnapshot();
+    }
+
+    public PlanetRenderSnapshot AdvanceClimate(double years)
+    {
+        var basePhysics = PlanetPhysicsCalculator.Calculate(state.PhysicalParameters);
+        var atmosphere = AtmosphereCalculator.Calculate(state.AtmosphereParameters, state.PhysicalParameters, basePhysics);
+        climateState ??= ClimateFeedbackSimulator.Initialize(state.PhysicalParameters, atmosphere, state.WaterParameters);
+        climateState = ClimateFeedbackSimulator.Advance(state.PhysicalParameters, atmosphere, state.WaterParameters, climateState, years);
         return CreateSnapshot();
     }
 
@@ -222,6 +234,7 @@ public sealed class PlanetExperience(
     public PlanetRenderSnapshot ResetEarthReference()
     {
         state.ResetEarthReference();
+        climateState = null;
         return CreateSnapshot();
     }
 
