@@ -1,27 +1,26 @@
-const buildVersion = '0.0.3.8';
-const buildLabel = 'ZOOM STREAM FIX';
-const pageTitle = `PlanetForge ${buildVersion} — Zoom Stream Fix`;
+const buildVersion = '0.0.3.9';
+const buildLabel = 'LOAD HOTFIX';
+const pageTitle = `PlanetForge ${buildVersion} — Load Hotfix`;
+const maximumAttempts = 100;
+const retryDelayMilliseconds = 100;
 
-function applyBuildVersion() {
-    if (document.title !== pageTitle) {
-        document.title = pageTitle;
-    }
+document.title = pageTitle;
+applyBuildVersion(0);
 
+function applyBuildVersion(attempt) {
     const milestone = Array.from(document.querySelectorAll('.eyebrow'))
         .find(element => element.textContent?.trim().startsWith('MILESTONE 0.0.3'));
-
-    if (milestone) {
-        milestone.textContent = `MILESTONE ${buildVersion} · ${buildLabel}`;
-    }
-
     const seedChip = document.querySelector('.seed-chip');
-    if (seedChip) {
+
+    if (milestone && seedChip) {
+        milestone.textContent = `MILESTONE ${buildVersion} · ${buildLabel}`;
         const seedMatch = seedChip.textContent?.match(/SEED\s+(.+)$/);
         const seed = seedMatch?.[1]?.trim();
         seedChip.textContent = seed ? `BUILD ${buildVersion} · SEED ${seed}` : `BUILD ${buildVersion}`;
+        return;
+    }
+
+    if (attempt < maximumAttempts) {
+        window.setTimeout(() => applyBuildVersion(attempt + 1), retryDelayMilliseconds);
     }
 }
-
-const observer = new MutationObserver(() => applyBuildVersion());
-observer.observe(document.documentElement, { childList: true, subtree: true, characterData: true });
-applyBuildVersion();
