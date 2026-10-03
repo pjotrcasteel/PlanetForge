@@ -32,10 +32,10 @@ public sealed class FrozenWorldMission(PlanetExperience planetExperience)
         new(
             MissionInterventionType.OrbitalTransfer,
             "Orbital transfer campaign",
-            70,
+            95,
             "Move the planet 0.10 AU closer to its star.",
             "Stellar flux follows the inverse-square law, so a smaller orbit receives substantially more energy.",
-            "An extreme megaproject: effective, expensive, and difficult to reverse."),
+            "An extreme megaproject: highly effective, consumes almost the entire mission budget, and is difficult to reverse."),
     ];
 
     private readonly List<MissionInterventionType> plannedInterventions = [];
