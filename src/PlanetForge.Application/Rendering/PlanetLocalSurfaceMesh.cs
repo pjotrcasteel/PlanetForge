@@ -1,6 +1,7 @@
 namespace PlanetForge.Application.Rendering;
 
 public sealed record PlanetLocalSurfaceMesh(
+    string Key,
     float[] PositionsMeters,
     float[] Normals,
     float[] ElevationsMeters,
