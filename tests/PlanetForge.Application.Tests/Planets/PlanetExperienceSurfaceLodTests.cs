@@ -25,10 +25,38 @@ public sealed class PlanetExperienceSurfaceLodTests
     }
 
     [TestMethod]
+    public void UpdateSurfaceView_AboveLocalTransition_RemainsGlobeTerrain()
+    {
+        var experience = CreateExperience();
+        var cameraDistance = 1.0 + (25_000.0 / EarthRadiusMeters);
+        var view = new PlanetSurfaceView(PlanetVector.UnitZ, cameraDistance, 1080, Math.PI / 4.2) { ViewportAspectRatio = 16.0 / 9.0 };
+
+        var snapshot = experience.UpdateSurfaceView(view);
+
+        Assert.IsNull(snapshot.LocalSurface);
+        Assert.IsTrue(snapshot.SurfaceTiles.Count > 0);
+    }
+
+    [TestMethod]
+    public void UpdateSurfaceView_JustInsideLocalTransition_UsesCheapCoarseLocalMesh()
+    {
+        var experience = CreateExperience();
+        var cameraDistance = 1.0 + (19_000.0 / EarthRadiusMeters);
+        var view = new PlanetSurfaceView(PlanetVector.UnitZ, cameraDistance, 1080, Math.PI / 4.2) { ViewportAspectRatio = 16.0 / 9.0 };
+
+        var snapshot = experience.UpdateSurfaceView(view);
+
+        Assert.IsNotNull(snapshot.LocalSurface);
+        Assert.AreEqual(0, snapshot.SurfaceTiles.Count);
+        Assert.AreEqual(128, snapshot.LocalSurface.TriangleCount);
+    }
+
+    [TestMethod]
     public void UpdateSurfaceView_CloseToSurface_SwitchesToLocalMetreMesh()
     {
         var experience = CreateExperience();
-        var view = new PlanetSurfaceView(PlanetVector.UnitZ, 1.005, 1080, Math.PI / 4.2) { ViewportAspectRatio = 16.0 / 9.0 };
+        var cameraDistance = 1.0 + (5_000.0 / EarthRadiusMeters);
+        var view = new PlanetSurfaceView(PlanetVector.UnitZ, cameraDistance, 1080, Math.PI / 4.2) { ViewportAspectRatio = 16.0 / 9.0 };
 
         var snapshot = experience.UpdateSurfaceView(view);
 
@@ -49,8 +77,30 @@ public sealed class PlanetExperienceSurfaceLodTests
 
         Assert.IsNotNull(snapshot.LocalSurface);
         Assert.AreEqual(16.0, snapshot.LocalSurface.SizeMeters, 0.001);
+        Assert.AreEqual(2_048, snapshot.LocalSurface.TriangleCount);
         Assert.IsLessThanOrEqualTo(3.01, snapshot.LocalSurface.CameraAltitudeMeters);
         Assert.IsGreaterThanOrEqualTo(2.99, snapshot.LocalSurface.CameraAltitudeMeters);
+    }
+
+    [TestMethod]
+    public void UpdateSurfaceView_SameLocalGeometryBand_ReusesGeneratedTerrain()
+    {
+        var elevationSource = new CountingElevationSource();
+        var experience = CreateExperience(elevationSource);
+        var firstDistance = 1.0 + (10_000.0 / EarthRadiusMeters);
+        var secondDistance = 1.0 + (9_000.0 / EarthRadiusMeters);
+        var firstView = new PlanetSurfaceView(PlanetVector.UnitZ, firstDistance, 1080, Math.PI / 4.2) { ViewportAspectRatio = 16.0 / 9.0 };
+        var secondView = firstView with { CameraDistanceFromCenter = secondDistance };
+
+        var first = experience.UpdateSurfaceView(firstView);
+        var callsAfterFirst = elevationSource.SampleCount;
+        var second = experience.UpdateSurfaceView(secondView);
+
+        Assert.IsNotNull(first.LocalSurface);
+        Assert.IsNotNull(second.LocalSurface);
+        Assert.AreEqual(first.LocalSurface.Key, second.LocalSurface.Key);
+        Assert.AreEqual(callsAfterFirst, elevationSource.SampleCount);
+        Assert.AreNotEqual(first.LocalSurface.CameraAltitudeMeters, second.LocalSurface.CameraAltitudeMeters);
     }
 
     [TestMethod]
@@ -107,9 +157,9 @@ public sealed class PlanetExperienceSurfaceLodTests
         Assert.IsTrue(snapshot.SurfaceTiles.All(tile => tile.Id.Level == 1));
     }
 
-    private static PlanetExperience CreateExperience()
+    private static PlanetExperience CreateExperience(IPlanetElevationSource? elevationSource = null)
     {
-        var elevationSource = new FlatElevationSource();
+        elevationSource ??= new FlatElevationSource();
         var sampler = new PlanetSurfaceTileSampler(elevationSource);
         var meshBuilder = new PlanetSurfaceMeshBuilder(sampler);
         var meshCache = new PlanetSurfaceMeshCache(meshBuilder);
@@ -122,5 +172,16 @@ public sealed class PlanetExperienceSurfaceLodTests
     private sealed class FlatElevationSource : IPlanetElevationSource
     {
         public double SampleElevationMeters(PlanetVector direction, int seed) => 0.0;
+    }
+
+    private sealed class CountingElevationSource : IPlanetElevationSource
+    {
+        public int SampleCount { get; private set; }
+
+        public double SampleElevationMeters(PlanetVector direction, int seed)
+        {
+            SampleCount++;
+            return 0.0;
+        }
     }
 }
