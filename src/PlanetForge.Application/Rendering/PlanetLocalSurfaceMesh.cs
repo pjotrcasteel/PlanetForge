@@ -14,4 +14,12 @@ public sealed record PlanetLocalSurfaceMesh(
     double CameraAltitudeMeters)
 {
     public int VertexCount => TriangleCount * 3;
+
+    public PlanetLocalSurfaceMesh AsReference(double cameraAltitudeMeters) => this with
+    {
+        PositionsMeters = [],
+        Normals = [],
+        ElevationsMeters = [],
+        CameraAltitudeMeters = cameraAltitudeMeters,
+    };
 }
