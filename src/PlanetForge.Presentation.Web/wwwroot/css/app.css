@@ -1,12 +1,15 @@
 html, body { margin: 0; min-height: 100%; background: #07100f; color: #e8f4ea; font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
 body { min-height: 100vh; overflow-x: hidden; background: radial-gradient(circle at 50% 24%, #16312a 0, #0a1614 34rem, #050908 70rem); }
 button { font: inherit; }
+button:disabled { opacity: .4; cursor: not-allowed; transform: none; }
 .boot-screen { min-height: 100vh; display: grid; place-items: center; letter-spacing: .2em; color: #7ee1a3; font-size: .8rem; }
 .game-shell { width: min(1180px, calc(100% - 32px)); margin: 0 auto; padding: 40px 0 28px; }
 .hero-copy { display: flex; align-items: end; justify-content: space-between; gap: 24px; }
 .eyebrow, .control-label, footer, .stage-hint { letter-spacing: .16em; font-size: .68rem; font-weight: 800; color: #7ca98b; }
 h1 { margin: 6px 0 4px; font-size: clamp(2.5rem, 8vw, 5.4rem); line-height: .9; letter-spacing: -.07em; }
 h2 { margin: 5px 0 0; font-size: clamp(1.45rem, 4vw, 2rem); letter-spacing: -.035em; }
+h3 { margin: 0; font-size: 1.22rem; letter-spacing: -.025em; }
+p { line-height: 1.6; }
 .hero-copy p, .science-copy p { max-width: 720px; margin: 18px 0 0; color: #a8bbb0; line-height: 1.6; }
 .seed-chip { border: 1px solid #284c3c; color: #8ee4a9; border-radius: 999px; padding: 10px 14px; font: 700 .72rem ui-monospace, monospace; white-space: nowrap; }
 .planet-stage { position: relative; height: min(61vh, 680px); min-height: 420px; margin: 26px 0 18px; overflow: hidden; border: 1px solid #1f3d32; border-radius: 28px; background: radial-gradient(circle at 50% 45%, rgba(40,104,76,.16), rgba(4,8,8,.1) 42%, rgba(2,4,4,.78)); box-shadow: inset 0 0 80px rgba(0,0,0,.34), 0 24px 80px rgba(0,0,0,.28); }
@@ -29,8 +32,9 @@ h2 { margin: 5px 0 0; font-size: clamp(1.45rem, 4vw, 2rem); letter-spacing: -.03
 .accent-card { border-color: #31674d; background: linear-gradient(140deg, rgba(22,65,48,.92), rgba(10,29,23,.9)); }
 .button-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: auto; }
 button { border: 1px solid #315242; border-radius: 10px; padding: 10px 12px; color: #dff7e6; background: #10251e; cursor: pointer; transition: transform .12s ease, border-color .12s ease, background .12s ease; }
-button:hover { transform: translateY(-1px); border-color: #67c98c; background: #163527; }
+button:hover:not(:disabled) { transform: translateY(-1px); border-color: #67c98c; background: #163527; }
 .wide-button { margin-top: auto; width: 100%; background: #1f4b36; }
+.primary-button { border-color: #62d990; background: #22623f; color: #f0fff5; font-weight: 800; }
 .stat-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
 .stat-card { display: flex; flex-direction: column; gap: 5px; padding: 15px 16px; border: 1px solid #193329; border-radius: 15px; background: rgba(7,18,15,.72); }
 .stat-card span { color: #84a390; font-size: .76rem; }
@@ -42,6 +46,59 @@ button:hover { transform: translateY(-1px); border-color: #67c98c; background: #
 .formula-list span { color: #6fa483; font-size: .68rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
 .formula-list code { color: #ddf4e3; font-size: .78rem; text-align: right; }
 .visual-controls { grid-template-columns: repeat(2, 1fr); }
+.mission-briefing { display: grid; grid-template-columns: 1.35fr .65fr; gap: 16px; margin-top: 30px; }
+.mission-briefing-copy, .mission-objective { border: 1px solid #29503f; border-radius: 22px; padding: 22px; background: linear-gradient(145deg, rgba(14,38,30,.9), rgba(7,18,15,.88)); }
+.mission-briefing-copy p { margin: 12px 0 0; color: #a8bbb0; }
+.mission-objective { display: flex; flex-direction: column; justify-content: center; gap: 9px; border-color: #3b7657; background: linear-gradient(145deg, rgba(27,72,51,.9), rgba(10,31,23,.9)); }
+.mission-objective > span, .mission-dashboard span, .observation-card span, .intervention-topline, .mechanism-note strong { color: #7ca98b; font-size: .68rem; font-weight: 800; letter-spacing: .12em; }
+.mission-objective strong { font-size: 1.1rem; line-height: 1.45; }
+.mission-objective small { color: #8ea89a; line-height: 1.45; }
+.mission-dashboard { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-top: 12px; }
+.mission-dashboard article { display: flex; flex-direction: column; gap: 5px; padding: 15px; border: 1px solid #1f3b31; border-radius: 15px; background: rgba(7,18,15,.76); }
+.mission-dashboard strong { font: 800 1.08rem ui-monospace, SFMono-Regular, Menlo, monospace; }
+.mission-dashboard small { color: #738b7d; }
+.progress-track { height: 5px; overflow: hidden; border-radius: 999px; background: #12251d; margin-top: 5px; }
+.progress-fill { height: 100%; border-radius: inherit; background: #67c98c; transition: width .25s ease; }
+.status-active { border-color: #315242 !important; }
+.status-won { border-color: #62d990 !important; background: rgba(24,74,45,.82) !important; }
+.status-failed { border-color: #9c544f !important; background: rgba(66,27,25,.78) !important; }
+.mission-resolution { margin-top: 24px; padding: 26px; border: 1px solid; border-radius: 22px; }
+.mission-resolution p { max-width: 780px; color: #a8bbb0; }
+.observation-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.observation-card { display: flex; flex-direction: column; gap: 6px; padding: 16px; border: 1px solid #1d3a2f; border-radius: 15px; background: rgba(8,21,17,.76); }
+.observation-card strong { font: 800 1.15rem ui-monospace, SFMono-Regular, Menlo, monospace; }
+.observation-card small { color: #789081; line-height: 1.4; }
+.learning-callout { display: flex; gap: 14px; align-items: baseline; margin-top: 12px; padding: 14px 16px; border-left: 3px solid #67c98c; background: rgba(20,54,40,.52); border-radius: 0 12px 12px 0; }
+.learning-callout strong { white-space: nowrap; }
+.learning-callout span { color: #a8bbb0; line-height: 1.5; }
+.intervention-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+.intervention-card { display: flex; flex-direction: column; gap: 12px; padding: 18px; border: 1px solid #29503f; border-radius: 18px; background: linear-gradient(150deg, rgba(14,39,30,.9), rgba(7,20,16,.9)); }
+.intervention-card p { margin: 0; color: #a8bbb0; }
+.intervention-card > small { color: #6f8879; line-height: 1.45; }
+.intervention-topline { display: flex; justify-content: space-between; gap: 10px; }
+.mechanism-note { display: flex; flex-direction: column; gap: 5px; padding: 10px 11px; border: 1px solid #234536; border-radius: 10px; background: rgba(4,13,10,.4); }
+.mechanism-note span { color: #a6b9ae; font-size: .83rem; line-height: 1.45; }
+.planned-action-bar { display: flex; justify-content: space-between; align-items: center; gap: 18px; margin-top: 12px; padding: 14px 16px; border: 1px solid #2b5d45; border-radius: 14px; background: rgba(18,49,36,.72); }
+.planned-action-bar div { display: flex; flex-direction: column; gap: 4px; }
+.planned-action-bar > span { color: #8ee4a9; font: 800 .76rem ui-monospace, monospace; white-space: nowrap; }
+.prediction-panel { padding: 20px; border: 1px solid #284c3c; border-radius: 18px; background: rgba(8,22,18,.78); }
+.prediction-panel p { margin: 0 0 14px; color: #a8bbb0; }
+.prediction-buttons { display: grid; grid-template-columns: repeat(3, 1fr); gap: 9px; }
+.prediction-selected { border-color: #7ee1a3 !important; background: #24593c !important; box-shadow: inset 0 0 0 1px rgba(126,225,163,.35); }
+.simulate-panel { display: flex; align-items: center; justify-content: space-between; gap: 24px; margin-top: 14px; padding: 22px; border: 1px solid #356a50; border-radius: 20px; background: linear-gradient(135deg, rgba(19,55,40,.9), rgba(8,25,19,.9)); }
+.simulate-panel p { max-width: 700px; margin: 8px 0 0; color: #91a99b; }
+.simulate-button { min-width: 220px; min-height: 54px; }
+.result-panel { display: grid; grid-template-columns: 1fr auto; gap: 24px; margin-top: 14px; padding: 22px; border: 1px solid; border-radius: 20px; }
+.result-panel h2 { margin-top: 4px; }
+.result-panel p { max-width: 760px; margin-bottom: 0; color: #b2c4b9; }
+.prediction-correct { border-color: #4f9c6d; background: rgba(17,57,38,.72); }
+.prediction-wrong { border-color: #8c6d48; background: rgba(57,43,20,.62); }
+.result-deltas { display: grid; gap: 8px; align-content: center; min-width: 185px; }
+.result-deltas span { display: flex; justify-content: space-between; gap: 14px; color: #8ea89a; font-size: .78rem; }
+.result-deltas strong { color: #e4f6e9; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.sandbox-entry { display: flex; justify-content: space-between; align-items: center; gap: 24px; margin-top: 28px; padding: 20px; border: 1px dashed #315242; border-radius: 18px; }
+.sandbox-entry strong { display: block; margin-top: 4px; }
+.sandbox-entry p { margin: 6px 0 0; max-width: 720px; color: #7e9789; }
 footer { display: flex; justify-content: center; gap: 24px; flex-wrap: wrap; padding: 28px 0 0; color: #506b5b; }
-@media (max-width: 900px) { .control-grid, .stat-grid { grid-template-columns: repeat(2, 1fr); } .science-panel { grid-template-columns: 1fr; } }
-@media (max-width: 760px) { .game-shell { width: min(100% - 20px, 1180px); padding-top: 24px; } .hero-copy, .section-heading { align-items: start; flex-direction: column; } .planet-stage { min-height: 380px; height: 54vh; border-radius: 20px; } .stage-metrics { left: 12px; right: 12px; justify-content: start; } .local-scale-hud { left: 12px; bottom: 46px; max-width: calc(100% - 24px); } .control-grid, .stat-grid, .visual-controls { grid-template-columns: 1fr; } .control-card { min-height: 100px; } .formula-list div { align-items: start; flex-direction: column; } .formula-list code { text-align: left; } }
+@media (max-width: 900px) { .control-grid, .stat-grid, .observation-grid, .intervention-grid { grid-template-columns: repeat(2, 1fr); } .mission-dashboard { grid-template-columns: repeat(2, 1fr); } .science-panel, .mission-briefing { grid-template-columns: 1fr; } }
+@media (max-width: 760px) { .game-shell { width: min(100% - 20px, 1180px); padding-top: 24px; } .hero-copy, .section-heading, .simulate-panel, .sandbox-entry, .learning-callout, .planned-action-bar { align-items: stretch; flex-direction: column; } .planet-stage { min-height: 380px; height: 54vh; border-radius: 20px; } .stage-metrics { left: 12px; right: 12px; justify-content: start; } .local-scale-hud { left: 12px; bottom: 46px; max-width: calc(100% - 24px); } .control-grid, .stat-grid, .visual-controls, .observation-grid, .intervention-grid, .mission-dashboard, .prediction-buttons { grid-template-columns: 1fr; } .control-card { min-height: 100px; } .formula-list div { align-items: start; flex-direction: column; } .formula-list code { text-align: left; } .learning-callout strong { white-space: normal; } .result-panel { grid-template-columns: 1fr; } .simulate-button { min-width: 0; width: 100%; } .planned-action-bar > span { white-space: normal; } }
