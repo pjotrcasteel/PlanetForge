@@ -11,7 +11,6 @@ namespace PlanetForge.Application.Planets;
 
 public sealed class PlanetExperience(
     PlanetSurfaceMeshCache surfaceMeshCache,
-    PlanetSurfaceLodSelector surfaceLodSelector,
     PlanetLocalSurfacePatchSampler localSurfacePatchSampler,
     PlanetLocalSurfaceMeshBuilder localSurfaceMeshBuilder)
 {
@@ -63,7 +62,9 @@ public sealed class PlanetExperience(
         var atmosphereDensity = CalculateAtmosphereDensity(atmosphere.SurfacePressurePascals);
         var radiusMeters = state.PhysicalParameters.RadiusMeters;
         var localSurface = CreateLocalSurface(radiusMeters);
-        var surfaceTiles = localSurface is null ? CreateSurfaceTiles(radiusMeters) : Array.Empty<PlanetSurfaceTileMesh>();
+        var surfaceTiles = localSurface is null
+            ? surfaceMeshCache.GetOrBuildGlobal(GlobalSurfaceLevel, SurfaceCellsPerAxis, state.Seed, radiusMeters)
+            : Array.Empty<PlanetSurfaceTileMesh>();
 
         return new PlanetRenderSnapshot(
             surfaceTiles,
@@ -222,17 +223,6 @@ public sealed class PlanetExperience(
     {
         state.ResetEarthReference();
         return CreateSnapshot();
-    }
-
-    private IReadOnlyList<PlanetSurfaceTileMesh> CreateSurfaceTiles(double radiusMeters)
-    {
-        if (surfaceView is null)
-        {
-            return surfaceMeshCache.GetOrBuildGlobal(GlobalSurfaceLevel, SurfaceCellsPerAxis, state.Seed, radiusMeters);
-        }
-
-        var selectedTiles = surfaceLodSelector.Select(surfaceView);
-        return surfaceMeshCache.GetOrBuild(selectedTiles, SurfaceCellsPerAxis, state.Seed, radiusMeters);
     }
 
     private PlanetLocalSurfaceMesh? CreateLocalSurface(double radiusMeters)
