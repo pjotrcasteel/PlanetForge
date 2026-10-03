@@ -24,6 +24,7 @@ public sealed class PlanetSurfaceLodSelector(PlanetSurfaceLodOptions options)
         var bounds = PlanetTileGeometry.CalculateBounds(id);
         if (!IsVisible(bounds, view))
         {
+            result.Add(id);
             return;
         }
 
