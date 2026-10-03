@@ -14,6 +14,6 @@ public sealed record PlanetRenderSnapshot(
     PlanetPhysicsSnapshot Physics,
     AtmosphereParameters AtmosphereParameters,
     AtmosphereSnapshot Atmosphere,
-    SurfaceClimateSnapshot Climate,
+    ClimateSnapshot Climate,
     WaterParameters WaterParameters,
     WaterPhaseSnapshot Water);
