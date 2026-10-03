@@ -16,4 +16,8 @@ public sealed record PlanetSurfaceTileMesh(
     public int SurfaceVertexCount => SurfaceTriangleCount * 3;
 
     public int SkirtVertexCount => SkirtTriangleCount * 3;
+
+    public bool IncludesGeometry => Positions.Length > 0 && Normals.Length > 0;
+
+    public PlanetSurfaceTileMesh AsReference() => new(Id, [], [], SurfaceTriangleCount, SkirtTriangleCount);
 }
