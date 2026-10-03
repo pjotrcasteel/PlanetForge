@@ -8,10 +8,20 @@ using PlanetForge.Domain.Planets;
 
 namespace PlanetForge.Application.Planets;
 
-public sealed class PlanetExperience(PlanetSurfaceMeshCache surfaceMeshCache, PlanetSurfaceLodSelector surfaceLodSelector)
+public sealed class PlanetExperience(
+    PlanetSurfaceMeshCache surfaceMeshCache,
+    PlanetSurfaceLodSelector surfaceLodSelector,
+    PlanetLocalSurfacePatchSampler localSurfacePatchSampler,
+    PlanetLocalSurfaceMeshBuilder localSurfaceMeshBuilder)
 {
     private const int GlobalSurfaceLevel = 1;
     private const int SurfaceCellsPerAxis = 12;
+    private const int LocalSurfaceCellsPerAxis = 32;
+    private const double MinimumLocalPatchSizeMeters = 256.0;
+    private const double MaximumLocalViewAltitudeMeters = 150_000.0;
+    private const double MaximumLocalViewRadiusFraction = 0.03;
+    private const double MaximumLocalPatchRadiusFraction = 0.18;
+    private const double LocalPatchMarginFactor = 1.5;
     private const double MinimumOrbitalDistanceAu = 0.25;
     private const double MaximumOrbitalDistanceAu = 3.0;
     private const double MinimumStellarLuminositySolar = 0.2;
@@ -43,7 +53,8 @@ public sealed class PlanetExperience(PlanetSurfaceMeshCache surfaceMeshCache, Pl
         var seaLevelMeters = CalculateVisualSeaLevelMeters(water);
         var atmosphereDensity = CalculateAtmosphereDensity(atmosphere.SurfacePressurePascals);
         var radiusMeters = state.PhysicalParameters.RadiusMeters;
-        var surfaceTiles = CreateSurfaceTiles(radiusMeters);
+        var localSurface = CreateLocalSurface(radiusMeters);
+        var surfaceTiles = localSurface is null ? CreateSurfaceTiles(radiusMeters) : Array.Empty<PlanetSurfaceTileMesh>();
 
         return new PlanetRenderSnapshot(
             surfaceTiles,
@@ -56,7 +67,8 @@ public sealed class PlanetExperience(PlanetSurfaceMeshCache surfaceMeshCache, Pl
             atmosphere,
             climate,
             state.WaterParameters,
-            water);
+            water,
+            localSurface);
     }
 
     public PlanetRenderSnapshot UpdateSurfaceView(PlanetSurfaceView view)
@@ -184,6 +196,47 @@ public sealed class PlanetExperience(PlanetSurfaceMeshCache surfaceMeshCache, Pl
 
         var selectedTiles = surfaceLodSelector.Select(surfaceView);
         return surfaceMeshCache.GetOrBuild(selectedTiles, SurfaceCellsPerAxis, state.Seed, radiusMeters);
+    }
+
+    private PlanetLocalSurfaceMesh? CreateLocalSurface(double radiusMeters)
+    {
+        if (surfaceView is null)
+        {
+            return null;
+        }
+
+        var cameraAltitudeMeters = (surfaceView.CameraDistanceFromCenter - 1.0) * radiusMeters;
+        var transitionAltitudeMeters = Math.Min(MaximumLocalViewAltitudeMeters, radiusMeters * MaximumLocalViewRadiusFraction);
+        if (cameraAltitudeMeters > transitionAltitudeMeters)
+        {
+            return null;
+        }
+
+        var patchSizeMeters = CalculateLocalPatchSize(surfaceView, cameraAltitudeMeters, radiusMeters);
+        var patch = localSurfacePatchSampler.Sample(
+            surfaceView.CameraDirection,
+            patchSizeMeters,
+            LocalSurfaceCellsPerAxis,
+            state.Seed,
+            radiusMeters,
+            CancellationToken.None);
+        return localSurfaceMeshBuilder.Build(patch, Math.Max(cameraAltitudeMeters, 1.0));
+    }
+
+    private static double CalculateLocalPatchSize(PlanetSurfaceView view, double cameraAltitudeMeters, double radiusMeters)
+    {
+        var visibleHeightMeters = 2.0 * cameraAltitudeMeters * Math.Tan(view.VerticalFieldOfViewRadians * 0.5);
+        var visibleWidthMeters = visibleHeightMeters * Math.Max(view.ViewportAspectRatio, 1.0);
+        var requiredSizeMeters = Math.Max(MinimumLocalPatchSizeMeters, Math.Max(visibleHeightMeters, visibleWidthMeters) * LocalPatchMarginFactor);
+        var maximumSizeMeters = radiusMeters * MaximumLocalPatchRadiusFraction;
+        var patchSizeMeters = MinimumLocalPatchSizeMeters;
+
+        while (patchSizeMeters < requiredSizeMeters && patchSizeMeters < maximumSizeMeters)
+        {
+            patchSizeMeters *= 2.0;
+        }
+
+        return Math.Min(patchSizeMeters, maximumSizeMeters);
     }
 
     private void ChangeOrbitalDistance(double deltaAstronomicalUnits)
