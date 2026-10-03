@@ -8,6 +8,8 @@ namespace PlanetForge.Application.Tests.Planets;
 [TestClass]
 public sealed class PlanetExperienceSurfaceLodTests
 {
+    private const double EarthRadiusMeters = 6_371_000.0;
+
     [TestMethod]
     public void UpdateSurfaceView_NearCamera_SelectsHigherDetailThanFarCamera()
     {
@@ -34,6 +36,21 @@ public sealed class PlanetExperienceSurfaceLodTests
         Assert.AreEqual(0, snapshot.SurfaceTiles.Count);
         Assert.IsTrue(snapshot.LocalSurface.CameraAltitudeMeters > 0.0);
         Assert.IsTrue(snapshot.LocalSurface.SizeMeters > 0.0);
+    }
+
+    [TestMethod]
+    public void UpdateSurfaceView_ThreeMetresAboveEarth_UsesSubMetreTerrainCells()
+    {
+        var experience = CreateExperience();
+        var cameraDistance = 1.0 + (3.0 / EarthRadiusMeters);
+        var view = new PlanetSurfaceView(PlanetVector.UnitZ, cameraDistance, 1080, Math.PI / 4.2) { ViewportAspectRatio = 16.0 / 9.0 };
+
+        var snapshot = experience.UpdateSurfaceView(view);
+
+        Assert.IsNotNull(snapshot.LocalSurface);
+        Assert.AreEqual(16.0, snapshot.LocalSurface.SizeMeters, 0.001);
+        Assert.IsLessThanOrEqualTo(3.01, snapshot.LocalSurface.CameraAltitudeMeters);
+        Assert.IsGreaterThanOrEqualTo(2.99, snapshot.LocalSurface.CameraAltitudeMeters);
     }
 
     [TestMethod]
