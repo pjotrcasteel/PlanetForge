@@ -1,6 +1,6 @@
-const buildVersion = '0.0.3.11';
-const buildLabel = 'LOCAL TREES & EXIT PERFORMANCE';
-const pageTitle = `PlanetForge ${buildVersion} — Local Trees & Exit Performance`;
+const buildVersion = '0.0.3.12';
+const buildLabel = 'TRANSITION HITCH FIX';
+const pageTitle = `PlanetForge ${buildVersion} — Transition Hitch Fix`;
 const maximumAttempts = 100;
 const retryDelayMilliseconds = 100;
 
