@@ -1,27 +1,40 @@
 namespace PlanetForge.Domain.Surface;
 
-public readonly record struct PlanetTileId(CubeFace Face, int Level, int X, int Y)
+public readonly record struct PlanetTileId
 {
-    public int TilesPerAxis => 1 << Level;
-
-    public PlanetTileId
+    public PlanetTileId(CubeFace face, int level, int x, int y)
     {
-        if (Level < 0 || Level > 30)
+        if (level < 0 || level > 30)
         {
-            throw new ArgumentOutOfRangeException(nameof(Level), Level, "Level must be between 0 and 30.");
+            throw new ArgumentOutOfRangeException(nameof(level), level, "Level must be between 0 and 30.");
         }
 
-        var tilesPerAxis = 1 << Level;
-        if (X < 0 || X >= tilesPerAxis)
+        var tilesPerAxis = 1 << level;
+        if (x < 0 || x >= tilesPerAxis)
         {
-            throw new ArgumentOutOfRangeException(nameof(X), X, "X must be inside the tile grid for the selected level.");
+            throw new ArgumentOutOfRangeException(nameof(x), x, "X must be inside the tile grid for the selected level.");
         }
 
-        if (Y < 0 || Y >= tilesPerAxis)
+        if (y < 0 || y >= tilesPerAxis)
         {
-            throw new ArgumentOutOfRangeException(nameof(Y), Y, "Y must be inside the tile grid for the selected level.");
+            throw new ArgumentOutOfRangeException(nameof(y), y, "Y must be inside the tile grid for the selected level.");
         }
+
+        Face = face;
+        Level = level;
+        X = x;
+        Y = y;
     }
+
+    public CubeFace Face { get; }
+
+    public int Level { get; }
+
+    public int X { get; }
+
+    public int Y { get; }
+
+    public int TilesPerAxis => 1 << Level;
 
     public IReadOnlyList<PlanetTileId> Children()
     {
