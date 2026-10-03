@@ -13,7 +13,8 @@ export function initialize(canvasId, snapshot) {
 
 export function setPlanet(snapshot) {
     if (!state) return;
-    state.seaLevel = snapshot.seaLevel;
+    state.seaLevelMeters = snapshot.seaLevelMeters;
+    state.planetRadiusMeters = snapshot.physicalParameters.radiusMeters;
     state.atmosphereDensity = snapshot.atmosphereDensity;
     state.equilibriumTemperature = snapshot.physics.equilibriumTemperatureKelvin;
     state.surfaceTemperature = snapshot.climate.surfaceTemperatureKelvin;
@@ -34,7 +35,7 @@ function createState(canvas, gl) {
     const program = createProgram(gl, vertexShaderSource, fragmentShaderSource);
     return {
         canvas, gl, program, seed: null, surfaceKey: null, tiles: [], yaw: -0.65, pitch: 0.24, distance: 3.15,
-        dragging: false, lastX: 0, lastY: 0, seaLevel: 0, atmosphereDensity: 0.6,
+        dragging: false, lastX: 0, lastY: 0, seaLevelMeters: 0, planetRadiusMeters: 6371000, atmosphereDensity: 0.6,
         equilibriumTemperature: 255, surfaceTemperature: 288, solarFlux: 1361,
         iceFraction: 0, liquidFraction: 1, vaporFraction: 0,
         attributes: {
@@ -45,7 +46,8 @@ function createState(canvas, gl) {
             model: gl.getUniformLocation(program, 'uModel'),
             viewProjection: gl.getUniformLocation(program, 'uViewProjection'),
             light: gl.getUniformLocation(program, 'uLightDirection'),
-            seaLevel: gl.getUniformLocation(program, 'uSeaLevel'),
+            seaLevelMeters: gl.getUniformLocation(program, 'uSeaLevelMeters'),
+            planetRadiusMeters: gl.getUniformLocation(program, 'uPlanetRadiusMeters'),
             atmosphere: gl.getUniformLocation(program, 'uAtmosphere'),
             equilibriumTemperature: gl.getUniformLocation(program, 'uEquilibriumTemperature'),
             surfaceTemperature: gl.getUniformLocation(program, 'uSurfaceTemperature'),
@@ -118,7 +120,8 @@ function render(time) {
     gl.uniformMatrix4fv(state.uniforms.model, false, model);
     gl.uniformMatrix4fv(state.uniforms.viewProjection, false, viewProjection);
     gl.uniform3f(state.uniforms.light, 0.7, 0.35, 0.6);
-    gl.uniform1f(state.uniforms.seaLevel, state.seaLevel);
+    gl.uniform1f(state.uniforms.seaLevelMeters, state.seaLevelMeters);
+    gl.uniform1f(state.uniforms.planetRadiusMeters, state.planetRadiusMeters);
     gl.uniform1f(state.uniforms.atmosphere, state.atmosphereDensity);
     gl.uniform1f(state.uniforms.equilibriumTemperature, state.equilibriumTemperature);
     gl.uniform1f(state.uniforms.surfaceTemperature, state.surfaceTemperature);
@@ -250,7 +253,8 @@ precision highp float;
 in vec3 vNormal;
 in vec3 vWorldPosition;
 uniform vec3 uLightDirection;
-uniform float uSeaLevel;
+uniform float uSeaLevelMeters;
+uniform float uPlanetRadiusMeters;
 uniform float uAtmosphere;
 uniform float uEquilibriumTemperature;
 uniform float uSurfaceTemperature;
@@ -271,8 +275,7 @@ void main() {
     }
 
     float radius = length(vWorldPosition);
-    float elevation = radius - 1.0;
-    float sea = uSeaLevel;
+    float elevationMeters = (radius - 1.0) * uPlanetRadiusMeters;
     vec3 deepOcean = vec3(0.035, 0.16, 0.23);
     vec3 shallowOcean = vec3(0.06, 0.31, 0.36);
     vec3 lowland = vec3(0.18, 0.38, 0.22);
@@ -280,10 +283,10 @@ void main() {
     vec3 peak = vec3(0.62, 0.65, 0.59);
     vec3 baseColor;
 
-    if (uLiquidFraction > 0.001 && elevation < sea - 0.012) baseColor = deepOcean;
-    else if (uLiquidFraction > 0.001 && elevation < sea) baseColor = shallowOcean;
-    else if (elevation < 0.018) baseColor = lowland;
-    else if (elevation < 0.038) baseColor = highland;
+    if (uLiquidFraction > 0.001 && elevationMeters < uSeaLevelMeters - 1500.0) baseColor = deepOcean;
+    else if (uLiquidFraction > 0.001 && elevationMeters < uSeaLevelMeters) baseColor = shallowOcean;
+    else if (elevationMeters < 1200.0) baseColor = lowland;
+    else if (elevationMeters < 3500.0) baseColor = highland;
     else baseColor = peak;
 
     float latitude = abs(normalize(vWorldPosition).y);
@@ -294,7 +297,7 @@ void main() {
     baseColor = mix(baseColor, vec3(0.77, 0.88, 0.90), clamp(frost, 0.0, 0.96));
 
     float heat = smoothstep(315.0, 430.0, uSurfaceTemperature);
-    if (elevation >= sea || uLiquidFraction <= 0.001) baseColor = mix(baseColor, vec3(0.48, 0.25, 0.11), heat * 0.76);
+    if (elevationMeters >= uSeaLevelMeters || uLiquidFraction <= 0.001) baseColor = mix(baseColor, vec3(0.48, 0.25, 0.11), heat * 0.76);
     baseColor = mix(baseColor, vec3(0.56, 0.45, 0.31), clamp(uVaporFraction * 0.28, 0.0, 0.28));
 
     float light = max(dot(normalize(vNormal), normalize(uLightDirection)), 0.0);
