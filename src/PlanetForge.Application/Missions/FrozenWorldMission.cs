@@ -53,7 +53,7 @@ public sealed class FrozenWorldMission(PlanetExperience planetExperience)
     {
         planetExperience.ResetEarthReference();
         planetExperience.MoveOrbitOutward();
-        currentPlanet = planetExperience.AdvanceClimate(20.0);
+        currentPlanet = planetExperience.AdvanceClimate(50.0);
         budgetRemaining = StartingBudget;
         missionYearsElapsed = 0;
         stableYears = 0;
