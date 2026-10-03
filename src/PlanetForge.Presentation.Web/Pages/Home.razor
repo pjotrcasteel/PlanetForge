@@ -8,18 +8,18 @@
 <main class="game-shell">
     <section class="hero-copy">
         <div>
-            <span class="eyebrow">MILESTONE 0.0.3.6 · CACHE CHECK</span>
+            <span class="eyebrow">MILESTONE 0.0.4 · CLIMATE FEEDBACK</span>
             <h1>PlanetForge</h1>
-            <p>The planet is now coupled. Change orbit, atmosphere, CO₂ or water and the simulation recalculates pressure, temperature and water phase before the renderer draws the result.</p>
+            <p>Change the forcing, then advance time. Temperature now responds with inertia while ice changes the effective albedo and feeds back into the planet's energy balance.</p>
         </div>
-        <div class="seed-chip">BUILD 0.0.3.6 · SEED @snapshot?.Seed</div>
+        <div class="seed-chip">BUILD 0.0.4 · SEED @snapshot?.Seed</div>
     </section>
 
     <section class="planet-stage">
         <canvas id="planet-canvas" aria-label="Interactive low-poly planet"></canvas>
         <div class="stage-metrics">
             <span>@FormatSurfaceTemperature()</span>
-            <span>@FormatPressure()</span>
+            <span>@FormatSimulationYear()</span>
             <span>@FormatWaterState()</span>
         </div>
         <div class="stage-hint">DRAG TO ORBIT · SCROLL / PINCH TO ZOOM</div>
@@ -27,10 +27,42 @@
 
     <section class="section-heading">
         <div>
-            <span class="eyebrow">COUPLED SYSTEMS</span>
-            <h2>Change the environment</h2>
+            <span class="eyebrow">CLIMATE TIMELINE</span>
+            <h2>Advance the planet through time</h2>
         </div>
         <button class="reset-button" @onclick="ResetEarthReferenceAsync">Reset Earth reference</button>
+    </section>
+
+    <section class="control-grid">
+        <article class="control-card accent-card">
+            <span class="control-label">SIMULATION TIME</span>
+            <strong>@FormatSimulationYear()</strong>
+            <small>Boundary changes set the forcing; time reveals the response</small>
+            <div class="button-row">
+                <button @onclick="AdvanceOneYearAsync">+1 year</button>
+                <button @onclick="AdvanceTenYearsAsync">+10 years</button>
+                <button @onclick="AdvanceFiftyYearsAsync">+50 years</button>
+            </div>
+        </article>
+
+        <article class="control-card accent-card">
+            <span class="control-label">THERMAL RESPONSE</span>
+            <strong>@FormatSurfaceTemperature()</strong>
+            <small>Target @FormatTargetSurfaceTemperature() · @FormatTemperatureGap()</small>
+        </article>
+
+        <article class="control-card accent-card">
+            <span class="control-label">ICE → ALBEDO FEEDBACK</span>
+            <strong>@FormatCryosphere()</strong>
+            <small>Effective albedo @FormatEffectiveAlbedo() · @FormatIceAlbedoContribution()</small>
+        </article>
+    </section>
+
+    <section class="section-heading compact-heading">
+        <div>
+            <span class="eyebrow">COUPLED SYSTEMS</span>
+            <h2>Change the environmental forcing</h2>
+        </div>
     </section>
 
     <section class="control-grid">
@@ -94,9 +126,9 @@
         </article>
 
         <article class="control-card">
-            <span class="control-label">BOND ALBEDO</span>
+            <span class="control-label">BASE BOND ALBEDO</span>
             <strong>@FormatAlbedo()</strong>
-            <small>Fraction of incoming radiation reflected</small>
+            <small>Effective @FormatEffectiveAlbedo() after cryosphere feedback</small>
             <div class="button-row">
                 <button @onclick="DarkenSurfaceAsync">Darken</button>
                 <button @onclick="BrightenSurfaceAsync">Brighten</button>
@@ -139,8 +171,11 @@
     </section>
 
     <section class="stat-grid">
-        <article class="stat-card"><span>Surface temperature</span><strong>@FormatSurfaceTemperature()</strong><small>Energy balance + simplified greenhouse</small></article>
-        <article class="stat-card"><span>Equilibrium temperature</span><strong>@FormatEquilibriumTemperature()</strong><small>Zero-greenhouse baseline</small></article>
+        <article class="stat-card"><span>Surface temperature</span><strong>@FormatSurfaceTemperature()</strong><small>Time-stepped climate state</small></article>
+        <article class="stat-card"><span>Target temperature</span><strong>@FormatTargetSurfaceTemperature()</strong><small>Current forcing + effective albedo</small></article>
+        <article class="stat-card"><span>Cryosphere</span><strong>@FormatCryosphere()</strong><small>Simplified global ice/snow coverage proxy</small></article>
+        <article class="stat-card"><span>Effective albedo</span><strong>@FormatEffectiveAlbedo()</strong><small>Base reflectivity + ice feedback</small></article>
+        <article class="stat-card"><span>Equilibrium temperature</span><strong>@FormatEquilibriumTemperature()</strong><small>Zero-greenhouse radiative baseline</small></article>
         <article class="stat-card"><span>Surface pressure</span><strong>@FormatPressure()</strong><small>p = Mₐg / 4πR²</small></article>
         <article class="stat-card"><span>Liquid water</span><strong>@FormatLiquidWater()</strong><small>Pressure/temperature phase model</small></article>
         <article class="stat-card"><span>Ice</span><strong>@FormatIce()</strong><small>Fraction of total water inventory</small></article>
@@ -153,19 +188,19 @@
     <section class="science-panel">
         <div class="science-copy">
             <span class="eyebrow">MODEL TRANSPARENCY</span>
-            <h2>Physics where possible, approximations where necessary</h2>
-            <p>Pressure is derived from atmospheric mass and gravity. CO₂ forcing uses a logarithmic concentration relationship. The current greenhouse-temperature response and global water phase split are deliberately simple approximations, exposed here so they can later become editable Planet Logic blocks.</p>
+            <h2>Real feedback, deliberately simple global model</h2>
+            <p>Ice and snow reflect more sunlight than darker land and ocean, creating a positive surface-albedo feedback. PlanetForge models that real mechanism while keeping the global cryosphere fraction, thermal response time and maximum ice-albedo contribution explicit simplifications rather than pretending this is a full climate model.</p>
         </div>
         <div class="formula-list">
             <div><span>Physical relation</span><code>p = Mₐg / 4πR²</code></div>
             <div><span>Empirical</span><code>ΔF = 5.35 ln(C / C₀)</code></div>
-            <div><span>Simplified model</span><code>Tₛ = Tₑ + greenhouse + λΔF</code></div>
-            <div><span>Phase constraint</span><code>liquid H₂O requires p ≥ 611.657 Pa</code></div>
+            <div><span>Feedback model</span><code>αeff = αbase + 0.28 · fcryosphere</code></div>
+            <div><span>Thermal inertia</span><code>dT/dt = (Ttarget − T) / τ</code></div>
         </div>
     </section>
 
     <footer>
-        <span>COUPLED C# SIMULATION</span>
+        <span>TIME-STEPPED C# CLIMATE</span>
         <span>WEBGL RENDERER</span>
         <span>NO COMMERCIAL ENGINE</span>
     </footer>
@@ -189,6 +224,9 @@
         await rendererModule.InvokeVoidAsync("initialize", disposeCancellationTokenSource.Token, "planet-canvas", snapshot, GetOrCreateSurfaceLodReference());
     }
 
+    private Task AdvanceOneYearAsync() => UpdateAsync(Experience.AdvanceClimate(1.0));
+    private Task AdvanceTenYearsAsync() => UpdateAsync(Experience.AdvanceClimate(10.0));
+    private Task AdvanceFiftyYearsAsync() => UpdateAsync(Experience.AdvanceClimate(50.0));
     private Task MoveOrbitInwardAsync() => UpdateAsync(Experience.MoveOrbitInward());
     private Task MoveOrbitOutwardAsync() => UpdateAsync(Experience.MoveOrbitOutward());
     private Task DimStarAsync() => UpdateAsync(Experience.DimStar());
@@ -218,9 +256,13 @@
         }
     }
 
+    private string FormatSimulationYear() => snapshot is null ? "—" : $"YEAR +{snapshot.ClimateFeedback.ElapsedYears:0}";
     private string FormatOrbitalDistance() => snapshot is null ? "—" : $"{snapshot.PhysicalParameters.OrbitalDistanceMeters / PhysicalConstants.AstronomicalUnitMeters:0.00} AU";
     private string FormatStellarLuminosity() => snapshot is null ? "—" : $"{snapshot.PhysicalParameters.StellarLuminosityWatts / PhysicalConstants.NominalSolarLuminosityWatts:0.0} L☉";
     private string FormatAlbedo() => snapshot is null ? "—" : $"{snapshot.PhysicalParameters.BondAlbedo * 100:0.0}%";
+    private string FormatEffectiveAlbedo() => snapshot is null ? "—" : $"{snapshot.ClimateFeedback.EffectiveBondAlbedo * 100:0.0}%";
+    private string FormatIceAlbedoContribution() => snapshot is null ? "—" : $"+{snapshot.ClimateFeedback.IceAlbedoContribution * 100:0.0} pp from ice";
+    private string FormatCryosphere() => snapshot is null ? "—" : $"{snapshot.ClimateFeedback.CryosphereFraction * 100:0.0}% cover";
     private string FormatMass() => snapshot is null ? "—" : $"{snapshot.PhysicalParameters.MassKilograms / EarthReference.MassKilograms:0.0} M⊕";
     private string FormatRadius() => snapshot is null ? "—" : $"{snapshot.PhysicalParameters.RadiusMeters / EarthReference.MeanRadiusMeters:0.00} R⊕";
     private string FormatAtmosphereMass() => snapshot is null ? "—" : $"{snapshot.Atmosphere.EarthAtmosphereMasses:0.00} atm mass";
@@ -236,6 +278,18 @@
     private string FormatIce() => snapshot is null ? "—" : $"{snapshot.Water.IceFraction * 100:0.0}%";
     private string FormatVapor() => snapshot is null ? "—" : $"{snapshot.Water.VaporFraction * 100:0.0}%";
     private string FormatBoilingPoint() => snapshot is null ? "—" : $"{snapshot.Water.BoilingPointKelvin:0.0} K";
+    private string FormatTargetSurfaceTemperature() => snapshot is null ? "—" : FormatTemperature(snapshot.ClimateFeedback.TargetSurfaceTemperatureKelvin);
+
+    private string FormatTemperatureGap()
+    {
+        if (snapshot is null)
+        {
+            return "—";
+        }
+
+        var gap = snapshot.ClimateFeedback.TargetSurfaceTemperatureKelvin - snapshot.Climate.SurfaceTemperatureKelvin;
+        return $"{gap:+0.0;-0.0;0.0} K from target";
+    }
 
     private string FormatEquilibriumTemperature()
     {

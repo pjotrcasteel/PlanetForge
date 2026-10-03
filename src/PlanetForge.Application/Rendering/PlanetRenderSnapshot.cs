@@ -15,6 +15,7 @@ public sealed record PlanetRenderSnapshot(
     AtmosphereParameters AtmosphereParameters,
     AtmosphereSnapshot Atmosphere,
     ClimateSnapshot Climate,
+    ClimateFeedbackSnapshot ClimateFeedback,
     WaterParameters WaterParameters,
     WaterPhaseSnapshot Water,
     PlanetLocalSurfaceMesh? LocalSurface = null);
