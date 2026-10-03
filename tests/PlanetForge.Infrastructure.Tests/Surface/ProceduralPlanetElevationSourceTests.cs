@@ -40,7 +40,7 @@ public sealed class ProceduralPlanetElevationSourceTests
         var first = source.Sample(firstDirection, 42);
         var second = source.Sample(secondDirection, 42);
 
-        Assert.IsLessThan(Math.Abs(first - second), 0.001);
+        Assert.IsLessThan(0.001, Math.Abs(first - second));
     }
 
     [TestMethod]
@@ -59,8 +59,8 @@ public sealed class ProceduralPlanetElevationSourceTests
         foreach (var direction in directions)
         {
             var elevation = source.Sample(direction, 42);
-            Assert.IsGreaterThanOrEqualTo(elevation, -1.0);
-            Assert.IsLessThanOrEqualTo(elevation, 1.0);
+            Assert.IsGreaterThanOrEqualTo(-1.0, elevation);
+            Assert.IsLessThanOrEqualTo(1.0, elevation);
         }
     }
 }
