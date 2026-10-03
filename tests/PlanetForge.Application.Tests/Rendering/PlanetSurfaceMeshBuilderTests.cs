@@ -41,6 +41,24 @@ public sealed class PlanetSurfaceMeshBuilderTests
     }
 
     [TestMethod]
+    public void BuildTile_SurfaceNormals_FollowEachVertexRadialDirection()
+    {
+        var builder = CreateBuilder(new FlatElevationSource());
+        var tile = builder.BuildTile(new PlanetTileId(CubeFace.PositiveZ, 0, 0, 0), 4, 42, EarthRadiusMeters);
+        var surfaceFloatCount = tile.SurfaceTriangleCount * 9;
+
+        for (var offset = 0; offset < surfaceFloatCount; offset += 3)
+        {
+            var position = Vector3.Normalize(new Vector3(tile.Positions[offset], tile.Positions[offset + 1], tile.Positions[offset + 2]));
+            var normal = new Vector3(tile.Normals[offset], tile.Normals[offset + 1], tile.Normals[offset + 2]);
+
+            Assert.AreEqual(position.X, normal.X, 0.000001f);
+            Assert.AreEqual(position.Y, normal.Y, 0.000001f);
+            Assert.AreEqual(position.Z, normal.Z, 0.000001f);
+        }
+    }
+
+    [TestMethod]
     public void BuildTile_AddsSkirtsBelowSurfaceRadius()
     {
         var builder = CreateBuilder(new FlatElevationSource());

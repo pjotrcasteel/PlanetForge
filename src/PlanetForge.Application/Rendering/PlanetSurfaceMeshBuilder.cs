@@ -6,8 +6,8 @@ namespace PlanetForge.Application.Rendering;
 
 public sealed class PlanetSurfaceMeshBuilder(PlanetSurfaceTileSampler tileSampler)
 {
-    private const double MinimumSkirtDepthMeters = 25.0;
-    private const double MaximumSkirtDepthMeters = 5_000.0;
+    private const double MinimumSkirtDepthMeters = 5.0;
+    private const double MaximumSkirtDepthMeters = 500.0;
 
     public PlanetSurfaceTileMesh BuildTile(PlanetTileId id, int cellsPerAxis, int seed, double planetRadiusMeters)
     {
@@ -28,8 +28,8 @@ public sealed class PlanetSurfaceMeshBuilder(PlanetSurfaceTileSampler tileSample
                 var b = ToRenderVector(tile.GetPoint(x + 1, y), planetRadiusMeters);
                 var c = ToRenderVector(tile.GetPoint(x, y + 1), planetRadiusMeters);
                 var d = ToRenderVector(tile.GetPoint(x + 1, y + 1), planetRadiusMeters);
-                WriteTriangle(positions, normals, ref offset, a, c, b);
-                WriteTriangle(positions, normals, ref offset, b, c, d);
+                WriteSurfaceTriangle(positions, normals, ref offset, a, c, b);
+                WriteSurfaceTriangle(positions, normals, ref offset, b, c, d);
             }
         }
 
@@ -73,7 +73,7 @@ public sealed class PlanetSurfaceMeshBuilder(PlanetSurfaceTileSampler tileSample
         var bounds = PlanetTileGeometry.CalculateBounds(tile.Id);
         var tileArcLengthMeters = planetRadiusMeters * bounds.AngularRadiusRadians * 2.0;
         var approximateCellSizeMeters = tileArcLengthMeters / cellsPerAxis;
-        var skirtDepthMeters = Math.Clamp(approximateCellSizeMeters * 0.35, MinimumSkirtDepthMeters, MaximumSkirtDepthMeters);
+        var skirtDepthMeters = Math.Clamp(approximateCellSizeMeters * 0.05, MinimumSkirtDepthMeters, MaximumSkirtDepthMeters);
 
         for (var index = 0; index < cellsPerAxis; index++)
         {
@@ -101,8 +101,8 @@ public sealed class PlanetSurfaceMeshBuilder(PlanetSurfaceTileSampler tileSample
         var b = ToRenderVector(secondSurface, planetRadiusMeters);
         var c = ToRenderVector(firstInner, planetRadiusMeters);
         var d = ToRenderVector(secondInner, planetRadiusMeters);
-        WriteTriangle(positions, normals, ref offset, a, c, b);
-        WriteTriangle(positions, normals, ref offset, b, c, d);
+        WriteFlatTriangle(positions, normals, ref offset, a, c, b);
+        WriteFlatTriangle(positions, normals, ref offset, b, c, d);
     }
 
     private static PlanetVector LowerRadially(PlanetVector positionMeters, double skirtDepthMeters)
@@ -120,7 +120,30 @@ public sealed class PlanetSurfaceMeshBuilder(PlanetSurfaceTileSampler tileSample
         return new Vector3((float)normalized.X, (float)normalized.Y, (float)normalized.Z);
     }
 
-    private static void WriteTriangle(float[] positions, float[] normals, ref int offset, Vector3 a, Vector3 b, Vector3 c)
+    private static void WriteSurfaceTriangle(float[] positions, float[] normals, ref int offset, Vector3 a, Vector3 b, Vector3 c)
+    {
+        var normalA = Vector3.Normalize(a);
+        var normalB = Vector3.Normalize(b);
+        var normalC = Vector3.Normalize(c);
+        var faceNormal = Vector3.Cross(b - a, c - a);
+        var center = (a + b + c) / 3f;
+
+        if (Vector3.Dot(faceNormal, center) < 0f)
+        {
+            (b, c) = (c, b);
+            (normalB, normalC) = (normalC, normalB);
+        }
+
+        WriteVector(positions, offset, a);
+        WriteVector(positions, offset + 3, b);
+        WriteVector(positions, offset + 6, c);
+        WriteVector(normals, offset, normalA);
+        WriteVector(normals, offset + 3, normalB);
+        WriteVector(normals, offset + 6, normalC);
+        offset += 9;
+    }
+
+    private static void WriteFlatTriangle(float[] positions, float[] normals, ref int offset, Vector3 a, Vector3 b, Vector3 c)
     {
         var normal = Vector3.Cross(b - a, c - a);
         var center = (a + b + c) / 3f;
