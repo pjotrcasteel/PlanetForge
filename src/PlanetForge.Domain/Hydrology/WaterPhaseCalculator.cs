@@ -22,8 +22,8 @@ public static class WaterPhaseCalculator
 
         if (surfacePressurePascals < TriplePointPressurePascals)
         {
-            var vaporFraction = SmoothStep(258.0, 278.0, surfaceTemperatureKelvin);
-            return CreateSnapshot(water.TotalMassKilograms, 1.0 - vaporFraction, 0.0, vaporFraction, TriplePointTemperatureKelvin, false);
+            var sublimatedFraction = SmoothStep(258.0, 278.0, surfaceTemperatureKelvin);
+            return CreateSnapshot(water.TotalMassKilograms, 1.0 - sublimatedFraction, 0.0, sublimatedFraction, TriplePointTemperatureKelvin, false);
         }
 
         var boilingPoint = CalculateBoilingPoint(surfacePressurePascals);
