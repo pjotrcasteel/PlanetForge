@@ -179,7 +179,7 @@ public sealed class PlanetHydrologyModelBuilder(IPlanetElevationSource elevation
         var cells = new PlanetHydrologyCell[layout.CellCount];
         for (var index = 0; index < layout.CellCount; index++)
         {
-            var drainageTarget = drainageTargetIndices[index] >= 0 ? layout.GetCell(drainageTargetIndices[index]) : null;
+            PlanetSurfaceGridCellId? drainageTarget = drainageTargetIndices[index] >= 0 ? layout.GetCell(drainageTargetIndices[index]) : null;
             cells[index] = new PlanetHydrologyCell(
                 layout.GetCell(index),
                 rawElevationMeters[index],
