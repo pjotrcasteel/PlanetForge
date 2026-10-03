@@ -2,10 +2,12 @@ let state;
 
 const verticalFieldOfViewRadians = Math.PI / 4.2;
 const surfaceUpdateDebounceMilliseconds = 240;
+const localSurfaceUpdateDebounceMilliseconds = 650;
 const maximumCachedSurfaceTiles = 512;
 const minimumCameraAltitudeMeters = 3.0;
 const maximumCameraAltitudeRatio = 4.2;
 const localTransitionAltitudeMeters = 20_000.0;
+const localExitAltitudeMeters = 25_000.0;
 const minimumLocalViewPitchRadians = 0.24;
 const maximumLocalViewPitchRadians = 1.48;
 
@@ -14,7 +16,7 @@ export function initialize(canvasId, snapshot, dotNetReference) {
     const gl = canvas?.getContext('webgl2', { antialias: true, alpha: true });
     if (!canvas || !gl) throw new Error('PlanetForge requires WebGL 2.');
 
-    document.title = 'PlanetForge 0.0.3.7 — Zoom Fix';
+    document.title = 'PlanetForge 0.0.3.10 — Local Scale & Performance';
     state = createState(canvas, gl, dotNetReference);
     installInput(state);
     setPlanet(snapshot);
@@ -41,17 +43,23 @@ export function setPlanet(snapshot) {
     }
 
     if (snapshot.localSurface) {
-        if (state.renderMode !== 'local') {
+        const enteringLocal = state.renderMode !== 'local';
+        if (enteringLocal) {
             state.localYaw = -0.65;
             state.localPitch = 0.72;
+            state.localCameraAltitudeMeters = snapshot.localSurface.cameraAltitudeMeters;
+            state.distance = 1.0 + (state.localCameraAltitudeMeters / state.planetRadiusMeters);
         }
 
         state.renderMode = 'local';
         activateLocalSurface(state, snapshot.localSurface);
+        updateLocalScaleHud(state);
         return;
     }
 
     state.renderMode = 'globe';
+    state.localCameraAltitudeMeters = null;
+    updateLocalScaleHud(state);
     const surfaceKey = snapshot.surfaceTiles.map(tile => tile.key).join('|');
     if (state.surfaceKey !== surfaceKey) {
         state.surfaceKey = surfaceKey;
@@ -67,6 +75,7 @@ export function dispose() {
     state.dotNetReference = null;
     clearSurfaceBufferCache(state);
     clearLocalSurfaceBuffer(state);
+    state.scaleHud?.remove();
     state.gl.deleteProgram(state.globeProgram);
     state.gl.deleteProgram(state.localProgram);
     state = null;
@@ -79,6 +88,7 @@ function createState(canvas, gl, dotNetReference) {
         canvas, gl, dotNetReference, globeProgram, localProgram, renderMode: 'globe', geometryKey: null,
         surfaceKey: null, tileBufferCache: new Map(), tiles: [], localSurface: null,
         yaw: -0.65, pitch: 0.24, distance: 3.15, localYaw: -0.65, localPitch: 0.72,
+        localCameraAltitudeMeters: null, scaleHud: createLocalScaleHud(canvas),
         dragging: false, lastX: 0, lastY: 0,
         lodTimer: null, lodSequence: 0, lastSurfaceRequestSignature: null,
         surfaceRequestInFlight: false, surfaceRequestPending: false,
@@ -121,6 +131,36 @@ function createState(canvas, gl, dotNetReference) {
     };
 }
 
+function createLocalScaleHud(canvas) {
+    const stage = canvas.closest('.planet-stage');
+    if (!stage) return null;
+
+    const hud = document.createElement('div');
+    hud.className = 'local-scale-hud';
+    hud.hidden = true;
+    hud.innerHTML = '<span class="local-scale-trees" aria-hidden="true">🌲 🌲</span><span class="local-scale-copy"></span>';
+    stage.appendChild(hud);
+    return hud;
+}
+
+function updateLocalScaleHud(s) {
+    if (!s.scaleHud) return;
+    if (s.renderMode !== 'local' || s.localCameraAltitudeMeters === null) {
+        s.scaleHud.hidden = true;
+        return;
+    }
+
+    const altitude = Math.max(s.localCameraAltitudeMeters, minimumCameraAltitudeMeters);
+    const altitudeText = altitude >= 1_000.0 ? `${(altitude / 1_000.0).toFixed(altitude >= 10_000.0 ? 0 : 1)} km` : `${Math.round(altitude)} m`;
+    const treeScale = 1.0 - clamp(Math.log10(altitude) / Math.log10(localTransitionAltitudeMeters), 0.0, 1.0);
+    const treeSizePixels = 14.0 + (treeScale * 28.0);
+    const trees = s.scaleHud.querySelector('.local-scale-trees');
+    const copy = s.scaleHud.querySelector('.local-scale-copy');
+    if (trees) trees.style.fontSize = `${treeSizePixels.toFixed(0)}px`;
+    if (copy) copy.textContent = `ALT ${altitudeText} · TREE ≈ 15 m`;
+    s.scaleHud.hidden = false;
+}
+
 function activateSurfaceTiles(s, surfaceTiles) {
     const activeKeys = new Set();
     s.tiles = surfaceTiles.map(tile => {
@@ -155,7 +195,10 @@ function createBufferedTile(gl, tile) {
 
 function activateLocalSurface(s, localSurface) {
     if (s.localSurface?.key === localSurface.key) {
-        s.localSurface.cameraAltitudeMeters = localSurface.cameraAltitudeMeters;
+        return;
+    }
+
+    if (!localSurface.positionsMeters?.length || !localSurface.normals?.length || !localSurface.elevationsMeters?.length) {
         return;
     }
 
@@ -175,8 +218,7 @@ function activateLocalSurface(s, localSurface) {
         normalBuffer,
         elevationBuffer,
         vertexCount: localSurface.vertexCount,
-        sizeMeters: localSurface.sizeMeters,
-        cameraAltitudeMeters: localSurface.cameraAltitudeMeters
+        sizeMeters: localSurface.sizeMeters
     };
 }
 
@@ -247,9 +289,19 @@ function installInput(s) {
     });
     canvas.addEventListener('wheel', event => {
         event.preventDefault();
+        const zoomFactor = Math.exp(event.deltaY * 0.0015);
+
+        if (s.renderMode === 'local' && s.localSurface) {
+            const currentAltitude = s.localCameraAltitudeMeters ?? localTransitionAltitudeMeters;
+            s.localCameraAltitudeMeters = clamp(currentAltitude * zoomFactor, minimumCameraAltitudeMeters, localExitAltitudeMeters);
+            s.distance = 1.0 + (s.localCameraAltitudeMeters / Math.max(s.planetRadiusMeters, 1.0));
+            updateLocalScaleHud(s);
+            scheduleSurfaceUpdate(s, localSurfaceUpdateDebounceMilliseconds);
+            return;
+        }
+
         const minimumCameraAltitudeRatio = minimumCameraAltitudeMeters / Math.max(s.planetRadiusMeters, 1.0);
         const altitudeRatio = clamp(s.distance - 1.0, minimumCameraAltitudeRatio, maximumCameraAltitudeRatio);
-        const zoomFactor = Math.exp(event.deltaY * 0.0015);
         s.distance = 1.0 + clamp(altitudeRatio * zoomFactor, minimumCameraAltitudeRatio, maximumCameraAltitudeRatio);
 
         if (shouldRequestSurfaceUpdate(s)) {
@@ -373,7 +425,7 @@ function renderLocal(s) {
     gl.useProgram(localProgram);
 
     const aspect = canvas.width / Math.max(canvas.height, 1);
-    const cameraHeightMeters = Math.max(localSurface.cameraAltitudeMeters, minimumCameraAltitudeMeters);
+    const cameraHeightMeters = Math.max(s.localCameraAltitudeMeters ?? localTransitionAltitudeMeters, minimumCameraAltitudeMeters);
     const horizontalDistanceMeters = cameraHeightMeters / Math.tan(s.localPitch);
     const eye = [
         Math.sin(s.localYaw) * horizontalDistanceMeters,
@@ -454,7 +506,7 @@ function bindLocalAttributes(s) {
 }
 
 function resize(s) {
-    const ratio = Math.min(window.devicePixelRatio || 1, 2);
+    const ratio = Math.min(window.devicePixelRatio || 1, s.renderMode === 'local' ? 1.5 : 2.0);
     const width = Math.floor(s.canvas.clientWidth * ratio);
     const height = Math.floor(s.canvas.clientHeight * ratio);
     if (s.canvas.width === width && s.canvas.height === height) return;
@@ -462,7 +514,7 @@ function resize(s) {
     s.canvas.width = width;
     s.canvas.height = height;
     if (s.renderMode === 'local') {
-        scheduleSurfaceUpdate(s, surfaceUpdateDebounceMilliseconds);
+        scheduleSurfaceUpdate(s, localSurfaceUpdateDebounceMilliseconds);
     }
 }
 
