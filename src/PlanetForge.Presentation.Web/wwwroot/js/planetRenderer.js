@@ -1,13 +1,18 @@
 let state;
 
-export function initialize(canvasId, snapshot) {
+const verticalFieldOfViewRadians = Math.PI / 4.2;
+const surfaceUpdateDebounceMilliseconds = 120;
+const maximumCachedSurfaceTiles = 512;
+
+export function initialize(canvasId, snapshot, dotNetReference) {
     const canvas = document.getElementById(canvasId);
     const gl = canvas?.getContext('webgl2', { antialias: true, alpha: true });
     if (!canvas || !gl) throw new Error('PlanetForge requires WebGL 2.');
 
-    state = createState(canvas, gl);
+    state = createState(canvas, gl, dotNetReference);
     installInput(state);
     setPlanet(snapshot);
+    scheduleSurfaceUpdate(state, 0);
     requestAnimationFrame(render);
 }
 
@@ -23,19 +28,26 @@ export function setPlanet(snapshot) {
     state.liquidFraction = snapshot.water.liquidFraction;
     state.vaporFraction = snapshot.water.vaporFraction;
 
+    const geometryKey = `${snapshot.seed}:${snapshot.physicalParameters.radiusMeters}`;
+    if (state.geometryKey !== geometryKey) {
+        clearSurfaceBufferCache(state);
+        state.geometryKey = geometryKey;
+    }
+
     const surfaceKey = snapshot.surfaceTiles.map(tile => tile.key).join('|');
-    if (state.seed !== snapshot.seed || state.surfaceKey !== surfaceKey) {
-        state.seed = snapshot.seed;
+    if (state.surfaceKey !== surfaceKey) {
         state.surfaceKey = surfaceKey;
-        uploadSurface(state, snapshot.surfaceTiles);
+        activateSurfaceTiles(state, snapshot.surfaceTiles);
     }
 }
 
-function createState(canvas, gl) {
+function createState(canvas, gl, dotNetReference) {
     const program = createProgram(gl, vertexShaderSource, fragmentShaderSource);
     return {
-        canvas, gl, program, seed: null, surfaceKey: null, tiles: [], yaw: -0.65, pitch: 0.24, distance: 3.15,
-        dragging: false, lastX: 0, lastY: 0, seaLevelMeters: 0, planetRadiusMeters: 6371000, atmosphereDensity: 0.6,
+        canvas, gl, program, dotNetReference, geometryKey: null, surfaceKey: null, tileBufferCache: new Map(), tiles: [],
+        yaw: -0.65, pitch: 0.24, distance: 3.15, dragging: false, lastX: 0, lastY: 0,
+        lodTimer: null, lodSequence: 0, lastSurfaceRequestSignature: null,
+        seaLevelMeters: 0, planetRadiusMeters: 6371000, atmosphereDensity: 0.6,
         equilibriumTemperature: 255, surfaceTemperature: 288, solarFlux: 1361,
         iceFraction: 0, liquidFraction: 1, vaporFraction: 0,
         attributes: {
@@ -60,46 +72,133 @@ function createState(canvas, gl) {
     };
 }
 
-function uploadSurface(s, surfaceTiles) {
-    const gl = s.gl;
-    for (const tile of s.tiles) {
-        gl.deleteBuffer(tile.positionBuffer);
-        gl.deleteBuffer(tile.normalBuffer);
+function activateSurfaceTiles(s, surfaceTiles) {
+    const activeKeys = new Set();
+    s.tiles = surfaceTiles.map(tile => {
+        activeKeys.add(tile.key);
+        let bufferedTile = s.tileBufferCache.get(tile.key);
+        if (!bufferedTile) {
+            bufferedTile = createBufferedTile(s.gl, tile);
+            s.tileBufferCache.set(tile.key, bufferedTile);
+        }
+
+        return bufferedTile;
+    });
+
+    trimSurfaceBufferCache(s, activeKeys);
+}
+
+function createBufferedTile(gl, tile) {
+    const positionBuffer = gl.createBuffer();
+    const normalBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(tile.positions), gl.STATIC_DRAW);
+    gl.bindBuffer(gl.ARRAY_BUFFER, normalBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(tile.normals), gl.STATIC_DRAW);
+    return {
+        key: tile.key,
+        positionBuffer,
+        normalBuffer,
+        surfaceVertexCount: tile.surfaceVertexCount,
+        skirtVertexCount: tile.skirtVertexCount
+    };
+}
+
+function clearSurfaceBufferCache(s) {
+    for (const tile of s.tileBufferCache.values()) {
+        deleteBufferedTile(s.gl, tile);
     }
 
-    s.tiles = surfaceTiles.map(tile => {
-        const positionBuffer = gl.createBuffer();
-        const normalBuffer = gl.createBuffer();
-        gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
-        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(tile.positions), gl.STATIC_DRAW);
-        gl.bindBuffer(gl.ARRAY_BUFFER, normalBuffer);
-        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(tile.normals), gl.STATIC_DRAW);
-        return {
-            key: tile.key,
-            positionBuffer,
-            normalBuffer,
-            surfaceVertexCount: tile.surfaceVertexCount,
-            skirtVertexCount: tile.skirtVertexCount
-        };
-    });
+    s.tileBufferCache.clear();
+    s.tiles = [];
+    s.surfaceKey = null;
+}
+
+function trimSurfaceBufferCache(s, activeKeys) {
+    if (s.tileBufferCache.size <= maximumCachedSurfaceTiles) return;
+
+    for (const [key, tile] of s.tileBufferCache) {
+        if (activeKeys.has(key)) continue;
+        deleteBufferedTile(s.gl, tile);
+        s.tileBufferCache.delete(key);
+        if (s.tileBufferCache.size <= maximumCachedSurfaceTiles) break;
+    }
+}
+
+function deleteBufferedTile(gl, tile) {
+    gl.deleteBuffer(tile.positionBuffer);
+    gl.deleteBuffer(tile.normalBuffer);
 }
 
 function installInput(s) {
     const canvas = s.canvas;
-    canvas.addEventListener('pointerdown', event => { s.dragging = true; s.lastX = event.clientX; s.lastY = event.clientY; canvas.setPointerCapture(event.pointerId); });
-    canvas.addEventListener('pointerup', event => { s.dragging = false; canvas.releasePointerCapture(event.pointerId); });
-    canvas.addEventListener('pointercancel', () => { s.dragging = false; });
+    canvas.addEventListener('pointerdown', event => {
+        s.dragging = true;
+        s.lastX = event.clientX;
+        s.lastY = event.clientY;
+        canvas.setPointerCapture(event.pointerId);
+    });
+    canvas.addEventListener('pointerup', event => {
+        s.dragging = false;
+        canvas.releasePointerCapture(event.pointerId);
+        scheduleSurfaceUpdate(s, 0);
+    });
+    canvas.addEventListener('pointercancel', () => {
+        s.dragging = false;
+        scheduleSurfaceUpdate(s, 0);
+    });
     canvas.addEventListener('pointermove', event => {
         if (!s.dragging) return;
         s.yaw += (event.clientX - s.lastX) * 0.008;
         s.pitch = clamp(s.pitch + (event.clientY - s.lastY) * 0.008, -1.25, 1.25);
         s.lastX = event.clientX;
         s.lastY = event.clientY;
+        scheduleSurfaceUpdate(s, surfaceUpdateDebounceMilliseconds);
     });
-    canvas.addEventListener('wheel', event => { event.preventDefault(); s.distance = clamp(s.distance + event.deltaY * 0.002, 2.05, 5.2); }, { passive: false });
+    canvas.addEventListener('wheel', event => {
+        event.preventDefault();
+        s.distance = clamp(s.distance + event.deltaY * 0.0016, 1.055, 5.2);
+        scheduleSurfaceUpdate(s, surfaceUpdateDebounceMilliseconds);
+    }, { passive: false });
 }
 
-function render(time) {
+function scheduleSurfaceUpdate(s, delayMilliseconds) {
+    if (!s.dotNetReference) return;
+    if (s.lodTimer !== null) clearTimeout(s.lodTimer);
+
+    const sequence = ++s.lodSequence;
+    s.lodTimer = setTimeout(() => requestSurfaceUpdate(s, sequence), delayMilliseconds);
+}
+
+async function requestSurfaceUpdate(s, sequence) {
+    s.lodTimer = null;
+    if (state !== s || sequence !== s.lodSequence) return;
+
+    const eye = orbitEye(s.yaw, s.pitch, s.distance);
+    const direction = normalize(eye);
+    const viewportHeight = Math.max(s.canvas.height, 1);
+    const signature = `${direction[0].toFixed(5)}:${direction[1].toFixed(5)}:${direction[2].toFixed(5)}:${s.distance.toFixed(4)}:${viewportHeight}`;
+    if (signature === s.lastSurfaceRequestSignature) return;
+
+    s.lastSurfaceRequestSignature = signature;
+    try {
+        const snapshot = await s.dotNetReference.invokeMethodAsync(
+            'UpdateSurfaceView',
+            direction[0],
+            direction[1],
+            direction[2],
+            s.distance,
+            viewportHeight,
+            verticalFieldOfViewRadians);
+
+        if (state !== s || sequence !== s.lodSequence) return;
+        setPlanet(snapshot);
+    } catch (error) {
+        if (state === s) console.error('PlanetForge surface LOD update failed.', error);
+    }
+}
+
+function render() {
     if (!state) return;
     resize(state);
     const { gl, canvas, program } = state;
@@ -111,11 +210,11 @@ function render(time) {
     gl.useProgram(program);
 
     const aspect = canvas.width / Math.max(canvas.height, 1);
-    const projection = perspective(Math.PI / 4.2, aspect, 0.1, 20);
+    const projection = perspective(verticalFieldOfViewRadians, aspect, 0.002, 20);
     const eye = orbitEye(state.yaw, state.pitch, state.distance);
     const view = lookAt(eye, [0, 0, 0], [0, 1, 0]);
     const viewProjection = multiply(projection, view);
-    const model = rotationY(time * 0.000045);
+    const model = identityMatrix();
 
     gl.uniformMatrix4fv(state.uniforms.model, false, model);
     gl.uniformMatrix4fv(state.uniforms.viewProjection, false, viewProjection);
@@ -181,7 +280,11 @@ function resize(s) {
     const ratio = Math.min(window.devicePixelRatio || 1, 2);
     const width = Math.floor(s.canvas.clientWidth * ratio);
     const height = Math.floor(s.canvas.clientHeight * ratio);
-    if (s.canvas.width !== width || s.canvas.height !== height) { s.canvas.width = width; s.canvas.height = height; }
+    if (s.canvas.width === width && s.canvas.height === height) return;
+
+    s.canvas.width = width;
+    s.canvas.height = height;
+    scheduleSurfaceUpdate(s, surfaceUpdateDebounceMilliseconds);
 }
 
 function createProgram(gl, vertexSource, fragmentSource) {
@@ -226,7 +329,7 @@ function multiply(a, b) {
     return out;
 }
 
-function rotationY(angle) { const c=Math.cos(angle), s=Math.sin(angle); return new Float32Array([c,0,-s,0, 0,1,0,0, s,0,c,0, 0,0,0,1]); }
+function identityMatrix() { return new Float32Array([1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1]); }
 function scaleMatrix(s) { return new Float32Array([s,0,0,0, 0,s,0,0, 0,0,s,0, 0,0,0,1]); }
 function normalize(v) { const l=Math.hypot(v[0],v[1],v[2])||1; return [v[0]/l,v[1]/l,v[2]/l]; }
 function cross(a,b) { return [a[1]*b[2]-a[2]*b[1], a[2]*b[0]-a[0]*b[2], a[0]*b[1]-a[1]*b[0]]; }
