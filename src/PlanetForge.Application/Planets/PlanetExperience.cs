@@ -5,6 +5,7 @@ using PlanetForge.Domain.Climate;
 using PlanetForge.Domain.Hydrology;
 using PlanetForge.Domain.Physics;
 using PlanetForge.Domain.Planets;
+using PlanetForge.Domain.Surface;
 
 namespace PlanetForge.Application.Planets;
 
@@ -43,6 +44,7 @@ public sealed class PlanetExperience(
 
     private readonly PlanetState state = new();
     private PlanetSurfaceView? surfaceView;
+    private PlanetVector? localAnchorDirection;
 
     public PlanetRenderSnapshot CreateSnapshot()
     {
@@ -73,7 +75,35 @@ public sealed class PlanetExperience(
 
     public PlanetRenderSnapshot UpdateSurfaceView(PlanetSurfaceView view)
     {
-        surfaceView = view;
+        var radiusMeters = state.PhysicalParameters.RadiusMeters;
+        if (IsLocalView(view, radiusMeters))
+        {
+            localAnchorDirection ??= PlanetVector.Normalize(view.CameraDirection);
+            surfaceView = view with { CameraDirection = localAnchorDirection.Value };
+        }
+        else if (localAnchorDirection is not null)
+        {
+            surfaceView = view with { CameraDirection = localAnchorDirection.Value };
+            localAnchorDirection = null;
+        }
+        else
+        {
+            surfaceView = view;
+        }
+
+        return CreateSnapshot();
+    }
+
+    public PlanetRenderSnapshot MoveLocalSurfaceAnchor(double eastMeters, double northMeters)
+    {
+        if (surfaceView is null || localAnchorDirection is null)
+        {
+            throw new InvalidOperationException("Local surface travel requires an active local surface view.");
+        }
+
+        var radiusMeters = state.PhysicalParameters.RadiusMeters;
+        localAnchorDirection = PlanetSurfaceNavigator.Move(localAnchorDirection.Value, eastMeters, northMeters, radiusMeters);
+        surfaceView = surfaceView with { CameraDirection = localAnchorDirection.Value };
         return CreateSnapshot();
     }
 
@@ -200,27 +230,29 @@ public sealed class PlanetExperience(
 
     private PlanetLocalSurfaceMesh? CreateLocalSurface(double radiusMeters)
     {
-        if (surfaceView is null)
+        if (surfaceView is null || !IsLocalView(surfaceView, radiusMeters))
         {
             return null;
         }
 
         var cameraAltitudeMeters = (surfaceView.CameraDistanceFromCenter - 1.0) * radiusMeters;
-        var transitionAltitudeMeters = Math.Min(MaximumLocalViewAltitudeMeters, radiusMeters * MaximumLocalViewRadiusFraction);
-        if (cameraAltitudeMeters > transitionAltitudeMeters)
-        {
-            return null;
-        }
-
         var patchSizeMeters = CalculateLocalPatchSize(surfaceView, cameraAltitudeMeters, radiusMeters);
+        var anchorDirection = localAnchorDirection ?? surfaceView.CameraDirection;
         var patch = localSurfacePatchSampler.Sample(
-            surfaceView.CameraDirection,
+            anchorDirection,
             patchSizeMeters,
             LocalSurfaceCellsPerAxis,
             state.Seed,
             radiusMeters,
             CancellationToken.None);
         return localSurfaceMeshBuilder.Build(patch, Math.Max(cameraAltitudeMeters, 1.0));
+    }
+
+    private static bool IsLocalView(PlanetSurfaceView view, double radiusMeters)
+    {
+        var cameraAltitudeMeters = (view.CameraDistanceFromCenter - 1.0) * radiusMeters;
+        var transitionAltitudeMeters = Math.Min(MaximumLocalViewAltitudeMeters, radiusMeters * MaximumLocalViewRadiusFraction);
+        return cameraAltitudeMeters <= transitionAltitudeMeters;
     }
 
     private static double CalculateLocalPatchSize(PlanetSurfaceView view, double cameraAltitudeMeters, double radiusMeters)
