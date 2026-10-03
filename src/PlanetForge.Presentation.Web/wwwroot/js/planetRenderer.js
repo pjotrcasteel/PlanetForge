@@ -22,8 +22,10 @@ export function setPlanet(snapshot) {
     state.liquidFraction = snapshot.water.liquidFraction;
     state.vaporFraction = snapshot.water.vaporFraction;
 
-    if (state.seed !== snapshot.seed) {
+    const surfaceKey = snapshot.surfaceTiles.map(tile => tile.key).join('|');
+    if (state.seed !== snapshot.seed || state.surfaceKey !== surfaceKey) {
         state.seed = snapshot.seed;
+        state.surfaceKey = surfaceKey;
         uploadSurface(state, snapshot.surfaceTiles);
     }
 }
@@ -31,7 +33,7 @@ export function setPlanet(snapshot) {
 function createState(canvas, gl) {
     const program = createProgram(gl, vertexShaderSource, fragmentShaderSource);
     return {
-        canvas, gl, program, seed: null, tiles: [], yaw: -0.65, pitch: 0.24, distance: 3.15,
+        canvas, gl, program, seed: null, surfaceKey: null, tiles: [], yaw: -0.65, pitch: 0.24, distance: 3.15,
         dragging: false, lastX: 0, lastY: 0, seaLevel: 0, atmosphereDensity: 0.6,
         equilibriumTemperature: 255, surfaceTemperature: 288, solarFlux: 1361,
         iceFraction: 0, liquidFraction: 1, vaporFraction: 0,
@@ -70,7 +72,13 @@ function uploadSurface(s, surfaceTiles) {
         gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(tile.positions), gl.STATIC_DRAW);
         gl.bindBuffer(gl.ARRAY_BUFFER, normalBuffer);
         gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(tile.normals), gl.STATIC_DRAW);
-        return { key: tile.key, positionBuffer, normalBuffer, vertexCount: tile.positions.length / 3 };
+        return {
+            key: tile.key,
+            positionBuffer,
+            normalBuffer,
+            surfaceVertexCount: tile.surfaceVertexCount,
+            skirtVertexCount: tile.skirtVertexCount
+        };
     });
 }
 
@@ -119,23 +127,40 @@ function render(time) {
     gl.uniform1f(state.uniforms.liquidFraction, state.liquidFraction);
     gl.uniform1f(state.uniforms.vaporFraction, state.vaporFraction);
     gl.uniform1i(state.uniforms.mode, 0);
-    drawTiles(state);
+    drawTerrain(state);
 
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
     gl.disable(gl.CULL_FACE);
     gl.uniform1i(state.uniforms.mode, 1);
     gl.uniformMatrix4fv(state.uniforms.model, false, scaleMatrix(1.065));
-    drawTiles(state);
+    drawAtmosphere(state);
     gl.disable(gl.BLEND);
 
     requestAnimationFrame(render);
 }
 
-function drawTiles(s) {
+function drawTerrain(s) {
+    const gl = s.gl;
+    gl.enable(gl.CULL_FACE);
     for (const tile of s.tiles) {
         bindTileAttributes(s, tile);
-        s.gl.drawArrays(s.gl.TRIANGLES, 0, tile.vertexCount);
+        gl.drawArrays(gl.TRIANGLES, 0, tile.surfaceVertexCount);
+    }
+
+    gl.disable(gl.CULL_FACE);
+    for (const tile of s.tiles) {
+        if (tile.skirtVertexCount <= 0) continue;
+        bindTileAttributes(s, tile);
+        gl.drawArrays(gl.TRIANGLES, tile.surfaceVertexCount, tile.skirtVertexCount);
+    }
+    gl.enable(gl.CULL_FACE);
+}
+
+function drawAtmosphere(s) {
+    for (const tile of s.tiles) {
+        bindTileAttributes(s, tile);
+        s.gl.drawArrays(s.gl.TRIANGLES, 0, tile.surfaceVertexCount);
     }
 }
 
