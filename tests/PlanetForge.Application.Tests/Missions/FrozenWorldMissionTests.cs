@@ -82,8 +82,10 @@ public sealed class FrozenWorldMissionTests
         Assert.AreEqual(FrozenWorldMission.RequiredStableYears, secondTurn.StableYears);
         Assert.IsGreaterThan(secondTurn.Planet.Water.LiquidFraction, 0.5);
         Assert.IsLessThan(secondTurn.Planet.ClimateFeedback.CryosphereFraction, 0.35);
-        Assert.IsTrue(firstTurn.LastTurn?.PredictionCorrect);
-        Assert.IsTrue(secondTurn.LastTurn?.PredictionCorrect);
+        Assert.IsNotNull(firstTurn.LastTurn);
+        Assert.IsNotNull(secondTurn.LastTurn);
+        Assert.IsTrue(firstTurn.LastTurn.PredictionCorrect);
+        Assert.IsTrue(secondTurn.LastTurn.PredictionCorrect);
     }
 
     [TestMethod]
