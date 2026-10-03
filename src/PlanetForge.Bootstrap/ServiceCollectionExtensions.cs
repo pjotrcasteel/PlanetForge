@@ -15,6 +15,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton(PlanetSurfaceLodOptions.Default);
         services.AddSingleton<PlanetSurfaceTileSampler>();
         services.AddSingleton<PlanetSurfaceLodSelector>();
+        services.AddSingleton<PlanetSurfaceCellAnalyzer>();
         services.AddSingleton<PlanetSurfaceMeshBuilder>();
         services.AddSingleton<PlanetSurfaceMeshCache>();
         services.AddSingleton<PlanetExperience>();
