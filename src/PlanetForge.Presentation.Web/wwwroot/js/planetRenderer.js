@@ -1,10 +1,11 @@
 let state;
 
 const verticalFieldOfViewRadians = Math.PI / 4.2;
-const surfaceUpdateDebounceMilliseconds = 120;
+const surfaceUpdateDebounceMilliseconds = 240;
 const maximumCachedSurfaceTiles = 512;
 const minimumCameraAltitudeMeters = 3.0;
 const maximumCameraAltitudeRatio = 4.2;
+const localTransitionAltitudeMeters = 20_000.0;
 const minimumLocalViewPitchRadians = 0.24;
 const maximumLocalViewPitchRadians = 1.48;
 
@@ -13,10 +14,10 @@ export function initialize(canvasId, snapshot, dotNetReference) {
     const gl = canvas?.getContext('webgl2', { antialias: true, alpha: true });
     if (!canvas || !gl) throw new Error('PlanetForge requires WebGL 2.');
 
+    document.title = 'PlanetForge 0.0.3.7 — Zoom Fix';
     state = createState(canvas, gl, dotNetReference);
     installInput(state);
     setPlanet(snapshot);
-    scheduleSurfaceUpdate(state, 0);
     requestAnimationFrame(render);
 }
 
@@ -62,6 +63,7 @@ export function dispose() {
     if (!state) return;
     if (state.lodTimer !== null) clearTimeout(state.lodTimer);
     state.lodSequence++;
+    state.surfaceRequestPending = false;
     state.dotNetReference = null;
     clearSurfaceBufferCache(state);
     clearLocalSurfaceBuffer(state);
@@ -79,6 +81,7 @@ function createState(canvas, gl, dotNetReference) {
         yaw: -0.65, pitch: 0.24, distance: 3.15, localYaw: -0.65, localPitch: 0.72,
         dragging: false, lastX: 0, lastY: 0,
         lodTimer: null, lodSequence: 0, lastSurfaceRequestSignature: null,
+        surfaceRequestInFlight: false, surfaceRequestPending: false,
         seaLevelMeters: 0, planetRadiusMeters: 6371000, atmosphereDensity: 0.6,
         equilibriumTemperature: 255, surfaceTemperature: 288, solarFlux: 1361,
         iceFraction: 0, liquidFraction: 1, vaporFraction: 0,
@@ -222,11 +225,9 @@ function installInput(s) {
     canvas.addEventListener('pointerup', event => {
         s.dragging = false;
         canvas.releasePointerCapture(event.pointerId);
-        if (s.renderMode === 'globe') scheduleSurfaceUpdate(s, 0);
     });
     canvas.addEventListener('pointercancel', () => {
         s.dragging = false;
-        if (s.renderMode === 'globe') scheduleSurfaceUpdate(s, 0);
     });
     canvas.addEventListener('pointermove', event => {
         if (!s.dragging) return;
@@ -243,7 +244,6 @@ function installInput(s) {
 
         s.yaw += deltaX * 0.008;
         s.pitch = clamp(s.pitch + deltaY * 0.008, -1.25, 1.25);
-        scheduleSurfaceUpdate(s, surfaceUpdateDebounceMilliseconds);
     });
     canvas.addEventListener('wheel', event => {
         event.preventDefault();
@@ -251,8 +251,17 @@ function installInput(s) {
         const altitudeRatio = clamp(s.distance - 1.0, minimumCameraAltitudeRatio, maximumCameraAltitudeRatio);
         const zoomFactor = Math.exp(event.deltaY * 0.0015);
         s.distance = 1.0 + clamp(altitudeRatio * zoomFactor, minimumCameraAltitudeRatio, maximumCameraAltitudeRatio);
-        scheduleSurfaceUpdate(s, surfaceUpdateDebounceMilliseconds);
+
+        if (shouldRequestSurfaceUpdate(s)) {
+            scheduleSurfaceUpdate(s, surfaceUpdateDebounceMilliseconds);
+        }
     }, { passive: false });
+}
+
+function shouldRequestSurfaceUpdate(s) {
+    if (s.renderMode === 'local') return true;
+    const altitudeMeters = Math.max(0.0, (s.distance - 1.0) * s.planetRadiusMeters);
+    return altitudeMeters <= localTransitionAltitudeMeters;
 }
 
 function scheduleSurfaceUpdate(s, delayMilliseconds) {
@@ -260,20 +269,32 @@ function scheduleSurfaceUpdate(s, delayMilliseconds) {
     if (s.lodTimer !== null) clearTimeout(s.lodTimer);
 
     const sequence = ++s.lodSequence;
+    s.surfaceRequestPending = true;
+    if (s.surfaceRequestInFlight) return;
+
     s.lodTimer = setTimeout(() => requestSurfaceUpdate(s, sequence), delayMilliseconds);
 }
 
 async function requestSurfaceUpdate(s, sequence) {
     s.lodTimer = null;
     if (state !== s || sequence !== s.lodSequence) return;
+    if (s.surfaceRequestInFlight) {
+        s.surfaceRequestPending = true;
+        return;
+    }
 
     const eye = orbitEye(s.yaw, s.pitch, s.distance);
     const direction = normalize(eye);
     const viewportWidth = Math.max(s.canvas.width, 1);
     const viewportHeight = Math.max(s.canvas.height, 1);
     const signature = `${direction[0].toFixed(5)}:${direction[1].toFixed(5)}:${direction[2].toFixed(5)}:${s.distance.toFixed(7)}:${viewportWidth}:${viewportHeight}`;
-    if (signature === s.lastSurfaceRequestSignature) return;
+    if (signature === s.lastSurfaceRequestSignature) {
+        s.surfaceRequestPending = false;
+        return;
+    }
 
+    s.surfaceRequestInFlight = true;
+    s.surfaceRequestPending = false;
     s.lastSurfaceRequestSignature = signature;
     try {
         const snapshot = await s.dotNetReference.invokeMethodAsync(
@@ -286,10 +307,17 @@ async function requestSurfaceUpdate(s, sequence) {
             viewportHeight,
             verticalFieldOfViewRadians);
 
-        if (state !== s || sequence !== s.lodSequence) return;
-        setPlanet(snapshot);
+        if (state === s && sequence === s.lodSequence) {
+            setPlanet(snapshot);
+        }
     } catch (error) {
-        if (state === s) console.error('PlanetForge surface LOD update failed.', error);
+        if (state === s) console.error('PlanetForge surface update failed.', error);
+    } finally {
+        s.surfaceRequestInFlight = false;
+        if (state === s && s.surfaceRequestPending) {
+            s.surfaceRequestPending = false;
+            scheduleSurfaceUpdate(s, 0);
+        }
     }
 }
 
@@ -433,7 +461,9 @@ function resize(s) {
 
     s.canvas.width = width;
     s.canvas.height = height;
-    scheduleSurfaceUpdate(s, surfaceUpdateDebounceMilliseconds);
+    if (s.renderMode === 'local') {
+        scheduleSurfaceUpdate(s, surfaceUpdateDebounceMilliseconds);
+    }
 }
 
 function createProgram(gl, vertexSource, fragmentSource) {
