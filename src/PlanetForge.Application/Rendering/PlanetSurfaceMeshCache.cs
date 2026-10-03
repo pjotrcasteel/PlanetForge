@@ -7,32 +7,32 @@ public sealed class PlanetSurfaceMeshCache(PlanetSurfaceMeshBuilder meshBuilder)
     private readonly Dictionary<CacheKey, PlanetSurfaceTileMesh> cache = [];
     private int? activeSeed;
 
-    public PlanetSurfaceTileMesh GetOrBuild(PlanetTileId id, int cellsPerAxis, int seed)
+    public PlanetSurfaceTileMesh GetOrBuild(PlanetTileId id, int cellsPerAxis, int seed, double planetRadiusMeters)
     {
         EnsureSeed(seed);
-        var key = new CacheKey(id, cellsPerAxis);
+        var key = new CacheKey(id, cellsPerAxis, planetRadiusMeters);
         if (cache.TryGetValue(key, out var cached))
         {
             return cached;
         }
 
-        var mesh = meshBuilder.BuildTile(id, cellsPerAxis, seed);
+        var mesh = meshBuilder.BuildTile(id, cellsPerAxis, seed, planetRadiusMeters);
         cache.Add(key, mesh);
         return mesh;
     }
 
-    public IReadOnlyList<PlanetSurfaceTileMesh> GetOrBuild(IReadOnlyList<PlanetTileId> ids, int cellsPerAxis, int seed)
+    public IReadOnlyList<PlanetSurfaceTileMesh> GetOrBuild(IReadOnlyList<PlanetTileId> ids, int cellsPerAxis, int seed, double planetRadiusMeters)
     {
         var result = new PlanetSurfaceTileMesh[ids.Count];
         for (var index = 0; index < ids.Count; index++)
         {
-            result[index] = GetOrBuild(ids[index], cellsPerAxis, seed);
+            result[index] = GetOrBuild(ids[index], cellsPerAxis, seed, planetRadiusMeters);
         }
 
         return result;
     }
 
-    public IReadOnlyList<PlanetSurfaceTileMesh> GetOrBuildGlobal(int level, int cellsPerAxis, int seed)
+    public IReadOnlyList<PlanetSurfaceTileMesh> GetOrBuildGlobal(int level, int cellsPerAxis, int seed, double planetRadiusMeters)
     {
         if (level < 0 || level > 8)
         {
@@ -52,7 +52,7 @@ public sealed class PlanetSurfaceMeshCache(PlanetSurfaceMeshBuilder meshBuilder)
             }
         }
 
-        return GetOrBuild(ids, cellsPerAxis, seed);
+        return GetOrBuild(ids, cellsPerAxis, seed, planetRadiusMeters);
     }
 
     public void Clear()
@@ -72,5 +72,5 @@ public sealed class PlanetSurfaceMeshCache(PlanetSurfaceMeshBuilder meshBuilder)
         activeSeed = seed;
     }
 
-    private readonly record struct CacheKey(PlanetTileId Id, int CellsPerAxis);
+    private readonly record struct CacheKey(PlanetTileId Id, int CellsPerAxis, double PlanetRadiusMeters);
 }

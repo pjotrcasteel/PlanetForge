@@ -8,12 +8,14 @@ namespace PlanetForge.Application.Tests.Rendering;
 [TestClass]
 public sealed class PlanetSurfaceMeshBuilderTests
 {
+    private const double EarthRadiusMeters = 6_371_000.0;
+
     [TestMethod]
     public void BuildGlobal_LevelOne_CreatesExpectedTileAndTriangleCount()
     {
-        var builder = CreateBuilder();
+        var builder = CreateBuilder(new FlatElevationSource());
 
-        var tiles = builder.BuildGlobal(1, 4, 42);
+        var tiles = builder.BuildGlobal(1, 4, 42, EarthRadiusMeters);
 
         Assert.AreEqual(24, tiles.Count);
         Assert.IsTrue(tiles.All(tile => tile.SurfaceTriangleCount == 32));
@@ -26,8 +28,8 @@ public sealed class PlanetSurfaceMeshBuilderTests
     [TestMethod]
     public void BuildTile_FlatSurface_NormalsPointAwayFromPlanet()
     {
-        var builder = CreateBuilder();
-        var tile = builder.BuildTile(new PlanetTileId(CubeFace.PositiveZ, 0, 0, 0), 4, 42);
+        var builder = CreateBuilder(new FlatElevationSource());
+        var tile = builder.BuildTile(new PlanetTileId(CubeFace.PositiveZ, 0, 0, 0), 4, 42, EarthRadiusMeters);
         var surfaceFloatCount = tile.SurfaceTriangleCount * 9;
 
         for (var offset = 0; offset < surfaceFloatCount; offset += 9)
@@ -41,8 +43,8 @@ public sealed class PlanetSurfaceMeshBuilderTests
     [TestMethod]
     public void BuildTile_AddsSkirtsBelowSurfaceRadius()
     {
-        var builder = CreateBuilder();
-        var tile = builder.BuildTile(new PlanetTileId(CubeFace.PositiveZ, 0, 0, 0), 4, 42);
+        var builder = CreateBuilder(new FlatElevationSource());
+        var tile = builder.BuildTile(new PlanetTileId(CubeFace.PositiveZ, 0, 0, 0), 4, 42, EarthRadiusMeters);
         var skirtStart = tile.SurfaceTriangleCount * 9;
         var minimumSkirtRadius = double.MaxValue;
 
@@ -58,14 +60,31 @@ public sealed class PlanetSurfaceMeshBuilderTests
         Assert.IsLessThan(1.0, minimumSkirtRadius);
     }
 
-    private static PlanetSurfaceMeshBuilder CreateBuilder()
+    [TestMethod]
+    public void BuildTile_MetreElevation_IsNormalizedOnlyAtRenderBoundary()
     {
-        var sampler = new PlanetSurfaceTileSampler(new FlatElevationSource());
+        const double elevationMeters = 1_000.0;
+        var builder = CreateBuilder(new ConstantElevationSource(elevationMeters));
+
+        var tile = builder.BuildTile(new PlanetTileId(CubeFace.PositiveZ, 0, 0, 0), 4, 42, EarthRadiusMeters);
+        var position = new Vector3(tile.Positions[0], tile.Positions[1], tile.Positions[2]);
+
+        Assert.AreEqual(1.0 + (elevationMeters / EarthRadiusMeters), position.Length(), 0.000001);
+    }
+
+    private static PlanetSurfaceMeshBuilder CreateBuilder(IPlanetElevationSource elevationSource)
+    {
+        var sampler = new PlanetSurfaceTileSampler(elevationSource);
         return new PlanetSurfaceMeshBuilder(sampler);
     }
 
     private sealed class FlatElevationSource : IPlanetElevationSource
     {
-        public double Sample(PlanetVector direction, int seed) => 0.0;
+        public double SampleElevationMeters(PlanetVector direction, int seed) => 0.0;
+    }
+
+    private sealed class ConstantElevationSource(double elevationMeters) : IPlanetElevationSource
+    {
+        public double SampleElevationMeters(PlanetVector direction, int seed) => elevationMeters;
     }
 }

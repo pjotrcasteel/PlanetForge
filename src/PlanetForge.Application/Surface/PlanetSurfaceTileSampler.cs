@@ -25,8 +25,8 @@ public sealed class PlanetSurfaceTileSampler(IPlanetElevationSource elevationSou
                 var globalX = checked((id.X * cellsPerAxis) + x);
                 var u = ToFaceCoordinate(globalX, globalCellsPerAxis);
                 var direction = CubedSphereProjection.ToUnitSphere(id.Face, u, v);
-                var elevation = elevationSource.Sample(direction, seed);
-                points[(y * pointsPerAxis) + x] = new PlanetSurfacePoint(direction, elevation);
+                var elevationMeters = elevationSource.SampleElevationMeters(direction, seed);
+                points[(y * pointsPerAxis) + x] = new PlanetSurfacePoint(direction, elevationMeters);
             }
         }
 

@@ -8,13 +8,13 @@ namespace PlanetForge.Application.Tests.Rendering;
 public sealed class PlanetSurfaceMeshCacheTests
 {
     [TestMethod]
-    public void GetOrBuild_SameTileAndSeed_ReturnsCachedMeshInstance()
+    public void GetOrBuild_SameTileSeedAndRadius_ReturnsCachedMeshInstance()
     {
         var cache = CreateCache();
         var id = new PlanetTileId(CubeFace.PositiveZ, 2, 1, 2);
 
-        var first = cache.GetOrBuild(id, 8, 42);
-        var second = cache.GetOrBuild(id, 8, 42);
+        var first = cache.GetOrBuild(id, 8, 42, 6_371_000.0);
+        var second = cache.GetOrBuild(id, 8, 42, 6_371_000.0);
 
         Assert.AreSame(first, second);
     }
@@ -25,8 +25,20 @@ public sealed class PlanetSurfaceMeshCacheTests
         var cache = CreateCache();
         var id = new PlanetTileId(CubeFace.PositiveZ, 2, 1, 2);
 
-        var first = cache.GetOrBuild(id, 8, 42);
-        var second = cache.GetOrBuild(id, 8, 43);
+        var first = cache.GetOrBuild(id, 8, 42, 6_371_000.0);
+        var second = cache.GetOrBuild(id, 8, 43, 6_371_000.0);
+
+        Assert.AreNotSame(first, second);
+    }
+
+    [TestMethod]
+    public void GetOrBuild_RadiusChange_UsesDifferentMesh()
+    {
+        var cache = CreateCache();
+        var id = new PlanetTileId(CubeFace.PositiveZ, 2, 1, 2);
+
+        var first = cache.GetOrBuild(id, 8, 42, 6_371_000.0);
+        var second = cache.GetOrBuild(id, 8, 42, 3_185_500.0);
 
         Assert.AreNotSame(first, second);
     }
@@ -39,6 +51,6 @@ public sealed class PlanetSurfaceMeshCacheTests
 
     private sealed class FlatElevationSource : IPlanetElevationSource
     {
-        public double Sample(PlanetVector direction, int seed) => 0.0;
+        public double SampleElevationMeters(PlanetVector direction, int seed) => 0.0;
     }
 }

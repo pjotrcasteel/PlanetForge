@@ -27,8 +27,8 @@ public sealed class PlanetExperience(PlanetSurfaceMeshCache surfaceMeshCache)
     private const double MaximumCarbonDioxidePartsPerMillion = 5_000.0;
     private const double MinimumWaterEarthHydrospheres = 0.0;
     private const double MaximumWaterEarthHydrospheres = 5.0;
-    private const double MinimumVisualSeaLevel = -0.035;
-    private const double MaximumVisualSeaLevel = 0.035;
+    private const double MinimumVisualSeaLevelMeters = -11_000.0;
+    private const double MaximumVisualSeaLevelMeters = 6_000.0;
 
     private readonly PlanetState state = new();
 
@@ -38,13 +38,14 @@ public sealed class PlanetExperience(PlanetSurfaceMeshCache surfaceMeshCache)
         var atmosphere = AtmosphereCalculator.Calculate(state.AtmosphereParameters, state.PhysicalParameters, physics);
         var climate = SurfaceClimateCalculator.Calculate(physics, atmosphere);
         var water = WaterPhaseCalculator.Calculate(state.WaterParameters, climate.SurfaceTemperatureKelvin, atmosphere.SurfacePressurePascals);
-        var seaLevel = CalculateVisualSeaLevel(water);
+        var seaLevelMeters = CalculateVisualSeaLevelMeters(water);
         var atmosphereDensity = CalculateAtmosphereDensity(atmosphere.SurfacePressurePascals);
-        var surfaceTiles = surfaceMeshCache.GetOrBuildGlobal(GlobalSurfaceLevel, GlobalSurfaceCellsPerAxis, state.Seed);
+        var radiusMeters = state.PhysicalParameters.RadiusMeters;
+        var surfaceTiles = surfaceMeshCache.GetOrBuildGlobal(GlobalSurfaceLevel, GlobalSurfaceCellsPerAxis, state.Seed, radiusMeters);
 
         return new PlanetRenderSnapshot(
             surfaceTiles,
-            seaLevel,
+            seaLevelMeters,
             atmosphereDensity,
             state.Seed,
             state.PhysicalParameters,
@@ -221,15 +222,16 @@ public sealed class PlanetExperience(PlanetSurfaceMeshCache surfaceMeshCache)
         state.SetWaterParameters(parameters with { TotalMassKilograms = next * EarthWaterReference.TotalHydrosphereMassKilograms });
     }
 
-    private static double CalculateVisualSeaLevel(WaterPhaseSnapshot water)
+    private static double CalculateVisualSeaLevelMeters(WaterPhaseSnapshot water)
     {
         var liquidEarthHydrospheres = water.LiquidMassKilograms / EarthWaterReference.TotalHydrosphereMassKilograms;
         if (liquidEarthHydrospheres <= 0.0)
         {
-            return MinimumVisualSeaLevel;
+            return MinimumVisualSeaLevelMeters;
         }
 
-        return Math.Clamp(MinimumVisualSeaLevel + 0.031 * Math.Sqrt(liquidEarthHydrospheres), MinimumVisualSeaLevel, MaximumVisualSeaLevel);
+        var seaLevelMeters = (Math.Sqrt(liquidEarthHydrospheres) - 1.0) * 4_000.0;
+        return Math.Clamp(seaLevelMeters, MinimumVisualSeaLevelMeters, MaximumVisualSeaLevelMeters);
     }
 
     private static double CalculateAtmosphereDensity(double surfacePressurePascals)

@@ -7,7 +7,7 @@ namespace PlanetForge.Application.Rendering;
 
 public sealed record PlanetRenderSnapshot(
     IReadOnlyList<PlanetSurfaceTileMesh> SurfaceTiles,
-    double SeaLevel,
+    double SeaLevelMeters,
     double AtmosphereDensity,
     int Seed,
     PlanetPhysicalParameters PhysicalParameters,

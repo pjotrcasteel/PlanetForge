@@ -34,11 +34,12 @@ public sealed class PlanetSurfaceTileSamplerTests
         Assert.AreEqual(expected.Direction.X, actual.Direction.X, 0.0000000001);
         Assert.AreEqual(expected.Direction.Y, actual.Direction.Y, 0.0000000001);
         Assert.AreEqual(expected.Direction.Z, actual.Direction.Z, 0.0000000001);
-        Assert.AreEqual(expected.ElevationNormalized, actual.ElevationNormalized, 0.0000000001);
+        Assert.AreEqual(expected.ElevationMeters, actual.ElevationMeters, 0.0000000001);
     }
 
     private sealed class DirectionElevationSource : IPlanetElevationSource
     {
-        public double Sample(PlanetVector direction, int seed) => (direction.X * 0.3) + (direction.Y * 0.2) + (direction.Z * 0.1) + (seed * 0.000001);
+        public double SampleElevationMeters(PlanetVector direction, int seed) =>
+            ((direction.X * 0.3) + (direction.Y * 0.2) + (direction.Z * 0.1) + (seed * 0.000001)) * 1_000.0;
     }
 }

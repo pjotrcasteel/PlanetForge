@@ -4,7 +4,10 @@ namespace PlanetForge.Infrastructure.Surface;
 
 public sealed class ProceduralPlanetElevationSource : IPlanetElevationSource
 {
-    public double Sample(PlanetVector direction, int seed)
+    private const double MaximumLandElevationMeters = 9_000.0;
+    private const double MaximumOceanDepthMeters = 7_000.0;
+
+    public double SampleElevationMeters(PlanetVector direction, int seed)
     {
         var continental = FractalNoise(direction, seed, 0.85, 5, 2.03, 0.52);
         var regional = FractalNoise(direction, seed ^ 0x2C1B3C6D, 3.2, 4, 2.11, 0.48);
@@ -12,8 +15,8 @@ public sealed class ProceduralPlanetElevationSource : IPlanetElevationSource
         var detail = FractalNoise(direction, seed ^ 0x6D2B79F5, 13.0, 3, 2.17, 0.44);
         var landMask = SmoothStep(-0.28, 0.42, continental);
         var mountains = ridges * landMask * landMask;
-        var elevation = (continental * 0.61) + (regional * 0.17) + (mountains * 0.29) + (detail * 0.06) - 0.04;
-        return Math.Clamp(elevation, -1.0, 1.0);
+        var normalizedElevation = Math.Clamp((continental * 0.61) + (regional * 0.17) + (mountains * 0.29) + (detail * 0.06) - 0.04, -1.0, 1.0);
+        return normalizedElevation >= 0.0 ? normalizedElevation * MaximumLandElevationMeters : normalizedElevation * MaximumOceanDepthMeters;
     }
 
     private static double FractalNoise(PlanetVector direction, int seed, double frequency, int octaves, double lacunarity, double persistence)
