@@ -23,6 +23,20 @@ public sealed class PlanetExperienceSurfaceLodTests
     }
 
     [TestMethod]
+    public void UpdateSurfaceView_CloseToSurface_SwitchesToLocalMetreMesh()
+    {
+        var experience = CreateExperience();
+        var view = new PlanetSurfaceView(PlanetVector.UnitZ, 1.005, 1080, Math.PI / 4.2) { ViewportAspectRatio = 16.0 / 9.0 };
+
+        var snapshot = experience.UpdateSurfaceView(view);
+
+        Assert.IsNotNull(snapshot.LocalSurface);
+        Assert.AreEqual(0, snapshot.SurfaceTiles.Count);
+        Assert.IsTrue(snapshot.LocalSurface.CameraAltitudeMeters > 0.0);
+        Assert.IsTrue(snapshot.LocalSurface.SizeMeters > 0.0);
+    }
+
+    [TestMethod]
     public void CreateSnapshot_BeforeCameraView_UsesCompleteGlobalFallback()
     {
         var experience = CreateExperience();
@@ -30,16 +44,20 @@ public sealed class PlanetExperienceSurfaceLodTests
         var snapshot = experience.CreateSnapshot();
 
         Assert.AreEqual(24, snapshot.SurfaceTiles.Count);
+        Assert.IsNull(snapshot.LocalSurface);
         Assert.IsTrue(snapshot.SurfaceTiles.All(tile => tile.Id.Level == 1));
     }
 
     private static PlanetExperience CreateExperience()
     {
-        var sampler = new PlanetSurfaceTileSampler(new FlatElevationSource());
+        var elevationSource = new FlatElevationSource();
+        var sampler = new PlanetSurfaceTileSampler(elevationSource);
         var meshBuilder = new PlanetSurfaceMeshBuilder(sampler);
         var meshCache = new PlanetSurfaceMeshCache(meshBuilder);
         var lodSelector = new PlanetSurfaceLodSelector(PlanetSurfaceLodOptions.Default);
-        return new PlanetExperience(meshCache, lodSelector);
+        var localSampler = new PlanetLocalSurfacePatchSampler(elevationSource);
+        var localMeshBuilder = new PlanetLocalSurfaceMeshBuilder();
+        return new PlanetExperience(meshCache, lodSelector, localSampler, localMeshBuilder);
     }
 
     private sealed class FlatElevationSource : IPlanetElevationSource
