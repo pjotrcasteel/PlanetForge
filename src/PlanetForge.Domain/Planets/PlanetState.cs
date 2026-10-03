@@ -1,28 +1,43 @@
+using PlanetForge.Domain.Atmosphere;
+using PlanetForge.Domain.Hydrology;
+using PlanetForge.Domain.Physics;
+
 namespace PlanetForge.Domain.Planets;
 
 public sealed class PlanetState
 {
-    private const double MinimumSeaLevel = -0.035;
-    private const double MaximumSeaLevel = 0.035;
-    private const double MinimumAtmosphereDensity = 0.0;
-    private const double MaximumAtmosphereDensity = 1.0;
-
-    public PlanetState(int seed = 24061984, double seaLevel = -0.004, double atmosphereDensity = 0.62)
+    public PlanetState(
+        int seed = 24061984,
+        PlanetPhysicalParameters? physicalParameters = null,
+        AtmosphereParameters? atmosphereParameters = null,
+        WaterParameters? waterParameters = null)
     {
         Seed = seed;
-        SeaLevel = Math.Clamp(seaLevel, MinimumSeaLevel, MaximumSeaLevel);
-        AtmosphereDensity = Math.Clamp(atmosphereDensity, MinimumAtmosphereDensity, MaximumAtmosphereDensity);
+        PhysicalParameters = physicalParameters ?? EarthReference.CreateParameters();
+        AtmosphereParameters = atmosphereParameters ?? EarthAtmosphereReference.CreateParameters();
+        WaterParameters = waterParameters ?? EarthWaterReference.CreateParameters();
     }
 
     public int Seed { get; private set; }
 
-    public double SeaLevel { get; private set; }
+    public PlanetPhysicalParameters PhysicalParameters { get; private set; }
 
-    public double AtmosphereDensity { get; private set; }
+    public AtmosphereParameters AtmosphereParameters { get; private set; }
 
-    public void ChangeSeaLevel(double delta) => SeaLevel = Math.Clamp(SeaLevel + delta, MinimumSeaLevel, MaximumSeaLevel);
+    public WaterParameters WaterParameters { get; private set; }
 
-    public void ChangeAtmosphereDensity(double delta) => AtmosphereDensity = Math.Clamp(AtmosphereDensity + delta, MinimumAtmosphereDensity, MaximumAtmosphereDensity);
+    public void SetPhysicalParameters(PlanetPhysicalParameters parameters) => PhysicalParameters = parameters ?? throw new ArgumentNullException(nameof(parameters));
+
+    public void SetAtmosphereParameters(AtmosphereParameters parameters) => AtmosphereParameters = parameters ?? throw new ArgumentNullException(nameof(parameters));
+
+    public void SetWaterParameters(WaterParameters parameters) => WaterParameters = parameters ?? throw new ArgumentNullException(nameof(parameters));
 
     public void Reseed(int seed) => Seed = seed;
+
+    public void ResetEarthReference()
+    {
+        PhysicalParameters = EarthReference.CreateParameters();
+        AtmosphereParameters = EarthAtmosphereReference.CreateParameters();
+        WaterParameters = EarthWaterReference.CreateParameters();
+    }
 }

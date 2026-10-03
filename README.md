@@ -4,35 +4,54 @@ PlanetForge is a science-grounded, low-poly planetary terraforming game built in
 
 ## Current milestone
 
-### 0.0.2 — Physical Planet
+### 0.0.3 — Atmosphere & Water
 
-The planet now has a real physical baseline instead of arbitrary gameplay values:
+PlanetForge now has its first coupled environmental simulation:
 
-- .NET 10 / C# core
+- .NET 10 / C# simulation core
 - Blazor WebAssembly browser client
 - Custom WebGL 2 rendering with no commercial game engine
 - Procedural low-poly planet
-- Editable orbital distance, stellar luminosity, Bond albedo, planet mass and planet radius
-- Surface gravity from `g = GM / R²`
-- Stellar irradiance from the inverse-square relation `S = L / (4πd²)`
-- Equilibrium temperature from a zero-greenhouse global energy-balance model
-- Mean density and escape velocity derived from mass and radius
+- Orbital distance, stellar luminosity, Bond albedo, planet mass and radius
+- Atmospheric mass and mean surface pressure
+- Atmospheric composition with editable CO₂ concentration
+- Logarithmic CO₂ radiative forcing
+- Simplified greenhouse surface-temperature model
+- Total planetary water inventory
+- Pressure/temperature water phase partitioning into ice, liquid and vapor
+- Triple-point constraint for stable liquid water
+- Pressure-dependent boiling-point approximation
+- Atmosphere, oceans, ice and steam/desiccation visuals derived from simulation state
 - Earth-like reference preset
-- Visual response to calculated irradiance and equilibrium temperature
 - GitHub Actions validation and GitHub Pages deployment
 
-Sea level and atmosphere thickness are still visual sandbox controls in 0.0.2. They become physical simulation inputs in the atmosphere/water milestone rather than being falsely presented as climate science now.
+There are no manual sea-level or atmosphere-visual sliders anymore. The rendered planet now follows the coupled simulation output.
 
-## Scientific baseline
+## Scientific model transparency
 
-PlanetForge distinguishes direct physical relations from simplified models. The 0.0.2 equilibrium-temperature calculation assumes uniform heat redistribution, emissivity 1 and no greenhouse warming.
+PlanetForge distinguishes direct physical relations, empirical relationships and simplified simulation models.
 
-Earth reference values are based on the NASA Earth Fact Sheet. Solar luminosity and astronomical scaling use standard IAU nominal values.
+Current direct/physical relations include:
 
-References:
+- Surface gravity: `g = GM / R²`
+- Stellar irradiance: `S = L / (4πd²)`
+- Mean surface pressure: `p = Mₐg / (4πR²)`
+- Zero-greenhouse equilibrium temperature from global radiative balance
+
+Current empirical/simplified models include:
+
+- CO₂ radiative forcing: `ΔF = 5.35 ln(C / C₀)`
+- A deliberately simplified greenhouse temperature response
+- A global water-phase partition model rather than a full atmosphere/ocean circulation model
+- A Clausius–Clapeyron-based boiling-point approximation
+
+These approximations are intentionally explicit. Later milestones will turn scientific models into inspectable and editable Planet Logic blocks rather than hiding assumptions inside gameplay code.
+
+## References
 
 - NASA NSSDC Earth Fact Sheet: https://nssdc.gsfc.nasa.gov/planetary/factsheet/earthfact.html
 - IAU 2015 Resolution B3, nominal solar and planetary conversion constants: https://www.iau.org/static/resolutions/IAU2015_English.pdf
+- IPCC radiative forcing literature for the logarithmic CO₂ relationship
 
 ## Principles
 

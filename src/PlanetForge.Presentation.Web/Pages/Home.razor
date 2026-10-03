@@ -1,3 +1,5 @@
+@using PlanetForge.Domain.Atmosphere
+@using PlanetForge.Domain.Hydrology
 @using PlanetForge.Domain.Physics
 @implements IAsyncDisposable
 @inject PlanetExperience Experience
@@ -6,9 +8,9 @@
 <main class="game-shell">
     <section class="hero-copy">
         <div>
-            <span class="eyebrow">MILESTONE 0.0.2 · PHYSICAL PLANET</span>
+            <span class="eyebrow">MILESTONE 0.0.3 · ATMOSPHERE & WATER</span>
             <h1>PlanetForge</h1>
-            <p>Change the planet and its star. Gravity, stellar irradiance and equilibrium temperature are now calculated from physical relationships instead of gameplay bonuses.</p>
+            <p>The planet is now coupled. Change orbit, atmosphere, CO₂ or water and the simulation recalculates pressure, temperature and water phase before the renderer draws the result.</p>
         </div>
         <div class="seed-chip">SEED @snapshot?.Seed</div>
     </section>
@@ -16,26 +18,65 @@
     <section class="planet-stage">
         <canvas id="planet-canvas" aria-label="Interactive low-poly planet"></canvas>
         <div class="stage-metrics">
-            <span>@FormatTemperature()</span>
-            <span>@FormatSolarFlux()</span>
-            <span>@FormatGravity()</span>
+            <span>@FormatSurfaceTemperature()</span>
+            <span>@FormatPressure()</span>
+            <span>@FormatWaterState()</span>
         </div>
         <div class="stage-hint">DRAG TO ORBIT · SCROLL / PINCH TO ZOOM</div>
     </section>
 
     <section class="section-heading">
         <div>
-            <span class="eyebrow">PHYSICAL INPUTS</span>
-            <h2>Change the world</h2>
+            <span class="eyebrow">COUPLED SYSTEMS</span>
+            <h2>Change the environment</h2>
         </div>
         <button class="reset-button" @onclick="ResetEarthReferenceAsync">Reset Earth reference</button>
+    </section>
+
+    <section class="control-grid">
+        <article class="control-card accent-card">
+            <span class="control-label">ATMOSPHERIC MASS</span>
+            <strong>@FormatAtmosphereMass()</strong>
+            <small>@FormatPressure() mean surface pressure</small>
+            <div class="button-row">
+                <button @onclick="DecreaseAtmosphereMassAsync">Remove gas</button>
+                <button @onclick="IncreaseAtmosphereMassAsync">Add gas</button>
+            </div>
+        </article>
+
+        <article class="control-card accent-card">
+            <span class="control-label">CARBON DIOXIDE</span>
+            <strong>@FormatCarbonDioxide()</strong>
+            <small>@FormatCarbonDioxideForcing() radiative forcing</small>
+            <div class="button-row">
+                <button @onclick="HalveCarbonDioxideAsync">½ CO₂</button>
+                <button @onclick="DoubleCarbonDioxideAsync">2× CO₂</button>
+            </div>
+        </article>
+
+        <article class="control-card accent-card">
+            <span class="control-label">TOTAL WATER</span>
+            <strong>@FormatWaterInventory()</strong>
+            <small>@FormatWaterFractions()</small>
+            <div class="button-row">
+                <button @onclick="DecreaseWaterAsync">− Water</button>
+                <button @onclick="IncreaseWaterAsync">+ Water</button>
+            </div>
+        </article>
+    </section>
+
+    <section class="section-heading compact-heading">
+        <div>
+            <span class="eyebrow">STAR & PLANET</span>
+            <h2>Change the physical boundary conditions</h2>
+        </div>
     </section>
 
     <section class="control-grid physics-controls">
         <article class="control-card">
             <span class="control-label">ORBITAL DISTANCE</span>
             <strong>@FormatOrbitalDistance()</strong>
-            <small>Inverse-square irradiance</small>
+            <small>Inverse-square stellar irradiance</small>
             <div class="button-row">
                 <button @onclick="MoveOrbitInwardAsync">Toward star</button>
                 <button @onclick="MoveOrbitOutwardAsync">Away from star</button>
@@ -45,7 +86,7 @@
         <article class="control-card">
             <span class="control-label">STELLAR LUMINOSITY</span>
             <strong>@FormatStellarLuminosity()</strong>
-            <small>Radiative power of the star</small>
+            <small>@FormatSolarFlux() at the planet</small>
             <div class="button-row">
                 <button @onclick="DimStarAsync">Dim</button>
                 <button @onclick="BrightenStarAsync">Brighten</button>
@@ -65,7 +106,7 @@
         <article class="control-card">
             <span class="control-label">PLANET MASS</span>
             <strong>@FormatMass()</strong>
-            <small>Changes gravity, density and escape velocity</small>
+            <small>Changes gravity and atmospheric pressure</small>
             <div class="button-row">
                 <button @onclick="DecreaseMassAsync">− Mass</button>
                 <button @onclick="IncreaseMassAsync">+ Mass</button>
@@ -75,79 +116,56 @@
         <article class="control-card">
             <span class="control-label">PLANET RADIUS</span>
             <strong>@FormatRadius()</strong>
-            <small>Mean radius</small>
+            <small>Changes gravity, density and surface area</small>
             <div class="button-row">
                 <button @onclick="DecreaseRadiusAsync">− Radius</button>
                 <button @onclick="IncreaseRadiusAsync">+ Radius</button>
             </div>
         </article>
 
-        <article class="control-card accent-card">
+        <article class="control-card">
             <span class="control-label">TERRAIN SEED</span>
             <strong>@snapshot?.Seed</strong>
-            <small>Same physics, another procedural surface</small>
+            <small>Same systems, another procedural surface</small>
             <button class="wide-button" @onclick="ReseedAsync">Forge another surface</button>
         </article>
     </section>
 
     <section class="section-heading compact-heading">
         <div>
-            <span class="eyebrow">DERIVED PHYSICS</span>
-            <h2>What the equations produce</h2>
+            <span class="eyebrow">SIMULATION STATE</span>
+            <h2>What the coupled model produces</h2>
         </div>
     </section>
 
     <section class="stat-grid">
+        <article class="stat-card"><span>Surface temperature</span><strong>@FormatSurfaceTemperature()</strong><small>Energy balance + simplified greenhouse</small></article>
+        <article class="stat-card"><span>Equilibrium temperature</span><strong>@FormatEquilibriumTemperature()</strong><small>Zero-greenhouse baseline</small></article>
+        <article class="stat-card"><span>Surface pressure</span><strong>@FormatPressure()</strong><small>p = Mₐg / 4πR²</small></article>
+        <article class="stat-card"><span>Liquid water</span><strong>@FormatLiquidWater()</strong><small>Pressure/temperature phase model</small></article>
+        <article class="stat-card"><span>Ice</span><strong>@FormatIce()</strong><small>Fraction of total water inventory</small></article>
+        <article class="stat-card"><span>Water vapor</span><strong>@FormatVapor()</strong><small>Fraction of total water inventory</small></article>
         <article class="stat-card"><span>Surface gravity</span><strong>@FormatGravity()</strong><small>g = GM / R²</small></article>
-        <article class="stat-card"><span>Solar flux</span><strong>@FormatSolarFlux()</strong><small>S = L / 4πd²</small></article>
-        <article class="stat-card"><span>Equilibrium temperature</span><strong>@FormatTemperature()</strong><small>Zero-greenhouse energy balance</small></article>
-        <article class="stat-card"><span>Mean density</span><strong>@FormatDensity()</strong><small>Mass / spherical volume</small></article>
         <article class="stat-card"><span>Escape velocity</span><strong>@FormatEscapeVelocity()</strong><small>vₑ = √(2GM / R)</small></article>
-        <article class="stat-card"><span>Rotation period</span><strong>@FormatRotationPeriod()</strong><small>Current input</small></article>
+        <article class="stat-card"><span>Water boiling point</span><strong>@FormatBoilingPoint()</strong><small>Pressure-dependent approximation</small></article>
     </section>
 
     <section class="science-panel">
         <div class="science-copy">
-            <span class="eyebrow">SCIENCE MODEL</span>
-            <h2>Real equations, explicit assumptions</h2>
-            <p>The equilibrium-temperature model assumes uniform heat redistribution, emissivity 1 and no greenhouse warming. It is intentionally a simple physical baseline; atmosphere and water become coupled simulation systems in the next milestone.</p>
+            <span class="eyebrow">MODEL TRANSPARENCY</span>
+            <h2>Physics where possible, approximations where necessary</h2>
+            <p>Pressure is derived from atmospheric mass and gravity. CO₂ forcing uses a logarithmic concentration relationship. The current greenhouse-temperature response and global water phase split are deliberately simple approximations, exposed here so they can later become editable Planet Logic blocks.</p>
         </div>
         <div class="formula-list">
-            <div><span>Fundamental</span><code>g = GM / R²</code></div>
-            <div><span>Fundamental</span><code>S = L / (4πd²)</code></div>
-            <div><span>Simplified model</span><code>Tₑ = [S(1 − A) / (4σ)]¼</code></div>
+            <div><span>Physical relation</span><code>p = Mₐg / 4πR²</code></div>
+            <div><span>Empirical</span><code>ΔF = 5.35 ln(C / C₀)</code></div>
+            <div><span>Simplified model</span><code>Tₛ = Tₑ + greenhouse + λΔF</code></div>
+            <div><span>Phase constraint</span><code>liquid H₂O requires p ≥ 611.657 Pa</code></div>
         </div>
-    </section>
-
-    <section class="section-heading compact-heading">
-        <div>
-            <span class="eyebrow">VISUAL SANDBOX</span>
-            <h2>Uncoupled until 0.0.3</h2>
-        </div>
-    </section>
-
-    <section class="control-grid visual-controls">
-        <article class="control-card">
-            <span class="control-label">SEA LEVEL</span>
-            <strong>@FormatSeaLevel()</strong>
-            <div class="button-row">
-                <button @onclick="LowerSeaLevelAsync">− Water</button>
-                <button @onclick="RaiseSeaLevelAsync">+ Water</button>
-            </div>
-        </article>
-
-        <article class="control-card">
-            <span class="control-label">ATMOSPHERE VISUAL</span>
-            <strong>@FormatAtmosphere()</strong>
-            <div class="button-row">
-                <button @onclick="DecreaseAtmosphereAsync">Thin</button>
-                <button @onclick="IncreaseAtmosphereAsync">Thicken</button>
-            </div>
-        </article>
     </section>
 
     <footer>
-        <span>PURE C# PHYSICS</span>
+        <span>COUPLED C# SIMULATION</span>
         <span>WEBGL RENDERER</span>
         <span>NO COMMERCIAL ENGINE</span>
     </footer>
@@ -172,35 +190,22 @@
     }
 
     private Task MoveOrbitInwardAsync() => UpdateAsync(Experience.MoveOrbitInward());
-
     private Task MoveOrbitOutwardAsync() => UpdateAsync(Experience.MoveOrbitOutward());
-
     private Task DimStarAsync() => UpdateAsync(Experience.DimStar());
-
     private Task BrightenStarAsync() => UpdateAsync(Experience.BrightenStar());
-
     private Task DarkenSurfaceAsync() => UpdateAsync(Experience.DarkenSurface());
-
     private Task BrightenSurfaceAsync() => UpdateAsync(Experience.BrightenSurface());
-
     private Task DecreaseMassAsync() => UpdateAsync(Experience.DecreaseMass());
-
     private Task IncreaseMassAsync() => UpdateAsync(Experience.IncreaseMass());
-
     private Task DecreaseRadiusAsync() => UpdateAsync(Experience.DecreaseRadius());
-
     private Task IncreaseRadiusAsync() => UpdateAsync(Experience.IncreaseRadius());
-
-    private Task RaiseSeaLevelAsync() => UpdateAsync(Experience.RaiseSeaLevel());
-
-    private Task LowerSeaLevelAsync() => UpdateAsync(Experience.LowerSeaLevel());
-
-    private Task IncreaseAtmosphereAsync() => UpdateAsync(Experience.IncreaseAtmosphere());
-
-    private Task DecreaseAtmosphereAsync() => UpdateAsync(Experience.DecreaseAtmosphere());
-
+    private Task DecreaseAtmosphereMassAsync() => UpdateAsync(Experience.DecreaseAtmosphereMass());
+    private Task IncreaseAtmosphereMassAsync() => UpdateAsync(Experience.IncreaseAtmosphereMass());
+    private Task HalveCarbonDioxideAsync() => UpdateAsync(Experience.HalveCarbonDioxide());
+    private Task DoubleCarbonDioxideAsync() => UpdateAsync(Experience.DoubleCarbonDioxide());
+    private Task DecreaseWaterAsync() => UpdateAsync(Experience.DecreaseWater());
+    private Task IncreaseWaterAsync() => UpdateAsync(Experience.IncreaseWater());
     private Task ReseedAsync() => UpdateAsync(Experience.Reseed());
-
     private Task ResetEarthReferenceAsync() => UpdateAsync(Experience.ResetEarthReference());
 
     private async Task UpdateAsync(PlanetRenderSnapshot nextSnapshot)
@@ -214,39 +219,64 @@
     }
 
     private string FormatOrbitalDistance() => snapshot is null ? "—" : $"{snapshot.PhysicalParameters.OrbitalDistanceMeters / PhysicalConstants.AstronomicalUnitMeters:0.00} AU";
-
     private string FormatStellarLuminosity() => snapshot is null ? "—" : $"{snapshot.PhysicalParameters.StellarLuminosityWatts / PhysicalConstants.NominalSolarLuminosityWatts:0.0} L☉";
-
     private string FormatAlbedo() => snapshot is null ? "—" : $"{snapshot.PhysicalParameters.BondAlbedo * 100:0.0}%";
-
     private string FormatMass() => snapshot is null ? "—" : $"{snapshot.PhysicalParameters.MassKilograms / EarthReference.MassKilograms:0.0} M⊕";
-
     private string FormatRadius() => snapshot is null ? "—" : $"{snapshot.PhysicalParameters.RadiusMeters / EarthReference.MeanRadiusMeters:0.00} R⊕";
-
-    private string FormatGravity() => snapshot is null ? "—" : $"{snapshot.Physics.SurfaceGravityMetersPerSecondSquared:0.00} m/s²";
-
+    private string FormatAtmosphereMass() => snapshot is null ? "—" : $"{snapshot.Atmosphere.EarthAtmosphereMasses:0.00} atm mass";
+    private string FormatCarbonDioxide() => snapshot is null ? "—" : $"{snapshot.AtmosphereParameters.CarbonDioxidePartsPerMillion:0} ppm";
+    private string FormatCarbonDioxideForcing() => snapshot is null ? "—" : $"{snapshot.Atmosphere.CarbonDioxideRadiativeForcingWattsPerSquareMeter:+0.00;-0.00;0.00} W/m²";
+    private string FormatWaterInventory() => snapshot is null ? "—" : $"{snapshot.WaterParameters.TotalMassKilograms / EarthWaterReference.TotalHydrosphereMassKilograms:0.00} Earth oceans";
+    private string FormatWaterFractions() => snapshot is null ? "—" : $"{snapshot.Water.IceFraction * 100:0}% ice · {snapshot.Water.LiquidFraction * 100:0}% liquid · {snapshot.Water.VaporFraction * 100:0}% vapor";
+    private string FormatPressure() => snapshot is null ? "—" : $"{snapshot.Atmosphere.SurfacePressurePascals / 100_000.0:0.000} bar";
     private string FormatSolarFlux() => snapshot is null ? "—" : $"{snapshot.Physics.SolarFluxWattsPerSquareMeter:0} W/m²";
+    private string FormatGravity() => snapshot is null ? "—" : $"{snapshot.Physics.SurfaceGravityMetersPerSecondSquared:0.00} m/s²";
+    private string FormatEscapeVelocity() => snapshot is null ? "—" : $"{snapshot.Physics.EscapeVelocityMetersPerSecond / 1000.0:0.00} km/s";
+    private string FormatLiquidWater() => snapshot is null ? "—" : $"{snapshot.Water.LiquidFraction * 100:0.0}%";
+    private string FormatIce() => snapshot is null ? "—" : $"{snapshot.Water.IceFraction * 100:0.0}%";
+    private string FormatVapor() => snapshot is null ? "—" : $"{snapshot.Water.VaporFraction * 100:0.0}%";
+    private string FormatBoilingPoint() => snapshot is null ? "—" : $"{snapshot.Water.BoilingPointKelvin:0.0} K";
 
-    private string FormatTemperature()
+    private string FormatEquilibriumTemperature()
     {
         if (snapshot is null)
         {
             return "—";
         }
 
-        var celsius = snapshot.Physics.EquilibriumTemperatureKelvin - PhysicalConstants.KelvinOffsetCelsius;
-        return $"{snapshot.Physics.EquilibriumTemperatureKelvin:0} K · {celsius:+0;-0;0}°C";
+        return FormatTemperature(snapshot.Physics.EquilibriumTemperatureKelvin);
     }
 
-    private string FormatDensity() => snapshot is null ? "—" : $"{snapshot.Physics.MeanDensityKilogramsPerCubicMeter:0} kg/m³";
+    private string FormatSurfaceTemperature()
+    {
+        if (snapshot is null)
+        {
+            return "—";
+        }
 
-    private string FormatEscapeVelocity() => snapshot is null ? "—" : $"{snapshot.Physics.EscapeVelocityMetersPerSecond / 1000.0:0.00} km/s";
+        return FormatTemperature(snapshot.Climate.SurfaceTemperatureKelvin);
+    }
 
-    private string FormatRotationPeriod() => snapshot is null ? "—" : $"{snapshot.PhysicalParameters.RotationPeriodSeconds / 3600.0:0.00} h";
+    private string FormatWaterState()
+    {
+        if (snapshot is null || snapshot.WaterParameters.TotalMassKilograms <= 0.0)
+        {
+            return "DRY";
+        }
 
-    private string FormatSeaLevel() => snapshot is null ? "—" : $"{snapshot.SeaLevel * 100:+0.0;-0.0;0.0}%";
+        if (snapshot.Water.LiquidFraction >= snapshot.Water.IceFraction && snapshot.Water.LiquidFraction >= snapshot.Water.VaporFraction)
+        {
+            return "LIQUID WATER";
+        }
 
-    private string FormatAtmosphere() => snapshot is null ? "—" : $"{snapshot.AtmosphereDensity * 100:0}%";
+        return snapshot.Water.IceFraction >= snapshot.Water.VaporFraction ? "ICE WORLD" : "STEAM WORLD";
+    }
+
+    private static string FormatTemperature(double kelvin)
+    {
+        var celsius = kelvin - PhysicalConstants.KelvinOffsetCelsius;
+        return $"{kelvin:0} K · {celsius:+0;-0;0}°C";
+    }
 
     public async ValueTask DisposeAsync()
     {

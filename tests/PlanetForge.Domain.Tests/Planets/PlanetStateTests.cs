@@ -1,3 +1,6 @@
+using PlanetForge.Domain.Atmosphere;
+using PlanetForge.Domain.Hydrology;
+using PlanetForge.Domain.Physics;
 using PlanetForge.Domain.Planets;
 
 namespace PlanetForge.Domain.Tests.Planets;
@@ -6,22 +9,27 @@ namespace PlanetForge.Domain.Tests.Planets;
 public sealed class PlanetStateTests
 {
     [TestMethod]
-    public void ChangeSeaLevel_ClampsToSupportedRange()
+    public void Constructor_UsesEarthReferenceSystemsByDefault()
     {
         var state = new PlanetState();
 
-        state.ChangeSeaLevel(100);
-
-        Assert.AreEqual(0.035, state.SeaLevel);
+        Assert.AreEqual(EarthReference.MassKilograms, state.PhysicalParameters.MassKilograms);
+        Assert.AreEqual(EarthAtmosphereReference.TotalMassKilograms, state.AtmosphereParameters.MassKilograms);
+        Assert.AreEqual(EarthWaterReference.TotalHydrosphereMassKilograms, state.WaterParameters.TotalMassKilograms);
     }
 
     [TestMethod]
-    public void ChangeAtmosphereDensity_ClampsToSupportedRange()
+    public void ResetEarthReference_RestoresAllCoupledSystems()
     {
         var state = new PlanetState();
+        state.SetPhysicalParameters(state.PhysicalParameters with { BondAlbedo = 0.1 });
+        state.SetAtmosphereParameters(state.AtmosphereParameters with { CarbonDioxidePartsPerMillion = 1_000.0 });
+        state.SetWaterParameters(new WaterParameters(0.0));
 
-        state.ChangeAtmosphereDensity(-100);
+        state.ResetEarthReference();
 
-        Assert.AreEqual(0.0, state.AtmosphereDensity);
+        Assert.AreEqual(EarthReference.BondAlbedo, state.PhysicalParameters.BondAlbedo);
+        Assert.AreEqual(EarthAtmosphereReference.PreindustrialCarbonDioxidePartsPerMillion, state.AtmosphereParameters.CarbonDioxidePartsPerMillion);
+        Assert.AreEqual(EarthWaterReference.TotalHydrosphereMassKilograms, state.WaterParameters.TotalMassKilograms);
     }
 }

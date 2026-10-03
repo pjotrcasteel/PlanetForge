@@ -1,4 +1,7 @@
 using PlanetForge.Application.Rendering;
+using PlanetForge.Domain.Atmosphere;
+using PlanetForge.Domain.Climate;
+using PlanetForge.Domain.Hydrology;
 using PlanetForge.Domain.Physics;
 using PlanetForge.Domain.Planets;
 
@@ -16,14 +19,38 @@ public sealed class PlanetExperience(PlanetMeshBuilder meshBuilder)
     private const double MaximumPlanetRadiusEarth = 2.5;
     private const double MinimumBondAlbedo = 0.02;
     private const double MaximumBondAlbedo = 0.85;
+    private const double MinimumAtmosphereEarthMasses = 0.0;
+    private const double MaximumAtmosphereEarthMasses = 5.0;
+    private const double MinimumCarbonDioxidePartsPerMillion = 10.0;
+    private const double MaximumCarbonDioxidePartsPerMillion = 5_000.0;
+    private const double MinimumWaterEarthHydrospheres = 0.0;
+    private const double MaximumWaterEarthHydrospheres = 5.0;
+    private const double MinimumVisualSeaLevel = -0.035;
+    private const double MaximumVisualSeaLevel = 0.035;
 
-    private readonly PlanetState visualState = new();
-    private PlanetPhysicalParameters physicalParameters = EarthReference.CreateParameters();
+    private readonly PlanetState state = new();
 
     public PlanetRenderSnapshot CreateSnapshot()
     {
-        var physics = PlanetPhysicsCalculator.Calculate(physicalParameters);
-        return new PlanetRenderSnapshot(meshBuilder.Build(visualState.Seed), visualState.SeaLevel, visualState.AtmosphereDensity, visualState.Seed, physicalParameters, physics);
+        var physics = PlanetPhysicsCalculator.Calculate(state.PhysicalParameters);
+        var atmosphere = AtmosphereCalculator.Calculate(state.AtmosphereParameters, state.PhysicalParameters, physics);
+        var climate = SurfaceClimateCalculator.Calculate(physics, atmosphere);
+        var water = WaterPhaseCalculator.Calculate(state.WaterParameters, climate.SurfaceTemperatureKelvin, atmosphere.SurfacePressurePascals);
+        var seaLevel = CalculateVisualSeaLevel(water);
+        var atmosphereDensity = CalculateAtmosphereDensity(atmosphere.SurfacePressurePascals);
+
+        return new PlanetRenderSnapshot(
+            meshBuilder.Build(state.Seed),
+            seaLevel,
+            atmosphereDensity,
+            state.Seed,
+            state.PhysicalParameters,
+            physics,
+            state.AtmosphereParameters,
+            atmosphere,
+            climate,
+            state.WaterParameters,
+            water);
     }
 
     public PlanetRenderSnapshot MoveOrbitInward()
@@ -52,13 +79,15 @@ public sealed class PlanetExperience(PlanetMeshBuilder meshBuilder)
 
     public PlanetRenderSnapshot DarkenSurface()
     {
-        physicalParameters = physicalParameters with { BondAlbedo = Math.Clamp(physicalParameters.BondAlbedo - 0.03, MinimumBondAlbedo, MaximumBondAlbedo) };
+        var parameters = state.PhysicalParameters;
+        state.SetPhysicalParameters(parameters with { BondAlbedo = Math.Clamp(parameters.BondAlbedo - 0.03, MinimumBondAlbedo, MaximumBondAlbedo) });
         return CreateSnapshot();
     }
 
     public PlanetRenderSnapshot BrightenSurface()
     {
-        physicalParameters = physicalParameters with { BondAlbedo = Math.Clamp(physicalParameters.BondAlbedo + 0.03, MinimumBondAlbedo, MaximumBondAlbedo) };
+        var parameters = state.PhysicalParameters;
+        state.SetPhysicalParameters(parameters with { BondAlbedo = Math.Clamp(parameters.BondAlbedo + 0.03, MinimumBondAlbedo, MaximumBondAlbedo) });
         return CreateSnapshot();
     }
 
@@ -86,67 +115,123 @@ public sealed class PlanetExperience(PlanetMeshBuilder meshBuilder)
         return CreateSnapshot();
     }
 
-    public PlanetRenderSnapshot RaiseSeaLevel()
+    public PlanetRenderSnapshot DecreaseAtmosphereMass()
     {
-        visualState.ChangeSeaLevel(0.004);
+        ChangeAtmosphereMass(-0.25);
         return CreateSnapshot();
     }
 
-    public PlanetRenderSnapshot LowerSeaLevel()
+    public PlanetRenderSnapshot IncreaseAtmosphereMass()
     {
-        visualState.ChangeSeaLevel(-0.004);
+        ChangeAtmosphereMass(0.25);
         return CreateSnapshot();
     }
 
-    public PlanetRenderSnapshot IncreaseAtmosphere()
+    public PlanetRenderSnapshot HalveCarbonDioxide()
     {
-        visualState.ChangeAtmosphereDensity(0.08);
+        ChangeCarbonDioxide(0.5);
         return CreateSnapshot();
     }
 
-    public PlanetRenderSnapshot DecreaseAtmosphere()
+    public PlanetRenderSnapshot DoubleCarbonDioxide()
     {
-        visualState.ChangeAtmosphereDensity(-0.08);
+        ChangeCarbonDioxide(2.0);
+        return CreateSnapshot();
+    }
+
+    public PlanetRenderSnapshot DecreaseWater()
+    {
+        ChangeWater(-0.25);
+        return CreateSnapshot();
+    }
+
+    public PlanetRenderSnapshot IncreaseWater()
+    {
+        ChangeWater(0.25);
         return CreateSnapshot();
     }
 
     public PlanetRenderSnapshot Reseed()
     {
-        visualState.Reseed(unchecked((visualState.Seed * 397) ^ 7919));
+        state.Reseed(unchecked((state.Seed * 397) ^ 7919));
         return CreateSnapshot();
     }
 
     public PlanetRenderSnapshot ResetEarthReference()
     {
-        physicalParameters = EarthReference.CreateParameters();
+        state.ResetEarthReference();
         return CreateSnapshot();
     }
 
     private void ChangeOrbitalDistance(double deltaAstronomicalUnits)
     {
-        var current = physicalParameters.OrbitalDistanceMeters / PhysicalConstants.AstronomicalUnitMeters;
+        var parameters = state.PhysicalParameters;
+        var current = parameters.OrbitalDistanceMeters / PhysicalConstants.AstronomicalUnitMeters;
         var next = Math.Clamp(current + deltaAstronomicalUnits, MinimumOrbitalDistanceAu, MaximumOrbitalDistanceAu);
-        physicalParameters = physicalParameters with { OrbitalDistanceMeters = next * PhysicalConstants.AstronomicalUnitMeters };
+        state.SetPhysicalParameters(parameters with { OrbitalDistanceMeters = next * PhysicalConstants.AstronomicalUnitMeters });
     }
 
     private void ChangeStellarLuminosity(double deltaSolarLuminosity)
     {
-        var current = physicalParameters.StellarLuminosityWatts / PhysicalConstants.NominalSolarLuminosityWatts;
+        var parameters = state.PhysicalParameters;
+        var current = parameters.StellarLuminosityWatts / PhysicalConstants.NominalSolarLuminosityWatts;
         var next = Math.Clamp(current + deltaSolarLuminosity, MinimumStellarLuminositySolar, MaximumStellarLuminositySolar);
-        physicalParameters = physicalParameters with { StellarLuminosityWatts = next * PhysicalConstants.NominalSolarLuminosityWatts };
+        state.SetPhysicalParameters(parameters with { StellarLuminosityWatts = next * PhysicalConstants.NominalSolarLuminosityWatts });
     }
 
     private void ChangeMass(double deltaEarthMass)
     {
-        var current = physicalParameters.MassKilograms / EarthReference.MassKilograms;
+        var parameters = state.PhysicalParameters;
+        var current = parameters.MassKilograms / EarthReference.MassKilograms;
         var next = Math.Clamp(current + deltaEarthMass, MinimumPlanetMassEarth, MaximumPlanetMassEarth);
-        physicalParameters = physicalParameters with { MassKilograms = next * EarthReference.MassKilograms };
+        state.SetPhysicalParameters(parameters with { MassKilograms = next * EarthReference.MassKilograms });
     }
 
     private void ChangeRadius(double deltaEarthRadius)
     {
-        var current = physicalParameters.RadiusMeters / EarthReference.MeanRadiusMeters;
+        var parameters = state.PhysicalParameters;
+        var current = parameters.RadiusMeters / EarthReference.MeanRadiusMeters;
         var next = Math.Clamp(current + deltaEarthRadius, MinimumPlanetRadiusEarth, MaximumPlanetRadiusEarth);
-        physicalParameters = physicalParameters with { RadiusMeters = next * EarthReference.MeanRadiusMeters };
+        state.SetPhysicalParameters(parameters with { RadiusMeters = next * EarthReference.MeanRadiusMeters });
+    }
+
+    private void ChangeAtmosphereMass(double deltaEarthAtmospheres)
+    {
+        var parameters = state.AtmosphereParameters;
+        var current = parameters.MassKilograms / EarthAtmosphereReference.TotalMassKilograms;
+        var next = Math.Clamp(current + deltaEarthAtmospheres, MinimumAtmosphereEarthMasses, MaximumAtmosphereEarthMasses);
+        state.SetAtmosphereParameters(parameters with { MassKilograms = next * EarthAtmosphereReference.TotalMassKilograms });
+    }
+
+    private void ChangeCarbonDioxide(double factor)
+    {
+        var parameters = state.AtmosphereParameters;
+        var next = Math.Clamp(parameters.CarbonDioxidePartsPerMillion * factor, MinimumCarbonDioxidePartsPerMillion, MaximumCarbonDioxidePartsPerMillion);
+        state.SetAtmosphereParameters(parameters with { CarbonDioxidePartsPerMillion = next });
+    }
+
+    private void ChangeWater(double deltaEarthHydrospheres)
+    {
+        var parameters = state.WaterParameters;
+        var current = parameters.TotalMassKilograms / EarthWaterReference.TotalHydrosphereMassKilograms;
+        var next = Math.Clamp(current + deltaEarthHydrospheres, MinimumWaterEarthHydrospheres, MaximumWaterEarthHydrospheres);
+        state.SetWaterParameters(parameters with { TotalMassKilograms = next * EarthWaterReference.TotalHydrosphereMassKilograms });
+    }
+
+    private static double CalculateVisualSeaLevel(WaterPhaseSnapshot water)
+    {
+        var liquidEarthHydrospheres = water.LiquidMassKilograms / EarthWaterReference.TotalHydrosphereMassKilograms;
+        if (liquidEarthHydrospheres <= 0.0)
+        {
+            return MinimumVisualSeaLevel;
+        }
+
+        return Math.Clamp(MinimumVisualSeaLevel + 0.031 * Math.Sqrt(liquidEarthHydrospheres), MinimumVisualSeaLevel, MaximumVisualSeaLevel);
+    }
+
+    private static double CalculateAtmosphereDensity(double surfacePressurePascals)
+    {
+        var pressureRatio = surfacePressurePascals / 101_325.0;
+        return Math.Clamp(0.62 * Math.Sqrt(Math.Max(pressureRatio, 0.0)), 0.0, 1.0);
     }
 }
