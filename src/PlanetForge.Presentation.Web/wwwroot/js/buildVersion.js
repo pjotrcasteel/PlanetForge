@@ -1,6 +1,6 @@
-const buildVersion = '0.0.4';
-const buildLabel = 'CLIMATE FEEDBACK';
-const pageTitle = `PlanetForge ${buildVersion} — Climate Feedback`;
+const buildVersion = '0.0.5';
+const buildLabel = 'FIRST EDUCATIONAL MISSION';
+const pageTitle = `PlanetForge ${buildVersion} — First Educational Mission`;
 const maximumAttempts = 100;
 const retryDelayMilliseconds = 100;
 
