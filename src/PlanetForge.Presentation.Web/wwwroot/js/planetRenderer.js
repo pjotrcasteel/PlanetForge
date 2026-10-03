@@ -41,6 +41,15 @@ export function setPlanet(snapshot) {
     }
 }
 
+export function dispose() {
+    if (!state) return;
+    if (state.lodTimer !== null) clearTimeout(state.lodTimer);
+    state.lodSequence++;
+    state.dotNetReference = null;
+    clearSurfaceBufferCache(state);
+    state = null;
+}
+
 function createState(canvas, gl, dotNetReference) {
     const program = createProgram(gl, vertexShaderSource, fragmentShaderSource);
     return {
