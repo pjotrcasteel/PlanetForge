@@ -2,6 +2,7 @@ using Microsoft.Extensions.DependencyInjection;
 using PlanetForge.Application.Planets;
 using PlanetForge.Application.Rendering;
 using PlanetForge.Application.Surface;
+using PlanetForge.Application.Surface.Hydrology;
 using PlanetForge.Domain.Surface;
 using PlanetForge.Infrastructure.Surface;
 
@@ -16,6 +17,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<PlanetSurfaceTileSampler>();
         services.AddSingleton<PlanetSurfaceLodSelector>();
         services.AddSingleton<PlanetSurfaceCellAnalyzer>();
+        services.AddSingleton<PlanetHydrologyModelBuilder>();
         services.AddSingleton<PlanetSurfaceMeshBuilder>();
         services.AddSingleton<PlanetSurfaceMeshCache>();
         services.AddSingleton<PlanetExperience>();
