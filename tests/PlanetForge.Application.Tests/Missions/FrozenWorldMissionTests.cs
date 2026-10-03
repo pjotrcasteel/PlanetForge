@@ -19,8 +19,8 @@ public sealed class FrozenWorldMissionTests
         Assert.AreEqual(FrozenWorldMission.StartingBudget, snapshot.BudgetRemaining);
         Assert.AreEqual(0, snapshot.MissionYearsElapsed);
         Assert.AreEqual(MissionStatus.Active, snapshot.Status);
-        Assert.IsLessThan(snapshot.Planet.Climate.SurfaceTemperatureKelvin, 273.15);
-        Assert.IsGreaterThan(snapshot.Planet.ClimateFeedback.CryosphereFraction, 0.25);
+        Assert.IsLessThan(273.15, snapshot.Planet.Climate.SurfaceTemperatureKelvin);
+        Assert.IsGreaterThan(0.25, snapshot.Planet.ClimateFeedback.CryosphereFraction);
     }
 
     [TestMethod]
@@ -58,7 +58,7 @@ public sealed class FrozenWorldMissionTests
 
         Assert.IsNotNull(result.LastTurn);
         Assert.IsFalse(result.LastTurn.PredictionCorrect);
-        Assert.IsLessThan(result.LastTurn.TemperatureDeltaKelvin, 0.0);
+        Assert.IsLessThan(0.0, result.LastTurn.TemperatureDeltaKelvin);
         StringAssert.Contains(result.LastTurn.Explanation, "Cryosphere");
     }
 
@@ -80,8 +80,8 @@ public sealed class FrozenWorldMissionTests
 
         Assert.AreEqual(MissionStatus.Won, secondTurn.Status);
         Assert.AreEqual(FrozenWorldMission.RequiredStableYears, secondTurn.StableYears);
-        Assert.IsGreaterThan(secondTurn.Planet.Water.LiquidFraction, 0.5);
-        Assert.IsLessThan(secondTurn.Planet.ClimateFeedback.CryosphereFraction, 0.35);
+        Assert.IsGreaterThan(0.5, secondTurn.Planet.Water.LiquidFraction);
+        Assert.IsLessThan(0.35, secondTurn.Planet.ClimateFeedback.CryosphereFraction);
         Assert.IsNotNull(firstTurn.LastTurn);
         Assert.IsNotNull(secondTurn.LastTurn);
         Assert.IsTrue(firstTurn.LastTurn.PredictionCorrect);
