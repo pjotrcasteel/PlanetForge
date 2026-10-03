@@ -7,13 +7,16 @@ namespace PlanetForge.Application.Rendering;
 public sealed class PlanetSurfaceMeshBuilder(PlanetSurfaceTileSampler tileSampler)
 {
     private const double ElevationScale = 0.055;
+    private const double SkirtDepth = 0.004;
 
     public PlanetSurfaceTileMesh BuildTile(PlanetTileId id, int cellsPerAxis, int seed)
     {
         var tile = tileSampler.Sample(id, cellsPerAxis, seed);
-        var triangleCount = cellsPerAxis * cellsPerAxis * 2;
-        var positions = new float[triangleCount * 9];
-        var normals = new float[triangleCount * 9];
+        var surfaceTriangleCount = cellsPerAxis * cellsPerAxis * 2;
+        var skirtTriangleCount = cellsPerAxis * 8;
+        var totalTriangleCount = surfaceTriangleCount + skirtTriangleCount;
+        var positions = new float[totalTriangleCount * 9];
+        var normals = new float[totalTriangleCount * 9];
         var offset = 0;
 
         for (var y = 0; y < cellsPerAxis; y++)
@@ -29,7 +32,8 @@ public sealed class PlanetSurfaceMeshBuilder(PlanetSurfaceTileSampler tileSample
             }
         }
 
-        return new PlanetSurfaceTileMesh(id, positions, normals, triangleCount);
+        WriteSkirts(tile, cellsPerAxis, positions, normals, ref offset);
+        return new PlanetSurfaceTileMesh(id, positions, normals, surfaceTriangleCount, skirtTriangleCount);
     }
 
     public IReadOnlyList<PlanetSurfaceTileMesh> BuildGlobal(int level, int cellsPerAxis, int seed)
@@ -54,6 +58,38 @@ public sealed class PlanetSurfaceMeshBuilder(PlanetSurfaceTileSampler tileSample
         }
 
         return result;
+    }
+
+    private static void WriteSkirts(PlanetSurfaceTile tile, int cellsPerAxis, float[] positions, float[] normals, ref int offset)
+    {
+        for (var index = 0; index < cellsPerAxis; index++)
+        {
+            WriteSkirtSegment(tile.GetPoint(index, 0), tile.GetPoint(index + 1, 0), positions, normals, ref offset);
+            WriteSkirtSegment(tile.GetPoint(cellsPerAxis, index), tile.GetPoint(cellsPerAxis, index + 1), positions, normals, ref offset);
+            WriteSkirtSegment(tile.GetPoint(index + 1, cellsPerAxis), tile.GetPoint(index, cellsPerAxis), positions, normals, ref offset);
+            WriteSkirtSegment(tile.GetPoint(0, index + 1), tile.GetPoint(0, index), positions, normals, ref offset);
+        }
+    }
+
+    private static void WriteSkirtSegment(PlanetSurfacePoint first, PlanetSurfacePoint second, float[] positions, float[] normals, ref int offset)
+    {
+        var firstSurface = first.Position(ElevationScale);
+        var secondSurface = second.Position(ElevationScale);
+        var firstInner = LowerRadially(firstSurface);
+        var secondInner = LowerRadially(secondSurface);
+        var a = ToRenderVector(firstSurface);
+        var b = ToRenderVector(secondSurface);
+        var c = ToRenderVector(firstInner);
+        var d = ToRenderVector(secondInner);
+        WriteTriangle(positions, normals, ref offset, a, c, b);
+        WriteTriangle(positions, normals, ref offset, b, c, d);
+    }
+
+    private static PlanetVector LowerRadially(PlanetVector position)
+    {
+        var length = position.Length;
+        var targetLength = Math.Max(0.001, length - SkirtDepth);
+        return position * (targetLength / length);
     }
 
     private static Vector3 ToRenderVector(PlanetVector value) => new((float)value.X, (float)value.Y, (float)value.Z);
