@@ -9,17 +9,22 @@ PlanetForge must support one deterministic world from orbital scale down to loca
 3. **Physical elevation.** Canonical elevation is stored in metres, never as a percentage of planet radius.
 4. **Stable render identity.** Every globe render patch is addressed by cube face, quadtree level, X and Y.
 5. **Stable simulation identity.** Hydrology and ecology use a fixed-resolution cube-sphere grid independent from render LOD.
-6. **Seam-free refinement.** Adjacent tiles, aligned parent/child samples and aligned local-patch samples resolve to the same canonical world.
-7. **Deterministic generation.** A seed and canonical direction always produce the same elevation.
-8. **Rendering is downstream.** Hydrology, erosion, biomes, vegetation and entities consume surface data, not WebGL meshes.
-9. **Replaceable generators.** Terrain generation is behind `IPlanetElevationSource`; geology/erosion can later compose with procedural elevation without changing coordinates.
-10. **Camera detail never changes simulation truth.** Zoom may change the visual representation, but cannot change rivers, biomes, terrain elevation or populations.
+6. **Stable world-location identity.** Persistent local locations use renderer-independent octahedral surface addresses, not render tile IDs.
+7. **Seam-free refinement.** Adjacent tiles, aligned parent/child samples and aligned local-patch samples resolve to the same canonical world.
+8. **Deterministic generation.** A generation version, seed and canonical direction always reproduce the same generated world inputs.
+9. **Rendering is downstream.** Hydrology, erosion, biomes, vegetation and entities consume surface data, not WebGL meshes.
+10. **Replaceable generators.** Terrain generation is behind `IPlanetElevationSource`; geology/erosion can later compose with procedural elevation without changing coordinates.
+11. **Camera detail never changes simulation truth.** Zoom may change the visual representation, but cannot change rivers, biomes, terrain elevation or populations.
+12. **Entity identity is not position.** Generated placement can create a stable initial ID, while a moving entity may later change surface address without changing entity identity.
 
 ## Spatial architecture
 
 ```text
 Canonical planet surface
 (double precision + elevation metres)
+        │
+        ├── Stable surface address
+        │   octahedral / renderer-independent
         │
         ├── Globe render quadtree
         │      ↓
@@ -80,13 +85,13 @@ Status: **validated and connected to the browser camera**.
 
 Still to improve later:
 
-- queued/background-style tile generation boundary without changing deterministic results
+- queued tile-generation boundary without changing deterministic results
 - bounded C# mesh-cache policy
 - optional visual morphing during parent/child replacement if skirts alone are not visually sufficient
 
-## Iteration 3 — physical scale and local terrain
+## Iteration 3 — physical scale, local terrain and travel
 
-Status: **validated; first globe-to-local renderer implemented**.
+Status: **core validated**.
 
 - canonical elevation in metres
 - Earth-scale procedural relief magnitudes
@@ -105,19 +110,23 @@ Status: **validated; first globe-to-local renderer implemented**.
 - local geometry keys allow GPU reuse while camera altitude changes
 - separate minimal WebGL pipeline for globe and local rendering
 - exponential zoom across orbital-to-local scales
-- JavaScript syntax validation in CI
+- camera can reach roughly 3 metres above the local surface
+- finest current patch is 16 metres across with 32 × 32 cells, roughly 0.5 metre cell spacing
+- local camera can orbit obliquely without moving the canonical world anchor
+- geodetic `PlanetSurfaceNavigator` moves the anchor across the spherical planet rather than an infinite flat plane
+- renderer-independent 30-bit octahedral `PlanetSurfaceAddress` provides stable sub-metre world-location addressing
+- travelled local anchors survive camera updates instead of being replaced by render-camera direction
 
 Still to improve later:
 
-- local camera pan/travel across the surface rather than only approaching the point under the orbital camera
-- multiple neighboring local patches for continuous travel
-- finer local mesh LOD below the current proof-of-foundation resolution
-- stable placement identities for vegetation, rocks, buildings and animals
-- local water/river geometry rather than only elevation-based colour classification
+- user-facing local travel controls in the browser
+- smooth input-driven recentering while travelling continuously
+- local river/water geometry
+- local object rendering and culling
 
 ## Iteration 4 — simulation surface grid and hydrology
 
-Status: **hydrology foundation validated**.
+Status: **hydrology topology and semantic feature extraction validated**.
 
 - render-LOD-independent simulation-grid cell IDs
 - cross-face cardinal neighbor topology
@@ -134,28 +143,47 @@ Status: **hydrology foundation validated**.
 - cancellation support
 - tests proving drainage reaches an outlet without loops
 - tests proving flow accumulation is conserved
+- watershed extraction from terminal drainage destinations
+- lake extraction from connected depression-fill regions
+- potential river-network extraction from accumulated upstream land-cell count
+- river segments retain their actual downstream drainage target
+
+The current river threshold is deliberately **not called physical discharge**. It uses contributing land-cell count only; precipitation and runoff still need to turn that topology into hydrological flow rates.
 
 Still pending:
 
-- watershed/basin IDs
-- river-network extraction from accumulated flow
-- lake/water-body entities from filled depressions
-- discharge driven by precipitation/runoff rather than cell count alone
+- precipitation/runoff-driven discharge
 - erosion and sediment feedback into terrain
 - geology and soil layers
 - climate sampling hooks
 - biome and vegetation-density layers
+- renderable river/lake geometry derived from the semantic features
+
+## Iteration 5 — reproducible world and placement identity
+
+Status: **core identity contract validated**.
+
+- explicit `PlanetGenerationVersion`, starting at version 1
+- `PlanetWorldIdentity` combines generation version and seed
+- deterministic generated placement identity based on world, surface address, layer and slot
+- changing seed, generation version, location, layer or slot changes the generated placement ID
+- placement identity is separate from future movable entity state
+
+Still pending:
+
+- explicit save-file schema/version
+- persisted entity state with immutable entity ID and mutable current surface address
+- migration policy when generation algorithms change
+- deterministic local placement samplers for vegetation, rocks and other generated objects
 
 ## Current foundation gate
 
-Gameplay and deeper terraforming remain intentionally paused while the surface foundation is being hardened. Before this phase is considered complete we want:
+Gameplay and deeper terraforming remain intentionally paused while the surface foundation is being hardened. The biggest remaining foundation items are now:
 
-1. orbital → regional → local representation to remain one deterministic world,
-2. continuous local travel without precision loss,
-3. rivers and lakes derived from the global hydrology topology,
-4. deterministic local-detail placement suitable for vegetation and animals,
-5. composable terrain modification/erosion rather than immutable procedural height only,
-6. explicit generation/save versioning so worlds remain reproducible,
-7. acceptable browser performance under representative globe and local terrain loads.
+1. browser-facing continuous local travel on top of the validated geodetic anchor system,
+2. precipitation/runoff plus composable erosion rather than immutable procedural height only,
+3. geology/soil/biome layers feeding deterministic local placement,
+4. explicit save schema and movable entity-state identity,
+5. representative browser performance hardening across globe, local terrain and generated detail.
 
 Only then do we resume climate-feedback/game-loop work on top of this surface model.
