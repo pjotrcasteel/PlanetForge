@@ -8,6 +8,10 @@ const minimumCameraAltitudeMeters = 3.0;
 const maximumCameraAltitudeRatio = 4.2;
 const localTransitionAltitudeMeters = 20_000.0;
 const localExitAltitudeMeters = 25_000.0;
+const treeVisibilityAltitudeMeters = 3_000.0;
+const maximumPlaceholderTrees = 36;
+const placeholderTreeHeightMeters = 15.0;
+const placeholderTreeHalfWidthMeters = 3.0;
 const minimumLocalViewPitchRadians = 0.24;
 const maximumLocalViewPitchRadians = 1.48;
 
@@ -16,7 +20,7 @@ export function initialize(canvasId, snapshot, dotNetReference) {
     const gl = canvas?.getContext('webgl2', { antialias: true, alpha: true });
     if (!canvas || !gl) throw new Error('PlanetForge requires WebGL 2.');
 
-    document.title = 'PlanetForge 0.0.3.10 — Local Scale & Performance';
+    document.title = 'PlanetForge 0.0.3.11 — Local Trees & Exit Performance';
     state = createState(canvas, gl, dotNetReference);
     installInput(state);
     setPlanet(snapshot);
@@ -126,7 +130,8 @@ function createState(canvas, gl, dotNetReference) {
             surfaceTemperature: gl.getUniformLocation(localProgram, 'uSurfaceTemperature'),
             iceFraction: gl.getUniformLocation(localProgram, 'uIceFraction'),
             liquidFraction: gl.getUniformLocation(localProgram, 'uLiquidFraction'),
-            vaporFraction: gl.getUniformLocation(localProgram, 'uVaporFraction')
+            vaporFraction: gl.getUniformLocation(localProgram, 'uVaporFraction'),
+            objectMode: gl.getUniformLocation(localProgram, 'uObjectMode')
         }
     };
 }
@@ -157,7 +162,7 @@ function updateLocalScaleHud(s) {
     const trees = s.scaleHud.querySelector('.local-scale-trees');
     const copy = s.scaleHud.querySelector('.local-scale-copy');
     if (trees) trees.style.fontSize = `${treeSizePixels.toFixed(0)}px`;
-    if (copy) copy.textContent = `ALT ${altitudeText} · TREE ≈ 15 m`;
+    if (copy) copy.textContent = `ALT ${altitudeText} · WORLD TREES ≈ 15 m`;
     s.scaleHud.hidden = false;
 }
 
@@ -194,39 +199,99 @@ function createBufferedTile(gl, tile) {
 }
 
 function activateLocalSurface(s, localSurface) {
-    if (s.localSurface?.key === localSurface.key) {
-        return;
-    }
-
-    if (!localSurface.positionsMeters?.length || !localSurface.normals?.length || !localSurface.elevationsMeters?.length) {
-        return;
-    }
+    if (s.localSurface?.key === localSurface.key) return;
+    if (!localSurface.positionsMeters?.length || !localSurface.normals?.length || !localSurface.elevationsMeters?.length) return;
 
     clearLocalSurfaceBuffer(s);
-    const positionBuffer = s.gl.createBuffer();
-    const normalBuffer = s.gl.createBuffer();
-    const elevationBuffer = s.gl.createBuffer();
-    s.gl.bindBuffer(s.gl.ARRAY_BUFFER, positionBuffer);
-    s.gl.bufferData(s.gl.ARRAY_BUFFER, new Float32Array(localSurface.positionsMeters), s.gl.STATIC_DRAW);
-    s.gl.bindBuffer(s.gl.ARRAY_BUFFER, normalBuffer);
-    s.gl.bufferData(s.gl.ARRAY_BUFFER, new Float32Array(localSurface.normals), s.gl.STATIC_DRAW);
-    s.gl.bindBuffer(s.gl.ARRAY_BUFFER, elevationBuffer);
-    s.gl.bufferData(s.gl.ARRAY_BUFFER, new Float32Array(localSurface.elevationsMeters), s.gl.STATIC_DRAW);
+    const positionBuffer = createStaticBuffer(s.gl, localSurface.positionsMeters);
+    const normalBuffer = createStaticBuffer(s.gl, localSurface.normals);
+    const elevationBuffer = createStaticBuffer(s.gl, localSurface.elevationsMeters);
+    const trees = createPlaceholderTrees(localSurface, s.seaLevelMeters);
+
     s.localSurface = {
         key: localSurface.key,
         positionBuffer,
         normalBuffer,
         elevationBuffer,
         vertexCount: localSurface.vertexCount,
-        sizeMeters: localSurface.sizeMeters
+        sizeMeters: localSurface.sizeMeters,
+        treePositionBuffer: trees.vertexCount > 0 ? createStaticBuffer(s.gl, trees.positions) : null,
+        treeNormalBuffer: trees.vertexCount > 0 ? createStaticBuffer(s.gl, trees.normals) : null,
+        treeElevationBuffer: trees.vertexCount > 0 ? createStaticBuffer(s.gl, trees.elevations) : null,
+        treeVertexCount: trees.vertexCount
     };
 }
 
-function clearSurfaceBufferCache(s) {
-    for (const tile of s.tileBufferCache.values()) {
-        deleteBufferedTile(s.gl, tile);
+function createStaticBuffer(gl, values) {
+    const buffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(values), gl.STATIC_DRAW);
+    return buffer;
+}
+
+function createPlaceholderTrees(localSurface, seaLevelMeters) {
+    const anchors = [];
+    const positions = localSurface.positionsMeters;
+    const elevations = localSurface.elevationsMeters;
+    const vertexCount = Math.floor(positions.length / 3);
+    const targetCount = Math.min(maximumPlaceholderTrees, Math.max(5, Math.round(localSurface.sizeMeters / 300.0)));
+    const stride = Math.max(1, Math.floor(vertexCount / Math.max(targetCount * 6, 1)));
+    const seen = new Set();
+
+    for (let index = 0; index < vertexCount && anchors.length < targetCount; index += stride) {
+        const elevation = elevations[index];
+        if (!Number.isFinite(elevation) || elevation <= seaLevelMeters + 2.0 || elevation >= 3_200.0) continue;
+
+        const offset = index * 3;
+        const x = positions[offset];
+        const y = positions[offset + 1];
+        const z = positions[offset + 2];
+        if (Math.hypot(x, z) > localSurface.sizeMeters * 0.46) continue;
+
+        const key = `${Math.round(x)}:${Math.round(z)}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        anchors.push([x, y, z, elevation]);
     }
 
+    const treePositions = [];
+    const treeNormals = [];
+    const treeElevations = [];
+    for (const anchor of anchors) appendTree(treePositions, treeNormals, treeElevations, anchor);
+
+    return {
+        positions: treePositions,
+        normals: treeNormals,
+        elevations: treeElevations,
+        vertexCount: treePositions.length / 3
+    };
+}
+
+function appendTree(positions, normals, elevations, anchor) {
+    const [x, y, z, elevation] = anchor;
+    const baseY = y + 0.25;
+    const apex = [x, baseY + placeholderTreeHeightMeters, z];
+    const a = [x - placeholderTreeHalfWidthMeters, baseY, z - placeholderTreeHalfWidthMeters];
+    const b = [x + placeholderTreeHalfWidthMeters, baseY, z - placeholderTreeHalfWidthMeters];
+    const c = [x + placeholderTreeHalfWidthMeters, baseY, z + placeholderTreeHalfWidthMeters];
+    const d = [x - placeholderTreeHalfWidthMeters, baseY, z + placeholderTreeHalfWidthMeters];
+    appendTreeTriangle(positions, normals, elevations, a, b, apex, elevation);
+    appendTreeTriangle(positions, normals, elevations, b, c, apex, elevation);
+    appendTreeTriangle(positions, normals, elevations, c, d, apex, elevation);
+    appendTreeTriangle(positions, normals, elevations, d, a, apex, elevation);
+}
+
+function appendTreeTriangle(positions, normals, elevations, a, b, c, elevation) {
+    const ab = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
+    const ac = [c[0] - a[0], c[1] - a[1], c[2] - a[2]];
+    const normal = normalize(cross(ab, ac));
+    positions.push(...a, ...b, ...c);
+    normals.push(...normal, ...normal, ...normal);
+    elevations.push(elevation, elevation, elevation);
+}
+
+function clearSurfaceBufferCache(s) {
+    for (const tile of s.tileBufferCache.values()) deleteBufferedTile(s.gl, tile);
     s.tileBufferCache.clear();
     s.tiles = [];
     s.surfaceKey = null;
@@ -237,12 +302,14 @@ function clearLocalSurfaceBuffer(s) {
     s.gl.deleteBuffer(s.localSurface.positionBuffer);
     s.gl.deleteBuffer(s.localSurface.normalBuffer);
     s.gl.deleteBuffer(s.localSurface.elevationBuffer);
+    if (s.localSurface.treePositionBuffer) s.gl.deleteBuffer(s.localSurface.treePositionBuffer);
+    if (s.localSurface.treeNormalBuffer) s.gl.deleteBuffer(s.localSurface.treeNormalBuffer);
+    if (s.localSurface.treeElevationBuffer) s.gl.deleteBuffer(s.localSurface.treeElevationBuffer);
     s.localSurface = null;
 }
 
 function trimSurfaceBufferCache(s, activeKeys) {
     if (s.tileBufferCache.size <= maximumCachedSurfaceTiles) return;
-
     for (const [key, tile] of s.tileBufferCache) {
         if (activeKeys.has(key)) continue;
         deleteBufferedTile(s.gl, tile);
@@ -303,10 +370,7 @@ function installInput(s) {
         const minimumCameraAltitudeRatio = minimumCameraAltitudeMeters / Math.max(s.planetRadiusMeters, 1.0);
         const altitudeRatio = clamp(s.distance - 1.0, minimumCameraAltitudeRatio, maximumCameraAltitudeRatio);
         s.distance = 1.0 + clamp(altitudeRatio * zoomFactor, minimumCameraAltitudeRatio, maximumCameraAltitudeRatio);
-
-        if (shouldRequestSurfaceUpdate(s)) {
-            scheduleSurfaceUpdate(s, surfaceUpdateDebounceMilliseconds);
-        }
+        if (shouldRequestSurfaceUpdate(s)) scheduleSurfaceUpdate(s, surfaceUpdateDebounceMilliseconds);
     }, { passive: false });
 }
 
@@ -323,7 +387,6 @@ function scheduleSurfaceUpdate(s, delayMilliseconds) {
     const sequence = ++s.lodSequence;
     s.surfaceRequestPending = true;
     if (s.surfaceRequestInFlight) return;
-
     s.lodTimer = setTimeout(() => requestSurfaceUpdate(s, sequence), delayMilliseconds);
 }
 
@@ -351,17 +414,10 @@ async function requestSurfaceUpdate(s, sequence) {
     try {
         const snapshot = await s.dotNetReference.invokeMethodAsync(
             'UpdateSurfaceView',
-            direction[0],
-            direction[1],
-            direction[2],
-            s.distance,
-            viewportWidth,
-            viewportHeight,
-            verticalFieldOfViewRadians);
+            direction[0], direction[1], direction[2], s.distance,
+            viewportWidth, viewportHeight, verticalFieldOfViewRadians);
 
-        if (state === s && sequence === s.lodSequence) {
-            setPlanet(snapshot);
-        }
+        if (state === s && sequence === s.lodSequence) setPlanet(snapshot);
     } catch (error) {
         if (state === s) console.error('PlanetForge surface update failed.', error);
     } finally {
@@ -376,10 +432,8 @@ async function requestSurfaceUpdate(s, sequence) {
 function render() {
     if (!state) return;
     resize(state);
-
     if (state.renderMode === 'local' && state.localSurface) renderLocal(state);
     else renderGlobe(state);
-
     requestAnimationFrame(render);
 }
 
@@ -393,9 +447,8 @@ function renderGlobe(s) {
     const eye = orbitEye(s.yaw, s.pitch, s.distance);
     const view = lookAt(eye, [0, 0, 0], [0, 1, 0]);
     const viewProjection = multiply(projection, view);
-    const model = identityMatrix();
 
-    gl.uniformMatrix4fv(s.globeUniforms.model, false, model);
+    gl.uniformMatrix4fv(s.globeUniforms.model, false, identityMatrix());
     gl.uniformMatrix4fv(s.globeUniforms.viewProjection, false, viewProjection);
     gl.uniform3f(s.globeUniforms.light, 0.7, 0.35, 0.6);
     gl.uniform1f(s.globeUniforms.seaLevelMeters, s.seaLevelMeters);
@@ -427,11 +480,7 @@ function renderLocal(s) {
     const aspect = canvas.width / Math.max(canvas.height, 1);
     const cameraHeightMeters = Math.max(s.localCameraAltitudeMeters ?? localTransitionAltitudeMeters, minimumCameraAltitudeMeters);
     const horizontalDistanceMeters = cameraHeightMeters / Math.tan(s.localPitch);
-    const eye = [
-        Math.sin(s.localYaw) * horizontalDistanceMeters,
-        cameraHeightMeters,
-        Math.cos(s.localYaw) * horizontalDistanceMeters
-    ];
+    const eye = [Math.sin(s.localYaw) * horizontalDistanceMeters, cameraHeightMeters, Math.cos(s.localYaw) * horizontalDistanceMeters];
     const nearMeters = Math.max(0.02, Math.min(1.0, cameraHeightMeters * 0.001));
     const farMeters = Math.max(localSurface.sizeMeters * 3.0, Math.hypot(horizontalDistanceMeters, cameraHeightMeters) * 4.0);
     const projection = perspective(verticalFieldOfViewRadians, aspect, nearMeters, farMeters);
@@ -446,8 +495,17 @@ function renderLocal(s) {
     gl.uniform1f(s.localUniforms.liquidFraction, s.liquidFraction);
     gl.uniform1f(s.localUniforms.vaporFraction, s.vaporFraction);
 
-    bindLocalAttributes(s);
+    gl.uniform1i(s.localUniforms.objectMode, 0);
+    bindLocalAttributes(s, localSurface.positionBuffer, localSurface.normalBuffer, localSurface.elevationBuffer);
     gl.drawArrays(gl.TRIANGLES, 0, localSurface.vertexCount);
+
+    if (cameraHeightMeters <= treeVisibilityAltitudeMeters && localSurface.treeVertexCount > 0) {
+        gl.uniform1i(s.localUniforms.objectMode, 1);
+        gl.disable(gl.CULL_FACE);
+        bindLocalAttributes(s, localSurface.treePositionBuffer, localSurface.treeNormalBuffer, localSurface.treeElevationBuffer);
+        gl.drawArrays(gl.TRIANGLES, 0, localSurface.treeVertexCount);
+        gl.enable(gl.CULL_FACE);
+    }
 }
 
 function prepareFrame(gl, canvas) {
@@ -492,15 +550,15 @@ function bindTileAttributes(s, tile) {
     gl.vertexAttribPointer(s.globeAttributes.normal, 3, gl.FLOAT, false, 0, 0);
 }
 
-function bindLocalAttributes(s) {
+function bindLocalAttributes(s, positionBuffer, normalBuffer, elevationBuffer) {
     const gl = s.gl;
-    gl.bindBuffer(gl.ARRAY_BUFFER, s.localSurface.positionBuffer);
+    gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
     gl.enableVertexAttribArray(s.localAttributes.position);
     gl.vertexAttribPointer(s.localAttributes.position, 3, gl.FLOAT, false, 0, 0);
-    gl.bindBuffer(gl.ARRAY_BUFFER, s.localSurface.normalBuffer);
+    gl.bindBuffer(gl.ARRAY_BUFFER, normalBuffer);
     gl.enableVertexAttribArray(s.localAttributes.normal);
     gl.vertexAttribPointer(s.localAttributes.normal, 3, gl.FLOAT, false, 0, 0);
-    gl.bindBuffer(gl.ARRAY_BUFFER, s.localSurface.elevationBuffer);
+    gl.bindBuffer(gl.ARRAY_BUFFER, elevationBuffer);
     gl.enableVertexAttribArray(s.localAttributes.elevation);
     gl.vertexAttribPointer(s.localAttributes.elevation, 1, gl.FLOAT, false, 0, 0);
 }
@@ -513,9 +571,7 @@ function resize(s) {
 
     s.canvas.width = width;
     s.canvas.height = height;
-    if (s.renderMode === 'local') {
-        scheduleSurfaceUpdate(s, localSurfaceUpdateDebounceMilliseconds);
-    }
+    if (s.renderMode === 'local') scheduleSurfaceUpdate(s, localSurfaceUpdateDebounceMilliseconds);
 }
 
 function createProgram(gl, vertexSource, fragmentSource) {
@@ -667,8 +723,16 @@ uniform float uSurfaceTemperature;
 uniform float uIceFraction;
 uniform float uLiquidFraction;
 uniform float uVaporFraction;
+uniform int uObjectMode;
 out vec4 outColor;
 void main() {
+    float light = max(dot(normalize(vNormal), normalize(uLightDirection)), 0.0);
+    if (uObjectMode == 1) {
+        vec3 treeColor = vec3(0.055, 0.30, 0.12);
+        outColor = vec4(treeColor * (0.35 + 0.65 * light), 1.0);
+        return;
+    }
+
     vec3 deepOcean = vec3(0.035, 0.16, 0.23);
     vec3 shallowOcean = vec3(0.06, 0.31, 0.36);
     vec3 lowland = vec3(0.18, 0.38, 0.22);
@@ -689,7 +753,6 @@ void main() {
     if (vElevationMeters >= uSeaLevelMeters || uLiquidFraction <= 0.001) baseColor = mix(baseColor, vec3(0.48, 0.25, 0.11), heat * 0.76);
     baseColor = mix(baseColor, vec3(0.56, 0.45, 0.31), clamp(uVaporFraction * 0.22, 0.0, 0.22));
 
-    float light = max(dot(normalize(vNormal), normalize(uLightDirection)), 0.0);
     vec3 color = baseColor * (0.18 + 0.82 * light);
     outColor = vec4(color, 1.0);
 }`;

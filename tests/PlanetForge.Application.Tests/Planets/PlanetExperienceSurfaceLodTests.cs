@@ -11,30 +11,19 @@ public sealed class PlanetExperienceSurfaceLodTests
     private const double EarthRadiusMeters = 6_371_000.0;
 
     [TestMethod]
-    public void UpdateSurfaceView_NearCamera_SelectsHigherDetailThanFarCamera()
+    public void UpdateSurfaceView_AboveLocalTransition_UsesStableGlobalFallback()
     {
         var experience = CreateExperience();
-        var direction = new PlanetVector(0.0, 0.0, 1.0);
-
-        var far = experience.UpdateSurfaceView(new PlanetSurfaceView(direction, 5.0, 1080, Math.PI / 4.2));
-        var near = experience.UpdateSurfaceView(new PlanetSurfaceView(direction, 1.08, 1080, Math.PI / 4.2));
-
-        Assert.IsTrue(near.SurfaceTiles.Max(tile => tile.Id.Level) > far.SurfaceTiles.Max(tile => tile.Id.Level));
-        Assert.AreEqual(far.Seed, near.Seed);
-        Assert.AreEqual(far.PhysicalParameters, near.PhysicalParameters);
-    }
-
-    [TestMethod]
-    public void UpdateSurfaceView_AboveLocalTransition_RemainsGlobeTerrain()
-    {
-        var experience = CreateExperience();
+        var far = experience.UpdateSurfaceView(new PlanetSurfaceView(PlanetVector.UnitZ, 5.0, 1080, Math.PI / 4.2));
         var cameraDistance = 1.0 + (25_000.0 / EarthRadiusMeters);
-        var view = new PlanetSurfaceView(PlanetVector.UnitZ, cameraDistance, 1080, Math.PI / 4.2) { ViewportAspectRatio = 16.0 / 9.0 };
+        var nearGlobe = experience.UpdateSurfaceView(new PlanetSurfaceView(PlanetVector.UnitZ, cameraDistance, 1080, Math.PI / 4.2));
 
-        var snapshot = experience.UpdateSurfaceView(view);
-
-        Assert.IsNull(snapshot.LocalSurface);
-        Assert.IsTrue(snapshot.SurfaceTiles.Count > 0);
+        Assert.IsNull(far.LocalSurface);
+        Assert.IsNull(nearGlobe.LocalSurface);
+        Assert.AreEqual(24, far.SurfaceTiles.Count);
+        Assert.AreEqual(24, nearGlobe.SurfaceTiles.Count);
+        Assert.IsTrue(far.SurfaceTiles.All(tile => tile.Id.Level == 1));
+        Assert.IsTrue(nearGlobe.SurfaceTiles.All(tile => tile.Id.Level == 1));
     }
 
     [TestMethod]
@@ -182,10 +171,9 @@ public sealed class PlanetExperienceSurfaceLodTests
         var sampler = new PlanetSurfaceTileSampler(elevationSource);
         var meshBuilder = new PlanetSurfaceMeshBuilder(sampler);
         var meshCache = new PlanetSurfaceMeshCache(meshBuilder);
-        var lodSelector = new PlanetSurfaceLodSelector(PlanetSurfaceLodOptions.Default);
         var localSampler = new PlanetLocalSurfacePatchSampler(elevationSource);
         var localMeshBuilder = new PlanetLocalSurfaceMeshBuilder();
-        return new PlanetExperience(meshCache, lodSelector, localSampler, localMeshBuilder);
+        return new PlanetExperience(meshCache, localSampler, localMeshBuilder);
     }
 
     private sealed class FlatElevationSource : IPlanetElevationSource
