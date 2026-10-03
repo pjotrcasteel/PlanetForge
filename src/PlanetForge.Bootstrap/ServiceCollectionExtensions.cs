@@ -1,4 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
+using PlanetForge.Application.Missions;
 using PlanetForge.Application.Planets;
 using PlanetForge.Application.Rendering;
 using PlanetForge.Application.Surface;
@@ -24,6 +25,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<PlanetSurfaceMeshCache>();
         services.AddSingleton<PlanetLocalSurfaceMeshBuilder>();
         services.AddSingleton<PlanetExperience>();
+        services.AddSingleton<FrozenWorldMission>();
         return services;
     }
 }
