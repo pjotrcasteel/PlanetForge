@@ -5,7 +5,10 @@ namespace PlanetForge.Application.Rendering;
 public sealed class PlanetSurfaceMeshCache(PlanetSurfaceMeshBuilder meshBuilder)
 {
     private readonly Dictionary<CacheKey, PlanetSurfaceTileMesh> cache = [];
+    private IReadOnlyList<PlanetTileId>? lastRequestedIds;
     private int? activeSeed;
+    private int lastCellsPerAxis;
+    private double lastPlanetRadiusMeters;
 
     public PlanetSurfaceTileMesh GetOrBuild(PlanetTileId id, int cellsPerAxis, int seed, double planetRadiusMeters)
     {
@@ -23,12 +26,19 @@ public sealed class PlanetSurfaceMeshCache(PlanetSurfaceMeshBuilder meshBuilder)
 
     public IReadOnlyList<PlanetSurfaceTileMesh> GetOrBuild(IReadOnlyList<PlanetTileId> ids, int cellsPerAxis, int seed, double planetRadiusMeters)
     {
+        EnsureSeed(seed);
+        if (IsSameRequest(ids, cellsPerAxis, planetRadiusMeters))
+        {
+            return CreateReferences(ids, cellsPerAxis, planetRadiusMeters);
+        }
+
         var result = new PlanetSurfaceTileMesh[ids.Count];
         for (var index = 0; index < ids.Count; index++)
         {
             result[index] = GetOrBuild(ids[index], cellsPerAxis, seed, planetRadiusMeters);
         }
 
+        RememberRequest(ids, cellsPerAxis, planetRadiusMeters);
         return result;
     }
 
@@ -59,6 +69,46 @@ public sealed class PlanetSurfaceMeshCache(PlanetSurfaceMeshBuilder meshBuilder)
     {
         cache.Clear();
         activeSeed = null;
+        lastRequestedIds = null;
+        lastCellsPerAxis = 0;
+        lastPlanetRadiusMeters = 0.0;
+    }
+
+    private IReadOnlyList<PlanetSurfaceTileMesh> CreateReferences(IReadOnlyList<PlanetTileId> ids, int cellsPerAxis, double planetRadiusMeters)
+    {
+        var result = new PlanetSurfaceTileMesh[ids.Count];
+        for (var index = 0; index < ids.Count; index++)
+        {
+            var key = new CacheKey(ids[index], cellsPerAxis, planetRadiusMeters);
+            result[index] = cache[key].AsReference();
+        }
+
+        return result;
+    }
+
+    private bool IsSameRequest(IReadOnlyList<PlanetTileId> ids, int cellsPerAxis, double planetRadiusMeters)
+    {
+        if (lastRequestedIds is null || lastCellsPerAxis != cellsPerAxis || lastPlanetRadiusMeters != planetRadiusMeters || lastRequestedIds.Count != ids.Count)
+        {
+            return false;
+        }
+
+        for (var index = 0; index < ids.Count; index++)
+        {
+            if (lastRequestedIds[index] != ids[index])
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private void RememberRequest(IReadOnlyList<PlanetTileId> ids, int cellsPerAxis, double planetRadiusMeters)
+    {
+        lastRequestedIds = ids.ToArray();
+        lastCellsPerAxis = cellsPerAxis;
+        lastPlanetRadiusMeters = planetRadiusMeters;
     }
 
     private void EnsureSeed(int seed)
@@ -70,6 +120,9 @@ public sealed class PlanetSurfaceMeshCache(PlanetSurfaceMeshBuilder meshBuilder)
 
         cache.Clear();
         activeSeed = seed;
+        lastRequestedIds = null;
+        lastCellsPerAxis = 0;
+        lastPlanetRadiusMeters = 0.0;
     }
 
     private readonly record struct CacheKey(PlanetTileId Id, int CellsPerAxis, double PlanetRadiusMeters);
