@@ -19,9 +19,9 @@ public sealed class ClimateFeedbackSimulatorTests
 
         var advanced = ClimateFeedbackSimulator.Advance(planet, atmosphere, water, state, 100.0);
 
-        Assert.IsGreaterThan(advanced.CryosphereFraction, state.CryosphereFraction);
-        Assert.IsGreaterThan(advanced.EffectiveBondAlbedo, planet.BondAlbedo);
-        Assert.IsLessThan(advanced.SurfaceTemperatureKelvin, state.SurfaceTemperatureKelvin);
+        Assert.IsTrue(advanced.CryosphereFraction > state.CryosphereFraction);
+        Assert.IsTrue(advanced.EffectiveBondAlbedo > planet.BondAlbedo);
+        Assert.IsTrue(advanced.SurfaceTemperatureKelvin < state.SurfaceTemperatureKelvin);
     }
 
     [TestMethod]
@@ -37,9 +37,9 @@ public sealed class ClimateFeedbackSimulatorTests
 
         var warmed = ClimateFeedbackSimulator.Advance(warmPlanet, atmosphere, water, frozen, 100.0);
 
-        Assert.IsLessThan(warmed.CryosphereFraction, frozen.CryosphereFraction);
-        Assert.IsLessThan(warmed.EffectiveBondAlbedo, frozen.EffectiveBondAlbedo);
-        Assert.IsGreaterThan(warmed.SurfaceTemperatureKelvin, frozen.SurfaceTemperatureKelvin);
+        Assert.IsTrue(warmed.CryosphereFraction < frozen.CryosphereFraction);
+        Assert.IsTrue(warmed.EffectiveBondAlbedo < frozen.EffectiveBondAlbedo);
+        Assert.IsTrue(warmed.SurfaceTemperatureKelvin > frozen.SurfaceTemperatureKelvin);
     }
 
     [TestMethod]
