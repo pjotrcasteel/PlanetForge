@@ -3,8 +3,10 @@ let state;
 const verticalFieldOfViewRadians = Math.PI / 4.2;
 const surfaceUpdateDebounceMilliseconds = 120;
 const maximumCachedSurfaceTiles = 512;
-const minimumCameraAltitudeRatio = 0.00001;
+const minimumCameraAltitudeMeters = 3.0;
 const maximumCameraAltitudeRatio = 4.2;
+const minimumLocalViewPitchRadians = 0.24;
+const maximumLocalViewPitchRadians = 1.48;
 
 export function initialize(canvasId, snapshot, dotNetReference) {
     const canvas = document.getElementById(canvasId);
@@ -38,6 +40,11 @@ export function setPlanet(snapshot) {
     }
 
     if (snapshot.localSurface) {
+        if (state.renderMode !== 'local') {
+            state.localYaw = -0.65;
+            state.localPitch = 0.72;
+        }
+
         state.renderMode = 'local';
         activateLocalSurface(state, snapshot.localSurface);
         return;
@@ -69,7 +76,8 @@ function createState(canvas, gl, dotNetReference) {
     return {
         canvas, gl, dotNetReference, globeProgram, localProgram, renderMode: 'globe', geometryKey: null,
         surfaceKey: null, tileBufferCache: new Map(), tiles: [], localSurface: null,
-        yaw: -0.65, pitch: 0.24, distance: 3.15, dragging: false, lastX: 0, lastY: 0,
+        yaw: -0.65, pitch: 0.24, distance: 3.15, localYaw: -0.65, localPitch: 0.72,
+        dragging: false, lastX: 0, lastY: 0,
         lodTimer: null, lodSequence: 0, lastSurfaceRequestSignature: null,
         seaLevelMeters: 0, planetRadiusMeters: 6371000, atmosphereDensity: 0.6,
         equilibriumTemperature: 255, surfaceTemperature: 288, solarFlux: 1361,
@@ -214,22 +222,32 @@ function installInput(s) {
     canvas.addEventListener('pointerup', event => {
         s.dragging = false;
         canvas.releasePointerCapture(event.pointerId);
-        scheduleSurfaceUpdate(s, 0);
+        if (s.renderMode === 'globe') scheduleSurfaceUpdate(s, 0);
     });
     canvas.addEventListener('pointercancel', () => {
         s.dragging = false;
-        scheduleSurfaceUpdate(s, 0);
+        if (s.renderMode === 'globe') scheduleSurfaceUpdate(s, 0);
     });
     canvas.addEventListener('pointermove', event => {
         if (!s.dragging) return;
-        s.yaw += (event.clientX - s.lastX) * 0.008;
-        s.pitch = clamp(s.pitch + (event.clientY - s.lastY) * 0.008, -1.25, 1.25);
+        const deltaX = event.clientX - s.lastX;
+        const deltaY = event.clientY - s.lastY;
         s.lastX = event.clientX;
         s.lastY = event.clientY;
+
+        if (s.renderMode === 'local') {
+            s.localYaw += deltaX * 0.008;
+            s.localPitch = clamp(s.localPitch - deltaY * 0.008, minimumLocalViewPitchRadians, maximumLocalViewPitchRadians);
+            return;
+        }
+
+        s.yaw += deltaX * 0.008;
+        s.pitch = clamp(s.pitch + deltaY * 0.008, -1.25, 1.25);
         scheduleSurfaceUpdate(s, surfaceUpdateDebounceMilliseconds);
     });
     canvas.addEventListener('wheel', event => {
         event.preventDefault();
+        const minimumCameraAltitudeRatio = minimumCameraAltitudeMeters / Math.max(s.planetRadiusMeters, 1.0);
         const altitudeRatio = clamp(s.distance - 1.0, minimumCameraAltitudeRatio, maximumCameraAltitudeRatio);
         const zoomFactor = Math.exp(event.deltaY * 0.0015);
         s.distance = 1.0 + clamp(altitudeRatio * zoomFactor, minimumCameraAltitudeRatio, maximumCameraAltitudeRatio);
@@ -327,11 +345,17 @@ function renderLocal(s) {
     gl.useProgram(localProgram);
 
     const aspect = canvas.width / Math.max(canvas.height, 1);
-    const cameraHeightMeters = Math.max(localSurface.cameraAltitudeMeters, 2.0);
-    const nearMeters = Math.max(0.05, cameraHeightMeters * 0.001);
-    const farMeters = Math.max(localSurface.sizeMeters * 3.0, cameraHeightMeters * 4.0);
+    const cameraHeightMeters = Math.max(localSurface.cameraAltitudeMeters, minimumCameraAltitudeMeters);
+    const horizontalDistanceMeters = cameraHeightMeters / Math.tan(s.localPitch);
+    const eye = [
+        Math.sin(s.localYaw) * horizontalDistanceMeters,
+        cameraHeightMeters,
+        Math.cos(s.localYaw) * horizontalDistanceMeters
+    ];
+    const nearMeters = Math.max(0.02, Math.min(1.0, cameraHeightMeters * 0.001));
+    const farMeters = Math.max(localSurface.sizeMeters * 3.0, Math.hypot(horizontalDistanceMeters, cameraHeightMeters) * 4.0);
     const projection = perspective(verticalFieldOfViewRadians, aspect, nearMeters, farMeters);
-    const view = lookAt([0, cameraHeightMeters, 0], [0, 0, 0], [0, 0, -1]);
+    const view = lookAt(eye, [0, 0, 0], [0, 1, 0]);
     const viewProjection = multiply(projection, view);
 
     gl.uniformMatrix4fv(s.localUniforms.viewProjection, false, viewProjection);
