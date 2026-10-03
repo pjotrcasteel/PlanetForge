@@ -17,7 +17,7 @@ public sealed class PlanetExperience(
     private const int GlobalSurfaceLevel = 1;
     private const int SurfaceCellsPerAxis = 12;
     private const int LocalSurfaceCellsPerAxis = 32;
-    private const double MinimumLocalPatchSizeMeters = 256.0;
+    private const double MinimumLocalPatchSizeMeters = 16.0;
     private const double MaximumLocalViewAltitudeMeters = 150_000.0;
     private const double MaximumLocalViewRadiusFraction = 0.03;
     private const double MaximumLocalPatchRadiusFraction = 0.18;
