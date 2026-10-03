@@ -15,6 +15,7 @@ public partial class Home
         double directionY,
         double directionZ,
         double cameraDistanceFromCenter,
+        int viewportWidthPixels,
         int viewportHeightPixels,
         double verticalFieldOfViewRadians)
     {
@@ -22,7 +23,10 @@ public partial class Home
             new PlanetVector(directionX, directionY, directionZ),
             cameraDistanceFromCenter,
             viewportHeightPixels,
-            verticalFieldOfViewRadians);
+            verticalFieldOfViewRadians)
+        {
+            ViewportAspectRatio = viewportWidthPixels / (double)viewportHeightPixels,
+        };
 
         snapshot = Experience.UpdateSurfaceView(view);
         return snapshot;
