@@ -491,12 +491,15 @@ in vec3 aPosition;
 in vec3 aNormal;
 uniform mat4 uModel;
 uniform mat4 uViewProjection;
+uniform float uPlanetRadiusMeters;
 out vec3 vNormal;
 out vec3 vWorldPosition;
+out float vElevationMeters;
 void main() {
     vec4 world = uModel * vec4(aPosition, 1.0);
     vWorldPosition = world.xyz;
     vNormal = normalize(mat3(uModel) * aNormal);
+    vElevationMeters = (length(aPosition) - 1.0) * uPlanetRadiusMeters;
     gl_Position = uViewProjection * world;
 }`;
 
@@ -504,9 +507,9 @@ const globeFragmentShaderSource = `#version 300 es
 precision highp float;
 in vec3 vNormal;
 in vec3 vWorldPosition;
+in float vElevationMeters;
 uniform vec3 uLightDirection;
 uniform float uSeaLevelMeters;
-uniform float uPlanetRadiusMeters;
 uniform float uAtmosphere;
 uniform float uEquilibriumTemperature;
 uniform float uSurfaceTemperature;
@@ -526,8 +529,6 @@ void main() {
         return;
     }
 
-    float radius = length(vWorldPosition);
-    float elevationMeters = (radius - 1.0) * uPlanetRadiusMeters;
     vec3 deepOcean = vec3(0.035, 0.16, 0.23);
     vec3 shallowOcean = vec3(0.06, 0.31, 0.36);
     vec3 lowland = vec3(0.18, 0.38, 0.22);
@@ -535,10 +536,10 @@ void main() {
     vec3 peak = vec3(0.62, 0.65, 0.59);
     vec3 baseColor;
 
-    if (uLiquidFraction > 0.001 && elevationMeters < uSeaLevelMeters - 1500.0) baseColor = deepOcean;
-    else if (uLiquidFraction > 0.001 && elevationMeters < uSeaLevelMeters) baseColor = shallowOcean;
-    else if (elevationMeters < 1200.0) baseColor = lowland;
-    else if (elevationMeters < 3500.0) baseColor = highland;
+    if (uLiquidFraction > 0.001 && vElevationMeters < uSeaLevelMeters - 1500.0) baseColor = deepOcean;
+    else if (uLiquidFraction > 0.001 && vElevationMeters < uSeaLevelMeters) baseColor = shallowOcean;
+    else if (vElevationMeters < 1200.0) baseColor = lowland;
+    else if (vElevationMeters < 3500.0) baseColor = highland;
     else baseColor = peak;
 
     float latitude = abs(normalize(vWorldPosition).y);
@@ -549,7 +550,7 @@ void main() {
     baseColor = mix(baseColor, vec3(0.77, 0.88, 0.90), clamp(frost, 0.0, 0.96));
 
     float heat = smoothstep(315.0, 430.0, uSurfaceTemperature);
-    if (elevationMeters >= uSeaLevelMeters || uLiquidFraction <= 0.001) baseColor = mix(baseColor, vec3(0.48, 0.25, 0.11), heat * 0.76);
+    if (vElevationMeters >= uSeaLevelMeters || uLiquidFraction <= 0.001) baseColor = mix(baseColor, vec3(0.48, 0.25, 0.11), heat * 0.76);
     baseColor = mix(baseColor, vec3(0.56, 0.45, 0.31), clamp(uVaporFraction * 0.28, 0.0, 0.28));
 
     float light = max(dot(normalize(vNormal), normalize(uLightDirection)), 0.0);
