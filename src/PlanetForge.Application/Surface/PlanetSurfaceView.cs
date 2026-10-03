@@ -6,4 +6,7 @@ public sealed record PlanetSurfaceView(
     PlanetVector CameraDirection,
     double CameraDistanceFromCenter,
     int ViewportHeightPixels,
-    double VerticalFieldOfViewRadians);
+    double VerticalFieldOfViewRadians)
+{
+    public double ViewportAspectRatio { get; init; } = 1.0;
+}
