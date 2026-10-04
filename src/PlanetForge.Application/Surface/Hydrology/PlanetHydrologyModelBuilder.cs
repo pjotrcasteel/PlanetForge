@@ -85,9 +85,8 @@ public sealed class PlanetHydrologyModelBuilder(IPlanetElevationSource elevation
             visitOrder[visitCount++] = currentIndex;
             var currentCell = layout.GetCell(currentIndex);
 
-            foreach (var direction in Enum.GetValues<PlanetGridDirection>())
+            foreach (var neighborCell in PlanetHydrologyNeighborhood.Enumerate(currentCell))
             {
-                var neighborCell = PlanetSurfaceGridTopology.GetNeighbor(currentCell, direction).Cell;
                 var neighborIndex = layout.GetIndex(neighborCell);
                 if (visited[neighborIndex])
                 {
