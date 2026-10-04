@@ -40,10 +40,17 @@ jobs:
 
       - name: Prepare GitHub Pages
         run: |
-          sed -i 's#<base href="/" />#<base href="/PlanetForge/" />#' ./artifacts/web/wwwroot/index.html
+          INDEX=./artifacts/web/wwwroot/index.html
+          sed -i 's#<base href="/" />#<base href="/PlanetForge/" />#' "$INDEX"
+          sed -i "s#css/app.css\"#css/app.css?v=${GITHUB_SHA}\"#" "$INDEX"
+          sed -i "s#css/mission-clarity.css\"#css/mission-clarity.css?v=${GITHUB_SHA}\"#" "$INDEX"
+          sed -i "s#css/planet-run.css\"#css/planet-run.css?v=${GITHUB_SHA}\"#" "$INDEX"
+          sed -i "s#css/hydrology-foundation.css\"#css/hydrology-foundation.css?v=${GITHUB_SHA}\"#" "$INDEX"
+          sed -i "s#js/buildVersion.js\"#js/buildVersion.js?v=${GITHUB_SHA}\"#" "$INDEX"
           touch ./artifacts/web/wwwroot/.nojekyll
           test -f ./artifacts/web/wwwroot/_framework/blazor.webassembly.js
-          grep -q '<base href="/PlanetForge/" />' ./artifacts/web/wwwroot/index.html
+          grep -q '<base href="/PlanetForge/" />' "$INDEX"
+          grep -q "hydrology-foundation.css?v=${GITHUB_SHA}" "$INDEX"
 
       - name: Configure Pages
         uses: actions/configure-pages@v5
