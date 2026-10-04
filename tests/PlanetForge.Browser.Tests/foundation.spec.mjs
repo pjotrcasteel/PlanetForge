@@ -15,6 +15,7 @@ test('FrozenToMelting_PreservesPolarCapsAndThawsEquator', async ({ page }, testI
 
   await orientPitch(page, 0.0);
   const meltedEquatorCoverage = await measureCenterCoverage(page);
+  const meltedUpperEdgeVariation = await measureUpperEdgeVariation(page);
   await page.screenshot({ path: testInfo.outputPath('year-50-equator.png'), fullPage: true });
 
   await orientPitch(page, 1.25);
@@ -25,7 +26,7 @@ test('FrozenToMelting_PreservesPolarCapsAndThawsEquator', async ({ page }, testI
   const southPoleCoverage = await measureCenterCoverage(page);
   await page.screenshot({ path: testInfo.outputPath('year-50-south.png'), fullPage: true });
 
-  const metrics = { frozenEquatorCoverage, meltedEquatorCoverage, northPoleCoverage, southPoleCoverage };
+  const metrics = { frozenEquatorCoverage, meltedEquatorCoverage, northPoleCoverage, southPoleCoverage, meltedUpperEdgeVariation };
   console.log(`Cryosphere metrics: ${JSON.stringify(metrics)}`);
   await testInfo.attach('cryosphere-metrics', { body: JSON.stringify(metrics, null, 2), contentType: 'application/json' });
 
@@ -62,4 +63,8 @@ async function orientPitch(page, targetPitch) {
 
 async function measureCenterCoverage(page) {
   return page.evaluate(() => window.__planetForgeCryosphereTest.measureCenterCoverage());
+}
+
+async function measureUpperEdgeVariation(page) {
+  return page.evaluate(() => window.__planetForgeCryosphereTest.measureUpperEdgeVariation());
 }
