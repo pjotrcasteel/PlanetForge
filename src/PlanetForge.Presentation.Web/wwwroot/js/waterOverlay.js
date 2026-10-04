@@ -420,27 +420,34 @@ function renderGameplayPanel(s, dock, host, button) {
     const heading = copy?.querySelector('h2');
     const paragraph = copy?.querySelector('p');
     const gameplay = s.gameplay;
+    const feedbackKey = gameplay.lastFeedback ? `${gameplay.lastFeedback.correct}:${gameplay.lastFeedback.headline}:${gameplay.lastFeedback.observation}` : 'none';
+    const renderKey = `${gameplay.round}|${gameplay.score}|${gameplay.selected ?? 'none'}|${gameplay.awaitingResolution}|${feedbackKey}`;
 
     if (gameplay.round >= waterChallenges.length) {
         if (heading) heading.textContent = 'Field study complete: you can now read this planet’s water cycle.';
         if (paragraph) paragraph.textContent = 'You tested runoff, basin storage and river-network growth against the generated world instead of simply advancing time.';
-        host.innerHTML = `
-            <div class="water-field-complete">
-                <span class="water-field-kicker">HYDROLOGY FIELD STUDY COMPLETE</span>
-                <strong>${gameplay.score} / ${waterChallenges.length} predictions confirmed</strong>
-                <p>The important result is not the score: you now have evidence for why terrain lows collect runoff, why basins delay connected flow, and why downstream discharge grows with contributing area.</p>
-            </div>`;
-        if (button) {
-            button.disabled = true;
-            button.style.display = 'none';
+        if (host.dataset.renderKey !== renderKey) {
+            host.dataset.renderKey = renderKey;
+            host.innerHTML = `
+                <div class="water-field-complete">
+                    <span class="water-field-kicker">HYDROLOGY FIELD STUDY COMPLETE</span>
+                    <strong>${gameplay.score} / ${waterChallenges.length} predictions confirmed</strong>
+                    <p>The important result is not the score: you now have evidence for why terrain lows collect runoff, why basins delay connected flow, and why downstream discharge grows with contributing area.</p>
+                </div>`;
         }
+        updateGameplayButton(button, gameplay);
         return;
     }
 
-    if (button) button.style.display = '';
     const challenge = waterChallenges[gameplay.round];
     if (heading) heading.textContent = `Investigation ${gameplay.round + 1} of ${waterChallenges.length}: make a prediction.`;
     if (paragraph) paragraph.textContent = 'Read the generated planet, commit a hypothesis, then let a century of hydrology test it.';
+
+    if (host.dataset.renderKey === renderKey) {
+        updateGameplayButton(button, gameplay);
+        return;
+    }
+    host.dataset.renderKey = renderKey;
 
     const feedback = gameplay.lastFeedback
         ? `<div class="water-field-feedback ${gameplay.lastFeedback.correct ? 'confirmed' : 'revised'}"><strong>${escapeHtml(gameplay.lastFeedback.headline)}</strong><p>${escapeHtml(gameplay.lastFeedback.observation)}</p></div>`
@@ -470,10 +477,16 @@ function renderGameplayPanel(s, dock, host, button) {
         });
     }
 
-    if (button) {
-        button.disabled = gameplay.selected === null || gameplay.awaitingResolution;
-        button.textContent = gameplay.awaitingResolution ? 'OBSERVING THE PLANET…' : gameplay.selected ? 'COMMIT PREDICTION & OBSERVE' : 'CHOOSE A PREDICTION FIRST';
-    }
+    updateGameplayButton(button, gameplay);
+}
+
+function updateGameplayButton(button, gameplay) {
+    if (!button) return;
+    const complete = gameplay.round >= waterChallenges.length;
+    button.style.display = complete ? 'none' : '';
+    button.disabled = complete || gameplay.selected === null || gameplay.awaitingResolution;
+    if (complete) return;
+    button.textContent = gameplay.awaitingResolution ? 'OBSERVING THE PLANET…' : gameplay.selected ? 'COMMIT PREDICTION & OBSERVE' : 'CHOOSE A PREDICTION FIRST';
 }
 
 function attachGameplayButton(s, button) {
