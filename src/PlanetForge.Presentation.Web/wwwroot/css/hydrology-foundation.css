@@ -2,7 +2,3 @@
     filter: none;
     mix-blend-mode: normal;
 }
-
-.run-game-shell:has(.water-gameplay-dock) .pre-vegetation-world #planet-canvas {
-    filter: grayscale(.84) saturate(.52) sepia(.10) contrast(1.08) brightness(.93);
-}
