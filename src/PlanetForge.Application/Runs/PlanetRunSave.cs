@@ -9,4 +9,5 @@ public sealed record PlanetRunSave(
     int Insight,
     IReadOnlyList<PlanetJournalEntry> Journal,
     IReadOnlyList<PlanetResearchUnlock> ResearchUnlocks,
-    bool ResearchChoiceAvailable);
+    bool ResearchChoiceAvailable,
+    PlanetWaterSurvey? WaterSurvey);
