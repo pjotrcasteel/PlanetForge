@@ -1,4 +1,5 @@
 using PlanetForge.Application.Missions;
+using PlanetForge.Application.Rendering;
 using PlanetForge.Application.Surface.Hydrology;
 using PlanetForge.Domain.Physics;
 
@@ -301,7 +302,7 @@ public sealed class PlanetRun(
         return new PlanetWaterCycleFrame(year, state);
     }
 
-    private static double EstimateAnnualPrecipitationMillimeters(Application.Rendering.PlanetRenderSnapshot planet)
+    private static double EstimateAnnualPrecipitationMillimeters(PlanetRenderSnapshot planet)
     {
         var temperatureCelsius = planet.Climate.SurfaceTemperatureKelvin - PhysicalConstants.KelvinOffsetCelsius;
         var liquidAvailability = Math.Clamp(planet.Water.LiquidFraction, 0.0, 1.0);
