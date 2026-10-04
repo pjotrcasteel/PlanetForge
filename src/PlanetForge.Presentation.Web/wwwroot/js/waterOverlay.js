@@ -6,7 +6,7 @@ const maximumCameraAltitudeRatio = 4.2;
 const localTransitionAltitudeMeters = 20_000.0;
 const localExitAltitudeMeters = 25_000.0;
 const riverSurfaceOffset = 1.003;
-const lakeSurfaceOffset = 1.0025;
+const legacyLakeSurfaceOffset = 1.0005;
 const endpointPrecision = 100_000;
 const waterFieldStudyVersion = 1;
 
@@ -207,106 +207,69 @@ function draw(s) {
 function drawLakeCells(context, cells, fillFraction, eye, viewProjection, width, height) {
     if (!cells?.length) return;
 
+    const opacity = 0.54 + clamp(fillFraction, 0.0, 1.0) * 0.18;
+    context.fillStyle = `rgba(24, 73, 85, ${opacity})`;
+    context.strokeStyle = `rgba(24, 73, 85, ${opacity})`;
+    context.lineWidth = 1.25;
+    context.lineJoin = 'round';
+
+    for (const cell of cells) {
+        if (drawHydrologyCell(context, cell, eye, viewProjection, width, height)) continue;
+        drawLegacyLakeCell(context, cell, fillFraction, eye, viewProjection, width, height);
+    }
+}
+
+function drawHydrologyCell(context, cell, eye, viewProjection, width, height) {
+    const corners = cell.boundaryDirections ?? [];
+    if (corners.length < 3) return false;
+
+    const centerDirection = unitPoint(cell.x, cell.y, cell.z);
+    const surfaceRadius = Number.isFinite(cell.surfaceRadiusRatio) && cell.surfaceRadiusRatio > 0.95
+        ? cell.surfaceRadiusRatio
+        : legacyLakeSurfaceOffset;
+    const center = scale(centerDirection, surfaceRadius);
+    if (dot(center, eye) <= 1.0) return true;
+
+    const projected = [];
+    for (const corner of corners) {
+        const direction = unitPoint(corner.x, corner.y, corner.z);
+        const point = project(viewProjection, scale(direction, surfaceRadius), width, height);
+        if (!point) return true;
+        projected.push(point);
+    }
+
+    context.beginPath();
+    context.moveTo(projected[0][0], projected[0][1]);
+    for (let index = 1; index < projected.length; index++) context.lineTo(projected[index][0], projected[index][1]);
+    context.closePath();
+    context.fill();
+    context.stroke();
+    return true;
+}
+
+function drawLegacyLakeCell(context, cell, fillFraction, eye, viewProjection, width, height) {
+    const direction = unitPoint(cell.x, cell.y, cell.z);
+    const center = scale(direction, legacyLakeSurfaceOffset);
+    if (dot(center, eye) <= 1.0) return;
+
+    const projectedCenter = project(viewProjection, center, width, height);
+    if (!projectedCenter) return;
+
+    const tangent = createSurfaceTangent(direction);
     const fillScale = 0.58 + (0.42 * Math.sqrt(clamp(fillFraction, 0.0, 1.0)));
-    for (const group of groupLakeCells(cells)) {
-        const boundary = [];
-        for (const cell of group) {
-            const direction = unitPoint(cell.x, cell.y, cell.z);
-            const tangent = createSurfaceTangent(direction);
-            const bitangent = safeNormalize(cross(direction, tangent), [0, 0, 1]);
-            const radiusRadians = Math.max(0.0005, (cell.angularRadiusRadians ?? 0.01) * fillScale);
+    const radiusRadians = Math.max(0.0005, (cell.angularRadiusRadians ?? 0.01) * fillScale);
+    const edgeDirection = normalize([
+        direction[0] * Math.cos(radiusRadians) + tangent[0] * Math.sin(radiusRadians),
+        direction[1] * Math.cos(radiusRadians) + tangent[1] * Math.sin(radiusRadians),
+        direction[2] * Math.cos(radiusRadians) + tangent[2] * Math.sin(radiusRadians)
+    ]);
+    const projectedEdge = project(viewProjection, scale(edgeDirection, legacyLakeSurfaceOffset), width, height);
+    if (!projectedEdge) return;
 
-            for (let sampleIndex = 0; sampleIndex < 8; sampleIndex++) {
-                const angle = sampleIndex / 8 * Math.PI * 2;
-                const radial = [
-                    (tangent[0] * Math.cos(angle)) + (bitangent[0] * Math.sin(angle)),
-                    (tangent[1] * Math.cos(angle)) + (bitangent[1] * Math.sin(angle)),
-                    (tangent[2] * Math.cos(angle)) + (bitangent[2] * Math.sin(angle))
-                ];
-                const edgeDirection = normalize([
-                    direction[0] * Math.cos(radiusRadians) + radial[0] * Math.sin(radiusRadians),
-                    direction[1] * Math.cos(radiusRadians) + radial[1] * Math.sin(radiusRadians),
-                    direction[2] * Math.cos(radiusRadians) + radial[2] * Math.sin(radiusRadians)
-                ]);
-                const surfacePoint = scale(edgeDirection, lakeSurfaceOffset);
-                if (dot(surfacePoint, eye) <= 1.0) continue;
-                const projected = project(viewProjection, surfacePoint, width, height);
-                if (projected) boundary.push(projected);
-            }
-        }
-
-        const hull = convexHull(boundary);
-        if (hull.length < 3) continue;
-
-        context.beginPath();
-        context.moveTo(hull[0][0], hull[0][1]);
-        for (let index = 1; index < hull.length; index++) context.lineTo(hull[index][0], hull[index][1]);
-        context.closePath();
-        context.fillStyle = `rgba(24, 73, 85, ${0.56 + fillFraction * 0.14})`;
-        context.fill();
-        context.strokeStyle = `rgba(49, 103, 113, ${0.28 + fillFraction * 0.12})`;
-        context.lineWidth = 0.8;
-        context.stroke();
-    }
-}
-
-function groupLakeCells(cells) {
-    const remaining = new Set(cells.map((_, index) => index));
-    const groups = [];
-
-    while (remaining.size > 0) {
-        const start = remaining.values().next().value;
-        remaining.delete(start);
-        const queue = [start];
-        const group = [];
-
-        while (queue.length > 0) {
-            const currentIndex = queue.pop();
-            const current = cells[currentIndex];
-            group.push(current);
-            for (const candidateIndex of [...remaining]) {
-                if (!lakeCellsTouch(current, cells[candidateIndex])) continue;
-                remaining.delete(candidateIndex);
-                queue.push(candidateIndex);
-            }
-        }
-
-        groups.push(group);
-    }
-
-    return groups;
-}
-
-function lakeCellsTouch(first, second) {
-    const firstDirection = unitPoint(first.x, first.y, first.z);
-    const secondDirection = unitPoint(second.x, second.y, second.z);
-    const separation = Math.acos(clamp(dot(firstDirection, secondDirection), -1.0, 1.0));
-    const firstRadius = first.angularRadiusRadians ?? 0.01;
-    const secondRadius = second.angularRadiusRadians ?? 0.01;
-    return separation <= (firstRadius + secondRadius) * 1.18;
-}
-
-function convexHull(points) {
-    if (points.length <= 3) return points;
-    const sorted = [...points].sort((first, second) => first[0] === second[0] ? first[1] - second[1] : first[0] - second[0]);
-    const lower = [];
-    for (const point of sorted) {
-        while (lower.length >= 2 && cross2d(lower[lower.length - 2], lower[lower.length - 1], point) <= 0) lower.pop();
-        lower.push(point);
-    }
-    const upper = [];
-    for (let index = sorted.length - 1; index >= 0; index--) {
-        const point = sorted[index];
-        while (upper.length >= 2 && cross2d(upper[upper.length - 2], upper[upper.length - 1], point) <= 0) upper.pop();
-        upper.push(point);
-    }
-    lower.pop();
-    upper.pop();
-    return lower.concat(upper);
-}
-
-function cross2d(origin, first, second) {
-    return ((first[0] - origin[0]) * (second[1] - origin[1])) - ((first[1] - origin[1]) * (second[0] - origin[0]));
+    const radiusPixels = Math.max(1.0, Math.hypot(projectedEdge[0] - projectedCenter[0], projectedEdge[1] - projectedCenter[1]));
+    context.beginPath();
+    context.arc(projectedCenter[0], projectedCenter[1], radiusPixels, 0, Math.PI * 2);
+    context.fill();
 }
 
 function createSurfaceTangent(direction) {
