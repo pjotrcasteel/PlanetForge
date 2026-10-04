@@ -1,23 +1,8 @@
 .water-overlay-canvas {
-    filter:
-        drop-shadow(0 0 1px rgba(171, 229, 247, .72))
-        drop-shadow(0 0 4px rgba(55, 168, 203, .42))
-        drop-shadow(0 0 10px rgba(29, 112, 86, .28));
-}
-
-.planet-stage.pre-vegetation-world .water-overlay-canvas {
-    mix-blend-mode: screen;
+    filter: none;
+    mix-blend-mode: normal;
 }
 
 .run-game-shell:has(.water-gameplay-dock) .pre-vegetation-world #planet-canvas {
-    filter: saturate(.46) contrast(1.06) brightness(.97);
-}
-
-@media (max-width: 760px) {
-    .water-overlay-canvas {
-        filter:
-            drop-shadow(0 0 1px rgba(171, 229, 247, .75))
-            drop-shadow(0 0 3px rgba(55, 168, 203, .44))
-            drop-shadow(0 0 7px rgba(29, 112, 86, .24));
-    }
+    filter: grayscale(.72) saturate(.58) sepia(.06) contrast(1.07) brightness(.94);
 }
