@@ -123,7 +123,7 @@ public sealed class PlanetRunTests
 
     private static PlanetRun CreateRun()
     {
-        var elevationSource = new FlatElevationSource();
+        var elevationSource = new TestElevationSource();
         var experience = CreateExperience(elevationSource);
         var mission = new FrozenWorldMission(experience);
         var hydrologyBuilder = new PlanetHydrologyModelBuilder(elevationSource);
@@ -141,8 +141,8 @@ public sealed class PlanetRunTests
         return new PlanetExperience(meshCache, localSampler, localMeshBuilder);
     }
 
-    private sealed class FlatElevationSource : IPlanetElevationSource
+    private sealed class TestElevationSource : IPlanetElevationSource
     {
-        public double SampleElevationMeters(PlanetVector direction, int seed) => 0.0;
+        public double SampleElevationMeters(PlanetVector direction, int seed) => (direction.Y * 4_000.0) + (direction.X * 1_000.0);
     }
 }
