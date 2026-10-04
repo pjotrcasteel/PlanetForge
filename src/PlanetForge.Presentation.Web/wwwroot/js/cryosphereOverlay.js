@@ -6,14 +6,21 @@ const maximumCameraAltitudeRatio = 4.2;
 const localTransitionAltitudeMeters = 20_000.0;
 const localExitAltitudeMeters = 25_000.0;
 const surfaceOffset = 1.0015;
-const landFreezingStartKelvin = 276.0;
-const landFreezingEndKelvin = 270.0;
-const oceanFreezingStartKelvin = 273.4;
-const oceanFreezingEndKelvin = 268.8;
-const latitudeCoolingKelvin = 24.0;
+const landFreezingStartKelvin = 272.0;
+const landFreezingEndKelvin = 265.0;
+const oceanFreezingStartKelvin = 271.5;
+const oceanFreezingEndKelvin = 266.0;
+const latitudeCoolingKelvin = 18.0;
 const elevationLapseRateKelvinPerMeter = 0.0065;
-const permanentPolarStart = 0.82;
-const permanentPolarFull = 0.94;
+const temperateTransitionStartKelvin = 270.0;
+const temperateTransitionEndKelvin = 278.0;
+const alpineSnowStartMeters = 1_900.0;
+const alpineSnowFullMeters = 3_200.0;
+const polarRetentionStart = 0.93;
+const polarRetentionFull = 0.98;
+const permanentPolarStart = 0.95;
+const permanentPolarFull = 0.99;
+const triangleSeamOverlapPixels = 1.15;
 
 export function initialize(overlayCanvasId, inputCanvasId, snapshot) {
     const canvas = document.getElementById(overlayCanvasId);
@@ -50,9 +57,15 @@ export function setPlanet(snapshot) {
     state.seaLevelMeters = snapshot.seaLevelMeters ?? state.seaLevelMeters;
     state.surfaceTemperatureKelvin = snapshot.climate?.surfaceTemperatureKelvin ?? state.surfaceTemperatureKelvin;
 
+    const activeKeys = new Set();
     for (const tile of snapshot.surfaceTiles ?? []) {
         if (!tile?.positions?.length || !tile.surfaceVertexCount) continue;
+        activeKeys.add(tile.key);
         state.tileCache.set(tile.key, buildTriangles(tile.positions, tile.surfaceVertexCount, state.planetRadiusMeters));
+    }
+
+    for (const key of state.tileCache.keys()) {
+        if (!activeKeys.has(key)) state.tileCache.delete(key);
     }
 
     state.dirty = true;
@@ -145,7 +158,8 @@ function draw(s) {
     const viewProjection = multiply(projection, view);
 
     context.globalCompositeOperation = 'source-over';
-    context.lineWidth = 0.0;
+    context.lineJoin = 'round';
+    context.lineWidth = triangleSeamOverlapPixels;
 
     for (const triangles of s.tileCache.values()) {
         for (const triangle of triangles) drawTriangle(context, triangle, s, eye, viewProjection, canvas.width, canvas.height);
@@ -153,18 +167,25 @@ function draw(s) {
 }
 
 function drawTriangle(context, triangle, s, eye, viewProjection, width, height) {
-    if (dot(triangle.center, eye) <= 1.0) return;
+    if (!isTriangleVisible(triangle, eye)) return;
 
     const latitude = Math.abs(triangle.center[1]);
     const elevationCooling = Math.max(triangle.elevationMeters, 0.0) * elevationLapseRateKelvinPerMeter;
-    const latitudeCooling = latitudeCoolingKelvin * Math.pow(latitude, 1.35);
+    const latitudeCooling = latitudeCoolingKelvin * Math.pow(latitude, 1.45);
     const localTemperatureKelvin = s.surfaceTemperatureKelvin - latitudeCooling - elevationCooling;
     const ocean = triangle.elevationMeters < s.seaLevelMeters;
-    const dynamicIce = ocean
+    let dynamicIce = ocean
         ? 1.0 - smoothstep(oceanFreezingEndKelvin, oceanFreezingStartKelvin, localTemperatureKelvin)
         : 1.0 - smoothstep(landFreezingEndKelvin, landFreezingStartKelvin, localTemperatureKelvin);
+
+    const temperateProgress = smoothstep(temperateTransitionStartKelvin, temperateTransitionEndKelvin, s.surfaceTemperatureKelvin);
+    const polarRetention = smoothstep(polarRetentionStart, polarRetentionFull, latitude);
+    const alpineRetention = smoothstep(alpineSnowStartMeters, alpineSnowFullMeters, triangle.elevationMeters);
+    const warmRetention = ocean ? polarRetention : Math.max(polarRetention, alpineRetention);
+    dynamicIce *= mix(1.0, warmRetention, temperateProgress);
+
     const permanentPolar = smoothstep(permanentPolarStart, permanentPolarFull, latitude);
-    const coverage = Math.max(dynamicIce, permanentPolar * 0.96);
+    const coverage = Math.max(dynamicIce, permanentPolar * 0.94);
     if (coverage < 0.025) return;
 
     const a = project(viewProjection, scaleToSurface(triangle.a), width, height);
@@ -179,10 +200,23 @@ function drawTriangle(context, triangle, s, eye, viewProjection, width, height) 
     context.closePath();
 
     const opacity = clamp(coverage * (ocean ? 0.78 : 0.86), 0.0, 0.86);
-    context.fillStyle = ocean
+    const fill = ocean
         ? `rgba(194, 222, 229, ${opacity})`
         : `rgba(224, 235, 234, ${opacity})`;
+    context.fillStyle = fill;
+    context.strokeStyle = fill;
     context.fill();
+    context.stroke();
+}
+
+function isTriangleVisible(triangle, eye) {
+    if (dot(triangle.center, eye) <= 1.0) return false;
+    return isSurfacePointVisible(triangle.a, eye) && isSurfacePointVisible(triangle.b, eye) && isSurfacePointVisible(triangle.c, eye);
+}
+
+function isSurfacePointVisible(point, eye) {
+    const direction = normalize(point);
+    return dot(direction, eye) > 1.0;
 }
 
 function scaleToSurface(point) {
@@ -235,6 +269,7 @@ function smoothstep(edge0, edge1, value) {
     return t * t * (3.0 - (2.0 * t));
 }
 
+function mix(first, second, amount) { return first + ((second - first) * amount); }
 function length(v) { return Math.hypot(v[0], v[1], v[2]); }
 function normalize(v) { const magnitude = length(v) || 1.0; return [v[0]/magnitude, v[1]/magnitude, v[2]/magnitude]; }
 function cross(a,b) { return [a[1]*b[2]-a[2]*b[1], a[2]*b[0]-a[0]*b[2], a[0]*b[1]-a[1]*b[0]]; }
