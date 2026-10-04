@@ -448,6 +448,10 @@ function render() {
     requestAnimationFrame(render);
 }
 
+function isPreBiologicalSurface(s) {
+    return s.canvas.closest('.planet-stage')?.classList.contains('pre-vegetation-world') ?? false;
+}
+
 function renderGlobe(s) {
     const { gl, canvas, globeProgram } = s;
     prepareFrame(gl, canvas);
@@ -471,7 +475,7 @@ function renderGlobe(s) {
     gl.uniform1f(s.globeUniforms.iceFraction, s.iceFraction);
     gl.uniform1f(s.globeUniforms.liquidFraction, s.liquidFraction);
     gl.uniform1f(s.globeUniforms.vaporFraction, s.vaporFraction);
-    gl.uniform1i(s.globeUniforms.mode, 0);
+    gl.uniform1i(s.globeUniforms.mode, isPreBiologicalSurface(s) ? 2 : 0);
     drawTerrain(s);
 
     gl.enable(gl.BLEND);
@@ -497,6 +501,7 @@ function renderLocal(s) {
     const projection = perspective(verticalFieldOfViewRadians, aspect, nearMeters, farMeters);
     const view = lookAt(eye, [0, 0, 0], [0, 1, 0]);
     const viewProjection = multiply(projection, view);
+    const preBiological = isPreBiologicalSurface(s);
 
     gl.uniformMatrix4fv(s.localUniforms.viewProjection, false, viewProjection);
     gl.uniform3f(s.localUniforms.light, 0.45, 0.82, 0.35);
@@ -506,11 +511,11 @@ function renderLocal(s) {
     gl.uniform1f(s.localUniforms.liquidFraction, s.liquidFraction);
     gl.uniform1f(s.localUniforms.vaporFraction, s.vaporFraction);
 
-    gl.uniform1i(s.localUniforms.objectMode, 0);
+    gl.uniform1i(s.localUniforms.objectMode, preBiological ? 2 : 0);
     bindLocalAttributes(s, localSurface.positionBuffer, localSurface.normalBuffer, localSurface.elevationBuffer);
     gl.drawArrays(gl.TRIANGLES, 0, localSurface.vertexCount);
 
-    if (cameraHeightMeters <= treeVisibilityAltitudeMeters && localSurface.treeVertexCount > 0) {
+    if (!preBiological && cameraHeightMeters <= treeVisibilityAltitudeMeters && localSurface.treeVertexCount > 0) {
         gl.uniform1i(s.localUniforms.objectMode, 1);
         gl.disable(gl.CULL_FACE);
         bindLocalAttributes(s, localSurface.treePositionBuffer, localSurface.treeNormalBuffer, localSurface.treeElevationBuffer);
@@ -678,11 +683,12 @@ void main() {
         return;
     }
 
+    bool preBiological = uMode == 2;
     vec3 deepOcean = vec3(0.035, 0.16, 0.23);
     vec3 shallowOcean = vec3(0.06, 0.31, 0.36);
-    vec3 lowland = vec3(0.18, 0.38, 0.22);
-    vec3 highland = vec3(0.39, 0.36, 0.22);
-    vec3 peak = vec3(0.62, 0.65, 0.59);
+    vec3 lowland = preBiological ? vec3(0.34, 0.30, 0.24) : vec3(0.18, 0.38, 0.22);
+    vec3 highland = preBiological ? vec3(0.42, 0.36, 0.29) : vec3(0.39, 0.36, 0.22);
+    vec3 peak = preBiological ? vec3(0.58, 0.56, 0.52) : vec3(0.62, 0.65, 0.59);
     vec3 baseColor;
 
     if (uLiquidFraction > 0.001 && vElevationMeters < uSeaLevelMeters - 1500.0) baseColor = deepOcean;
@@ -744,11 +750,12 @@ void main() {
         return;
     }
 
+    bool preBiological = uObjectMode == 2;
     vec3 deepOcean = vec3(0.035, 0.16, 0.23);
     vec3 shallowOcean = vec3(0.06, 0.31, 0.36);
-    vec3 lowland = vec3(0.18, 0.38, 0.22);
-    vec3 highland = vec3(0.39, 0.36, 0.22);
-    vec3 peak = vec3(0.62, 0.65, 0.59);
+    vec3 lowland = preBiological ? vec3(0.34, 0.30, 0.24) : vec3(0.18, 0.38, 0.22);
+    vec3 highland = preBiological ? vec3(0.42, 0.36, 0.29) : vec3(0.39, 0.36, 0.22);
+    vec3 peak = preBiological ? vec3(0.58, 0.56, 0.52) : vec3(0.62, 0.65, 0.59);
     vec3 baseColor;
 
     if (uLiquidFraction > 0.001 && vElevationMeters < uSeaLevelMeters - 1500.0) baseColor = deepOcean;
