@@ -1,5 +1,5 @@
-const buildVersion = '0.0.6.1';
-const pageTitle = `PlanetForge ${buildVersion} — Timelapse Run`;
+const buildVersion = '0.0.7';
+const pageTitle = `PlanetForge ${buildVersion} — Active Water World`;
 
 document.title = pageTitle;
 window.setTimeout(() => document.title = pageTitle, 500);
