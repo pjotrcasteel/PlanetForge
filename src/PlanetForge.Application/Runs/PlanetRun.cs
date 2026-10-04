@@ -13,8 +13,8 @@ public sealed class PlanetRun(
 {
     public const int SaveSchemaVersion = 3;
 
-    private const int WaterSurveyGridLevel = 5;
-    private const long MinimumRiverContributingLandCells = 8;
+    private const int WaterSurveyGridLevel = 6;
+    private const long MinimumRiverContributingLandCells = 32;
     private const double ReferenceAnnualPrecipitationMillimeters = 950.0;
     private static readonly int[] WaterCycleFrameYears = [1, 5, 20, 50, 100];
 
@@ -134,7 +134,7 @@ public sealed class PlanetRun(
         var runoff = EstimateAnnualRunoffMillimeters(precipitation);
         var startYear = waterCycle?.SimulatedYears ?? 0;
         var frames = WaterCycleFrameYears
-            .Select(frameYears => BuildWaterCycleFrame(startYear + frameYears, precipitation, runoff, features))
+            .Select(frameYears => BuildWaterCycleFrame(startYear + frameYears, precipitation, runoff, features, planet.PhysicalParameters.RadiusMeters))
             .ToArray();
 
         waterCycle = frames[^1].State;
@@ -267,20 +267,18 @@ public sealed class PlanetRun(
         int year,
         double annualPrecipitationMillimeters,
         double annualRunoffMillimeters,
-        PlanetHydrologyFeatures features)
+        PlanetHydrologyFeatures features,
+        double planetRadiusMeters)
     {
         var wettingResponse = 1.0 - Math.Exp(-year / 18.0);
         var runoffPotential = Math.Clamp(annualRunoffMillimeters / 350.0, 0.0, 1.0);
         var riverActivation = Math.Clamp(wettingResponse * runoffPotential, 0.0, 1.0);
         var lakeFillResponse = 1.0 - Math.Exp(-year / 30.0);
         var lakeFill = Math.Clamp(lakeFillResponse * Math.Clamp(annualPrecipitationMillimeters / 700.0, 0.0, 1.0), 0.0, 1.0);
-        var activeRiverCount = features.RiverSegments.Count == 0 ? 0 : Math.Clamp((int)Math.Round(features.RiverSegments.Count * riverActivation), 1, features.RiverSegments.Count);
-        var activeLakeCount = features.Lakes.Count == 0 ? 0 : Math.Clamp((int)Math.Round(features.Lakes.Count * lakeFill), 1, features.Lakes.Count);
         var maximumContribution = features.RiverSegments.Count == 0 ? 1L : features.RiverSegments.Max(segment => segment.ContributingLandCellCount);
-        var activeSegments = features.RiverSegments
+        var availableSegments = features.RiverSegments
             .OrderByDescending(segment => segment.ContributingLandCellCount)
             .ThenByDescending(segment => segment.StrahlerOrder)
-            .Take(activeRiverCount)
             .Select(segment => new PlanetWaterPathSegment(
                 segment.FromDirection.X,
                 segment.FromDirection.Y,
@@ -297,13 +295,16 @@ public sealed class PlanetRun(
             annualRunoffMillimeters,
             lakeFill,
             riverActivation,
-            activeLakeCount,
-            activeRiverCount,
-            activeSegments);
-        return new PlanetWaterCycleFrame(year, state with { ActiveLakeCells = BuildActiveLakeCells(features, state) });
+            features.Lakes.Count,
+            features.RiverSegments.Count,
+            availableSegments);
+        return new PlanetWaterCycleFrame(year, state with { ActiveLakeCells = BuildActiveLakeCells(features, state, planetRadiusMeters) });
     }
 
-    private static IReadOnlyList<PlanetWaterLakeCell> BuildActiveLakeCells(PlanetHydrologyFeatures features, PlanetWaterCycleState state)
+    private static IReadOnlyList<PlanetWaterLakeCell> BuildActiveLakeCells(
+        PlanetHydrologyFeatures features,
+        PlanetWaterCycleState state,
+        double planetRadiusMeters)
     {
         if (state.ActiveLakeCount == 0 || features.Lakes.Count == 0)
         {
@@ -311,16 +312,27 @@ public sealed class PlanetRun(
         }
 
         return features.Lakes
-            .OrderBy(lake => lake.Id)
+            .OrderByDescending(LakeSignificance)
+            .ThenByDescending(lake => lake.MaximumDepthMeters)
+            .ThenBy(lake => lake.Id)
             .Take(state.ActiveLakeCount)
-            .SelectMany(lake => lake.Cells)
-            .Select(cell =>
-            {
-                var direction = PlanetSurfaceGridGeometry.GetCenterDirection(cell);
-                var angularRadius = Math.PI / 2.0 / cell.CellsPerAxis * 0.78;
-                return new PlanetWaterLakeCell(direction.X, direction.Y, direction.Z, angularRadius);
-            })
+            .SelectMany(lake => lake.Cells.Select(cell => BuildLakeCell(lake, cell, planetRadiusMeters)))
             .ToArray();
+    }
+
+    private static double LakeSignificance(PlanetLake lake) => lake.Cells.Count * Math.Max(lake.MaximumDepthMeters, 1.0);
+
+    private static PlanetWaterLakeCell BuildLakeCell(PlanetLake lake, PlanetSurfaceGridCellId cell, double planetRadiusMeters)
+    {
+        var direction = PlanetSurfaceGridGeometry.GetCenterDirection(cell);
+        var angularRadius = Math.PI / 2.0 / cell.CellsPerAxis * 0.78;
+        var surfaceRadiusRatio = 1.0 + ((lake.SurfaceElevationMeters + 2.0) / planetRadiusMeters);
+        return new PlanetWaterLakeCell(direction.X, direction.Y, direction.Z, angularRadius)
+        {
+            LakeId = lake.Id,
+            SurfaceRadiusRatio = surfaceRadiusRatio,
+            BoundaryDirections = PlanetSurfaceGridGeometry.GetCornerDirections(cell),
+        };
     }
 
     private static double EstimateAnnualPrecipitationMillimeters(PlanetRenderSnapshot planet)
