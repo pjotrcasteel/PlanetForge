@@ -1,248 +1,48 @@
-@using System.Text.Json
 @using PlanetForge.Application.Missions
 @using PlanetForge.Application.Runs
-@using PlanetForge.Domain.Physics
 @implements IAsyncDisposable
 @inject PlanetExperience Experience
 @inject PlanetRun Run
 @inject IJSRuntime JsRuntime
 
-<main class="game-shell run-game-shell">
-    <header class="run-topbar">
-        <div>
-            <span class="eyebrow">PLANETFORGE 0.0.7 · ACTIVE WATER WORLD</span>
-            <h1>Forge one world through deep time.</h1>
-        </div>
-        <div class="run-topbar-status">
-            <strong>@FormatCurrentEra()</strong>
-            <span>@(run?.Insight ?? 0) Insight · Seed @snapshot?.Seed</span>
-        </div>
-    </header>
-
-    @if (!sandboxMode && run is not null)
-    {
-        <nav class="era-ribbon" aria-label="Planetary eras">
-            @foreach (var eraDefinition in Run.Eras)
-            {
-                <div class="era-ribbon-node @EraClass(eraDefinition.Era)" title="@eraDefinition.ScientificPrerequisite">
-                    <span>@((int)eraDefinition.Era + 1)</span>
-                    <strong>@eraDefinition.Name</strong>
-                </div>
-            }
-        </nav>
-    }
-
-    <section class="planet-stage @PlanetVisualClass()">
+<main class="foundation-shell">
+    <section class="planet-stage foundation-stage @PlanetVisualClass()">
         <canvas id="planet-canvas" aria-label="Interactive simulated planet"></canvas>
-        <canvas id="water-overlay-canvas" class="water-overlay-canvas" aria-hidden="true"></canvas>
-        <div class="stage-metrics compact-stage-metrics">
-            <span>@FormatSurfaceTemperature()</span>
-            <span>@FormatCryosphere()</span>
-            <span>@FormatWaterState()</span>
-            @if (run?.WaterCycle is not null)
-            {
-                <span>@run.WaterCycle.ActiveRiverSegmentCount FLOWING</span>
-            }
+        <canvas id="water-overlay-canvas" aria-hidden="true"></canvas>
+
+        <div class="foundation-clock" aria-live="polite">
+            <strong>@FormatElapsedTime()</strong>
+            <span>@FormatStageLabel()</span>
         </div>
-        @if (isSimulatingClimate)
-        {
-            <div class="timelapse-overlay">
-                <span>SIMULATING CLIMATE RESPONSE</span>
-                <strong>YEAR +@timelineYear.ToString("0")</strong>
-                <small>physical response shown in 10-year model steps</small>
-            </div>
-        }
-        else if (isSimulatingWater)
-        {
-            <div class="timelapse-overlay water-timelapse-overlay">
-                <span>ESTABLISHING THE WATER CYCLE</span>
-                <strong>HYDRO YEAR +@waterTimelineYear</strong>
-                <small>@FormatHydrologyStage()</small>
-            </div>
-        }
-        <div class="stage-hint">DRAG TO ORBIT · SCROLL / PINCH TO ZOOM</div>
+
+        <div class="foundation-controls">
+            <button class="foundation-next" disabled="@isTransitioning" @onclick="AdvanceAsync">@FormatButtonLabel()</button>
+        </div>
     </section>
-
-    @if (!sandboxMode && run is not null && mission is not null)
-    {
-        <section class="single-objective-bar">
-            <div>
-                <span class="eyebrow">CURRENT OBJECTIVE</span>
-                <h2>@FormatCurrentEraGoal()</h2>
-                <p>@FormatObjectiveExplanation()</p>
-            </div>
-            <div class="deep-time-key">
-                <span>PROCESS SCALE</span>
-                <strong>@FormatCurrentTimeScale()</strong>
-                <small>PlanetForge changes time scale with the process being simulated.</small>
-            </div>
-        </section>
-
-        @if (run.Era == PlanetRunEra.DeadRock && mission.Status == MissionStatus.Active)
-        {
-            <section class="intervention-strip" aria-label="Planetary interventions">
-                @foreach (var intervention in Run.Interventions)
-                {
-                    <button class="intervention-choice @(PlanCount(intervention.Type) > 0 ? "selected" : string.Empty)"
-                            disabled="@(IsBusy() || !Run.CanAfford(intervention.Type))"
-                            @onclick="() => PlanAsync(intervention.Type)">
-                        <span>@intervention.ImpactLabel</span>
-                        <strong>@intervention.Name</strong>
-                        <small>@intervention.EffectPreview</small>
-                        <em>@intervention.Cost capacity · @PlanCount(intervention.Type) queued</em>
-                    </button>
-                }
-            </section>
-
-            <section class="commit-dock">
-                <div class="commit-summary">
-                    <span class="eyebrow">YOUR PLAN</span>
-                    <strong>@FormatCurrentPlan()</strong>
-                    <small>@ReservedCredits() reserved · @mission.BudgetRemaining capacity left</small>
-                </div>
-                @if (mission.PlannedInterventions.Count > 0)
-                {
-                    <button class="quiet-button" disabled="@IsBusy()" @onclick="ClearPlanAsync">Clear</button>
-                }
-                <button class="primary-button commit-watch-button"
-                        disabled="@(IsBusy() || mission.PlannedInterventions.Count == 0)"
-                        @onclick="CommitAndWatchAsync">
-                    @(isSimulatingClimate ? "SIMULATING…" : "COMMIT & WATCH")
-                </button>
-            </section>
-
-            @if (mission.LastTurn is not null && !IsBusy())
-            {
-                <section class="outcome-line">
-                    <div><span class="eyebrow">WHAT CHANGED</span><strong>@mission.LastTurn.Headline</strong></div>
-                    <p>@mission.LastTurn.Explanation</p>
-                </section>
-            }
-        }
-        else if (mission.Status == MissionStatus.Failed)
-        {
-            <section class="chapter-transition failure-transition">
-                <span class="eyebrow">THIS RUN STALLED</span>
-                <h2>The frozen state never reached persistent liquid water.</h2>
-                <p>The planet and journal show where the trajectory ended. Start a fresh world and try a different physical strategy.</p>
-                <button class="primary-button" @onclick="RestartRunAsync">Start a new world</button>
-            </section>
-        }
-        else if (run.Era == PlanetRunEra.WaterWorld)
-        {
-            <section class="water-gameplay-dock">
-                <div class="water-gameplay-copy">
-                    <span class="eyebrow">ERA II · WATER WORLD</span>
-                    <h2>@(run.WaterCycle is null ? "Turn thawed water into a working planetary water cycle." : "The hydrological world is active.")</h2>
-                    <p>@(run.WaterCycle is null
-                        ? "Topography already defines where water could go. Now let evaporation, precipitation and runoff actually wet those pathways and fill closed basins."
-                        : "Blue channels on the globe are drainage paths that currently receive enough modeled runoff to stay active. Run another century to watch the same terrain remain connected under the present climate.")</p>
-                </div>
-
-                @if (run.WaterCycle is not null)
-                {
-                    <div class="water-status-line">
-                        <span><strong>@run.WaterCycle.AnnualPrecipitationMillimeters.ToString("0")</strong> mm/yr precipitation</span>
-                        <span><strong>@run.WaterCycle.AnnualRunoffMillimeters.ToString("0")</strong> mm/yr routed runoff</span>
-                        <span><strong>@run.WaterCycle.ActiveLakeCount</strong> filled basins</span>
-                        <span><strong>@run.WaterCycle.ActiveRiverSegmentCount</strong> active channels</span>
-                    </div>
-                }
-
-                <button class="primary-button water-cycle-button" disabled="@IsBusy()" @onclick="SimulateWaterWorldAsync">
-                    @(isSimulatingWater ? "WATER IS MOVING…" : run.WaterCycle is null ? "START WATER CYCLE & WATCH" : "WATCH THE NEXT CENTURY")
-                </button>
-                <small class="water-model-note">Reduced hydrology model: global precipitation is estimated from liquid-water availability, temperature and pressure; runoff is then routed over the real generated topography. It is not a full atmospheric circulation model.</small>
-            </section>
-
-            @if (run.ResearchChoiceAvailable)
-            {
-                <details class="run-details research-details">
-                    <summary>Scientific capability available · @run.Insight Insight</summary>
-                    <div class="research-strip compact-research-strip">
-                        @foreach (var research in run.ResearchChoices)
-                        {
-                            <button disabled="@(run.Insight < research.InsightCost)" @onclick="() => SelectResearchAsync(research.Type)">
-                                <strong>@research.Name</strong>
-                                <small>@research.Capability</small>
-                                <span>@research.InsightCost Insight</span>
-                            </button>
-                        }
-                    </div>
-                </details>
-            }
-        }
-
-        <details class="run-details">
-            <summary>Planet Journal · @run.Journal.Count events</summary>
-            <div class="journal-list compact-journal-list">
-                @foreach (var entry in run.Journal.OrderByDescending(value => value.Year))
-                {
-                    <article>
-                        <div class="journal-time">YEAR +@entry.Year.ToString("0")</div>
-                        <div><strong>@entry.Title</strong><p>@entry.Description</p></div>
-                        @if (entry.InsightAwarded > 0)
-                        {
-                            <span class="journal-insight">+@entry.InsightAwarded</span>
-                        }
-                    </article>
-                }
-            </div>
-        </details>
-
-        <details class="run-details science-details">
-            <summary>Science behind the current world</summary>
-            <p>@FormatDiagnosis()</p>
-            <div class="formula-list compact-formulas">
-                <div><span>Stellar energy</span><code>F ∝ 1 / d²</code></div>
-                <div><span>CO₂ forcing</span><code>ΔF = 5.35 ln(C / C₀)</code></div>
-                <div><span>Ice feedback</span><code>αeff = αbase + 0.28 · fcryosphere</code></div>
-                @if (run.WaterCycle is not null)
-                {
-                    <div><span>Water routing</span><code>precipitation → runoff → drainage</code></div>
-                }
-            </div>
-        </details>
-
-        <button class="sandbox-link" @onclick="ToggleSandboxAsync">Advanced scientific sandbox</button>
-    }
-    else if (sandboxMode)
-    {
-        <section class="sandbox-surface">
-            <div class="section-heading">
-                <div><span class="eyebrow">ADVANCED SANDBOX</span><h2>Direct model controls</h2></div>
-                <button @onclick="ToggleSandboxAsync">Return to Planet Run</button>
-            </div>
-            <section class="compact-sandbox-controls">
-                <button @onclick="MoveOrbitInwardAsync">Orbit −0.1 AU</button>
-                <button @onclick="MoveOrbitOutwardAsync">Orbit +0.1 AU</button>
-                <button @onclick="DoubleCarbonDioxideAsync">2× CO₂</button>
-                <button @onclick="HalveCarbonDioxideAsync">½ CO₂</button>
-                <button @onclick="DarkenSurfaceAsync">Darker surface</button>
-                <button @onclick="BrightenSurfaceAsync">Brighter surface</button>
-                <button @onclick="AdvanceTenYearsAsync">+10 years</button>
-                <button @onclick="AdvanceFiftyYearsAsync">+50 years</button>
-            </section>
-        </section>
-    }
 </main>
 
 @code {
+    private const int ClimateFrameDelayMilliseconds = 140;
+    private const int HydrologyFrameDelayMilliseconds = 260;
+    private const int ScaffoldFrameDelayMilliseconds = 65;
+    private const int ScaffoldFrameCount = 36;
+
     private readonly CancellationTokenSource disposeCancellationTokenSource = new();
     private IJSObjectReference? rendererModule;
     private IJSObjectReference? waterRendererModule;
-    private IJSObjectReference? persistenceModule;
     private PlanetRenderSnapshot? snapshot;
     private PlanetRunSnapshot? run;
-    private MissionSnapshot? mission;
-    private PlanetRunSave? sandboxReturnSave;
-    private bool sandboxMode;
-    private bool isSimulatingClimate;
-    private bool isSimulatingWater;
-    private double timelineYear;
-    private int waterTimelineYear;
+    private FoundationStage currentStage = FoundationStage.FrozenWorld;
+    private FoundationStage? transitionStage;
+    private bool isTransitioning;
+    private double elapsedYears;
 
-    protected override void OnInitialized() => ApplyRun(Run.StartNew());
+    protected override void OnInitialized()
+    {
+        ApplyRun(Run.StartNew());
+        currentStage = FoundationStage.FrozenWorld;
+        elapsedYears = 0.0;
+    }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -251,282 +51,226 @@
             return;
         }
 
-        persistenceModule = await JsRuntime.InvokeAsync<IJSObjectReference>("import", disposeCancellationTokenSource.Token, "./js/runPersistence.js");
-        var savedJson = await persistenceModule.InvokeAsync<string?>("load", disposeCancellationTokenSource.Token);
-        if (!string.IsNullOrWhiteSpace(savedJson))
-        {
-            try
-            {
-                var save = JsonSerializer.Deserialize<PlanetRunSave>(savedJson);
-                if (save is not null)
-                {
-                    ApplyRun(Run.Restore(save));
-                }
-            }
-            catch (JsonException)
-            {
-                ApplyRun(Run.StartNew());
-            }
-            catch (NotSupportedException)
-            {
-                ApplyRun(Run.StartNew());
-                await SaveRunAsync();
-            }
-        }
-        else
-        {
-            await SaveRunAsync();
-        }
-
         rendererModule = await JsRuntime.InvokeAsync<IJSObjectReference>("import", disposeCancellationTokenSource.Token, "./js/planetRenderer.js");
         await rendererModule.InvokeVoidAsync("initialize", disposeCancellationTokenSource.Token, "planet-canvas", snapshot, GetOrCreateSurfaceLodReference());
+
         waterRendererModule = await JsRuntime.InvokeAsync<IJSObjectReference>("import", disposeCancellationTokenSource.Token, "./js/waterOverlay.js");
         await waterRendererModule.InvokeVoidAsync("initialize", disposeCancellationTokenSource.Token, "water-overlay-canvas", "planet-canvas", snapshot.PhysicalParameters.RadiusMeters);
-        await SyncWaterOverlayAsync();
-        StateHasChanged();
+        await waterRendererModule.InvokeVoidAsync("clearWaterCycle", disposeCancellationTokenSource.Token);
     }
 
-    private bool IsBusy() => isSimulatingClimate || isSimulatingWater;
-    private async Task PlanAsync(MissionInterventionType type) => await ApplyRunAsync(Run.QueueIntervention(type), updatePlanet: false);
-    private async Task ClearPlanAsync() => await ApplyRunAsync(Run.ClearPlan(), updatePlanet: false);
-    private async Task SelectResearchAsync(PlanetResearchUnlock research) => await ApplyRunAsync(Run.SelectResearch(research), updatePlanet: false);
-    private async Task RestartRunAsync() => await ApplyRunAsync(Run.Restart(), updatePlanet: true);
-
-    private async Task CommitAndWatchAsync()
+    private async Task AdvanceAsync()
     {
-        if (IsBusy())
+        if (isTransitioning)
         {
             return;
         }
 
-        isSimulatingClimate = true;
-        var result = Run.SimulateCommit();
+        switch (currentStage)
+        {
+            case FoundationStage.FrozenWorld:
+                await SimulateMeltingAsync();
+                break;
+            case FoundationStage.MeltingWorld:
+                await SimulateWaterCycleAsync();
+                break;
+            case FoundationStage.ActiveWaterCycle:
+                await SimulateScaffoldStageAsync(FoundationStage.FirstLife, 5_000_000.0);
+                break;
+            case FoundationStage.FirstLife:
+                await SimulateScaffoldStageAsync(FoundationStage.MarineAnimals, 50_000_000.0);
+                break;
+            case FoundationStage.MarineAnimals:
+                await SimulateScaffoldStageAsync(FoundationStage.LandVegetation, 100_000_000.0);
+                break;
+            case FoundationStage.LandVegetation:
+                await SimulateScaffoldStageAsync(FoundationStage.LandAnimals, 50_000_000.0);
+                break;
+            case FoundationStage.LandAnimals:
+                await ResetAsync();
+                break;
+            default:
+                throw new ArgumentOutOfRangeException();
+        }
+    }
+
+    private async Task SimulateMeltingAsync()
+    {
+        BeginTransition(FoundationStage.MeltingWorld);
         try
         {
+            Run.QueueIntervention(MissionInterventionType.ReleaseCapturedCarbon);
+            Run.QueueIntervention(MissionInterventionType.ReleaseCapturedCarbon);
+            Run.QueueIntervention(MissionInterventionType.DarkenSurface);
+            Run.QueueIntervention(MissionInterventionType.DarkenSurface);
+            var result = Run.SimulateCommit();
+
             foreach (var frame in result.Frames)
             {
                 disposeCancellationTokenSource.Token.ThrowIfCancellationRequested();
-                timelineYear = frame.Year;
+                elapsedYears = frame.Year;
                 snapshot = frame.Planet;
-                if (rendererModule is not null)
-                {
-                    await rendererModule.InvokeVoidAsync("setPlanet", disposeCancellationTokenSource.Token, snapshot);
-                }
-
+                await SyncPlanetAsync();
                 StateHasChanged();
-                await Task.Delay(280, disposeCancellationTokenSource.Token);
+                await Task.Delay(ClimateFrameDelayMilliseconds, disposeCancellationTokenSource.Token);
             }
 
             ApplyRun(result.Run);
-            await SaveRunAsync();
+            currentStage = FoundationStage.MeltingWorld;
+            elapsedYears = result.Run.Mission.MissionYearsElapsed;
         }
         finally
         {
-            isSimulatingClimate = false;
-            StateHasChanged();
+            EndTransition();
         }
     }
 
-    private async Task SimulateWaterWorldAsync()
+    private async Task SimulateWaterCycleAsync()
     {
-        if (IsBusy())
+        if (run?.Era != PlanetRunEra.WaterWorld)
         {
-            return;
+            throw new InvalidOperationException("The deterministic melting transition did not reach Water World.");
         }
 
-        isSimulatingWater = true;
-        var result = Run.SimulateWaterWorld(disposeCancellationTokenSource.Token);
+        BeginTransition(FoundationStage.ActiveWaterCycle);
+        var startYear = elapsedYears;
         try
         {
+            var result = Run.SimulateWaterWorld(disposeCancellationTokenSource.Token);
             foreach (var frame in result.Frames)
             {
                 disposeCancellationTokenSource.Token.ThrowIfCancellationRequested();
-                waterTimelineYear = frame.Year;
+                elapsedYears = startYear + frame.Year;
                 if (waterRendererModule is not null)
                 {
                     await waterRendererModule.InvokeVoidAsync("setWaterCycle", disposeCancellationTokenSource.Token, frame.State);
                 }
 
                 StateHasChanged();
-                await Task.Delay(420, disposeCancellationTokenSource.Token);
+                await Task.Delay(HydrologyFrameDelayMilliseconds, disposeCancellationTokenSource.Token);
             }
 
             ApplyRun(result.Run);
-            await SaveRunAsync();
+            currentStage = FoundationStage.ActiveWaterCycle;
         }
         finally
         {
-            isSimulatingWater = false;
-            StateHasChanged();
+            EndTransition();
         }
     }
 
-    private async Task ToggleSandboxAsync()
+    private async Task SimulateScaffoldStageAsync(FoundationStage nextStage, double transitionYears)
     {
-        if (!sandboxMode)
+        BeginTransition(nextStage);
+        var startYear = elapsedYears;
+        try
         {
-            sandboxReturnSave = Run.ExportSave();
-            sandboxMode = true;
+            for (var frame = 1; frame <= ScaffoldFrameCount; frame++)
+            {
+                disposeCancellationTokenSource.Token.ThrowIfCancellationRequested();
+                elapsedYears = startYear + (transitionYears * frame / ScaffoldFrameCount);
+                StateHasChanged();
+                await Task.Delay(ScaffoldFrameDelayMilliseconds, disposeCancellationTokenSource.Token);
+            }
+
+            currentStage = nextStage;
+        }
+        finally
+        {
+            EndTransition();
+        }
+    }
+
+    private async Task ResetAsync()
+    {
+        BeginTransition(FoundationStage.FrozenWorld);
+        try
+        {
+            ApplyRun(Run.Restart());
+            currentStage = FoundationStage.FrozenWorld;
+            elapsedYears = 0.0;
+            await SyncPlanetAsync();
             if (waterRendererModule is not null)
             {
                 await waterRendererModule.InvokeVoidAsync("clearWaterCycle", disposeCancellationTokenSource.Token);
             }
-            return;
         }
-
-        sandboxMode = false;
-        if (sandboxReturnSave is not null)
+        finally
         {
-            await ApplyRunAsync(Run.Restore(sandboxReturnSave), updatePlanet: true);
-            sandboxReturnSave = null;
+            EndTransition();
         }
     }
 
-    private Task AdvanceTenYearsAsync() => UpdateSandboxAsync(Experience.AdvanceClimate(10.0));
-    private Task AdvanceFiftyYearsAsync() => UpdateSandboxAsync(Experience.AdvanceClimate(50.0));
-    private Task MoveOrbitInwardAsync() => UpdateSandboxAsync(Experience.MoveOrbitInward());
-    private Task MoveOrbitOutwardAsync() => UpdateSandboxAsync(Experience.MoveOrbitOutward());
-    private Task DarkenSurfaceAsync() => UpdateSandboxAsync(Experience.DarkenSurface());
-    private Task BrightenSurfaceAsync() => UpdateSandboxAsync(Experience.BrightenSurface());
-    private Task HalveCarbonDioxideAsync() => UpdateSandboxAsync(Experience.HalveCarbonDioxide());
-    private Task DoubleCarbonDioxideAsync() => UpdateSandboxAsync(Experience.DoubleCarbonDioxide());
+    private void BeginTransition(FoundationStage targetStage)
+    {
+        isTransitioning = true;
+        transitionStage = targetStage;
+        StateHasChanged();
+    }
+
+    private void EndTransition()
+    {
+        transitionStage = null;
+        isTransitioning = false;
+        StateHasChanged();
+    }
 
     private void ApplyRun(PlanetRunSnapshot nextRun)
     {
         run = nextRun;
-        mission = nextRun.Mission;
-        snapshot = mission.Planet;
-        timelineYear = mission.MissionYearsElapsed;
-        waterTimelineYear = nextRun.WaterCycle?.SimulatedYears ?? 0;
+        snapshot = nextRun.Mission.Planet;
     }
 
-    private async Task ApplyRunAsync(PlanetRunSnapshot nextRun, bool updatePlanet)
+    private async Task SyncPlanetAsync()
     {
-        ApplyRun(nextRun);
-        if (updatePlanet && rendererModule is not null)
-        {
-            await rendererModule.InvokeVoidAsync("setPlanet", disposeCancellationTokenSource.Token, snapshot);
-        }
-
-        await SyncWaterOverlayAsync();
-        await SaveRunAsync();
-    }
-
-    private async Task SyncWaterOverlayAsync()
-    {
-        if (waterRendererModule is null)
-        {
-            return;
-        }
-
-        if (run?.WaterCycle is null)
-        {
-            await waterRendererModule.InvokeVoidAsync("clearWaterCycle", disposeCancellationTokenSource.Token);
-            return;
-        }
-
-        await waterRendererModule.InvokeVoidAsync("setWaterCycle", disposeCancellationTokenSource.Token, run.WaterCycle);
-    }
-
-    private async Task SaveRunAsync()
-    {
-        if (persistenceModule is null)
-        {
-            return;
-        }
-
-        var json = JsonSerializer.Serialize(Run.ExportSave());
-        await persistenceModule.InvokeVoidAsync("save", disposeCancellationTokenSource.Token, json);
-    }
-
-    private async Task UpdateSandboxAsync(PlanetRenderSnapshot nextSnapshot)
-    {
-        snapshot = nextSnapshot;
-        if (rendererModule is not null)
+        if (rendererModule is not null && snapshot is not null)
         {
             await rendererModule.InvokeVoidAsync("setPlanet", disposeCancellationTokenSource.Token, snapshot);
         }
     }
 
-    private int PlanCount(MissionInterventionType type) => mission?.PlannedInterventions.Count(value => value == type) ?? 0;
-    private int ReservedCredits() => mission?.PlannedInterventions.Sum(type => Run.GetDefinition(type).Cost) ?? 0;
+    private string PlanetVisualClass()
+        => currentStage is FoundationStage.FrozenWorld or FoundationStage.MeltingWorld or FoundationStage.ActiveWaterCycle or FoundationStage.FirstLife or FoundationStage.MarineAnimals
+            ? "pre-vegetation-world"
+            : string.Empty;
 
-    private string FormatCurrentPlan()
-        => mission is null || mission.PlannedInterventions.Count == 0
-            ? "Choose one or more interventions."
-            : string.Join(" + ", mission.PlannedInterventions.GroupBy(type => type).Select(group => $"{group.Count()}× {Run.GetDefinition(group.Key).Name}"));
+    private string FormatStageLabel()
+    {
+        var displayedStage = transitionStage ?? currentStage;
+        return isTransitioning && transitionStage is not null
+            ? $"{StageName(currentStage)} → {StageName(displayedStage)}"
+            : StageName(displayedStage);
+    }
 
-    private string FormatCurrentEra() => run is null ? "—" : Run.Eras.Single(value => value.Era == run.Era).Name;
-    private string FormatCurrentEraGoal() => run is null ? "—" : Run.Eras.Single(value => value.Era == run.Era).Goal;
-    private string EraClass(PlanetRunEra value) => run is null ? "era-locked" : value < run.Era ? "era-complete" : value == run.Era ? "era-current" : "era-locked";
-    private string PlanetVisualClass() => run is not null && run.Era < PlanetRunEra.GreenWorld ? "pre-vegetation-world" : string.Empty;
+    private string FormatButtonLabel() => isTransitioning ? "SIMULATING…" : currentStage == FoundationStage.LandAnimals ? "RESET" : "NEXT";
 
-    private string FormatObjectiveExplanation()
-        => run?.Era switch
+    private string FormatElapsedTime()
+    {
+        if (elapsedYears < 1_000.0)
         {
-            PlanetRunEra.DeadRock => "Choose a physical intervention once, then watch the climate supply the consequences.",
-            PlanetRunEra.WaterWorld when run.WaterCycle is null => "Liquid water exists, but dry drainage geometry is not yet a river system. Start the water cycle and watch precipitation, lakes and runoff occupy the terrain.",
-            PlanetRunEra.WaterWorld => "The water cycle is active. Explore the river network on the globe or run another century to test whether the present climate keeps it connected.",
-            _ => "The next era unlocks only when its scientific prerequisites are actually modelled and met.",
+            return $"YEAR {elapsedYears:0}";
+        }
+
+        if (elapsedYears < 1_000_000.0)
+        {
+            return $"{elapsedYears / 1_000.0:0.0} kyr";
+        }
+
+        return $"{elapsedYears / 1_000_000.0:0.0} Myr";
+    }
+
+    private static string StageName(FoundationStage stage)
+        => stage switch
+        {
+            FoundationStage.FrozenWorld => "FROZEN WORLD",
+            FoundationStage.MeltingWorld => "MELTING WORLD",
+            FoundationStage.ActiveWaterCycle => "ACTIVE WATER CYCLE",
+            FoundationStage.FirstLife => "FIRST LIFE",
+            FoundationStage.MarineAnimals => "MARINE ANIMALS",
+            FoundationStage.LandVegetation => "LAND VEGETATION",
+            FoundationStage.LandAnimals => "LAND ANIMALS",
+            _ => throw new ArgumentOutOfRangeException(nameof(stage), stage, null),
         };
-
-    private string FormatCurrentTimeScale()
-        => run?.Era switch
-        {
-            PlanetRunEra.DeadRock => "YEARS → CENTURIES",
-            PlanetRunEra.WaterWorld => "DAYS → CENTURIES",
-            PlanetRunEra.FirstLife => "KYR → MYR",
-            _ => "MYR",
-        };
-
-    private string FormatHydrologyStage()
-    {
-        var activation = run?.WaterCycle?.RiverActivationFraction ?? 0.0;
-        if (waterTimelineYear <= 1) return "FIRST PERSISTENT PRECIPITATION";
-        if (activation < 0.35) return "MAJOR DRAINAGE CHANNELS WETTING";
-        if (activation < 0.70) return "LAKES FILLING · RUNOFF CONNECTING";
-        return "PERSISTENT RIVER NETWORK";
-    }
-
-    private string FormatDiagnosis()
-    {
-        if (snapshot is null)
-        {
-            return "Collecting planetary data…";
-        }
-
-        if (run?.WaterCycle is not null)
-        {
-            return $"At {FormatSurfaceTemperature()}, the reduced water-cycle model estimates {run.WaterCycle.AnnualPrecipitationMillimeters:0} mm/year of global mean precipitation and {run.WaterCycle.AnnualRunoffMillimeters:0} mm/year of routed runoff. Topography determines where that runoff concentrates; higher-contributing channels activate first.";
-        }
-
-        return $"The surface is {FormatSurfaceTemperature()}, the current forcing points toward {FormatTargetSurfaceTemperature()}, and {FormatCryosphere()} of the surface is in the cryosphere. Changes in ice cover alter effective albedo, so the planet can amplify the intervention through feedback.";
-    }
-
-    private string FormatSurfaceTemperature() => snapshot is null ? "—" : FormatTemperature(snapshot.Climate.SurfaceTemperatureKelvin);
-    private string FormatTargetSurfaceTemperature() => snapshot is null ? "—" : FormatTemperature(snapshot.ClimateFeedback.TargetSurfaceTemperatureKelvin);
-    private string FormatCryosphere() => snapshot is null ? "—" : $"{snapshot.ClimateFeedback.CryosphereFraction * 100:0}% ICE";
-
-    private string FormatWaterState()
-    {
-        if (snapshot is null || snapshot.WaterParameters.TotalMassKilograms <= 0.0)
-        {
-            return "DRY";
-        }
-
-        if (snapshot.Water.LiquidFraction >= snapshot.Water.IceFraction && snapshot.Water.LiquidFraction >= snapshot.Water.VaporFraction)
-        {
-            return run?.WaterCycle is null ? "LIQUID WATER" : "ACTIVE WATER CYCLE";
-        }
-
-        return snapshot.Water.IceFraction >= snapshot.Water.VaporFraction ? "ICE WORLD" : "STEAM WORLD";
-    }
-
-    private static string FormatTemperature(double kelvin)
-    {
-        var celsius = kelvin - PhysicalConstants.KelvinOffsetCelsius;
-        return $"{celsius:+0.0;-0.0;0.0}°C";
-    }
 
     public async ValueTask DisposeAsync()
     {
@@ -555,18 +299,18 @@
             }
         }
 
-        if (persistenceModule is not null)
-        {
-            try
-            {
-                await persistenceModule.DisposeAsync();
-            }
-            catch (JSDisconnectedException)
-            {
-            }
-        }
-
         DisposeSurfaceLodReference();
         disposeCancellationTokenSource.Dispose();
+    }
+
+    private enum FoundationStage
+    {
+        FrozenWorld,
+        MeltingWorld,
+        ActiveWaterCycle,
+        FirstLife,
+        MarineAnimals,
+        LandVegetation,
+        LandAnimals,
     }
 }
