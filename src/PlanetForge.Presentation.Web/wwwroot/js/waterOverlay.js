@@ -6,6 +6,7 @@ const maximumCameraAltitudeRatio = 4.2;
 const localTransitionAltitudeMeters = 20_000.0;
 const localExitAltitudeMeters = 25_000.0;
 const riverSurfaceOffset = 1.006;
+const lakeSurfaceOffset = 1.004;
 const endpointPrecision = 100_000;
 const waterFieldStudyVersion = 1;
 
@@ -71,6 +72,7 @@ export function initialize(overlayCanvasId, inputCanvasId, planetRadiusMeters) {
         lastY: 0,
         paths: [],
         riverChains: [],
+        lakeCells: [],
         cycle: null,
         gameplayKey: null,
         gameplay: createGameplayState(),
@@ -95,6 +97,7 @@ export function setWaterCycle(waterCycle) {
     state.cycle = waterCycle ?? null;
     state.paths = waterCycle?.activeRiverSegments ?? [];
     state.riverChains = buildRiverChains(state.paths);
+    state.lakeCells = waterCycle?.activeLakeCells ?? [];
 
     if (state.gameplay.selected && !state.gameplay.awaitingResolution && (waterCycle?.simulatedYears ?? 0) > previousYears) {
         state.gameplay.awaitingResolution = true;
@@ -110,6 +113,7 @@ export function clearWaterCycle() {
     if (!state) return;
     state.paths = [];
     state.riverChains = [];
+    state.lakeCells = [];
     state.cycle = null;
 }
 
@@ -179,7 +183,7 @@ function resize(s) {
 function draw(s) {
     const { context, canvas } = s;
     context.clearRect(0, 0, canvas.width, canvas.height);
-    if (s.riverChains.length === 0) return;
+    if (s.riverChains.length === 0 && s.lakeCells.length === 0) return;
 
     const altitudeMeters = Math.max(0.0, (s.distance - 1.0) * s.planetRadiusMeters);
     if (altitudeMeters <= localTransitionAltitudeMeters) return;
@@ -190,11 +194,61 @@ function draw(s) {
     const view = lookAt(eye, [0, 0, 0], [0, 1, 0]);
     const viewProjection = multiply(projection, view);
 
+    drawLakeCells(context, s.lakeCells, s.cycle?.lakeFillFraction ?? 0.0, eye, viewProjection, canvas.width, canvas.height);
+
     context.lineCap = 'round';
     context.lineJoin = 'round';
     for (const chain of s.riverChains) {
         drawRiverChain(context, chain, eye, viewProjection, canvas.width, canvas.height);
     }
+}
+
+function drawLakeCells(context, cells, fillFraction, eye, viewProjection, width, height) {
+    if (!cells?.length) return;
+
+    const fillScale = 0.45 + (0.55 * Math.sqrt(clamp(fillFraction, 0.0, 1.0)));
+    for (const cell of cells) {
+        const direction = unitPoint(cell.x, cell.y, cell.z);
+        const center = scale(direction, lakeSurfaceOffset);
+        if (dot(center, eye) <= 1.0) continue;
+
+        const projectedCenter = project(viewProjection, center, width, height);
+        if (!projectedCenter) continue;
+
+        const tangent = createSurfaceTangent(direction);
+        const radiusRadians = Math.max(0.0005, (cell.angularRadiusRadians ?? 0.01) * fillScale);
+        const edgeDirection = normalize([
+            direction[0] * Math.cos(radiusRadians) + tangent[0] * Math.sin(radiusRadians),
+            direction[1] * Math.cos(radiusRadians) + tangent[1] * Math.sin(radiusRadians),
+            direction[2] * Math.cos(radiusRadians) + tangent[2] * Math.sin(radiusRadians)
+        ]);
+        const projectedEdge = project(viewProjection, scale(edgeDirection, lakeSurfaceOffset), width, height);
+        if (!projectedEdge) continue;
+
+        const radiusPixels = Math.max(1.1, Math.hypot(projectedEdge[0] - projectedCenter[0], projectedEdge[1] - projectedCenter[1]));
+        context.beginPath();
+        context.arc(projectedCenter[0], projectedCenter[1], radiusPixels * 1.16, 0, Math.PI * 2);
+        context.fillStyle = `rgba(8, 42, 55, ${0.32 + fillFraction * 0.18})`;
+        context.fill();
+
+        context.beginPath();
+        context.arc(projectedCenter[0], projectedCenter[1], radiusPixels, 0, Math.PI * 2);
+        context.fillStyle = `rgba(38, 143, 184, ${0.48 + fillFraction * 0.28})`;
+        context.fill();
+
+        if (radiusPixels >= 3.0) {
+            context.beginPath();
+            context.arc(projectedCenter[0] - radiusPixels * 0.18, projectedCenter[1] - radiusPixels * 0.18, radiusPixels * 0.58, 0, Math.PI * 2);
+            context.fillStyle = `rgba(139, 215, 238, ${0.08 + fillFraction * 0.10})`;
+            context.fill();
+        }
+    }
+}
+
+function createSurfaceTangent(direction) {
+    const primary = cross(direction, [0, 1, 0]);
+    if (Math.hypot(primary[0], primary[1], primary[2]) >= 0.0001) return normalize(primary);
+    return safeNormalize(cross(direction, [1, 0, 0]), [0, 0, 1]);
 }
 
 function buildRiverChains(paths) {
