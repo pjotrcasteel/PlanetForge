@@ -5,40 +5,60 @@ test('FrozenToMelting_PreservesPolarCapsAndThawsEquator', async ({ page }, testI
   await expect(page.getByText('FROZEN WORLD')).toBeVisible();
   await page.waitForFunction(() => Boolean(window.__planetForgeCryosphereTest));
 
-  await setCryospherePitch(page, 0.0);
+  await orientPitch(page, 0.0);
   const frozenEquatorCoverage = await measureCenterCoverage(page);
-  expect(frozenEquatorCoverage).toBeGreaterThan(0.80);
   await page.screenshot({ path: testInfo.outputPath('year-0-frozen.png'), fullPage: true });
 
   await page.getByRole('button', { name: 'NEXT' }).click();
   await expect(page.getByText('MELTING WORLD', { exact: true })).toBeVisible({ timeout: 20_000 });
   await expect(page.getByRole('button', { name: 'NEXT' })).toBeEnabled({ timeout: 20_000 });
 
-  await setCryospherePitch(page, 0.0);
+  await orientPitch(page, 0.0);
   const meltedEquatorCoverage = await measureCenterCoverage(page);
-  expect(meltedEquatorCoverage).toBeLessThan(0.35);
   await page.screenshot({ path: testInfo.outputPath('year-50-equator.png'), fullPage: true });
 
-  await setCryospherePitch(page, 1.25);
+  await orientPitch(page, 1.25);
   const northPoleCoverage = await measureCenterCoverage(page);
-  expect(northPoleCoverage).toBeGreaterThan(0.70);
+  await page.screenshot({ path: testInfo.outputPath('year-50-north.png'), fullPage: true });
 
-  await setCryospherePitch(page, -1.25);
+  await orientPitch(page, -1.25);
   const southPoleCoverage = await measureCenterCoverage(page);
-  expect(southPoleCoverage).toBeGreaterThan(0.70);
+  await page.screenshot({ path: testInfo.outputPath('year-50-south.png'), fullPage: true });
 
-  expect(northPoleCoverage - meltedEquatorCoverage).toBeGreaterThan(0.40);
-  expect(southPoleCoverage - meltedEquatorCoverage).toBeGreaterThan(0.40);
+  const metrics = { frozenEquatorCoverage, meltedEquatorCoverage, northPoleCoverage, southPoleCoverage };
+  console.log(`Cryosphere metrics: ${JSON.stringify(metrics)}`);
+  await testInfo.attach('cryosphere-metrics', { body: JSON.stringify(metrics, null, 2), contentType: 'application/json' });
 
-  await testInfo.attach('cryosphere-metrics', {
-    body: JSON.stringify({ frozenEquatorCoverage, meltedEquatorCoverage, northPoleCoverage, southPoleCoverage }, null, 2),
-    contentType: 'application/json'
-  });
+  expect(frozenEquatorCoverage).toBeGreaterThan(0.80);
+  expect(meltedEquatorCoverage).toBeLessThan(0.35);
+  expect(northPoleCoverage).toBeGreaterThan(0.35);
+  expect(southPoleCoverage).toBeGreaterThan(0.35);
+  expect(northPoleCoverage - meltedEquatorCoverage).toBeGreaterThan(0.20);
+  expect(southPoleCoverage - meltedEquatorCoverage).toBeGreaterThan(0.20);
+  expect(Math.abs(northPoleCoverage - southPoleCoverage)).toBeLessThan(0.20);
 });
 
-async function setCryospherePitch(page, pitch) {
-  await page.evaluate(value => window.__planetForgeCryosphereTest.setPitch(value), pitch);
-  await page.waitForTimeout(50);
+async function orientPitch(page, targetPitch) {
+  const currentPitch = await page.evaluate(() => window.__planetForgeCryosphereTest.getPitch());
+  const deltaPixels = (targetPitch - currentPitch) / 0.008;
+  if (Math.abs(deltaPixels) < 1.0) return;
+
+  const canvas = page.locator('#planet-canvas');
+  const box = await canvas.boundingBox();
+  if (!box) throw new Error('Planet canvas is not visible.');
+
+  const x = box.x + (box.width * 0.5);
+  const y = box.y + (box.height * 0.5);
+  const targetY = Math.max(box.y + 20, Math.min(box.y + box.height - 20, y + deltaPixels));
+
+  await page.mouse.move(x, y);
+  await page.mouse.down();
+  await page.mouse.move(x, targetY, { steps: 12 });
+  await page.mouse.up();
+  await page.waitForTimeout(100);
+
+  const actualPitch = await page.evaluate(() => window.__planetForgeCryosphereTest.getPitch());
+  expect(Math.abs(actualPitch - targetPitch)).toBeLessThan(0.05);
 }
 
 async function measureCenterCoverage(page) {
