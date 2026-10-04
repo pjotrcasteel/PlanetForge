@@ -17,33 +17,9 @@ public sealed class FrozenWorldMission(PlanetExperience planetExperience)
 
     private static readonly IReadOnlyList<MissionInterventionDefinition> InterventionDefinitions =
     [
-        new(
-            MissionInterventionType.ReleaseCapturedCarbon,
-            "Release captured CO₂",
-            25,
-            "Double atmospheric CO₂ from stored carbon reserves.",
-            "CO₂ ×2 · roughly +3.7 W/m² radiative forcing",
-            "MODERATE WARMING",
-            "More CO₂ increases infrared radiative forcing, raising the climate target temperature.",
-            "Cheap and powerful, but repeated releases can overshoot into excessive warming."),
-        new(
-            MissionInterventionType.DarkenSurface,
-            "Darken exposed surface",
-            20,
-            "Reduce base Bond albedo by three percentage points.",
-            "Base albedo −3 pp · more incoming starlight absorbed",
-            "MODERATE WARMING",
-            "A darker surface reflects less incoming starlight and absorbs more energy.",
-            "Works against a bright frozen world, but permanently changes the surface energy balance."),
-        new(
-            MissionInterventionType.OrbitalTransfer,
-            "Orbital transfer campaign",
-            95,
-            "Move the planet 0.10 AU closer to its star.",
-            "Orbit −0.10 AU · stellar flux rises sharply",
-            "VERY STRONG WARMING",
-            "Stellar flux follows the inverse-square law, so a smaller orbit receives substantially more energy.",
-            "An extreme megaproject: highly effective, consumes almost the entire mission budget, and is difficult to reverse."),
+        new(MissionInterventionType.ReleaseCapturedCarbon, "Release captured CO₂", 25, "Double atmospheric CO₂ from stored carbon reserves.", "CO₂ ×2 · roughly +3.7 W/m² radiative forcing", "MODERATE WARMING", "More CO₂ increases infrared radiative forcing, raising the climate target temperature.", "Cheap and powerful, but repeated releases can overshoot into excessive warming."),
+        new(MissionInterventionType.DarkenSurface, "Darken exposed surface", 20, "Reduce base Bond albedo by three percentage points.", "Base albedo −3 pp · more incoming starlight absorbed", "MODERATE WARMING", "A darker surface reflects less incoming starlight and absorbs more energy.", "Works against a bright frozen world, but permanently changes the surface energy balance."),
+        new(MissionInterventionType.OrbitalTransfer, "Orbital transfer campaign", 95, "Move the planet 0.10 AU closer to its star.", "Orbit −0.10 AU · stellar flux rises sharply", "VERY STRONG WARMING", "Stellar flux follows the inverse-square law, so a smaller orbit receives substantially more energy.", "An extreme megaproject: highly effective, consumes almost the entire mission budget, and is difficult to reverse."),
     ];
 
     private readonly List<MissionInterventionType> plannedInterventions = [];
@@ -62,6 +38,7 @@ public sealed class FrozenWorldMission(PlanetExperience planetExperience)
         planetExperience.ResetEarthReference();
         planetExperience.MoveOrbitOutward();
         planetExperience.AdvanceClimate(50.0);
+        InitializeInheritedSnowballCryosphere();
         currentPlanet = planetExperience.CreateInitialRenderSnapshot();
         budgetRemaining = StartingBudget;
         missionYearsElapsed = 0;
@@ -169,19 +146,10 @@ public sealed class FrozenWorldMission(PlanetExperience planetExperience)
 
     public bool CanAfford(MissionInterventionType type) => budgetRemaining >= GetDefinition(type).Cost;
 
-    public MissionInterventionDefinition GetDefinition(MissionInterventionType type)
-        => InterventionDefinitions.Single(definition => definition.Type == type);
+    public MissionInterventionDefinition GetDefinition(MissionInterventionType type) => InterventionDefinitions.Single(definition => definition.Type == type);
 
     public FrozenWorldMissionState ExportState()
-        => new(
-            planetExperience.ExportState(),
-            budgetRemaining,
-            missionYearsElapsed,
-            stableYears,
-            status,
-            plannedInterventions.ToArray(),
-            prediction,
-            lastTurn);
+        => new(planetExperience.ExportState(), budgetRemaining, missionYearsElapsed, stableYears, status, plannedInterventions.ToArray(), prediction, lastTurn);
 
     public MissionSnapshot RestoreState(FrozenWorldMissionState restoredState)
     {
@@ -199,6 +167,18 @@ public sealed class FrozenWorldMission(PlanetExperience planetExperience)
     }
 
     private PlanetRenderSnapshot CurrentPlanet => currentPlanet ?? throw new InvalidOperationException("Start the mission before using it.");
+
+    private void InitializeInheritedSnowballCryosphere()
+    {
+        var state = planetExperience.ExportState();
+        var climateState = state.ClimateState with
+        {
+            SeaIceFraction = 1.0,
+            LandIceFraction = 1.0,
+            SnowCoverFraction = 1.0,
+        };
+        planetExperience.RestoreState(state with { ClimateState = climateState });
+    }
 
     private void ApplyPlan()
     {
@@ -227,24 +207,9 @@ public sealed class FrozenWorldMission(PlanetExperience planetExperience)
         }
     }
 
-    private MissionSnapshot CreateSnapshot()
-        => new(
-            CurrentPlanet,
-            budgetRemaining,
-            missionYearsElapsed,
-            stableYears,
-            status,
-            plannedInterventions.ToArray(),
-            prediction,
-            lastTurn);
+    private MissionSnapshot CreateSnapshot() => new(CurrentPlanet, budgetRemaining, missionYearsElapsed, stableYears, status, plannedInterventions.ToArray(), prediction, lastTurn);
 
-    private static MissionTurnFeedback CreateFeedback(
-        PlanetRenderSnapshot before,
-        PlanetRenderSnapshot after,
-        MissionPrediction selectedPrediction,
-        IReadOnlyList<MissionInterventionType> interventionsApplied,
-        int creditsSpent,
-        int elapsedYears)
+    private static MissionTurnFeedback CreateFeedback(PlanetRenderSnapshot before, PlanetRenderSnapshot after, MissionPrediction selectedPrediction, IReadOnlyList<MissionInterventionType> interventionsApplied, int creditsSpent, int elapsedYears)
     {
         var temperatureDelta = after.Climate.SurfaceTemperatureKelvin - before.Climate.SurfaceTemperatureKelvin;
         var actualPrediction = ClassifyTemperatureChange(temperatureDelta);
@@ -253,46 +218,21 @@ public sealed class FrozenWorldMission(PlanetExperience planetExperience)
         return CreateFeedbackCore(before, after, interventionsApplied, creditsSpent, elapsedYears, predictionCorrect, headline);
     }
 
-    private static MissionTurnFeedback CreateOutcomeFeedback(
-        PlanetRenderSnapshot before,
-        PlanetRenderSnapshot after,
-        IReadOnlyList<MissionInterventionType> interventionsApplied,
-        int creditsSpent,
-        int elapsedYears)
+    private static MissionTurnFeedback CreateOutcomeFeedback(PlanetRenderSnapshot before, PlanetRenderSnapshot after, IReadOnlyList<MissionInterventionType> interventionsApplied, int creditsSpent, int elapsedYears)
     {
         var temperatureDelta = after.Climate.SurfaceTemperatureKelvin - before.Climate.SurfaceTemperatureKelvin;
         var direction = DescribePrediction(ClassifyTemperatureChange(temperatureDelta));
         return CreateFeedbackCore(before, after, interventionsApplied, creditsSpent, elapsedYears, true, $"The planet became {direction} over the timelapse.");
     }
 
-    private static MissionTurnFeedback CreateFeedbackCore(
-        PlanetRenderSnapshot before,
-        PlanetRenderSnapshot after,
-        IReadOnlyList<MissionInterventionType> interventionsApplied,
-        int creditsSpent,
-        int elapsedYears,
-        bool predictionCorrect,
-        string headline)
+    private static MissionTurnFeedback CreateFeedbackCore(PlanetRenderSnapshot before, PlanetRenderSnapshot after, IReadOnlyList<MissionInterventionType> interventionsApplied, int creditsSpent, int elapsedYears, bool predictionCorrect, string headline)
     {
         var temperatureDelta = after.Climate.SurfaceTemperatureKelvin - before.Climate.SurfaceTemperatureKelvin;
         var cryosphereDelta = after.ClimateFeedback.CryosphereFraction - before.ClimateFeedback.CryosphereFraction;
         var albedoDelta = after.ClimateFeedback.EffectiveBondAlbedo - before.ClimateFeedback.EffectiveBondAlbedo;
         var temperatureSentence = $"Global mean surface temperature changed by {temperatureDelta:+0.0;-0.0;0.0}°C over {elapsedYears} years.";
         var feedbackSentence = DescribeFeedback(cryosphereDelta, albedoDelta);
-        return new MissionTurnFeedback(
-            predictionCorrect,
-            headline,
-            $"{temperatureSentence} {feedbackSentence}",
-            interventionsApplied,
-            creditsSpent,
-            before.Climate.SurfaceTemperatureKelvin,
-            after.Climate.SurfaceTemperatureKelvin,
-            before.ClimateFeedback.CryosphereFraction,
-            after.ClimateFeedback.CryosphereFraction,
-            before.Water.LiquidFraction,
-            after.Water.LiquidFraction,
-            before.ClimateFeedback.EffectiveBondAlbedo,
-            after.ClimateFeedback.EffectiveBondAlbedo);
+        return new MissionTurnFeedback(predictionCorrect, headline, $"{temperatureSentence} {feedbackSentence}", interventionsApplied, creditsSpent, before.Climate.SurfaceTemperatureKelvin, after.Climate.SurfaceTemperatureKelvin, before.ClimateFeedback.CryosphereFraction, after.ClimateFeedback.CryosphereFraction, before.Water.LiquidFraction, after.Water.LiquidFraction, before.ClimateFeedback.EffectiveBondAlbedo, after.ClimateFeedback.EffectiveBondAlbedo);
     }
 
     private static MissionPrediction ClassifyTemperatureChange(double temperatureDeltaKelvin)
