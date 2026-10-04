@@ -12,7 +12,7 @@ public static class ClimateFeedbackSimulator
     private const double MaximumIceAlbedoContribution = 0.28;
     private const double MaximumEffectiveBondAlbedo = 0.90;
     private const double ThermalResponseTimeYears = 12.0;
-    private const double CryosphereResponseTimeYears = 8.0;
+    private const double CryosphereResponseTimeYears = 16.0;
     private const double MaximumAdvanceYears = 500.0;
 
     public static ClimateFeedbackState Initialize(PlanetPhysicalParameters planet, AtmosphereSnapshot atmosphere, WaterParameters water)
