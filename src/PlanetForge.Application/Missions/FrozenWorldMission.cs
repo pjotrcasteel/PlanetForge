@@ -20,6 +20,8 @@ public sealed class FrozenWorldMission(PlanetExperience planetExperience)
             "Release captured CO₂",
             25,
             "Double atmospheric CO₂ from stored carbon reserves.",
+            "CO₂ ×2 · roughly +3.7 W/m² radiative forcing",
+            "MODERATE WARMING",
             "More CO₂ increases infrared radiative forcing, raising the climate target temperature.",
             "Cheap and powerful, but repeated releases can overshoot into excessive warming."),
         new(
@@ -27,6 +29,8 @@ public sealed class FrozenWorldMission(PlanetExperience planetExperience)
             "Darken exposed surface",
             20,
             "Reduce base Bond albedo by three percentage points.",
+            "Base albedo −3 pp · more incoming starlight absorbed",
+            "MODERATE WARMING",
             "A darker surface reflects less incoming starlight and absorbs more energy.",
             "Works against a bright frozen world, but permanently changes the surface energy balance."),
         new(
@@ -34,6 +38,8 @@ public sealed class FrozenWorldMission(PlanetExperience planetExperience)
             "Orbital transfer campaign",
             95,
             "Move the planet 0.10 AU closer to its star.",
+            "Orbit −0.10 AU · stellar flux rises sharply",
+            "VERY STRONG WARMING",
             "Stellar flux follows the inverse-square law, so a smaller orbit receives substantially more energy.",
             "An extreme megaproject: highly effective, consumes almost the entire mission budget, and is difficult to reverse."),
     ];
@@ -53,7 +59,8 @@ public sealed class FrozenWorldMission(PlanetExperience planetExperience)
     {
         planetExperience.ResetEarthReference();
         planetExperience.MoveOrbitOutward();
-        currentPlanet = planetExperience.AdvanceClimate(50.0);
+        planetExperience.AdvanceClimate(50.0);
+        currentPlanet = planetExperience.CreateInitialRenderSnapshot();
         budgetRemaining = StartingBudget;
         missionYearsElapsed = 0;
         stableYears = 0;
@@ -72,7 +79,7 @@ public sealed class FrozenWorldMission(PlanetExperience planetExperience)
         var definition = GetDefinition(type);
         if (budgetRemaining < definition.Cost)
         {
-            throw new InvalidOperationException($"{definition.Name} costs {definition.Cost} credits, but only {budgetRemaining} remain.");
+            throw new InvalidOperationException($"{definition.Name} costs {definition.Cost} credits, but only {budgetRemaining} remain available.");
         }
 
         plannedInterventions.Add(type);
@@ -168,7 +175,18 @@ public sealed class FrozenWorldMission(PlanetExperience planetExperience)
         var headline = predictionCorrect ? "Your prediction matched the simulation." : $"The planet became {DescribePrediction(actualPrediction)} instead.";
         var temperatureSentence = $"Global mean surface temperature changed by {temperatureDelta:+0.0;-0.0;0.0}°C over {TurnYears} years.";
         var feedbackSentence = DescribeFeedback(cryosphereDelta, albedoDelta);
-        return new MissionTurnFeedback(predictionCorrect, headline, $"{temperatureSentence} {feedbackSentence}", temperatureDelta, cryosphereDelta, albedoDelta);
+        return new MissionTurnFeedback(
+            predictionCorrect,
+            headline,
+            $"{temperatureSentence} {feedbackSentence}",
+            before.Climate.SurfaceTemperatureKelvin,
+            after.Climate.SurfaceTemperatureKelvin,
+            before.ClimateFeedback.CryosphereFraction,
+            after.ClimateFeedback.CryosphereFraction,
+            before.Water.LiquidFraction,
+            after.Water.LiquidFraction,
+            before.ClimateFeedback.EffectiveBondAlbedo,
+            after.ClimateFeedback.EffectiveBondAlbedo);
     }
 
     private static MissionPrediction ClassifyTemperatureChange(double temperatureDeltaKelvin)
