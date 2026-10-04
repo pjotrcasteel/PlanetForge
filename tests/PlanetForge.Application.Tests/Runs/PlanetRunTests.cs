@@ -91,15 +91,10 @@ public sealed class PlanetRunTests
 
         Assert.IsNotNull(first);
         Assert.IsNotNull(second);
-        Assert.IsGreaterThan(first.SimulatedYears, 0);
-        Assert.IsGreaterThan(first.ActiveRiverSegmentCount, 0);
-        Assert.IsGreaterThan(first.ActiveRiverSegmentCount, 0);
-        Assert.IsGreaterThan(first.SimulatedYears, 0);
-        Assert.IsGreaterThan(first.ActiveRiverSegmentCount, 0);
-        Assert.IsGreaterThan(first.RiverActivationFraction, 0.0);
-        Assert.IsGreaterThan(second.SimulatedYears, first.SimulatedYears);
-        Assert.IsGreaterThan(second.RiverActivationFraction, first.RiverActivationFraction);
-        Assert.IsGreaterThanOrEqualTo(second.ActiveRiverSegmentCount, first.ActiveRiverSegmentCount);
+        Assert.IsGreaterThan(first.SimulatedYears, second.SimulatedYears);
+        Assert.IsGreaterThan(first.RiverActivationFraction, second.RiverActivationFraction);
+        Assert.IsGreaterThanOrEqualTo(first.ActiveRiverSegmentCount, second.ActiveRiverSegmentCount);
+        Assert.IsGreaterThan(first.ActiveRiverSegments.Max(segment => segment.RelativeDischarge), second.ActiveRiverSegments.Max(segment => segment.RelativeDischarge));
     }
 
     [TestMethod]
