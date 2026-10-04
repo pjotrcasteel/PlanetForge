@@ -53,36 +53,9 @@ public sealed class PlanetExperience(
     private PlanetLocalSurfaceMesh? cachedLocalSurface;
     private ClimateFeedbackState? climateState;
 
-    public PlanetRenderSnapshot CreateSnapshot()
-    {
-        var basePhysics = PlanetPhysicsCalculator.Calculate(state.PhysicalParameters);
-        var atmosphere = AtmosphereCalculator.Calculate(state.AtmosphereParameters, state.PhysicalParameters, basePhysics);
-        climateState ??= ClimateFeedbackSimulator.Initialize(state.PhysicalParameters, atmosphere, state.WaterParameters);
-        var climateResult = ClimateFeedbackSimulator.Evaluate(state.PhysicalParameters, atmosphere, state.WaterParameters, climateState);
-        climateState = climateResult.State;
-        var seaLevelMeters = CalculateVisualSeaLevelMeters(climateResult.Water);
-        var atmosphereDensity = CalculateAtmosphereDensity(atmosphere.SurfacePressurePascals);
-        var radiusMeters = state.PhysicalParameters.RadiusMeters;
-        var localSurface = CreateLocalSurface(radiusMeters);
-        var surfaceTiles = localSurface is null
-            ? surfaceMeshCache.GetOrBuildGlobal(GlobalSurfaceLevel, SurfaceCellsPerAxis, state.Seed, radiusMeters)
-            : Array.Empty<PlanetSurfaceTileMesh>();
+    public PlanetRenderSnapshot CreateSnapshot() => CreateSnapshot(includeFullGlobalGeometry: false);
 
-        return new PlanetRenderSnapshot(
-            surfaceTiles,
-            seaLevelMeters,
-            atmosphereDensity,
-            state.Seed,
-            state.PhysicalParameters,
-            climateResult.Physics,
-            state.AtmosphereParameters,
-            atmosphere,
-            climateResult.Climate,
-            climateResult.Feedback,
-            state.WaterParameters,
-            climateResult.Water,
-            localSurface);
-    }
+    public PlanetRenderSnapshot CreateInitialRenderSnapshot() => CreateSnapshot(includeFullGlobalGeometry: true);
 
     public PlanetRenderSnapshot UpdateSurfaceView(PlanetSurfaceView view)
     {
@@ -236,6 +209,39 @@ public sealed class PlanetExperience(
         state.ResetEarthReference();
         climateState = null;
         return CreateSnapshot();
+    }
+
+    private PlanetRenderSnapshot CreateSnapshot(bool includeFullGlobalGeometry)
+    {
+        var basePhysics = PlanetPhysicsCalculator.Calculate(state.PhysicalParameters);
+        var atmosphere = AtmosphereCalculator.Calculate(state.AtmosphereParameters, state.PhysicalParameters, basePhysics);
+        climateState ??= ClimateFeedbackSimulator.Initialize(state.PhysicalParameters, atmosphere, state.WaterParameters);
+        var climateResult = ClimateFeedbackSimulator.Evaluate(state.PhysicalParameters, atmosphere, state.WaterParameters, climateState);
+        climateState = climateResult.State;
+        var seaLevelMeters = CalculateVisualSeaLevelMeters(climateResult.Water);
+        var atmosphereDensity = CalculateAtmosphereDensity(atmosphere.SurfacePressurePascals);
+        var radiusMeters = state.PhysicalParameters.RadiusMeters;
+        var localSurface = CreateLocalSurface(radiusMeters);
+        var surfaceTiles = localSurface is not null
+            ? Array.Empty<PlanetSurfaceTileMesh>()
+            : includeFullGlobalGeometry
+                ? surfaceMeshCache.GetOrBuildGlobalFull(GlobalSurfaceLevel, SurfaceCellsPerAxis, state.Seed, radiusMeters)
+                : surfaceMeshCache.GetOrBuildGlobal(GlobalSurfaceLevel, SurfaceCellsPerAxis, state.Seed, radiusMeters);
+
+        return new PlanetRenderSnapshot(
+            surfaceTiles,
+            seaLevelMeters,
+            atmosphereDensity,
+            state.Seed,
+            state.PhysicalParameters,
+            climateResult.Physics,
+            state.AtmosphereParameters,
+            atmosphere,
+            climateResult.Climate,
+            climateResult.Feedback,
+            state.WaterParameters,
+            climateResult.Water,
+            localSurface);
     }
 
     private PlanetLocalSurfaceMesh? CreateLocalSurface(double radiusMeters)
