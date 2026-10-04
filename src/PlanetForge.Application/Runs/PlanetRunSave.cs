@@ -11,6 +11,4 @@ public sealed record PlanetRunSave(
     IReadOnlyList<PlanetResearchUnlock> ResearchUnlocks,
     bool ResearchChoiceAvailable,
     PlanetWaterSurvey? WaterSurvey,
-    PlanetWaterCycleState? WaterCycle,
-    PlanetWaterPrediction? SelectedWaterPrediction,
-    IReadOnlyList<PlanetWaterPredictionResult> WaterPredictionResults);
+    PlanetWaterCycleState? WaterCycle);
