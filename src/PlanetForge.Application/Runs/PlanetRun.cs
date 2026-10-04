@@ -2,6 +2,7 @@ using PlanetForge.Application.Missions;
 using PlanetForge.Application.Rendering;
 using PlanetForge.Application.Surface.Hydrology;
 using PlanetForge.Domain.Physics;
+using PlanetForge.Domain.Surface;
 
 namespace PlanetForge.Application.Runs;
 
@@ -299,7 +300,27 @@ public sealed class PlanetRun(
             activeLakeCount,
             activeRiverCount,
             activeSegments);
-        return new PlanetWaterCycleFrame(year, state);
+        return new PlanetWaterCycleFrame(year, state with { ActiveLakeCells = BuildActiveLakeCells(features, state) });
+    }
+
+    private static IReadOnlyList<PlanetWaterLakeCell> BuildActiveLakeCells(PlanetHydrologyFeatures features, PlanetWaterCycleState state)
+    {
+        if (state.ActiveLakeCount == 0 || features.Lakes.Count == 0)
+        {
+            return [];
+        }
+
+        return features.Lakes
+            .OrderBy(lake => lake.Id)
+            .Take(state.ActiveLakeCount)
+            .SelectMany(lake => lake.Cells)
+            .Select(cell =>
+            {
+                var direction = PlanetSurfaceGridGeometry.GetCenterDirection(cell);
+                var angularRadius = Math.PI / 2.0 / cell.CellsPerAxis * 0.78;
+                return new PlanetWaterLakeCell(direction.X, direction.Y, direction.Z, angularRadius);
+            })
+            .ToArray();
     }
 
     private static double EstimateAnnualPrecipitationMillimeters(PlanetRenderSnapshot planet)
