@@ -287,10 +287,10 @@ void main() {
     float seaSheet = smoothstep(seaIceLine, seaIceLine + 0.16, latitude);
     float landSheet = smoothstep(landIceLine, landIceLine + 0.16, latitude);
 
-    float snowlineMeters = mix(-1_200.0, ${finalAlpineSnowlineMeters.toFixed(1)}, snowRetreat);
+    float snowlineMeters = mix(-1200.0, ${finalAlpineSnowlineMeters.toFixed(1)}, snowRetreat);
     float alpineSnow = ocean ? 0.0 : smoothstep(snowlineMeters, snowlineMeters + ${alpineSnowTransitionMeters.toFixed(1)}, vElevationMeters);
     float permanentPolar = smoothstep(${polarStart.toFixed(2)}, ${polarFull.toFixed(2)}, latitude);
-    float permanentAlpine = ocean ? 0.0 : smoothstep(2_600.0, 3_400.0, vElevationMeters) * (1.0 - smoothstep(270.0, 276.0, localTemperature));
+    float permanentAlpine = ocean ? 0.0 : smoothstep(2600.0, 3400.0, vElevationMeters) * (1.0 - smoothstep(270.0, 276.0, localTemperature));
 
     float coverage = ocean
         ? max(seaSheet, permanentPolar)
