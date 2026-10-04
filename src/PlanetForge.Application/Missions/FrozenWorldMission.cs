@@ -113,10 +113,12 @@ public sealed class FrozenWorldMission(PlanetExperience planetExperience)
         }
 
         var before = CurrentPlanet;
+        var interventionsApplied = plannedInterventions.ToArray();
+        var creditsSpent = interventionsApplied.Sum(type => GetDefinition(type).Cost);
         ApplyPlan();
         currentPlanet = planetExperience.AdvanceClimate(TurnYears);
         missionYearsElapsed += TurnYears;
-        lastTurn = CreateFeedback(before, currentPlanet, prediction.Value);
+        lastTurn = CreateFeedback(before, currentPlanet, prediction.Value, interventionsApplied, creditsSpent);
         plannedInterventions.Clear();
         prediction = null;
 
@@ -165,7 +167,12 @@ public sealed class FrozenWorldMission(PlanetExperience planetExperience)
             prediction,
             lastTurn);
 
-    private static MissionTurnFeedback CreateFeedback(PlanetRenderSnapshot before, PlanetRenderSnapshot after, MissionPrediction selectedPrediction)
+    private static MissionTurnFeedback CreateFeedback(
+        PlanetRenderSnapshot before,
+        PlanetRenderSnapshot after,
+        MissionPrediction selectedPrediction,
+        IReadOnlyList<MissionInterventionType> interventionsApplied,
+        int creditsSpent)
     {
         var temperatureDelta = after.Climate.SurfaceTemperatureKelvin - before.Climate.SurfaceTemperatureKelvin;
         var cryosphereDelta = after.ClimateFeedback.CryosphereFraction - before.ClimateFeedback.CryosphereFraction;
@@ -179,6 +186,8 @@ public sealed class FrozenWorldMission(PlanetExperience planetExperience)
             predictionCorrect,
             headline,
             $"{temperatureSentence} {feedbackSentence}",
+            interventionsApplied,
+            creditsSpent,
             before.Climate.SurfaceTemperatureKelvin,
             after.Climate.SurfaceTemperatureKelvin,
             before.ClimateFeedback.CryosphereFraction,
