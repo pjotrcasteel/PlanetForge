@@ -10,12 +10,16 @@
 .era-ribbon-node.era-current { border-color: #75c991; background: rgba(24, 65, 44, .72); opacity: 1; }
 .era-ribbon-node.era-complete { border-color: #47775a; opacity: .82; }
 .planet-stage { position: relative; }
-.pre-vegetation-world canvas { filter: grayscale(.55) sepia(.18) saturate(.72) contrast(1.05); }
-.compact-stage-metrics { gap: 8px; }
-.timelapse-overlay { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); display: grid; justify-items: center; gap: 5px; min-width: min(82%, 360px); padding: 16px 20px; border: 1px solid rgba(120, 210, 150, .55); border-radius: 16px; background: rgba(2, 11, 7, .78); backdrop-filter: blur(8px); pointer-events: none; }
+.pre-vegetation-world #planet-canvas { filter: grayscale(1) contrast(1.08) brightness(.96); }
+.water-overlay-canvas { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 2; }
+.compact-stage-metrics { gap: 8px; z-index: 4; }
+.stage-hint { z-index: 4; }
+.timelapse-overlay { position: absolute; z-index: 5; left: 50%; top: 50%; transform: translate(-50%, -50%); display: grid; justify-items: center; gap: 5px; min-width: min(82%, 360px); padding: 16px 20px; border: 1px solid rgba(120, 210, 150, .55); border-radius: 16px; background: rgba(2, 11, 7, .78); backdrop-filter: blur(8px); pointer-events: none; }
 .timelapse-overlay span { color: #9bd8ae; font: 800 .65rem ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .12em; }
 .timelapse-overlay strong { font: 900 1.5rem ui-monospace, SFMono-Regular, Menlo, monospace; }
 .timelapse-overlay small { color: #8fa196; }
+.water-timelapse-overlay { border-color: rgba(81, 183, 228, .75); background: rgba(2, 14, 20, .84); }
+.water-timelapse-overlay span { color: #82d7f5; }
 .single-objective-bar { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 24px; align-items: center; padding: 16px 18px; border: 1px solid #2a4638; border-radius: 15px; background: rgba(7, 20, 15, .82); }
 .single-objective-bar h2 { margin: 4px 0 6px; font-size: clamp(1.15rem, 2.5vw, 1.6rem); }
 .single-objective-bar p { margin: 0; color: #9fb3a6; max-width: 800px; }
@@ -42,13 +46,19 @@
 .chapter-transition h2, .chapter-transition p { margin: 0; }
 .chapter-transition > .primary-button { justify-self: start; min-width: 220px; }
 .failure-transition { border-color: #80544a; background: rgba(47, 22, 18, .62); }
-.survey-result-line { display: flex; flex-wrap: wrap; gap: 9px; align-items: center; padding: 12px 14px; border-radius: 11px; background: rgba(3, 17, 11, .5); color: #c7ead2; }
-.next-system-note { color: #95aa9d; }
+.water-gameplay-dock { display: grid; gap: 14px; padding: 20px; border: 1px solid rgba(72, 159, 198, .58); border-radius: 18px; background: linear-gradient(145deg, rgba(7, 30, 38, .94), rgba(7, 23, 20, .94)); }
+.water-gameplay-copy h2 { margin: 5px 0 8px; font-size: clamp(1.25rem, 3vw, 1.85rem); }
+.water-gameplay-copy p { margin: 0; max-width: 880px; color: #adc3ba; }
+.water-status-line { display: flex; flex-wrap: wrap; gap: 8px 18px; padding: 11px 13px; border-radius: 12px; background: rgba(2, 13, 18, .56); color: #9dc0c8; font-size: .8rem; }
+.water-status-line strong { color: #8ee0ff; font: 900 .9rem ui-monospace, SFMono-Regular, Menlo, monospace; }
+.water-cycle-button { justify-self: start; min-width: min(100%, 310px); min-height: 54px; background: linear-gradient(135deg, #2d8fb8, #3eafbf); border-color: #67c9df; }
+.water-model-note { max-width: 850px; color: #748f91; line-height: 1.5; }
 .research-strip { display: grid; grid-template-columns: 1fr repeat(3, minmax(160px, .8fr)); gap: 9px; align-items: stretch; }
 .research-strip > div { align-self: center; }
 .research-strip button { display: grid; gap: 5px; text-align: left; padding: 12px; }
 .research-strip button small { color: #869b8e; }
 .research-strip button span { color: #8fcea5; font-size: .7rem; }
+.compact-research-strip { grid-template-columns: repeat(3, 1fr); padding: 12px; }
 .run-details { border: 1px solid #243d31; border-radius: 13px; background: rgba(5, 15, 11, .6); }
 .run-details summary { padding: 12px 14px; cursor: pointer; color: #a9beb0; font-weight: 800; }
 .run-details[open] summary { border-bottom: 1px solid #243d31; }
@@ -64,7 +74,7 @@
     .deep-time-key small { text-align: left; }
     .intervention-strip { grid-template-columns: 1fr; }
     .intervention-choice { min-height: 0; }
-    .research-strip { grid-template-columns: 1fr; }
+    .research-strip, .compact-research-strip { grid-template-columns: 1fr; }
 }
 @media (max-width: 700px) {
     .run-topbar { align-items: start; }
@@ -74,6 +84,8 @@
     .commit-watch-button { grid-column: 1 / -1; }
     .outcome-line { grid-template-columns: 1fr; gap: 8px; }
     .single-objective-bar { padding: 14px; }
+    .water-gameplay-dock { padding: 16px; }
+    .water-cycle-button { justify-self: stretch; }
 }
 @media (max-width: 430px) {
     .run-topbar h1 { font-size: 1.7rem; }
