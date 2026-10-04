@@ -1,5 +1,6 @@
 using PlanetForge.Application.Missions;
 using PlanetForge.Application.Planets;
+using PlanetForge.Application.Rendering;
 using PlanetForge.Application.Surface;
 using PlanetForge.Domain.Surface;
 
