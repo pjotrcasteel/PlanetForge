@@ -1,6 +1,6 @@
-const buildVersion = '0.0.5.1';
-const buildLabel = 'GAMEPLAY CLARITY';
-const pageTitle = `PlanetForge ${buildVersion} — Gameplay Clarity`;
+const buildVersion = '0.0.6';
+const buildLabel = 'PLANET RUN';
+const pageTitle = `PlanetForge ${buildVersion} — Planet Run`;
 const maximumAttempts = 100;
 const retryDelayMilliseconds = 100;
 
