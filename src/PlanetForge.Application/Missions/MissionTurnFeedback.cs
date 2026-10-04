@@ -4,6 +4,20 @@ public sealed record MissionTurnFeedback(
     bool PredictionCorrect,
     string Headline,
     string Explanation,
-    double TemperatureDeltaKelvin,
-    double CryosphereDelta,
-    double EffectiveAlbedoDelta);
+    double TemperatureBeforeKelvin,
+    double TemperatureAfterKelvin,
+    double CryosphereBefore,
+    double CryosphereAfter,
+    double LiquidWaterBefore,
+    double LiquidWaterAfter,
+    double EffectiveAlbedoBefore,
+    double EffectiveAlbedoAfter)
+{
+    public double TemperatureDeltaKelvin => TemperatureAfterKelvin - TemperatureBeforeKelvin;
+
+    public double CryosphereDelta => CryosphereAfter - CryosphereBefore;
+
+    public double LiquidWaterDelta => LiquidWaterAfter - LiquidWaterBefore;
+
+    public double EffectiveAlbedoDelta => EffectiveAlbedoAfter - EffectiveAlbedoBefore;
+}
