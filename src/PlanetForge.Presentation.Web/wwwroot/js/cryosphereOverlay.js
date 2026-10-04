@@ -5,33 +5,27 @@ const minimumCameraAltitudeMeters = 3.0;
 const maximumCameraAltitudeRatio = 4.2;
 const localTransitionAltitudeMeters = 20_000.0;
 const localExitAltitudeMeters = 25_000.0;
-const surfaceOffset = 1.0015;
-const landFreezingStartKelvin = 272.0;
-const landFreezingEndKelvin = 265.0;
-const oceanFreezingStartKelvin = 271.5;
-const oceanFreezingEndKelvin = 266.0;
+const landFreezeColdKelvin = 265.0;
+const landFreezeWarmKelvin = 273.0;
+const oceanFreezeColdKelvin = 266.0;
+const oceanFreezeWarmKelvin = 271.5;
 const latitudeCoolingKelvin = 18.0;
 const elevationLapseRateKelvinPerMeter = 0.0065;
-const temperateTransitionStartKelvin = 270.0;
-const temperateTransitionEndKelvin = 278.0;
-const alpineSnowStartMeters = 1_900.0;
-const alpineSnowFullMeters = 3_200.0;
-const polarRetentionStart = 0.93;
-const polarRetentionFull = 0.98;
-const permanentPolarStart = 0.95;
-const permanentPolarFull = 0.99;
-const triangleSeamOverlapPixels = 1.15;
+const permanentPolarStart = 0.90;
+const permanentPolarFull = 0.98;
 
 export function initialize(overlayCanvasId, inputCanvasId, snapshot) {
     const canvas = document.getElementById(overlayCanvasId);
     const inputCanvas = document.getElementById(inputCanvasId);
-    const context = canvas?.getContext('2d');
-    if (!canvas || !inputCanvas || !context) return;
+    const gl = canvas?.getContext('webgl2', { antialias: true, alpha: true, premultipliedAlpha: false });
+    if (!canvas || !inputCanvas || !gl) return;
 
+    const program = createProgram(gl, vertexShaderSource, fragmentShaderSource);
     state = {
         canvas,
         inputCanvas,
-        context,
+        gl,
+        program,
         yaw: -0.65,
         pitch: 0.24,
         distance: 3.15,
@@ -41,8 +35,17 @@ export function initialize(overlayCanvasId, inputCanvasId, snapshot) {
         planetRadiusMeters: 6_371_000.0,
         seaLevelMeters: 0.0,
         surfaceTemperatureKelvin: 250.0,
-        tileCache: new Map(),
-        dirty: true
+        tiles: new Map(),
+        dirty: true,
+        attributes: {
+            position: gl.getAttribLocation(program, 'aPosition')
+        },
+        uniforms: {
+            viewProjection: gl.getUniformLocation(program, 'uViewProjection'),
+            planetRadiusMeters: gl.getUniformLocation(program, 'uPlanetRadiusMeters'),
+            seaLevelMeters: gl.getUniformLocation(program, 'uSeaLevelMeters'),
+            surfaceTemperatureKelvin: gl.getUniformLocation(program, 'uSurfaceTemperatureKelvin')
+        }
     };
 
     installInput(state);
@@ -61,35 +64,31 @@ export function setPlanet(snapshot) {
     for (const tile of snapshot.surfaceTiles ?? []) {
         if (!tile?.positions?.length || !tile.surfaceVertexCount) continue;
         activeKeys.add(tile.key);
-        state.tileCache.set(tile.key, buildTriangles(tile.positions, tile.surfaceVertexCount, state.planetRadiusMeters));
+        if (!state.tiles.has(tile.key)) state.tiles.set(tile.key, createTileBuffer(state.gl, tile));
     }
 
-    for (const key of state.tileCache.keys()) {
-        if (!activeKeys.has(key)) state.tileCache.delete(key);
+    for (const [key, tile] of state.tiles) {
+        if (activeKeys.has(key)) continue;
+        state.gl.deleteBuffer(tile.positionBuffer);
+        state.tiles.delete(key);
     }
 
     state.dirty = true;
 }
 
 export function dispose() {
+    if (!state) return;
+    for (const tile of state.tiles.values()) state.gl.deleteBuffer(tile.positionBuffer);
+    state.tiles.clear();
+    state.gl.deleteProgram(state.program);
     state = null;
 }
 
-function buildTriangles(positions, surfaceVertexCount, planetRadiusMeters) {
-    const triangles = [];
-    const vertexLimit = Math.min(surfaceVertexCount, Math.floor(positions.length / 3));
-
-    for (let vertex = 0; vertex + 2 < vertexLimit; vertex += 3) {
-        const offset = vertex * 3;
-        const a = [positions[offset], positions[offset + 1], positions[offset + 2]];
-        const b = [positions[offset + 3], positions[offset + 4], positions[offset + 5]];
-        const c = [positions[offset + 6], positions[offset + 7], positions[offset + 8]];
-        const center = normalize([(a[0] + b[0] + c[0]) / 3.0, (a[1] + b[1] + c[1]) / 3.0, (a[2] + b[2] + c[2]) / 3.0]);
-        const elevationMeters = (((length(a) + length(b) + length(c)) / 3.0) - 1.0) * planetRadiusMeters;
-        triangles.push({ a, b, c, center, elevationMeters });
-    }
-
-    return triangles;
+function createTileBuffer(gl, tile) {
+    const positionBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(tile.positions), gl.STATIC_DRAW);
+    return { positionBuffer, vertexCount: tile.surfaceVertexCount };
 }
 
 function installInput(s) {
@@ -145,8 +144,10 @@ function resize(s) {
 }
 
 function draw(s) {
-    const { context, canvas } = s;
-    context.clearRect(0, 0, canvas.width, canvas.height);
+    const { gl, canvas, program } = s;
+    gl.viewport(0, 0, canvas.width, canvas.height);
+    gl.clearColor(0, 0, 0, 0);
+    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
     const altitudeMeters = Math.max(0.0, (s.distance - 1.0) * s.planetRadiusMeters);
     if (altitudeMeters <= localTransitionAltitudeMeters) return;
@@ -157,84 +158,45 @@ function draw(s) {
     const view = lookAt(eye, [0, 0, 0], [0, 1, 0]);
     const viewProjection = multiply(projection, view);
 
-    context.globalCompositeOperation = 'source-over';
-    context.lineJoin = 'round';
-    context.lineWidth = triangleSeamOverlapPixels;
+    gl.enable(gl.DEPTH_TEST);
+    gl.enable(gl.CULL_FACE);
+    gl.enable(gl.BLEND);
+    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+    gl.useProgram(program);
+    gl.uniformMatrix4fv(s.uniforms.viewProjection, false, viewProjection);
+    gl.uniform1f(s.uniforms.planetRadiusMeters, s.planetRadiusMeters);
+    gl.uniform1f(s.uniforms.seaLevelMeters, s.seaLevelMeters);
+    gl.uniform1f(s.uniforms.surfaceTemperatureKelvin, s.surfaceTemperatureKelvin);
 
-    for (const triangles of s.tileCache.values()) {
-        for (const triangle of triangles) drawTriangle(context, triangle, s, eye, viewProjection, canvas.width, canvas.height);
+    for (const tile of s.tiles.values()) {
+        gl.bindBuffer(gl.ARRAY_BUFFER, tile.positionBuffer);
+        gl.enableVertexAttribArray(s.attributes.position);
+        gl.vertexAttribPointer(s.attributes.position, 3, gl.FLOAT, false, 0, 0);
+        gl.drawArrays(gl.TRIANGLES, 0, tile.vertexCount);
     }
+
+    gl.disable(gl.BLEND);
 }
 
-function drawTriangle(context, triangle, s, eye, viewProjection, width, height) {
-    if (!isTriangleVisible(triangle, eye)) return;
-
-    const latitude = Math.abs(triangle.center[1]);
-    const elevationCooling = Math.max(triangle.elevationMeters, 0.0) * elevationLapseRateKelvinPerMeter;
-    const latitudeCooling = latitudeCoolingKelvin * Math.pow(latitude, 1.45);
-    const localTemperatureKelvin = s.surfaceTemperatureKelvin - latitudeCooling - elevationCooling;
-    const ocean = triangle.elevationMeters < s.seaLevelMeters;
-    let dynamicIce = ocean
-        ? 1.0 - smoothstep(oceanFreezingEndKelvin, oceanFreezingStartKelvin, localTemperatureKelvin)
-        : 1.0 - smoothstep(landFreezingEndKelvin, landFreezingStartKelvin, localTemperatureKelvin);
-
-    const temperateProgress = smoothstep(temperateTransitionStartKelvin, temperateTransitionEndKelvin, s.surfaceTemperatureKelvin);
-    const polarRetention = smoothstep(polarRetentionStart, polarRetentionFull, latitude);
-    const alpineRetention = smoothstep(alpineSnowStartMeters, alpineSnowFullMeters, triangle.elevationMeters);
-    const warmRetention = ocean ? polarRetention : Math.max(polarRetention, alpineRetention);
-    dynamicIce *= mix(1.0, warmRetention, temperateProgress);
-
-    const permanentPolar = smoothstep(permanentPolarStart, permanentPolarFull, latitude);
-    const coverage = Math.max(dynamicIce, permanentPolar * 0.94);
-    if (coverage < 0.025) return;
-
-    const a = project(viewProjection, scaleToSurface(triangle.a), width, height);
-    const b = project(viewProjection, scaleToSurface(triangle.b), width, height);
-    const c = project(viewProjection, scaleToSurface(triangle.c), width, height);
-    if (!a || !b || !c) return;
-
-    context.beginPath();
-    context.moveTo(a[0], a[1]);
-    context.lineTo(b[0], b[1]);
-    context.lineTo(c[0], c[1]);
-    context.closePath();
-
-    const opacity = clamp(coverage * (ocean ? 0.78 : 0.86), 0.0, 0.86);
-    const fill = ocean
-        ? `rgba(194, 222, 229, ${opacity})`
-        : `rgba(224, 235, 234, ${opacity})`;
-    context.fillStyle = fill;
-    context.strokeStyle = fill;
-    context.fill();
-    context.stroke();
+function createProgram(gl, vertexSource, fragmentSource) {
+    const vertex = compile(gl, gl.VERTEX_SHADER, vertexSource);
+    const fragment = compile(gl, gl.FRAGMENT_SHADER, fragmentSource);
+    const program = gl.createProgram();
+    gl.attachShader(program, vertex);
+    gl.attachShader(program, fragment);
+    gl.linkProgram(program);
+    gl.deleteShader(vertex);
+    gl.deleteShader(fragment);
+    if (!gl.getProgramParameter(program, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(program));
+    return program;
 }
 
-function isTriangleVisible(triangle, eye) {
-    if (dot(triangle.center, eye) <= 1.0) return false;
-    return isSurfacePointVisible(triangle.a, eye) && isSurfacePointVisible(triangle.b, eye) && isSurfacePointVisible(triangle.c, eye);
-}
-
-function isSurfacePointVisible(point, eye) {
-    const direction = normalize(point);
-    return dot(direction, eye) > 1.0;
-}
-
-function scaleToSurface(point) {
-    const magnitude = length(point);
-    if (magnitude <= 0.0) return point;
-    const factor = (magnitude + (surfaceOffset - 1.0)) / magnitude;
-    return [point[0] * factor, point[1] * factor, point[2] * factor];
-}
-
-function project(matrix, point, width, height) {
-    const x = point[0], y = point[1], z = point[2];
-    const clipX = matrix[0] * x + matrix[4] * y + matrix[8] * z + matrix[12];
-    const clipY = matrix[1] * x + matrix[5] * y + matrix[9] * z + matrix[13];
-    const clipW = matrix[3] * x + matrix[7] * y + matrix[11] * z + matrix[15];
-    if (clipW <= 0.0) return null;
-    const ndcX = clipX / clipW;
-    const ndcY = clipY / clipW;
-    return [(ndcX * 0.5 + 0.5) * width, (1.0 - (ndcY * 0.5 + 0.5)) * height];
+function compile(gl, type, source) {
+    const shader = gl.createShader(type);
+    gl.shaderSource(shader, source);
+    gl.compileShader(shader);
+    if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(shader));
+    return shader;
 }
 
 function orbitEye(yaw, pitch, distance) {
@@ -264,14 +226,50 @@ function multiply(a, b) {
     return out;
 }
 
-function smoothstep(edge0, edge1, value) {
-    const t = clamp((value - edge0) / (edge1 - edge0), 0.0, 1.0);
-    return t * t * (3.0 - (2.0 * t));
+function normalize(v) {
+    const magnitude = Math.hypot(v[0], v[1], v[2]) || 1.0;
+    return [v[0]/magnitude, v[1]/magnitude, v[2]/magnitude];
 }
 
-function mix(first, second, amount) { return first + ((second - first) * amount); }
-function length(v) { return Math.hypot(v[0], v[1], v[2]); }
-function normalize(v) { const magnitude = length(v) || 1.0; return [v[0]/magnitude, v[1]/magnitude, v[2]/magnitude]; }
 function cross(a,b) { return [a[1]*b[2]-a[2]*b[1], a[2]*b[0]-a[0]*b[2], a[0]*b[1]-a[1]*b[0]]; }
 function dot(a,b) { return a[0]*b[0] + a[1]*b[1] + a[2]*b[2]; }
 function clamp(value,min,max) { return Math.max(min, Math.min(max, value)); }
+
+const vertexShaderSource = `#version 300 es
+precision highp float;
+in vec3 aPosition;
+uniform mat4 uViewProjection;
+uniform float uPlanetRadiusMeters;
+out vec3 vDirection;
+out float vElevationMeters;
+void main() {
+    float radius = length(aPosition);
+    vDirection = normalize(aPosition);
+    vElevationMeters = (radius - 1.0) * uPlanetRadiusMeters;
+    gl_Position = uViewProjection * vec4(aPosition, 1.0);
+}`;
+
+const fragmentShaderSource = `#version 300 es
+precision highp float;
+in vec3 vDirection;
+in float vElevationMeters;
+uniform float uSeaLevelMeters;
+uniform float uSurfaceTemperatureKelvin;
+out vec4 outColor;
+void main() {
+    float latitude = abs(vDirection.y);
+    float latitudeCooling = ${latitudeCoolingKelvin.toFixed(1)} * pow(latitude, 1.45);
+    float elevationCooling = max(vElevationMeters, 0.0) * ${elevationLapseRateKelvinPerMeter.toFixed(4)};
+    float localTemperature = uSurfaceTemperatureKelvin - latitudeCooling - elevationCooling;
+    bool ocean = vElevationMeters < uSeaLevelMeters;
+    float dynamicIce = ocean
+        ? 1.0 - smoothstep(${oceanFreezeColdKelvin.toFixed(1)}, ${oceanFreezeWarmKelvin.toFixed(1)}, localTemperature)
+        : 1.0 - smoothstep(${landFreezeColdKelvin.toFixed(1)}, ${landFreezeWarmKelvin.toFixed(1)}, localTemperature);
+    float permanentPolar = smoothstep(${permanentPolarStart.toFixed(2)}, ${permanentPolarFull.toFixed(2)}, latitude);
+    float coverage = max(dynamicIce, permanentPolar * 0.94);
+    if (coverage < 0.025) discard;
+
+    vec3 iceColor = ocean ? vec3(0.76, 0.87, 0.90) : vec3(0.90, 0.94, 0.94);
+    float alpha = clamp(coverage * (ocean ? 0.88 : 0.94), 0.0, 0.94);
+    outColor = vec4(iceColor, alpha);
+}`;
