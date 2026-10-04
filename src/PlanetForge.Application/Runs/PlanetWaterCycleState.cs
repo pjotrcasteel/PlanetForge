@@ -62,6 +62,8 @@ public sealed record PlanetWaterCycleState
 
     public IReadOnlyList<PlanetWaterPathSegment> ActiveRiverSegments { get; init; } = [];
 
+    public IReadOnlyList<PlanetWaterLakeCell> ActiveLakeCells { get; init; } = [];
+
     private static double MaturationResponse(int simulatedYears, double timeScaleYears)
         => 1.0 - Math.Exp(-Math.Max(simulatedYears, 0) / timeScaleYears);
 
