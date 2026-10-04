@@ -5,6 +5,8 @@ const minimumCameraAltitudeMeters = 3.0;
 const maximumCameraAltitudeRatio = 4.2;
 const localTransitionAltitudeMeters = 20_000.0;
 const localExitAltitudeMeters = 25_000.0;
+const riverSurfaceOffset = 1.006;
+const endpointPrecision = 100_000;
 
 export function initialize(overlayCanvasId, inputCanvasId, planetRadiusMeters) {
     const canvas = document.getElementById(overlayCanvasId);
@@ -23,7 +25,8 @@ export function initialize(overlayCanvasId, inputCanvasId, planetRadiusMeters) {
         dragging: false,
         lastX: 0,
         lastY: 0,
-        paths: []
+        paths: [],
+        riverChains: []
     };
 
     installInput(state);
@@ -37,10 +40,13 @@ export function setPlanetRadius(planetRadiusMeters) {
 export function setWaterCycle(waterCycle) {
     if (!state) return;
     state.paths = waterCycle?.activeRiverSegments ?? [];
+    state.riverChains = buildRiverChains(state.paths);
 }
 
 export function clearWaterCycle() {
-    if (state) state.paths = [];
+    if (!state) return;
+    state.paths = [];
+    state.riverChains = [];
 }
 
 export function dispose() {
@@ -94,7 +100,7 @@ function resize(s) {
 function draw(s) {
     const { context, canvas } = s;
     context.clearRect(0, 0, canvas.width, canvas.height);
-    if (s.paths.length === 0) return;
+    if (s.riverChains.length === 0) return;
 
     const altitudeMeters = Math.max(0.0, (s.distance - 1.0) * s.planetRadiusMeters);
     if (altitudeMeters <= localTransitionAltitudeMeters) return;
@@ -107,24 +113,132 @@ function draw(s) {
 
     context.lineCap = 'round';
     context.lineJoin = 'round';
-    for (const path of s.paths) {
-        const from = [path.fromX * 1.006, path.fromY * 1.006, path.fromZ * 1.006];
-        const to = [path.toX * 1.006, path.toY * 1.006, path.toZ * 1.006];
-        const midpoint = normalize([(from[0] + to[0]) * 0.5, (from[1] + to[1]) * 0.5, (from[2] + to[2]) * 0.5]);
-        if (dot(midpoint, eye) <= 1.0) continue;
-
-        const projectedFrom = project(viewProjection, from, canvas.width, canvas.height);
-        const projectedTo = project(viewProjection, to, canvas.width, canvas.height);
-        if (!projectedFrom || !projectedTo) continue;
-
-        const discharge = clamp(path.relativeDischarge ?? 0.2, 0.08, 1.0);
-        context.strokeStyle = `rgba(68, 188, 235, ${0.48 + discharge * 0.42})`;
-        context.lineWidth = 0.8 + discharge * 2.6;
-        context.beginPath();
-        context.moveTo(projectedFrom[0], projectedFrom[1]);
-        context.lineTo(projectedTo[0], projectedTo[1]);
-        context.stroke();
+    for (const chain of s.riverChains) {
+        drawRiverChain(context, chain, eye, viewProjection, canvas.width, canvas.height);
     }
+}
+
+function buildRiverChains(paths) {
+    if (!paths || paths.length === 0) return [];
+
+    const outgoing = new Map();
+    const incomingCount = new Map();
+    for (const path of paths) {
+        const fromKey = endpointKey(path.fromX, path.fromY, path.fromZ);
+        const toKey = endpointKey(path.toX, path.toY, path.toZ);
+        outgoing.set(fromKey, path);
+        incomingCount.set(toKey, (incomingCount.get(toKey) ?? 0) + 1);
+        if (!incomingCount.has(fromKey)) incomingCount.set(fromKey, 0);
+    }
+
+    const visited = new Set();
+    const chains = [];
+    const sourcePaths = paths.filter(path => incomingCount.get(endpointKey(path.fromX, path.fromY, path.fromZ)) === 0);
+
+    for (const source of sourcePaths) {
+        const chain = followChain(source, outgoing, visited);
+        if (chain) chains.push(chain);
+    }
+
+    for (const path of paths) {
+        if (visited.has(segmentKey(path))) continue;
+        const chain = followChain(path, outgoing, visited);
+        if (chain) chains.push(chain);
+    }
+
+    return chains;
+}
+
+function followChain(start, outgoing, visited) {
+    const points = [];
+    const discharges = [];
+    const streamOrders = [];
+    let current = start;
+
+    while (current && !visited.has(segmentKey(current))) {
+        visited.add(segmentKey(current));
+        if (points.length === 0) points.push(surfacePoint(current.fromX, current.fromY, current.fromZ));
+        points.push(surfacePoint(current.toX, current.toY, current.toZ));
+        discharges.push(clamp(current.relativeDischarge ?? 0.2, 0.08, 1.0));
+        streamOrders.push(current.streamOrder ?? 1);
+        current = outgoing.get(endpointKey(current.toX, current.toY, current.toZ));
+    }
+
+    if (points.length < 2) return null;
+    return {
+        points,
+        discharge: Math.max(...discharges),
+        streamOrder: Math.max(...streamOrders)
+    };
+}
+
+function drawRiverChain(context, chain, eye, viewProjection, width, height) {
+    const visibleRuns = [];
+    let currentRun = [];
+
+    for (const point of chain.points) {
+        if (dot(point, eye) <= 1.0) {
+            if (currentRun.length >= 2) visibleRuns.push(currentRun);
+            currentRun = [];
+            continue;
+        }
+
+        const projected = project(viewProjection, point, width, height);
+        if (!projected) {
+            if (currentRun.length >= 2) visibleRuns.push(currentRun);
+            currentRun = [];
+            continue;
+        }
+
+        currentRun.push(projected);
+    }
+
+    if (currentRun.length >= 2) visibleRuns.push(currentRun);
+    if (visibleRuns.length === 0) return;
+
+    const discharge = chain.discharge;
+    const orderScale = clamp((chain.streamOrder - 1) * 0.12, 0.0, 0.45);
+    context.strokeStyle = `rgba(68, 188, 235, ${0.46 + discharge * 0.44})`;
+    context.lineWidth = 0.75 + discharge * 2.4 + orderScale;
+
+    for (const points of visibleRuns) {
+        drawSmoothPolyline(context, points);
+    }
+}
+
+function drawSmoothPolyline(context, points) {
+    context.beginPath();
+    context.moveTo(points[0][0], points[0][1]);
+
+    if (points.length === 2) {
+        context.lineTo(points[1][0], points[1][1]);
+        context.stroke();
+        return;
+    }
+
+    for (let index = 1; index < points.length - 1; index++) {
+        const current = points[index];
+        const next = points[index + 1];
+        const midpointX = (current[0] + next[0]) * 0.5;
+        const midpointY = (current[1] + next[1]) * 0.5;
+        context.quadraticCurveTo(current[0], current[1], midpointX, midpointY);
+    }
+
+    const last = points[points.length - 1];
+    context.lineTo(last[0], last[1]);
+    context.stroke();
+}
+
+function surfacePoint(x, y, z) {
+    return [x * riverSurfaceOffset, y * riverSurfaceOffset, z * riverSurfaceOffset];
+}
+
+function endpointKey(x, y, z) {
+    return `${Math.round(x * endpointPrecision)},${Math.round(y * endpointPrecision)},${Math.round(z * endpointPrecision)}`;
+}
+
+function segmentKey(path) {
+    return `${endpointKey(path.fromX, path.fromY, path.fromZ)}>${endpointKey(path.toX, path.toY, path.toZ)}`;
 }
 
 function project(matrix, point, width, height) {
