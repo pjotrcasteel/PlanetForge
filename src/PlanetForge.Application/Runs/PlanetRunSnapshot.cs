@@ -9,4 +9,5 @@ public sealed record PlanetRunSnapshot(
     IReadOnlyList<PlanetJournalEntry> Journal,
     IReadOnlyList<PlanetResearchUnlock> ResearchUnlocks,
     IReadOnlyList<PlanetResearchUnlockDefinition> ResearchChoices,
-    bool ResearchChoiceAvailable);
+    bool ResearchChoiceAvailable,
+    PlanetWaterSurvey? WaterSurvey);
