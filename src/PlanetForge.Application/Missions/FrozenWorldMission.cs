@@ -140,6 +140,32 @@ public sealed class FrozenWorldMission(PlanetExperience planetExperience)
     public MissionInterventionDefinition GetDefinition(MissionInterventionType type)
         => InterventionDefinitions.Single(definition => definition.Type == type);
 
+    public FrozenWorldMissionState ExportState()
+        => new(
+            planetExperience.ExportState(),
+            budgetRemaining,
+            missionYearsElapsed,
+            stableYears,
+            status,
+            plannedInterventions.ToArray(),
+            prediction,
+            lastTurn);
+
+    public MissionSnapshot RestoreState(FrozenWorldMissionState restoredState)
+    {
+        ArgumentNullException.ThrowIfNull(restoredState);
+        currentPlanet = planetExperience.RestoreState(restoredState.Planet);
+        budgetRemaining = restoredState.BudgetRemaining;
+        missionYearsElapsed = restoredState.MissionYearsElapsed;
+        stableYears = restoredState.StableYears;
+        status = restoredState.Status;
+        prediction = restoredState.Prediction;
+        lastTurn = restoredState.LastTurn;
+        plannedInterventions.Clear();
+        plannedInterventions.AddRange(restoredState.PlannedInterventions);
+        return CreateSnapshot();
+    }
+
     private PlanetRenderSnapshot CurrentPlanet => currentPlanet ?? throw new InvalidOperationException("Start the mission before using it.");
 
     private void ApplyPlan()
