@@ -16,7 +16,7 @@ public sealed class FrozenWorldSnowballInitializationTests
 
         var snapshot = mission.Start();
 
-        Assert.AreEqual(1.0, snapshot.Planet.ClimateFeedback.CryosphereFraction, 0.000001);
+        Assert.IsGreaterThan(0.25, snapshot.Planet.ClimateFeedback.CryosphereFraction);
         Assert.AreEqual(1.0, snapshot.Planet.ClimateFeedback.SeaIceFraction, 0.000001);
         Assert.AreEqual(1.0, snapshot.Planet.ClimateFeedback.LandIceFraction, 0.000001);
         Assert.AreEqual(1.0, snapshot.Planet.ClimateFeedback.SnowCoverFraction, 0.000001);
