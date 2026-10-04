@@ -13,7 +13,7 @@ const polarEdgeStartDegrees = 64.0;
 const polarEdgeFullDegrees = 75.0;
 const finalSeaIceLatitudeDegrees = 68.5;
 const finalLandIceLatitudeDegrees = 69.5;
-const finalAlpineSnowlineMeters = 3_800.0;
+const finalAlpineSnowlineMeters = 4_100.0;
 const alpineSnowTransitionMeters = 650.0;
 
 export function initialize(overlayCanvasId, inputCanvasId, snapshot) {
@@ -372,53 +372,58 @@ void main() {
 
     float terrainNoise = iceNoise(vDirection);
     float broadWarpDegrees = (terrainNoise - 0.5) * 12.0;
-    float elevationColdBiasDegrees = ocean ? 0.0 : clamp(max(vElevationMeters, 0.0) / 800.0, 0.0, 6.0);
+    float elevationColdBiasDegrees = ocean ? 0.0 : clamp(max(vElevationMeters, 0.0) / 850.0, 0.0, 5.5);
     float iceSuitabilityDegrees = latitudeDegrees + broadWarpDegrees + elevationColdBiasDegrees;
 
-    float seaRetreat = pow(1.0 - clamp(uSeaIceFraction, 0.0, 1.0), 0.85);
-    float landRetreat = pow(1.0 - clamp(uLandIceFraction, 0.0, 1.0), 0.75);
-    float snowRetreat = pow(1.0 - clamp(uSnowCoverFraction, 0.0, 1.0), 0.85);
+    float seaRetreat = pow(1.0 - clamp(uSeaIceFraction, 0.0, 1.0), 0.75);
+    float landRetreat = pow(1.0 - clamp(uLandIceFraction, 0.0, 1.0), 0.55);
+    float snowRetreat = pow(1.0 - clamp(uSnowCoverFraction, 0.0, 1.0), 0.78);
 
     float seaIceLineDegrees = mix(-25.0, ${finalSeaIceLatitudeDegrees.toFixed(1)}, seaRetreat);
     float landIceLineDegrees = mix(-25.0, ${finalLandIceLatitudeDegrees.toFixed(1)}, landRetreat);
-    float seaSheet = smoothstep(seaIceLineDegrees - 1.5, seaIceLineDegrees + 6.5, iceSuitabilityDegrees);
-    float landSheet = smoothstep(landIceLineDegrees - 1.5, landIceLineDegrees + 7.0, iceSuitabilityDegrees);
+    float seaSheet = smoothstep(seaIceLineDegrees - 1.5, seaIceLineDegrees + 6.0, iceSuitabilityDegrees);
+    float landSheet = smoothstep(landIceLineDegrees - 1.0, landIceLineDegrees + 6.5, iceSuitabilityDegrees);
 
     float snowlineMeters = mix(-1200.0, ${finalAlpineSnowlineMeters.toFixed(1)}, snowRetreat);
-    float localSnowlineMeters = snowlineMeters + ((0.5 - terrainNoise) * 360.0);
+    float localSnowlineMeters = snowlineMeters + ((0.5 - terrainNoise) * 300.0);
     float alpineSnow = ocean ? 0.0 : smoothstep(localSnowlineMeters, localSnowlineMeters + ${alpineSnowTransitionMeters.toFixed(1)}, vElevationMeters);
-    alpineSnow *= 1.0 - smoothstep(268.0, 273.0, localTemperature);
+    alpineSnow *= 1.0 - smoothstep(266.0, 271.0, localTemperature);
 
     float edgeWarpDegrees = (terrainNoise - 0.5) * 11.0;
     float coreWarpDegrees = (terrainNoise - 0.5) * 5.0;
-    float polarEdge = smoothstep(${polarEdgeStartDegrees.toFixed(1)}, ${polarEdgeFullDegrees.toFixed(1)}, latitudeDegrees + edgeWarpDegrees + (elevationColdBiasDegrees * 0.20));
+    float polarEdge = smoothstep(${polarEdgeStartDegrees.toFixed(1)}, ${polarEdgeFullDegrees.toFixed(1)}, latitudeDegrees + edgeWarpDegrees + (elevationColdBiasDegrees * 0.18));
     float polarCore = smoothstep(${polarCoreStartDegrees.toFixed(1)}, ${polarCoreFullDegrees.toFixed(1)}, latitudeDegrees + coreWarpDegrees);
     float permanentPolar = max(polarEdge, polarCore * 0.90);
-    float permanentAlpine = ocean ? 0.0 : smoothstep(4400.0, 5200.0, vElevationMeters) * (1.0 - smoothstep(261.0, 269.0, localTemperature));
+    float permanentAlpine = ocean ? 0.0 : smoothstep(4600.0, 5400.0, vElevationMeters) * (1.0 - smoothstep(259.0, 267.0, localTemperature));
 
     float coverage = ocean
         ? max(seaSheet, permanentPolar)
-        : max(max(landSheet, alpineSnow * 0.66), max(permanentPolar, permanentAlpine * 0.72));
+        : max(max(landSheet, alpineSnow * 0.58), max(permanentPolar, permanentAlpine * 0.66));
     coverage = smoothstep(0.16, 0.70, coverage);
 
-    float packNoise = valueNoise((vDirection * 25.0) + vec3(3.0, -7.0, 5.0));
-    float marginalSeaIce = ocean ? 1.0 - smoothstep(78.0, 84.0, latitudeDegrees) : 0.0;
-    float leadStrength = ocean ? smoothstep(0.46, 0.59, packNoise) * marginalSeaIce : 0.0;
-    coverage *= 1.0 - (leadStrength * 0.18);
-    if (coverage < 0.025) discard;
+    float floeBroad = valueNoise((vDirection * 10.0) + vec3(-4.0, 5.0, 9.0));
+    float floeFine = valueNoise((vDirection * 29.0) + vec3(8.0, -3.0, 2.0));
+    float floeNoise = (floeBroad * 0.68) + (floeFine * 0.32);
+    float poleDensity = smoothstep(63.0, 84.0, latitudeDegrees);
+    float floeThreshold = mix(0.58, 0.32, poleDensity);
+    float floePresence = smoothstep(floeThreshold - 0.075, floeThreshold + 0.055, floeNoise);
+    float deepPack = smoothstep(80.0, 87.0, latitudeDegrees);
+    float seaPackMask = max(floePresence, deepPack * 0.92);
+    if (ocean) coverage *= mix(0.20, 1.0, seaPackMask);
+    if (coverage < 0.04) discard;
 
     float surfaceTexture = valueNoise((vDirection * 18.0) + vec3(6.0, -2.0, 3.0));
-    float fineTexture = valueNoise((vDirection * 34.0) + vec3(-5.0, 8.0, 1.0));
-    float visualTexture = (surfaceTexture * 0.70) + (fineTexture * 0.30);
-    float edgeTexture = mix(0.91, 1.03, visualTexture);
-    vec3 seaIceColor = vec3(0.70, 0.83, 0.88);
-    vec3 landIceColor = vec3(0.84, 0.89, 0.89);
+    float fineTexture = valueNoise((vDirection * 36.0) + vec3(-5.0, 8.0, 1.0));
+    float visualTexture = (surfaceTexture * 0.68) + (fineTexture * 0.32);
+    float edgeTexture = mix(0.90, 1.03, visualTexture);
+    vec3 seaIceColor = vec3(0.68, 0.82, 0.87);
+    vec3 landIceColor = vec3(0.73, 0.79, 0.79);
     vec3 iceColor = (ocean ? seaIceColor : landIceColor) * edgeTexture;
 
-    float baseAlpha = 0.10 + (coverage * (ocean ? 0.72 : 0.74));
-    float textureAlpha = mix(0.82, 1.0, visualTexture);
+    float baseAlpha = 0.08 + (coverage * (ocean ? 0.67 : 0.58));
+    float textureAlpha = mix(0.84, 1.0, visualTexture);
     float polarInterior = smoothstep(75.0, 84.0, latitudeDegrees);
-    float interiorVariation = mix(textureAlpha, mix(0.76, 0.96, visualTexture), polarInterior);
-    float alpha = clamp(baseAlpha * interiorVariation, 0.0, 0.84);
+    float interiorVariation = mix(textureAlpha, mix(0.80, 0.96, visualTexture), polarInterior);
+    float alpha = clamp(baseAlpha * interiorVariation, 0.0, ocean ? 0.76 : 0.66);
     outColor = vec4(iceColor, alpha);
 }`;
