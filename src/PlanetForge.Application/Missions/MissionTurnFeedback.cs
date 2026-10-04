@@ -4,6 +4,8 @@ public sealed record MissionTurnFeedback(
     bool PredictionCorrect,
     string Headline,
     string Explanation,
+    IReadOnlyList<MissionInterventionType> InterventionsApplied,
+    int CreditsSpent,
     double TemperatureBeforeKelvin,
     double TemperatureAfterKelvin,
     double CryosphereBefore,
