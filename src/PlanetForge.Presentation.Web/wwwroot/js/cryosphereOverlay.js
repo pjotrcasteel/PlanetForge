@@ -38,6 +38,7 @@ export function initialize(overlayCanvasId, inputCanvasId, snapshot) {
         seaIceFraction: 1.0,
         landIceFraction: 1.0,
         snowCoverFraction: 1.0,
+        visible: true,
         tiles: new Map(),
         dirty: true,
         attributes: {
@@ -68,18 +69,27 @@ export function setPlanet(snapshot) {
     state.seaIceFraction = snapshot.climateFeedback?.seaIceFraction ?? snapshot.climateFeedback?.cryosphereFraction ?? state.seaIceFraction;
     state.landIceFraction = snapshot.climateFeedback?.landIceFraction ?? snapshot.climateFeedback?.cryosphereFraction ?? state.landIceFraction;
     state.snowCoverFraction = snapshot.climateFeedback?.snowCoverFraction ?? snapshot.climateFeedback?.cryosphereFraction ?? state.snowCoverFraction;
+    state.visible = !snapshot.localSurface;
 
-    const activeKeys = new Set();
-    for (const tile of snapshot.surfaceTiles ?? []) {
-        if (!tile?.positions?.length || !tile.surfaceVertexCount) continue;
-        activeKeys.add(tile.key);
-        if (!state.tiles.has(tile.key)) state.tiles.set(tile.key, createTileBuffer(state.gl, tile));
-    }
+    const surfaceTiles = snapshot.surfaceTiles ?? [];
+    if (surfaceTiles.length > 0) {
+        const activeKeys = new Set();
+        for (const tile of surfaceTiles) {
+            if (!tile?.key || !tile.surfaceVertexCount) continue;
 
-    for (const [key, tile] of state.tiles) {
-        if (activeKeys.has(key)) continue;
-        state.gl.deleteBuffer(tile.positionBuffer);
-        state.tiles.delete(key);
+            activeKeys.add(tile.key);
+            if (!tile.positions?.length) continue;
+
+            const existing = state.tiles.get(tile.key);
+            if (existing) state.gl.deleteBuffer(existing.positionBuffer);
+            state.tiles.set(tile.key, createTileBuffer(state.gl, tile));
+        }
+
+        for (const [key, tile] of state.tiles) {
+            if (activeKeys.has(key)) continue;
+            state.gl.deleteBuffer(tile.positionBuffer);
+            state.tiles.delete(key);
+        }
     }
 
     state.dirty = true;
@@ -125,9 +135,9 @@ function installInput(s) {
     });
     canvas.addEventListener('wheel', event => {
         const zoomFactor = Math.exp(event.deltaY * 0.0015);
-        const minimumAltitudeRatio = minimumCameraAltitudeMeters / Math.max(s.planetRadiusMeters, 1.0);
-        const altitudeRatio = clamp(s.distance - 1.0, minimumAltitudeRatio, maximumCameraAltitudeRatio);
-        s.distance = 1.0 + clamp(altitudeRatio * zoomFactor, minimumAltitudeRatio, maximumCameraAltitudeRatio);
+        const minimumCameraAltitudeRatio = minimumCameraAltitudeMeters / Math.max(s.planetRadiusMeters, 1.0);
+        const altitudeRatio = clamp(s.distance - 1.0, minimumCameraAltitudeRatio, maximumCameraAltitudeRatio);
+        s.distance = 1.0 + clamp(altitudeRatio * zoomFactor, minimumCameraAltitudeRatio, maximumCameraAltitudeRatio);
         s.dirty = true;
     }, { passive: true });
 }
@@ -157,6 +167,7 @@ function draw(s) {
     gl.viewport(0, 0, canvas.width, canvas.height);
     gl.clearColor(0, 0, 0, 0);
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+    if (!s.visible) return;
 
     const altitudeMeters = Math.max(0.0, (s.distance - 1.0) * s.planetRadiusMeters);
     if (altitudeMeters <= localTransitionAltitudeMeters) return;
