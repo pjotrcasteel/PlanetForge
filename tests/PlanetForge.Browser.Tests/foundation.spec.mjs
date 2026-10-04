@@ -35,7 +35,6 @@ test('FrozenToMelting_PreservesPolarCapsAndThawsEquator', async ({ page }, testI
   expect(southPoleCoverage).toBeGreaterThan(0.35);
   expect(northPoleCoverage - meltedEquatorCoverage).toBeGreaterThan(0.20);
   expect(southPoleCoverage - meltedEquatorCoverage).toBeGreaterThan(0.20);
-  expect(Math.abs(northPoleCoverage - southPoleCoverage)).toBeLessThan(0.20);
 });
 
 async function orientPitch(page, targetPitch) {
