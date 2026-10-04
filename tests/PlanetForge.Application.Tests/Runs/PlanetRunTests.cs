@@ -35,7 +35,7 @@ public sealed class PlanetRunTests
 
         Assert.AreEqual(MissionStatus.Won, completed.Mission.Status);
         Assert.AreEqual(PlanetRunEra.WaterWorld, completed.Era);
-        Assert.IsGreaterThanOrEqualTo(10, completed.Insight);
+        Assert.IsTrue(completed.Insight >= 10);
         Assert.IsTrue(completed.ResearchChoiceAvailable);
         Assert.IsTrue(completed.Journal.Any(entry => entry.Key == "stable-surface-water"));
         Assert.HasCount(3, completed.ResearchChoices);
