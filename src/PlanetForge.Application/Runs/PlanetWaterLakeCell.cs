@@ -1,7 +1,8 @@
+using PlanetForge.Domain.Surface;
+
 namespace PlanetForge.Application.Runs;
 
 public sealed record PlanetWaterLakeCell(
-    double X,
-    double Y,
-    double Z,
-    double AngularRadiusRadians);
+    int LakeId,
+    double SurfaceRadiusRatio,
+    IReadOnlyList<PlanetVector> BoundaryDirections);
