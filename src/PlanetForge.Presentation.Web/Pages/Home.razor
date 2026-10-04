@@ -8,6 +8,7 @@
 <main class="foundation-shell">
     <section class="planet-stage foundation-stage @PlanetVisualClass()">
         <canvas id="planet-canvas" aria-label="Interactive simulated planet"></canvas>
+        <canvas id="cryosphere-overlay-canvas" aria-hidden="true"></canvas>
         <canvas id="water-overlay-canvas" aria-hidden="true"></canvas>
 
         <div class="foundation-clock" aria-live="polite">
@@ -22,13 +23,15 @@
 </main>
 
 @code {
-    private const int ClimateFrameDelayMilliseconds = 140;
+    private const int ClimateFrameDelayMilliseconds = 280;
+    private const int ClimateTransitionLeadInMilliseconds = 700;
     private const int HydrologyFrameDelayMilliseconds = 260;
     private const int ScaffoldFrameDelayMilliseconds = 65;
     private const int ScaffoldFrameCount = 36;
 
     private readonly CancellationTokenSource disposeCancellationTokenSource = new();
     private IJSObjectReference? rendererModule;
+    private IJSObjectReference? cryosphereRendererModule;
     private IJSObjectReference? waterRendererModule;
     private PlanetRenderSnapshot? snapshot;
     private PlanetRunSnapshot? run;
@@ -53,6 +56,9 @@
 
         rendererModule = await JsRuntime.InvokeAsync<IJSObjectReference>("import", disposeCancellationTokenSource.Token, "./js/planetRenderer.js");
         await rendererModule.InvokeVoidAsync("initialize", disposeCancellationTokenSource.Token, "planet-canvas", snapshot, GetOrCreateSurfaceLodReference());
+
+        cryosphereRendererModule = await JsRuntime.InvokeAsync<IJSObjectReference>("import", disposeCancellationTokenSource.Token, "./js/cryosphereOverlay.js");
+        await cryosphereRendererModule.InvokeVoidAsync("initialize", disposeCancellationTokenSource.Token, "cryosphere-overlay-canvas", "planet-canvas", snapshot);
 
         waterRendererModule = await JsRuntime.InvokeAsync<IJSObjectReference>("import", disposeCancellationTokenSource.Token, "./js/waterOverlay.js");
         await waterRendererModule.InvokeVoidAsync("initialize", disposeCancellationTokenSource.Token, "water-overlay-canvas", "planet-canvas", snapshot.PhysicalParameters.RadiusMeters);
@@ -105,6 +111,7 @@
             Run.QueueIntervention(MissionInterventionType.DarkenSurface);
             var result = Run.SimulateCommit();
 
+            await Task.Delay(ClimateTransitionLeadInMilliseconds, disposeCancellationTokenSource.Token);
             foreach (var frame in result.Frames)
             {
                 disposeCancellationTokenSource.Token.ThrowIfCancellationRequested();
@@ -223,9 +230,19 @@
 
     private async Task SyncPlanetAsync()
     {
-        if (rendererModule is not null && snapshot is not null)
+        if (snapshot is null)
+        {
+            return;
+        }
+
+        if (rendererModule is not null)
         {
             await rendererModule.InvokeVoidAsync("setPlanet", disposeCancellationTokenSource.Token, snapshot);
+        }
+
+        if (cryosphereRendererModule is not null)
+        {
+            await cryosphereRendererModule.InvokeVoidAsync("setPlanet", disposeCancellationTokenSource.Token, snapshot);
         }
     }
 
@@ -281,6 +298,18 @@
             {
                 await waterRendererModule.InvokeVoidAsync("dispose", CancellationToken.None);
                 await waterRendererModule.DisposeAsync();
+            }
+            catch (JSDisconnectedException)
+            {
+            }
+        }
+
+        if (cryosphereRendererModule is not null)
+        {
+            try
+            {
+                await cryosphereRendererModule.InvokeVoidAsync("dispose", CancellationToken.None);
+                await cryosphereRendererModule.DisposeAsync();
             }
             catch (JSDisconnectedException)
             {
