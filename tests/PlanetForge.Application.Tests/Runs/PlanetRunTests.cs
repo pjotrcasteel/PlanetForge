@@ -80,6 +80,29 @@ public sealed class PlanetRunTests
     }
 
     [TestMethod]
+    public void SimulateWaterWorld_RepeatedRunContinuesMaturingRiverNetwork()
+    {
+        var run = CreateRun();
+        run.StartNew();
+        CompleteFrozenWorld(run);
+
+        var first = run.SimulateWaterWorld(CancellationToken.None).Run.WaterCycle;
+        var second = run.SimulateWaterWorld(CancellationToken.None).Run.WaterCycle;
+
+        Assert.IsNotNull(first);
+        Assert.IsNotNull(second);
+        Assert.IsGreaterThan(first.SimulatedYears, 0);
+        Assert.IsGreaterThan(first.ActiveRiverSegmentCount, 0);
+        Assert.IsGreaterThan(first.ActiveRiverSegmentCount, 0);
+        Assert.IsGreaterThan(first.SimulatedYears, 0);
+        Assert.IsGreaterThan(first.ActiveRiverSegmentCount, 0);
+        Assert.IsGreaterThan(first.RiverActivationFraction, 0.0);
+        Assert.IsGreaterThan(second.SimulatedYears, first.SimulatedYears);
+        Assert.IsGreaterThan(second.RiverActivationFraction, first.RiverActivationFraction);
+        Assert.IsGreaterThanOrEqualTo(second.ActiveRiverSegmentCount, first.ActiveRiverSegmentCount);
+    }
+
+    [TestMethod]
     public void SurveyWaterWorld_ContinuesRunWithTerrainDerivedHydrology()
     {
         var run = CreateRun();
