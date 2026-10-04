@@ -1,8 +1,6 @@
 @using System.Text.Json
 @using PlanetForge.Application.Missions
 @using PlanetForge.Application.Runs
-@using PlanetForge.Domain.Atmosphere
-@using PlanetForge.Domain.Hydrology
 @using PlanetForge.Domain.Physics
 @implements IAsyncDisposable
 @inject PlanetExperience Experience
@@ -12,7 +10,7 @@
 <main class="game-shell run-game-shell">
     <header class="run-topbar">
         <div>
-            <span class="eyebrow">PLANETFORGE 0.0.6.1 · PLANET RUN</span>
+            <span class="eyebrow">PLANETFORGE 0.0.7 · ACTIVE WATER WORLD</span>
             <h1>Forge one world through deep time.</h1>
         </div>
         <div class="run-topbar-status">
@@ -36,17 +34,30 @@
 
     <section class="planet-stage @PlanetVisualClass()">
         <canvas id="planet-canvas" aria-label="Interactive simulated planet"></canvas>
+        <canvas id="water-overlay-canvas" class="water-overlay-canvas" aria-hidden="true"></canvas>
         <div class="stage-metrics compact-stage-metrics">
             <span>@FormatSurfaceTemperature()</span>
             <span>@FormatCryosphere()</span>
             <span>@FormatWaterState()</span>
+            @if (run?.WaterCycle is not null)
+            {
+                <span>@run.WaterCycle.ActiveRiverSegmentCount FLOWING</span>
+            }
         </div>
-        @if (isSimulating)
+        @if (isSimulatingClimate)
         {
             <div class="timelapse-overlay">
                 <span>SIMULATING CLIMATE RESPONSE</span>
                 <strong>YEAR +@timelineYear.ToString("0")</strong>
                 <small>physical response shown in 10-year model steps</small>
+            </div>
+        }
+        else if (isSimulatingWater)
+        {
+            <div class="timelapse-overlay water-timelapse-overlay">
+                <span>ESTABLISHING THE WATER CYCLE</span>
+                <strong>HYDRO YEAR +@waterTimelineYear</strong>
+                <small>@FormatHydrologyStage()</small>
             </div>
         }
         <div class="stage-hint">DRAG TO ORBIT · SCROLL / PINCH TO ZOOM</div>
@@ -61,9 +72,9 @@
                 <p>@FormatObjectiveExplanation()</p>
             </div>
             <div class="deep-time-key">
-                <span>TIME SCALE</span>
+                <span>PROCESS SCALE</span>
                 <strong>@FormatCurrentTimeScale()</strong>
-                <small>Later geological and evolutionary eras will move into kyr and Myr.</small>
+                <small>PlanetForge changes time scale with the process being simulated.</small>
             </div>
         </section>
 
@@ -73,7 +84,7 @@
                 @foreach (var intervention in Run.Interventions)
                 {
                     <button class="intervention-choice @(PlanCount(intervention.Type) > 0 ? "selected" : string.Empty)"
-                            disabled="@(isSimulating || !Run.CanAfford(intervention.Type))"
+                            disabled="@(IsBusy() || !Run.CanAfford(intervention.Type))"
                             @onclick="() => PlanAsync(intervention.Type)">
                         <span>@intervention.ImpactLabel</span>
                         <strong>@intervention.Name</strong>
@@ -91,22 +102,19 @@
                 </div>
                 @if (mission.PlannedInterventions.Count > 0)
                 {
-                    <button class="quiet-button" disabled="@isSimulating" @onclick="ClearPlanAsync">Clear</button>
+                    <button class="quiet-button" disabled="@IsBusy()" @onclick="ClearPlanAsync">Clear</button>
                 }
                 <button class="primary-button commit-watch-button"
-                        disabled="@(isSimulating || mission.PlannedInterventions.Count == 0)"
+                        disabled="@(IsBusy() || mission.PlannedInterventions.Count == 0)"
                         @onclick="CommitAndWatchAsync">
-                    @(isSimulating ? "SIMULATING…" : "COMMIT & WATCH")
+                    @(isSimulatingClimate ? "SIMULATING…" : "COMMIT & WATCH")
                 </button>
             </section>
 
-            @if (mission.LastTurn is not null && !isSimulating)
+            @if (mission.LastTurn is not null && !IsBusy())
             {
                 <section class="outcome-line">
-                    <div>
-                        <span class="eyebrow">WHAT CHANGED</span>
-                        <strong>@mission.LastTurn.Headline</strong>
-                    </div>
+                    <div><span class="eyebrow">WHAT CHANGED</span><strong>@mission.LastTurn.Headline</strong></div>
                     <p>@mission.LastTurn.Explanation</p>
                 </section>
             }
@@ -116,51 +124,52 @@
             <section class="chapter-transition failure-transition">
                 <span class="eyebrow">THIS RUN STALLED</span>
                 <h2>The frozen state never reached persistent liquid water.</h2>
-                <p>The planet and journal show exactly where the trajectory ended. Start a fresh run and try a different physical strategy.</p>
+                <p>The planet and journal show where the trajectory ended. Start a fresh world and try a different physical strategy.</p>
                 <button class="primary-button" @onclick="RestartRunAsync">Start a new world</button>
             </section>
         }
         else if (run.Era == PlanetRunEra.WaterWorld)
         {
-            <section class="chapter-transition water-transition">
-                <span class="eyebrow">ERA II · WATER WORLD</span>
-                <h2>The ice has retreated enough for a persistent hydrological world.</h2>
-                <p>This is not life yet. The next scientific question is spatial: where can the new liquid water collect and flow across this exact terrain?</p>
+            <section class="water-gameplay-dock">
+                <div class="water-gameplay-copy">
+                    <span class="eyebrow">ERA II · WATER WORLD</span>
+                    <h2>@(run.WaterCycle is null ? "Turn thawed water into a working planetary water cycle." : "The hydrological world is active.")</h2>
+                    <p>@(run.WaterCycle is null
+                        ? "Topography already defines where water could go. Now let evaporation, precipitation and runoff actually wet those pathways and fill closed basins."
+                        : "Blue channels on the globe are drainage paths that currently receive enough modeled runoff to stay active. Run another century to watch the same terrain remain connected under the present climate.")</p>
+                </div>
 
-                @if (run.WaterSurvey is null)
+                @if (run.WaterCycle is not null)
                 {
-                    <button class="primary-button commit-watch-button" disabled="@isSimulating" @onclick="SurveyWaterWorldAsync">MAP WATER PATHWAYS</button>
-                    <small>The survey derives drainage from topography. It does not pretend potential drainage is already rainfall or river discharge.</small>
-                }
-                else
-                {
-                    <div class="survey-result-line">
-                        <strong>@run.WaterSurvey.WatershedCount drainage basins</strong>
-                        <span>·</span>
-                        <strong>@run.WaterSurvey.LakeCount closed depressions</strong>
-                        <span>·</span>
-                        <strong>@run.WaterSurvey.PotentialRiverSegmentCount potential high-flow segments</strong>
+                    <div class="water-status-line">
+                        <span><strong>@run.WaterCycle.AnnualPrecipitationMillimeters.ToString("0")</strong> mm/yr precipitation</span>
+                        <span><strong>@run.WaterCycle.AnnualRunoffMillimeters.ToString("0")</strong> mm/yr routed runoff</span>
+                        <span><strong>@run.WaterCycle.ActiveLakeCount</strong> filled basins</span>
+                        <span><strong>@run.WaterCycle.ActiveRiverSegmentCount</strong> active channels</span>
                     </div>
-                    <p class="next-system-note">Next: make those pathways physically wet with rainfall, runoff, lakes and visible rivers. That is the Water World simulation we build next.</p>
                 }
+
+                <button class="primary-button water-cycle-button" disabled="@IsBusy()" @onclick="SimulateWaterWorldAsync">
+                    @(isSimulatingWater ? "WATER IS MOVING…" : run.WaterCycle is null ? "START WATER CYCLE & WATCH" : "WATCH THE NEXT CENTURY")
+                </button>
+                <small class="water-model-note">Reduced hydrology model: global precipitation is estimated from liquid-water availability, temperature and pressure; runoff is then routed over the real generated topography. It is not a full atmospheric circulation model.</small>
             </section>
 
             @if (run.ResearchChoiceAvailable)
             {
-                <section class="research-strip">
-                    <div>
-                        <span class="eyebrow">CHOOSE ONE SCIENTIFIC CAPABILITY</span>
-                        <strong>Spend Insight on what you want to understand better.</strong>
+                <details class="run-details research-details">
+                    <summary>Scientific capability available · @run.Insight Insight</summary>
+                    <div class="research-strip compact-research-strip">
+                        @foreach (var research in run.ResearchChoices)
+                        {
+                            <button disabled="@(run.Insight < research.InsightCost)" @onclick="() => SelectResearchAsync(research.Type)">
+                                <strong>@research.Name</strong>
+                                <small>@research.Capability</small>
+                                <span>@research.InsightCost Insight</span>
+                            </button>
+                        }
                     </div>
-                    @foreach (var research in run.ResearchChoices)
-                    {
-                        <button disabled="@(run.Insight < research.InsightCost)" @onclick="() => SelectResearchAsync(research.Type)">
-                            <strong>@research.Name</strong>
-                            <small>@research.Capability</small>
-                            <span>@research.InsightCost Insight</span>
-                        </button>
-                    }
-                </section>
+                </details>
             }
         }
 
@@ -182,12 +191,16 @@
         </details>
 
         <details class="run-details science-details">
-            <summary>Why did the planet change?</summary>
+            <summary>Science behind the current world</summary>
             <p>@FormatDiagnosis()</p>
             <div class="formula-list compact-formulas">
                 <div><span>Stellar energy</span><code>F ∝ 1 / d²</code></div>
                 <div><span>CO₂ forcing</span><code>ΔF = 5.35 ln(C / C₀)</code></div>
                 <div><span>Ice feedback</span><code>αeff = αbase + 0.28 · fcryosphere</code></div>
+                @if (run.WaterCycle is not null)
+                {
+                    <div><span>Water routing</span><code>precipitation → runoff → drainage</code></div>
+                }
             </div>
         </details>
 
@@ -217,14 +230,17 @@
 @code {
     private readonly CancellationTokenSource disposeCancellationTokenSource = new();
     private IJSObjectReference? rendererModule;
+    private IJSObjectReference? waterRendererModule;
     private IJSObjectReference? persistenceModule;
     private PlanetRenderSnapshot? snapshot;
     private PlanetRunSnapshot? run;
     private MissionSnapshot? mission;
     private PlanetRunSave? sandboxReturnSave;
     private bool sandboxMode;
-    private bool isSimulating;
+    private bool isSimulatingClimate;
+    private bool isSimulatingWater;
     private double timelineYear;
+    private int waterTimelineYear;
 
     protected override void OnInitialized() => ApplyRun(Run.StartNew());
 
@@ -264,9 +280,13 @@
 
         rendererModule = await JsRuntime.InvokeAsync<IJSObjectReference>("import", disposeCancellationTokenSource.Token, "./js/planetRenderer.js");
         await rendererModule.InvokeVoidAsync("initialize", disposeCancellationTokenSource.Token, "planet-canvas", snapshot, GetOrCreateSurfaceLodReference());
+        waterRendererModule = await JsRuntime.InvokeAsync<IJSObjectReference>("import", disposeCancellationTokenSource.Token, "./js/waterOverlay.js");
+        await waterRendererModule.InvokeVoidAsync("initialize", disposeCancellationTokenSource.Token, "water-overlay-canvas", "planet-canvas", snapshot.PhysicalParameters.RadiusMeters);
+        await SyncWaterOverlayAsync();
         StateHasChanged();
     }
 
+    private bool IsBusy() => isSimulatingClimate || isSimulatingWater;
     private async Task PlanAsync(MissionInterventionType type) => await ApplyRunAsync(Run.QueueIntervention(type), updatePlanet: false);
     private async Task ClearPlanAsync() => await ApplyRunAsync(Run.ClearPlan(), updatePlanet: false);
     private async Task SelectResearchAsync(PlanetResearchUnlock research) => await ApplyRunAsync(Run.SelectResearch(research), updatePlanet: false);
@@ -274,12 +294,12 @@
 
     private async Task CommitAndWatchAsync()
     {
-        if (isSimulating)
+        if (IsBusy())
         {
             return;
         }
 
-        isSimulating = true;
+        isSimulatingClimate = true;
         var result = Run.SimulateCommit();
         try
         {
@@ -302,13 +322,44 @@
         }
         finally
         {
-            isSimulating = false;
+            isSimulatingClimate = false;
             StateHasChanged();
         }
     }
 
-    private async Task SurveyWaterWorldAsync()
-        => await ApplyRunAsync(Run.SurveyWaterWorld(disposeCancellationTokenSource.Token), updatePlanet: false);
+    private async Task SimulateWaterWorldAsync()
+    {
+        if (IsBusy())
+        {
+            return;
+        }
+
+        isSimulatingWater = true;
+        var result = Run.SimulateWaterWorld(disposeCancellationTokenSource.Token);
+        try
+        {
+            foreach (var frame in result.Frames)
+            {
+                disposeCancellationTokenSource.Token.ThrowIfCancellationRequested();
+                waterTimelineYear = frame.Year;
+                if (waterRendererModule is not null)
+                {
+                    await waterRendererModule.InvokeVoidAsync("setWaterCycle", disposeCancellationTokenSource.Token, frame.State);
+                }
+
+                StateHasChanged();
+                await Task.Delay(420, disposeCancellationTokenSource.Token);
+            }
+
+            ApplyRun(result.Run);
+            await SaveRunAsync();
+        }
+        finally
+        {
+            isSimulatingWater = false;
+            StateHasChanged();
+        }
+    }
 
     private async Task ToggleSandboxAsync()
     {
@@ -316,6 +367,10 @@
         {
             sandboxReturnSave = Run.ExportSave();
             sandboxMode = true;
+            if (waterRendererModule is not null)
+            {
+                await waterRendererModule.InvokeVoidAsync("clearWaterCycle", disposeCancellationTokenSource.Token);
+            }
             return;
         }
 
@@ -342,6 +397,7 @@
         mission = nextRun.Mission;
         snapshot = mission.Planet;
         timelineYear = mission.MissionYearsElapsed;
+        waterTimelineYear = nextRun.WaterCycle?.SimulatedYears ?? 0;
     }
 
     private async Task ApplyRunAsync(PlanetRunSnapshot nextRun, bool updatePlanet)
@@ -352,7 +408,24 @@
             await rendererModule.InvokeVoidAsync("setPlanet", disposeCancellationTokenSource.Token, snapshot);
         }
 
+        await SyncWaterOverlayAsync();
         await SaveRunAsync();
+    }
+
+    private async Task SyncWaterOverlayAsync()
+    {
+        if (waterRendererModule is null)
+        {
+            return;
+        }
+
+        if (run?.WaterCycle is null)
+        {
+            await waterRendererModule.InvokeVoidAsync("clearWaterCycle", disposeCancellationTokenSource.Token);
+            return;
+        }
+
+        await waterRendererModule.InvokeVoidAsync("setWaterCycle", disposeCancellationTokenSource.Token, run.WaterCycle);
     }
 
     private async Task SaveRunAsync()
@@ -391,8 +464,9 @@
     private string FormatObjectiveExplanation()
         => run?.Era switch
         {
-            PlanetRunEra.DeadRock => "Choose a physical intervention, commit it once, then watch the climate evolve until the response becomes meaningful. You are changing forcing; the planet supplies the consequences.",
-            PlanetRunEra.WaterWorld => "Stable liquid water exists. Now map how topography routes it before we add rainfall, runoff and visible rivers.",
+            PlanetRunEra.DeadRock => "Choose a physical intervention once, then watch the climate supply the consequences.",
+            PlanetRunEra.WaterWorld when run.WaterCycle is null => "Liquid water exists, but dry drainage geometry is not yet a river system. Start the water cycle and watch precipitation, lakes and runoff occupy the terrain.",
+            PlanetRunEra.WaterWorld => "The water cycle is active. Explore the river network on the globe or run another century to test whether the present climate keeps it connected.",
             _ => "The next era unlocks only when its scientific prerequisites are actually modelled and met.",
         };
 
@@ -400,16 +474,30 @@
         => run?.Era switch
         {
             PlanetRunEra.DeadRock => "YEARS → CENTURIES",
-            PlanetRunEra.WaterWorld => "YEARS → KYR",
+            PlanetRunEra.WaterWorld => "DAYS → CENTURIES",
             PlanetRunEra.FirstLife => "KYR → MYR",
             _ => "MYR",
         };
+
+    private string FormatHydrologyStage()
+    {
+        var activation = run?.WaterCycle?.RiverActivationFraction ?? 0.0;
+        if (waterTimelineYear <= 1) return "FIRST PERSISTENT PRECIPITATION";
+        if (activation < 0.35) return "MAJOR DRAINAGE CHANNELS WETTING";
+        if (activation < 0.70) return "LAKES FILLING · RUNOFF CONNECTING";
+        return "PERSISTENT RIVER NETWORK";
+    }
 
     private string FormatDiagnosis()
     {
         if (snapshot is null)
         {
             return "Collecting planetary data…";
+        }
+
+        if (run?.WaterCycle is not null)
+        {
+            return $"At {FormatSurfaceTemperature()}, the reduced water-cycle model estimates {run.WaterCycle.AnnualPrecipitationMillimeters:0} mm/year of global mean precipitation and {run.WaterCycle.AnnualRunoffMillimeters:0} mm/year of routed runoff. Topography determines where that runoff concentrates; higher-contributing channels activate first.";
         }
 
         return $"The surface is {FormatSurfaceTemperature()}, the current forcing points toward {FormatTargetSurfaceTemperature()}, and {FormatCryosphere()} of the surface is in the cryosphere. Changes in ice cover alter effective albedo, so the planet can amplify the intervention through feedback.";
@@ -428,7 +516,7 @@
 
         if (snapshot.Water.LiquidFraction >= snapshot.Water.IceFraction && snapshot.Water.LiquidFraction >= snapshot.Water.VaporFraction)
         {
-            return "LIQUID WATER";
+            return run?.WaterCycle is null ? "LIQUID WATER" : "ACTIVE WATER CYCLE";
         }
 
         return snapshot.Water.IceFraction >= snapshot.Water.VaporFraction ? "ICE WORLD" : "STEAM WORLD";
@@ -443,6 +531,18 @@
     public async ValueTask DisposeAsync()
     {
         disposeCancellationTokenSource.Cancel();
+        if (waterRendererModule is not null)
+        {
+            try
+            {
+                await waterRendererModule.InvokeVoidAsync("dispose", CancellationToken.None);
+                await waterRendererModule.DisposeAsync();
+            }
+            catch (JSDisconnectedException)
+            {
+            }
+        }
+
         if (rendererModule is not null)
         {
             try

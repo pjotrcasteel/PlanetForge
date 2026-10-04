@@ -10,4 +10,5 @@ public sealed record PlanetRunSnapshot(
     IReadOnlyList<PlanetResearchUnlock> ResearchUnlocks,
     IReadOnlyList<PlanetResearchUnlockDefinition> ResearchChoices,
     bool ResearchChoiceAvailable,
-    PlanetWaterSurvey? WaterSurvey);
+    PlanetWaterSurvey? WaterSurvey,
+    PlanetWaterCycleState? WaterCycle);

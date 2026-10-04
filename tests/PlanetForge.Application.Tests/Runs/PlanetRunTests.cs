@@ -57,6 +57,29 @@ public sealed class PlanetRunTests
     }
 
     [TestMethod]
+    public void SimulateWaterWorld_ProgressivelyActivatesTerrainDerivedRunoff()
+    {
+        var run = CreateRun();
+        run.StartNew();
+        CompleteFrozenWorld(run);
+
+        var result = run.SimulateWaterWorld(CancellationToken.None);
+
+        Assert.HasCount(5, result.Frames);
+        Assert.IsTrue(result.Frames.Zip(result.Frames.Skip(1)).All(pair => pair.First.Year < pair.Second.Year));
+        Assert.IsTrue(result.Frames.Zip(result.Frames.Skip(1)).All(pair => pair.First.State.ActiveRiverSegmentCount <= pair.Second.State.ActiveRiverSegmentCount));
+        Assert.IsNotNull(result.Run.WaterSurvey);
+        Assert.IsNotNull(result.Run.WaterCycle);
+        Assert.IsGreaterThan(0, result.Run.WaterCycle.ActiveRiverSegmentCount);
+        Assert.IsGreaterThan(0.0, result.Run.WaterCycle.AnnualPrecipitationMillimeters);
+        Assert.IsGreaterThan(0.0, result.Run.WaterCycle.AnnualRunoffMillimeters);
+        Assert.HasCount(result.Run.WaterCycle.ActiveRiverSegmentCount, result.Run.WaterCycle.ActiveRiverSegments);
+        Assert.IsTrue(result.Run.WaterCycle.ActiveRiverSegments.All(segment => segment.RelativeDischarge is >= 0.08 and <= 1.0));
+        Assert.IsTrue(result.Run.Journal.Any(entry => entry.Key == "first-precipitation"));
+        Assert.IsTrue(result.Run.Journal.Any(entry => entry.Key == "active-runoff-network"));
+    }
+
+    [TestMethod]
     public void SurveyWaterWorld_ContinuesRunWithTerrainDerivedHydrology()
     {
         var run = CreateRun();
@@ -88,12 +111,12 @@ public sealed class PlanetRunTests
     }
 
     [TestMethod]
-    public void ExportAndRestore_PreservesPlanetRunStateThroughJsonRoundTrip()
+    public void ExportAndRestore_PreservesActiveWaterWorldThroughJsonRoundTrip()
     {
         var source = CreateRun();
         source.StartNew();
         var completed = CompleteFrozenWorld(source);
-        source.SurveyWaterWorld(CancellationToken.None);
+        var simulated = source.SimulateWaterWorld(CancellationToken.None).Run;
         source.SelectResearch(PlanetResearchUnlock.SurfaceRadiometry);
         var json = JsonSerializer.Serialize(source.ExportSave());
         var restoredSave = JsonSerializer.Deserialize<PlanetRunSave>(json);
@@ -109,6 +132,9 @@ public sealed class PlanetRunTests
         Assert.IsTrue(restored.ResearchUnlocks.Contains(PlanetResearchUnlock.SurfaceRadiometry));
         Assert.IsTrue(restored.Journal.Any(entry => entry.Key == "stable-surface-water"));
         Assert.IsNotNull(restored.WaterSurvey);
+        Assert.IsNotNull(restored.WaterCycle);
+        Assert.AreEqual(simulated.WaterCycle!.ActiveRiverSegmentCount, restored.WaterCycle.ActiveRiverSegmentCount);
+        Assert.HasCount(simulated.WaterCycle.ActiveRiverSegments.Count, restored.WaterCycle.ActiveRiverSegments);
         Assert.IsTrue(restored.Mission.Planet.SurfaceTiles.All(tile => tile.IncludesGeometry));
     }
 
