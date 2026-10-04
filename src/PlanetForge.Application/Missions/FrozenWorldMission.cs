@@ -8,7 +8,7 @@ public sealed class FrozenWorldMission(PlanetExperience planetExperience)
 {
     public const int StartingBudget = 100;
     public const int TurnYears = 25;
-    public const int TimelineStepYears = 10;
+    public const int TimelineStepYears = 2;
     public const int MaximumCommitYears = 100;
     public const int MaximumMissionYears = 500;
     public const int RequiredStableYears = 50;
