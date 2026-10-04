@@ -5,8 +5,8 @@ const minimumCameraAltitudeMeters = 3.0;
 const maximumCameraAltitudeRatio = 4.2;
 const localTransitionAltitudeMeters = 20_000.0;
 const localExitAltitudeMeters = 25_000.0;
-const riverSurfaceOffset = 1.006;
-const lakeSurfaceOffset = 1.004;
+const riverSurfaceOffset = 1.003;
+const lakeSurfaceOffset = 1.0025;
 const endpointPrecision = 100_000;
 const waterFieldStudyVersion = 1;
 
@@ -194,6 +194,7 @@ function draw(s) {
     const view = lookAt(eye, [0, 0, 0], [0, 1, 0]);
     const viewProjection = multiply(projection, view);
 
+    context.globalCompositeOperation = 'source-over';
     drawLakeCells(context, s.lakeCells, s.cycle?.lakeFillFraction ?? 0.0, eye, viewProjection, canvas.width, canvas.height);
 
     context.lineCap = 'round';
@@ -206,43 +207,106 @@ function draw(s) {
 function drawLakeCells(context, cells, fillFraction, eye, viewProjection, width, height) {
     if (!cells?.length) return;
 
-    const fillScale = 0.45 + (0.55 * Math.sqrt(clamp(fillFraction, 0.0, 1.0)));
-    for (const cell of cells) {
-        const direction = unitPoint(cell.x, cell.y, cell.z);
-        const center = scale(direction, lakeSurfaceOffset);
-        if (dot(center, eye) <= 1.0) continue;
+    const fillScale = 0.58 + (0.42 * Math.sqrt(clamp(fillFraction, 0.0, 1.0)));
+    for (const group of groupLakeCells(cells)) {
+        const boundary = [];
+        for (const cell of group) {
+            const direction = unitPoint(cell.x, cell.y, cell.z);
+            const tangent = createSurfaceTangent(direction);
+            const bitangent = safeNormalize(cross(direction, tangent), [0, 0, 1]);
+            const radiusRadians = Math.max(0.0005, (cell.angularRadiusRadians ?? 0.01) * fillScale);
 
-        const projectedCenter = project(viewProjection, center, width, height);
-        if (!projectedCenter) continue;
-
-        const tangent = createSurfaceTangent(direction);
-        const radiusRadians = Math.max(0.0005, (cell.angularRadiusRadians ?? 0.01) * fillScale);
-        const edgeDirection = normalize([
-            direction[0] * Math.cos(radiusRadians) + tangent[0] * Math.sin(radiusRadians),
-            direction[1] * Math.cos(radiusRadians) + tangent[1] * Math.sin(radiusRadians),
-            direction[2] * Math.cos(radiusRadians) + tangent[2] * Math.sin(radiusRadians)
-        ]);
-        const projectedEdge = project(viewProjection, scale(edgeDirection, lakeSurfaceOffset), width, height);
-        if (!projectedEdge) continue;
-
-        const radiusPixels = Math.max(1.1, Math.hypot(projectedEdge[0] - projectedCenter[0], projectedEdge[1] - projectedCenter[1]));
-        context.beginPath();
-        context.arc(projectedCenter[0], projectedCenter[1], radiusPixels * 1.16, 0, Math.PI * 2);
-        context.fillStyle = `rgba(8, 42, 55, ${0.32 + fillFraction * 0.18})`;
-        context.fill();
-
-        context.beginPath();
-        context.arc(projectedCenter[0], projectedCenter[1], radiusPixels, 0, Math.PI * 2);
-        context.fillStyle = `rgba(38, 143, 184, ${0.48 + fillFraction * 0.28})`;
-        context.fill();
-
-        if (radiusPixels >= 3.0) {
-            context.beginPath();
-            context.arc(projectedCenter[0] - radiusPixels * 0.18, projectedCenter[1] - radiusPixels * 0.18, radiusPixels * 0.58, 0, Math.PI * 2);
-            context.fillStyle = `rgba(139, 215, 238, ${0.08 + fillFraction * 0.10})`;
-            context.fill();
+            for (let sampleIndex = 0; sampleIndex < 8; sampleIndex++) {
+                const angle = sampleIndex / 8 * Math.PI * 2;
+                const radial = [
+                    (tangent[0] * Math.cos(angle)) + (bitangent[0] * Math.sin(angle)),
+                    (tangent[1] * Math.cos(angle)) + (bitangent[1] * Math.sin(angle)),
+                    (tangent[2] * Math.cos(angle)) + (bitangent[2] * Math.sin(angle))
+                ];
+                const edgeDirection = normalize([
+                    direction[0] * Math.cos(radiusRadians) + radial[0] * Math.sin(radiusRadians),
+                    direction[1] * Math.cos(radiusRadians) + radial[1] * Math.sin(radiusRadians),
+                    direction[2] * Math.cos(radiusRadians) + radial[2] * Math.sin(radiusRadians)
+                ]);
+                const surfacePoint = scale(edgeDirection, lakeSurfaceOffset);
+                if (dot(surfacePoint, eye) <= 1.0) continue;
+                const projected = project(viewProjection, surfacePoint, width, height);
+                if (projected) boundary.push(projected);
+            }
         }
+
+        const hull = convexHull(boundary);
+        if (hull.length < 3) continue;
+
+        context.beginPath();
+        context.moveTo(hull[0][0], hull[0][1]);
+        for (let index = 1; index < hull.length; index++) context.lineTo(hull[index][0], hull[index][1]);
+        context.closePath();
+        context.fillStyle = `rgba(24, 73, 85, ${0.56 + fillFraction * 0.14})`;
+        context.fill();
+        context.strokeStyle = `rgba(49, 103, 113, ${0.28 + fillFraction * 0.12})`;
+        context.lineWidth = 0.8;
+        context.stroke();
     }
+}
+
+function groupLakeCells(cells) {
+    const remaining = new Set(cells.map((_, index) => index));
+    const groups = [];
+
+    while (remaining.size > 0) {
+        const start = remaining.values().next().value;
+        remaining.delete(start);
+        const queue = [start];
+        const group = [];
+
+        while (queue.length > 0) {
+            const currentIndex = queue.pop();
+            const current = cells[currentIndex];
+            group.push(current);
+            for (const candidateIndex of [...remaining]) {
+                if (!lakeCellsTouch(current, cells[candidateIndex])) continue;
+                remaining.delete(candidateIndex);
+                queue.push(candidateIndex);
+            }
+        }
+
+        groups.push(group);
+    }
+
+    return groups;
+}
+
+function lakeCellsTouch(first, second) {
+    const firstDirection = unitPoint(first.x, first.y, first.z);
+    const secondDirection = unitPoint(second.x, second.y, second.z);
+    const separation = Math.acos(clamp(dot(firstDirection, secondDirection), -1.0, 1.0));
+    const firstRadius = first.angularRadiusRadians ?? 0.01;
+    const secondRadius = second.angularRadiusRadians ?? 0.01;
+    return separation <= (firstRadius + secondRadius) * 1.18;
+}
+
+function convexHull(points) {
+    if (points.length <= 3) return points;
+    const sorted = [...points].sort((first, second) => first[0] === second[0] ? first[1] - second[1] : first[0] - second[0]);
+    const lower = [];
+    for (const point of sorted) {
+        while (lower.length >= 2 && cross2d(lower[lower.length - 2], lower[lower.length - 1], point) <= 0) lower.pop();
+        lower.push(point);
+    }
+    const upper = [];
+    for (let index = sorted.length - 1; index >= 0; index--) {
+        const point = sorted[index];
+        while (upper.length >= 2 && cross2d(upper[upper.length - 2], upper[upper.length - 1], point) <= 0) upper.pop();
+        upper.push(point);
+    }
+    lower.pop();
+    upper.pop();
+    return lower.concat(upper);
+}
+
+function cross2d(origin, first, second) {
+    return ((first[0] - origin[0]) * (second[1] - origin[1])) - ((first[1] - origin[1]) * (second[0] - origin[0]));
 }
 
 function createSurfaceTangent(direction) {
@@ -370,15 +434,12 @@ function drawRiverChain(context, chain, eye, viewProjection, width, height) {
     if (visibleRuns.length === 0) return;
 
     const discharge = chain.discharge;
-    const orderScale = clamp((chain.streamOrder - 1) * 0.16, 0.0, 0.55);
-    const coreWidth = 0.72 + discharge * 2.15 + orderScale;
+    const orderScale = clamp((chain.streamOrder - 1) * 0.14, 0.0, 0.48);
+    const coreWidth = 0.62 + discharge * 1.65 + orderScale;
 
     for (const points of visibleRuns) {
-        drawSmoothPolyline(context, points, `rgba(8, 33, 43, ${0.34 + discharge * 0.18})`, coreWidth + 1.5);
-        drawSmoothPolyline(context, points, `rgba(67, 188, 235, ${0.48 + discharge * 0.42})`, coreWidth);
-        if (discharge > 0.55) {
-            drawSmoothPolyline(context, points, `rgba(170, 226, 247, ${0.12 + discharge * 0.12})`, Math.max(0.55, coreWidth * 0.28));
-        }
+        drawSmoothPolyline(context, points, `rgba(12, 35, 40, ${0.42 + discharge * 0.12})`, coreWidth + 0.9);
+        drawSmoothPolyline(context, points, `rgba(35, 105, 121, ${0.58 + discharge * 0.16})`, coreWidth);
     }
 }
 
