@@ -5,17 +5,14 @@ const minimumCameraAltitudeMeters = 3.0;
 const maximumCameraAltitudeRatio = 4.2;
 const localTransitionAltitudeMeters = 20_000.0;
 const localExitAltitudeMeters = 25_000.0;
-const landFreezeColdKelvin = 265.0;
-const landFreezeWarmKelvin = 273.0;
-const oceanFreezeColdKelvin = 266.0;
-const oceanFreezeWarmKelvin = 271.5;
 const latitudeCoolingKelvin = 18.0;
 const elevationLapseRateKelvinPerMeter = 0.0065;
-const permanentPolarStart = 0.84;
-const permanentPolarFull = 0.97;
-const finalIceSheetLatitudeStart = 0.86;
-const finalAlpineSnowlineMeters = 2_200.0;
-const alpineSnowTransitionMeters = 1_000.0;
+const polarStart = 0.78;
+const polarFull = 0.94;
+const finalSeaIceLatitudeStart = 0.84;
+const finalLandIceLatitudeStart = 0.88;
+const finalAlpineSnowlineMeters = 2_500.0;
+const alpineSnowTransitionMeters = 850.0;
 
 export function initialize(overlayCanvasId, inputCanvasId, snapshot) {
     const canvas = document.getElementById(overlayCanvasId);
@@ -38,7 +35,9 @@ export function initialize(overlayCanvasId, inputCanvasId, snapshot) {
         planetRadiusMeters: 6_371_000.0,
         seaLevelMeters: 0.0,
         surfaceTemperatureKelvin: 250.0,
-        cryosphereFraction: 1.0,
+        seaIceFraction: 1.0,
+        landIceFraction: 1.0,
+        snowCoverFraction: 1.0,
         tiles: new Map(),
         dirty: true,
         attributes: {
@@ -49,7 +48,9 @@ export function initialize(overlayCanvasId, inputCanvasId, snapshot) {
             planetRadiusMeters: gl.getUniformLocation(program, 'uPlanetRadiusMeters'),
             seaLevelMeters: gl.getUniformLocation(program, 'uSeaLevelMeters'),
             surfaceTemperatureKelvin: gl.getUniformLocation(program, 'uSurfaceTemperatureKelvin'),
-            cryosphereFraction: gl.getUniformLocation(program, 'uCryosphereFraction')
+            seaIceFraction: gl.getUniformLocation(program, 'uSeaIceFraction'),
+            landIceFraction: gl.getUniformLocation(program, 'uLandIceFraction'),
+            snowCoverFraction: gl.getUniformLocation(program, 'uSnowCoverFraction')
         }
     };
 
@@ -64,7 +65,9 @@ export function setPlanet(snapshot) {
     state.planetRadiusMeters = snapshot.physicalParameters?.radiusMeters ?? state.planetRadiusMeters;
     state.seaLevelMeters = snapshot.seaLevelMeters ?? state.seaLevelMeters;
     state.surfaceTemperatureKelvin = snapshot.climate?.surfaceTemperatureKelvin ?? state.surfaceTemperatureKelvin;
-    state.cryosphereFraction = snapshot.climateFeedback?.cryosphereFraction ?? snapshot.water?.iceFraction ?? state.cryosphereFraction;
+    state.seaIceFraction = snapshot.climateFeedback?.seaIceFraction ?? snapshot.climateFeedback?.cryosphereFraction ?? state.seaIceFraction;
+    state.landIceFraction = snapshot.climateFeedback?.landIceFraction ?? snapshot.climateFeedback?.cryosphereFraction ?? state.landIceFraction;
+    state.snowCoverFraction = snapshot.climateFeedback?.snowCoverFraction ?? snapshot.climateFeedback?.cryosphereFraction ?? state.snowCoverFraction;
 
     const activeKeys = new Set();
     for (const tile of snapshot.surfaceTiles ?? []) {
@@ -173,7 +176,9 @@ function draw(s) {
     gl.uniform1f(s.uniforms.planetRadiusMeters, s.planetRadiusMeters);
     gl.uniform1f(s.uniforms.seaLevelMeters, s.seaLevelMeters);
     gl.uniform1f(s.uniforms.surfaceTemperatureKelvin, s.surfaceTemperatureKelvin);
-    gl.uniform1f(s.uniforms.cryosphereFraction, s.cryosphereFraction);
+    gl.uniform1f(s.uniforms.seaIceFraction, s.seaIceFraction);
+    gl.uniform1f(s.uniforms.landIceFraction, s.landIceFraction);
+    gl.uniform1f(s.uniforms.snowCoverFraction, s.snowCoverFraction);
 
     for (const tile of s.tiles.values()) {
         gl.bindBuffer(gl.ARRAY_BUFFER, tile.positionBuffer);
@@ -262,33 +267,37 @@ in vec3 vDirection;
 in float vElevationMeters;
 uniform float uSeaLevelMeters;
 uniform float uSurfaceTemperatureKelvin;
-uniform float uCryosphereFraction;
+uniform float uSeaIceFraction;
+uniform float uLandIceFraction;
+uniform float uSnowCoverFraction;
 out vec4 outColor;
 void main() {
     float latitude = abs(vDirection.y);
-    float cryosphere = clamp(uCryosphereFraction, 0.0, 1.0);
-    float retreat = 1.0 - cryosphere;
     bool ocean = vElevationMeters < uSeaLevelMeters;
+    float localTemperature = uSurfaceTemperatureKelvin
+        - (${latitudeCoolingKelvin.toFixed(1)} * pow(latitude, 1.45))
+        - (max(vElevationMeters, 0.0) * ${elevationLapseRateKelvinPerMeter.toFixed(4)});
 
-    float latitudeCooling = ${latitudeCoolingKelvin.toFixed(1)} * pow(latitude, 1.45);
-    float elevationCooling = max(vElevationMeters, 0.0) * ${elevationLapseRateKelvinPerMeter.toFixed(4)};
-    float localTemperature = uSurfaceTemperatureKelvin - latitudeCooling - elevationCooling;
-    float localFreeze = ocean
-        ? 1.0 - smoothstep(${oceanFreezeColdKelvin.toFixed(1)}, ${oceanFreezeWarmKelvin.toFixed(1)}, localTemperature)
-        : 1.0 - smoothstep(${landFreezeColdKelvin.toFixed(1)}, ${landFreezeWarmKelvin.toFixed(1)}, localTemperature);
+    float seaRetreat = pow(1.0 - clamp(uSeaIceFraction, 0.0, 1.0), 1.45);
+    float landRetreat = pow(1.0 - clamp(uLandIceFraction, 0.0, 1.0), 1.55);
+    float snowRetreat = pow(1.0 - clamp(uSnowCoverFraction, 0.0, 1.0), 1.25);
 
-    float iceSheetLatitudeStart = mix(-0.25, ${finalIceSheetLatitudeStart.toFixed(2)}, retreat);
-    float latitudeSheet = smoothstep(iceSheetLatitudeStart, iceSheetLatitudeStart + 0.14, latitude);
-    float snowlineMeters = mix(-800.0, ${finalAlpineSnowlineMeters.toFixed(1)}, retreat);
-    float alpineSheet = ocean ? 0.0 : smoothstep(snowlineMeters, snowlineMeters + ${alpineSnowTransitionMeters.toFixed(1)}, vElevationMeters);
-    float massDrivenIce = max(latitudeSheet, alpineSheet);
+    float seaIceLine = mix(-0.45, ${finalSeaIceLatitudeStart.toFixed(2)}, seaRetreat);
+    float landIceLine = mix(-0.45, ${finalLandIceLatitudeStart.toFixed(2)}, landRetreat);
+    float seaSheet = smoothstep(seaIceLine, seaIceLine + 0.16, latitude);
+    float landSheet = smoothstep(landIceLine, landIceLine + 0.16, latitude);
 
-    float permanentPolar = smoothstep(${permanentPolarStart.toFixed(2)}, ${permanentPolarFull.toFixed(2)}, latitude);
-    float persistentLocalIce = max(permanentPolar, localFreeze * max(permanentPolar, alpineSheet));
-    float coverage = max(massDrivenIce, persistentLocalIce);
-    if (coverage < 0.025) discard;
+    float snowlineMeters = mix(-1200.0, ${finalAlpineSnowlineMeters.toFixed(1)}, snowRetreat);
+    float alpineSnow = ocean ? 0.0 : smoothstep(snowlineMeters, snowlineMeters + ${alpineSnowTransitionMeters.toFixed(1)}, vElevationMeters);
+    float permanentPolar = smoothstep(${polarStart.toFixed(2)}, ${polarFull.toFixed(2)}, latitude);
+    float permanentAlpine = ocean ? 0.0 : smoothstep(2600.0, 3400.0, vElevationMeters) * (1.0 - smoothstep(270.0, 276.0, localTemperature));
 
-    vec3 iceColor = ocean ? vec3(0.76, 0.87, 0.90) : vec3(0.90, 0.94, 0.94);
-    float alpha = clamp(coverage * (ocean ? 0.84 : 0.88), 0.0, 0.90);
+    float coverage = ocean
+        ? max(seaSheet, permanentPolar)
+        : max(max(landSheet, alpineSnow), max(permanentPolar, permanentAlpine));
+    if (coverage < 0.02) discard;
+
+    vec3 iceColor = ocean ? vec3(0.79, 0.90, 0.94) : vec3(0.94, 0.97, 0.97);
+    float alpha = clamp(0.12 + (coverage * (ocean ? 0.86 : 0.88)), 0.0, 0.98);
     outColor = vec4(iceColor, alpha);
 }`;
