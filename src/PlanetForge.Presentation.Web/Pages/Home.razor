@@ -22,7 +22,8 @@
 </main>
 
 @code {
-    private const int ClimateFrameDelayMilliseconds = 140;
+    private const int ClimateFrameDelayMilliseconds = 850;
+    private const int ClimateTransitionLeadInMilliseconds = 900;
     private const int HydrologyFrameDelayMilliseconds = 260;
     private const int ScaffoldFrameDelayMilliseconds = 65;
     private const int ScaffoldFrameCount = 36;
@@ -105,6 +106,7 @@
             Run.QueueIntervention(MissionInterventionType.DarkenSurface);
             var result = Run.SimulateCommit();
 
+            await Task.Delay(ClimateTransitionLeadInMilliseconds, disposeCancellationTokenSource.Token);
             foreach (var frame in result.Frames)
             {
                 disposeCancellationTokenSource.Token.ThrowIfCancellationRequested();
