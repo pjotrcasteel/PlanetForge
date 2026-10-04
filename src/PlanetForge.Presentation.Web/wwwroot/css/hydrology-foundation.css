@@ -4,5 +4,5 @@
 }
 
 .run-game-shell:has(.water-gameplay-dock) .pre-vegetation-world #planet-canvas {
-    filter: grayscale(.72) saturate(.58) sepia(.06) contrast(1.07) brightness(.94);
+    filter: grayscale(.84) saturate(.52) sepia(.10) contrast(1.08) brightness(.93);
 }
