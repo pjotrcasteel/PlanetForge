@@ -133,6 +133,12 @@ function installVisualTestApi() {
             draw(state);
             state.dirty = false;
             return measureCenterCoverage(state);
+        },
+        measureUpperEdgeVariation() {
+            if (!state) return { sampleCount: 0, rangePixels: 0.0, standardDeviationPixels: 0.0 };
+            draw(state);
+            state.dirty = false;
+            return measureUpperEdgeVariation(state);
         }
     };
 }
@@ -151,6 +157,43 @@ function measureCenterCoverage(s) {
     }
 
     return covered / (sampleSize * sampleSize);
+}
+
+function measureUpperEdgeVariation(s) {
+    const { gl, canvas } = s;
+    const width = canvas.width;
+    const height = canvas.height;
+    const pixels = new Uint8Array(width * height * 4);
+    gl.readPixels(0, 0, width, height, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+
+    const edges = [];
+    const startX = Math.floor(width * 0.22);
+    const endX = Math.floor(width * 0.78);
+    const startY = Math.floor(height * 0.50);
+    const endY = Math.floor(height * 0.93);
+    const xStep = Math.max(2, Math.floor(width / 100));
+
+    for (let x = startX; x <= endX; x += xStep) {
+        for (let y = startY; y <= endY - 4; y++) {
+            if (alphaAt(pixels, width, x, y) < 70 || alphaAt(pixels, width, x, y + 2) < 70 || alphaAt(pixels, width, x, y + 4) < 70) continue;
+            edges.push(y);
+            break;
+        }
+    }
+
+    if (edges.length < 8) return { sampleCount: edges.length, rangePixels: 0.0, standardDeviationPixels: 0.0 };
+
+    const mean = edges.reduce((total, value) => total + value, 0.0) / edges.length;
+    const variance = edges.reduce((total, value) => total + ((value - mean) ** 2), 0.0) / edges.length;
+    return {
+        sampleCount: edges.length,
+        rangePixels: Math.max(...edges) - Math.min(...edges),
+        standardDeviationPixels: Math.sqrt(variance)
+    };
+}
+
+function alphaAt(pixels, width, x, y) {
+    return pixels[((y * width) + x) * 4 + 3];
 }
 
 function installInput(s) {
