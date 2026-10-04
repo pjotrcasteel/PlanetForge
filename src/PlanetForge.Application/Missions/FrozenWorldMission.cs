@@ -8,7 +8,9 @@ public sealed class FrozenWorldMission(PlanetExperience planetExperience)
 {
     public const int StartingBudget = 100;
     public const int TurnYears = 25;
-    public const int MaximumMissionYears = 250;
+    public const int TimelineStepYears = 10;
+    public const int MaximumCommitYears = 100;
+    public const int MaximumMissionYears = 500;
     public const int RequiredStableYears = 50;
     public const string Title = "The Frozen World";
     public const string Objective = "Create stable liquid-water conditions and keep them for 50 years.";
@@ -118,21 +120,51 @@ public sealed class FrozenWorldMission(PlanetExperience planetExperience)
         ApplyPlan();
         currentPlanet = planetExperience.AdvanceClimate(TurnYears);
         missionYearsElapsed += TurnYears;
-        lastTurn = CreateFeedback(before, currentPlanet, prediction.Value, interventionsApplied, creditsSpent);
+        lastTurn = CreateFeedback(before, currentPlanet, prediction.Value, interventionsApplied, creditsSpent, TurnYears);
+        plannedInterventions.Clear();
+        prediction = null;
+        UpdateStabilityAndStatus(TurnYears);
+        return CreateSnapshot();
+    }
+
+    public MissionCommitResult SimulateCommit()
+    {
+        EnsureActive();
+        var before = CurrentPlanet;
+        var interventionsApplied = plannedInterventions.ToArray();
+        var creditsSpent = interventionsApplied.Sum(type => GetDefinition(type).Cost);
+        ApplyPlan();
         plannedInterventions.Clear();
         prediction = null;
 
-        stableYears = HasStableLiquidWater(currentPlanet) ? stableYears + TurnYears : 0;
-        if (stableYears >= RequiredStableYears)
+        var frames = new List<MissionTimelineFrame>();
+        var simulatedYears = 0;
+        var previousTemperatureKelvin = CurrentPlanet.Climate.SurfaceTemperatureKelvin;
+        while (simulatedYears < MaximumCommitYears && status == MissionStatus.Active)
         {
-            status = MissionStatus.Won;
-        }
-        else if (missionYearsElapsed >= MaximumMissionYears)
-        {
-            status = MissionStatus.Failed;
+            var stepYears = Math.Min(TimelineStepYears, MaximumMissionYears - missionYearsElapsed);
+            if (stepYears <= 0)
+            {
+                status = MissionStatus.Failed;
+                break;
+            }
+
+            currentPlanet = planetExperience.AdvanceClimate(stepYears);
+            missionYearsElapsed += stepYears;
+            simulatedYears += stepYears;
+            UpdateStabilityAndStatus(stepYears);
+            frames.Add(new MissionTimelineFrame(missionYearsElapsed, currentPlanet));
+
+            var temperatureChangeKelvin = Math.Abs(currentPlanet.Climate.SurfaceTemperatureKelvin - previousTemperatureKelvin);
+            previousTemperatureKelvin = currentPlanet.Climate.SurfaceTemperatureKelvin;
+            if (simulatedYears >= 30 && temperatureChangeKelvin < 0.05 && stableYears == 0)
+            {
+                break;
+            }
         }
 
-        return CreateSnapshot();
+        lastTurn = CreateOutcomeFeedback(before, CurrentPlanet, interventionsApplied, creditsSpent, simulatedYears);
+        return new MissionCommitResult(CreateSnapshot(), frames);
     }
 
     public bool CanAfford(MissionInterventionType type) => budgetRemaining >= GetDefinition(type).Cost;
@@ -182,6 +214,19 @@ public sealed class FrozenWorldMission(PlanetExperience planetExperience)
         }
     }
 
+    private void UpdateStabilityAndStatus(int years)
+    {
+        stableYears = HasStableLiquidWater(CurrentPlanet) ? stableYears + years : 0;
+        if (stableYears >= RequiredStableYears)
+        {
+            status = MissionStatus.Won;
+        }
+        else if (missionYearsElapsed >= MaximumMissionYears)
+        {
+            status = MissionStatus.Failed;
+        }
+    }
+
     private MissionSnapshot CreateSnapshot()
         => new(
             CurrentPlanet,
@@ -198,15 +243,41 @@ public sealed class FrozenWorldMission(PlanetExperience planetExperience)
         PlanetRenderSnapshot after,
         MissionPrediction selectedPrediction,
         IReadOnlyList<MissionInterventionType> interventionsApplied,
-        int creditsSpent)
+        int creditsSpent,
+        int elapsedYears)
+    {
+        var temperatureDelta = after.Climate.SurfaceTemperatureKelvin - before.Climate.SurfaceTemperatureKelvin;
+        var actualPrediction = ClassifyTemperatureChange(temperatureDelta);
+        var predictionCorrect = selectedPrediction == actualPrediction;
+        var headline = predictionCorrect ? "Your prediction matched the simulation." : $"The planet became {DescribePrediction(actualPrediction)} instead.";
+        return CreateFeedbackCore(before, after, interventionsApplied, creditsSpent, elapsedYears, predictionCorrect, headline);
+    }
+
+    private static MissionTurnFeedback CreateOutcomeFeedback(
+        PlanetRenderSnapshot before,
+        PlanetRenderSnapshot after,
+        IReadOnlyList<MissionInterventionType> interventionsApplied,
+        int creditsSpent,
+        int elapsedYears)
+    {
+        var temperatureDelta = after.Climate.SurfaceTemperatureKelvin - before.Climate.SurfaceTemperatureKelvin;
+        var direction = DescribePrediction(ClassifyTemperatureChange(temperatureDelta));
+        return CreateFeedbackCore(before, after, interventionsApplied, creditsSpent, elapsedYears, true, $"The planet became {direction} over the timelapse.");
+    }
+
+    private static MissionTurnFeedback CreateFeedbackCore(
+        PlanetRenderSnapshot before,
+        PlanetRenderSnapshot after,
+        IReadOnlyList<MissionInterventionType> interventionsApplied,
+        int creditsSpent,
+        int elapsedYears,
+        bool predictionCorrect,
+        string headline)
     {
         var temperatureDelta = after.Climate.SurfaceTemperatureKelvin - before.Climate.SurfaceTemperatureKelvin;
         var cryosphereDelta = after.ClimateFeedback.CryosphereFraction - before.ClimateFeedback.CryosphereFraction;
         var albedoDelta = after.ClimateFeedback.EffectiveBondAlbedo - before.ClimateFeedback.EffectiveBondAlbedo;
-        var actualPrediction = ClassifyTemperatureChange(temperatureDelta);
-        var predictionCorrect = selectedPrediction == actualPrediction;
-        var headline = predictionCorrect ? "Your prediction matched the simulation." : $"The planet became {DescribePrediction(actualPrediction)} instead.";
-        var temperatureSentence = $"Global mean surface temperature changed by {temperatureDelta:+0.0;-0.0;0.0}°C over {TurnYears} years.";
+        var temperatureSentence = $"Global mean surface temperature changed by {temperatureDelta:+0.0;-0.0;0.0}°C over {elapsedYears} years.";
         var feedbackSentence = DescribeFeedback(cryosphereDelta, albedoDelta);
         return new MissionTurnFeedback(
             predictionCorrect,
@@ -260,7 +331,7 @@ public sealed class FrozenWorldMission(PlanetExperience planetExperience)
             return $"Cryosphere cover expanded by {cryosphereDelta * 100.0:0.0} percentage points, increasing effective albedo by {albedoDelta * 100.0:0.0} points and reinforcing cooling.";
         }
 
-        return "Cryosphere cover changed little, so ice-albedo feedback was weak during this turn.";
+        return "Cryosphere cover changed little, so ice-albedo feedback was weak during this interval.";
     }
 
     private static bool HasStableLiquidWater(PlanetRenderSnapshot planet)
