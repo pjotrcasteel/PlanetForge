@@ -1,15 +1,22 @@
 using PlanetForge.Application.Missions;
+using PlanetForge.Application.Surface.Hydrology;
 
 namespace PlanetForge.Application.Runs;
 
-public sealed class PlanetRun(FrozenWorldMission frozenWorldMission)
+public sealed class PlanetRun(
+    FrozenWorldMission frozenWorldMission,
+    PlanetHydrologyModelBuilder hydrologyModelBuilder,
+    PlanetHydrologyFeatureExtractor hydrologyFeatureExtractor)
 {
-    public const int SaveSchemaVersion = 1;
+    public const int SaveSchemaVersion = 2;
+
+    private const int WaterSurveyGridLevel = 5;
+    private const long MinimumRiverContributingLandCells = 8;
 
     private static readonly IReadOnlyList<PlanetRunEraDefinition> EraDefinitions =
     [
-        new(PlanetRunEra.DeadRock, "Dead Rock", "Stabilize surface liquid water.", "A rocky planet with a climate that can support persistent surface liquid water."),
-        new(PlanetRunEra.WaterWorld, "Water World", "Build a persistent hydrological world.", "Stable liquid water plus a spatial water-cycle model with drainage, lakes and runoff."),
+        new(PlanetRunEra.DeadRock, "Dead Rock", "Create persistent surface liquid water.", "A rocky planet with a climate that can support persistent surface liquid water."),
+        new(PlanetRunEra.WaterWorld, "Water World", "Map where liquid water can persist and flow across the terrain.", "Stable liquid water plus a spatial water-cycle model with drainage, lakes and runoff."),
         new(PlanetRunEra.FirstLife, "First Life", "Establish conditions in which life could plausibly originate and persist.", "Prebiotic chemistry, sustained free-energy gradients and a scientifically explicit origin-of-life model."),
         new(PlanetRunEra.GreenWorld, "Green World", "Allow photosynthetic ecosystems to transform suitable environments.", "Evolved photosynthetic lineages, available nutrients, suitable climate and persistent habitats."),
         new(PlanetRunEra.AnimalWorld, "Animal World", "Support complex mobile multicellular ecosystems.", "Sufficient ecosystem productivity, oxygen availability where required, and evolved multicellular lineages."),
@@ -33,7 +40,7 @@ public sealed class PlanetRun(FrozenWorldMission frozenWorldMission)
         new(
             PlanetResearchUnlock.HydrologicalSurvey,
             "Hydrological Survey",
-            "Unlock detailed water inventory diagnostics and prepares basin/runoff mapping for the Water World era.",
+            "Unlock detailed water inventory diagnostics for the Water World era.",
             "Hydrology constrains where liquid water collects and how topography routes surface flow.",
             8),
     ];
@@ -44,6 +51,7 @@ public sealed class PlanetRun(FrozenWorldMission frozenWorldMission)
     private PlanetRunEra era;
     private int insight;
     private bool researchChoiceAvailable;
+    private PlanetWaterSurvey? waterSurvey;
 
     public IReadOnlyList<PlanetRunEraDefinition> Eras => EraDefinitions;
 
@@ -55,6 +63,7 @@ public sealed class PlanetRun(FrozenWorldMission frozenWorldMission)
         era = PlanetRunEra.DeadRock;
         insight = 0;
         researchChoiceAvailable = false;
+        waterSurvey = null;
         journal.Clear();
         researchUnlocks.Clear();
         AddJournalEntry(
@@ -89,6 +98,47 @@ public sealed class PlanetRun(FrozenWorldMission frozenWorldMission)
     {
         mission = frozenWorldMission.SimulateTurn();
         EvaluateDiscoveries();
+        return CreateSnapshot();
+    }
+
+    public PlanetRunCommitResult SimulateCommit()
+    {
+        var result = frozenWorldMission.SimulateCommit();
+        mission = result.Mission;
+        EvaluateDiscoveries();
+        return new PlanetRunCommitResult(CreateSnapshot(), result.Frames);
+    }
+
+    public PlanetRunSnapshot SurveyWaterWorld(CancellationToken cancellationToken)
+    {
+        if (era != PlanetRunEra.WaterWorld)
+        {
+            throw new InvalidOperationException("A hydrological survey requires the Water World era.");
+        }
+
+        if (waterSurvey is not null)
+        {
+            return CreateSnapshot();
+        }
+
+        var planet = CurrentMission.Planet;
+        var hydrology = hydrologyModelBuilder.Build(
+            WaterSurveyGridLevel,
+            planet.Seed,
+            planet.PhysicalParameters.RadiusMeters,
+            planet.SeaLevelMeters,
+            cancellationToken);
+        var features = hydrologyFeatureExtractor.Extract(hydrology, MinimumRiverContributingLandCells, cancellationToken);
+        waterSurvey = new PlanetWaterSurvey(
+            WaterSurveyGridLevel,
+            features.Watersheds.Count,
+            features.Lakes.Count,
+            features.RiverSegments.Count);
+        AddJournalEntry(
+            "water-pathways-mapped",
+            "Potential water pathways mapped",
+            $"Topography resolves {waterSurvey.WatershedCount} drainage basins, {waterSurvey.LakeCount} closed depressions and {waterSurvey.PotentialRiverSegmentCount} potential high-flow drainage segments. This is terrain-routing potential, not yet a rainfall or discharge simulation.",
+            6);
         return CreateSnapshot();
     }
 
@@ -128,7 +178,8 @@ public sealed class PlanetRun(FrozenWorldMission frozenWorldMission)
             insight,
             journal.ToArray(),
             researchUnlocks.ToArray(),
-            researchChoiceAvailable);
+            researchChoiceAvailable,
+            waterSurvey);
 
     public PlanetRunSnapshot Restore(PlanetRunSave save)
     {
@@ -142,6 +193,7 @@ public sealed class PlanetRun(FrozenWorldMission frozenWorldMission)
         era = save.Era;
         insight = save.Insight;
         researchChoiceAvailable = save.ResearchChoiceAvailable;
+        waterSurvey = save.WaterSurvey;
         journal.Clear();
         journal.AddRange(save.Journal);
         researchUnlocks.Clear();
@@ -158,7 +210,7 @@ public sealed class PlanetRun(FrozenWorldMission frozenWorldMission)
             AddJournalEntry(
                 "ice-albedo-measured",
                 "Ice-albedo feedback measured",
-                "A simulated climate step changed cryosphere cover enough to measurably alter effective planetary albedo, demonstrating a positive climate feedback.",
+                "The climate response changed cryosphere cover enough to measurably alter effective planetary albedo, demonstrating a positive climate feedback.",
                 4);
         }
 
@@ -168,7 +220,7 @@ public sealed class PlanetRun(FrozenWorldMission frozenWorldMission)
             AddJournalEntry(
                 "stable-surface-water",
                 "Persistent surface liquid water established",
-                "Surface temperature, liquid-water fraction and cryosphere state remained within the mission stability criteria for fifty consecutive simulated years.",
+                "Surface temperature, liquid-water fraction and cryosphere state remained within the stability criteria for fifty consecutive simulated years.",
                 10);
             researchChoiceAvailable = true;
         }
@@ -178,7 +230,7 @@ public sealed class PlanetRun(FrozenWorldMission frozenWorldMission)
             AddJournalEntry(
                 "dead-rock-attempt-failed",
                 "Dead Rock objective not achieved",
-                "The 250-year intervention window ended before persistent liquid-water conditions were maintained for fifty consecutive years.",
+                "The intervention window ended before persistent liquid-water conditions were maintained for fifty consecutive years.",
                 0);
         }
     }
@@ -210,6 +262,7 @@ public sealed class PlanetRun(FrozenWorldMission frozenWorldMission)
             journal.ToArray(),
             researchUnlocks.ToArray(),
             choices,
-            researchChoiceAvailable);
+            researchChoiceAvailable,
+            waterSurvey);
     }
 }
