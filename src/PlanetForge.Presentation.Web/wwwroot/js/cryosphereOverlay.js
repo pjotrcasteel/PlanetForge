@@ -7,12 +7,12 @@ const localTransitionAltitudeMeters = 20_000.0;
 const localExitAltitudeMeters = 25_000.0;
 const latitudeCoolingKelvin = 18.0;
 const elevationLapseRateKelvinPerMeter = 0.0065;
-const polarStartDegrees = 68.0;
-const polarFullDegrees = 76.0;
+const polarStartDegrees = 69.0;
+const polarFullDegrees = 79.0;
 const finalSeaIceLatitudeDegrees = 70.0;
-const finalLandIceLatitudeDegrees = 72.0;
-const finalAlpineSnowlineMeters = 2_500.0;
-const alpineSnowTransitionMeters = 850.0;
+const finalLandIceLatitudeDegrees = 71.0;
+const finalAlpineSnowlineMeters = 3_200.0;
+const alpineSnowTransitionMeters = 700.0;
 
 export function initialize(overlayCanvasId, inputCanvasId, snapshot) {
     const canvas = document.getElementById(overlayCanvasId);
@@ -323,6 +323,43 @@ uniform float uSeaIceFraction;
 uniform float uLandIceFraction;
 uniform float uSnowCoverFraction;
 out vec4 outColor;
+
+float hash31(vec3 p) {
+    p = fract(p * 0.1031);
+    p += dot(p, p.yzx + 33.33);
+    return fract((p.x + p.y) * p.z);
+}
+
+float valueNoise(vec3 p) {
+    vec3 cell = floor(p);
+    vec3 local = fract(p);
+    vec3 smoothLocal = local * local * (3.0 - (2.0 * local));
+
+    float n000 = hash31(cell + vec3(0.0, 0.0, 0.0));
+    float n100 = hash31(cell + vec3(1.0, 0.0, 0.0));
+    float n010 = hash31(cell + vec3(0.0, 1.0, 0.0));
+    float n110 = hash31(cell + vec3(1.0, 1.0, 0.0));
+    float n001 = hash31(cell + vec3(0.0, 0.0, 1.0));
+    float n101 = hash31(cell + vec3(1.0, 0.0, 1.0));
+    float n011 = hash31(cell + vec3(0.0, 1.0, 1.0));
+    float n111 = hash31(cell + vec3(1.0, 1.0, 1.0));
+
+    float nx00 = mix(n000, n100, smoothLocal.x);
+    float nx10 = mix(n010, n110, smoothLocal.x);
+    float nx01 = mix(n001, n101, smoothLocal.x);
+    float nx11 = mix(n011, n111, smoothLocal.x);
+    float nxy0 = mix(nx00, nx10, smoothLocal.y);
+    float nxy1 = mix(nx01, nx11, smoothLocal.y);
+    return mix(nxy0, nxy1, smoothLocal.z);
+}
+
+float iceNoise(vec3 direction) {
+    float broad = valueNoise((direction * 2.7) + vec3(4.1, -1.7, 8.3));
+    float medium = valueNoise((direction * 6.4) + vec3(-3.7, 6.2, 1.9));
+    float detail = valueNoise((direction * 13.0) + vec3(7.4, 2.6, -5.1));
+    return (broad * 0.58) + (medium * 0.29) + (detail * 0.13);
+}
+
 void main() {
     float latitudeDegrees = degrees(asin(clamp(abs(vDirection.y), 0.0, 1.0)));
     bool ocean = vElevationMeters < uSeaLevelMeters;
@@ -331,26 +368,39 @@ void main() {
         - (${latitudeCoolingKelvin.toFixed(1)} * pow(latitudeFactor, 1.45))
         - (max(vElevationMeters, 0.0) * ${elevationLapseRateKelvinPerMeter.toFixed(4)});
 
-    float seaRetreat = pow(1.0 - clamp(uSeaIceFraction, 0.0, 1.0), 1.45);
-    float landRetreat = pow(1.0 - clamp(uLandIceFraction, 0.0, 1.0), 1.55);
-    float snowRetreat = pow(1.0 - clamp(uSnowCoverFraction, 0.0, 1.0), 1.25);
+    float terrainNoise = iceNoise(vDirection);
+    float broadWarpDegrees = (terrainNoise - 0.5) * 15.0;
+    float elevationColdBiasDegrees = ocean ? 0.0 : clamp(max(vElevationMeters, 0.0) / 650.0, 0.0, 9.0);
+    float iceSuitabilityDegrees = latitudeDegrees + broadWarpDegrees + elevationColdBiasDegrees;
+
+    float seaRetreat = pow(1.0 - clamp(uSeaIceFraction, 0.0, 1.0), 1.15);
+    float landRetreat = pow(1.0 - clamp(uLandIceFraction, 0.0, 1.0), 1.10);
+    float snowRetreat = pow(1.0 - clamp(uSnowCoverFraction, 0.0, 1.0), 1.05);
 
     float seaIceLineDegrees = mix(-25.0, ${finalSeaIceLatitudeDegrees.toFixed(1)}, seaRetreat);
     float landIceLineDegrees = mix(-25.0, ${finalLandIceLatitudeDegrees.toFixed(1)}, landRetreat);
-    float seaSheet = smoothstep(seaIceLineDegrees, seaIceLineDegrees + 8.0, latitudeDegrees);
-    float landSheet = smoothstep(landIceLineDegrees, landIceLineDegrees + 8.0, latitudeDegrees);
+    float seaSheet = smoothstep(seaIceLineDegrees - 2.0, seaIceLineDegrees + 7.0, iceSuitabilityDegrees);
+    float landSheet = smoothstep(landIceLineDegrees - 2.0, landIceLineDegrees + 8.0, iceSuitabilityDegrees);
 
     float snowlineMeters = mix(-1200.0, ${finalAlpineSnowlineMeters.toFixed(1)}, snowRetreat);
-    float alpineSnow = ocean ? 0.0 : smoothstep(snowlineMeters, snowlineMeters + ${alpineSnowTransitionMeters.toFixed(1)}, vElevationMeters);
-    float permanentPolar = smoothstep(${polarStartDegrees.toFixed(1)}, ${polarFullDegrees.toFixed(1)}, latitudeDegrees);
-    float permanentAlpine = ocean ? 0.0 : smoothstep(2600.0, 3400.0, vElevationMeters) * (1.0 - smoothstep(270.0, 276.0, localTemperature));
+    float localSnowlineMeters = snowlineMeters + ((0.5 - terrainNoise) * 500.0);
+    float alpineSnow = ocean ? 0.0 : smoothstep(localSnowlineMeters, localSnowlineMeters + ${alpineSnowTransitionMeters.toFixed(1)}, vElevationMeters);
+    alpineSnow *= 1.0 - smoothstep(273.0, 279.0, localTemperature);
+
+    float polarSuitabilityDegrees = latitudeDegrees + ((terrainNoise - 0.5) * 10.0) + (elevationColdBiasDegrees * 0.35);
+    float permanentPolar = smoothstep(${polarStartDegrees.toFixed(1)}, ${polarFullDegrees.toFixed(1)}, polarSuitabilityDegrees);
+    float permanentAlpine = ocean ? 0.0 : smoothstep(3600.0, 4400.0, vElevationMeters) * (1.0 - smoothstep(266.0, 273.0, localTemperature));
 
     float coverage = ocean
         ? max(seaSheet, permanentPolar)
-        : max(max(landSheet, alpineSnow), max(permanentPolar, permanentAlpine));
-    if (coverage < 0.02) discard;
+        : max(max(landSheet, alpineSnow * 0.82), max(permanentPolar, permanentAlpine * 0.88));
+    coverage = smoothstep(0.04, 0.94, coverage);
+    if (coverage < 0.015) discard;
 
-    vec3 iceColor = ocean ? vec3(0.79, 0.90, 0.94) : vec3(0.94, 0.97, 0.97);
-    float alpha = clamp(0.12 + (coverage * (ocean ? 0.86 : 0.88)), 0.0, 0.98);
+    float edgeTexture = mix(0.94, 1.04, valueNoise((vDirection * 22.0) + vec3(2.0, 9.0, -4.0)));
+    vec3 seaIceColor = vec3(0.76, 0.88, 0.92);
+    vec3 landIceColor = vec3(0.91, 0.95, 0.95);
+    vec3 iceColor = (ocean ? seaIceColor : landIceColor) * edgeTexture;
+    float alpha = clamp(0.05 + (coverage * (ocean ? 0.78 : 0.82)), 0.0, 0.88);
     outColor = vec4(iceColor, alpha);
 }`;
