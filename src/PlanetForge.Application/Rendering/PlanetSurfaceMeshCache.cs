@@ -32,17 +32,44 @@ public sealed class PlanetSurfaceMeshCache(PlanetSurfaceMeshBuilder meshBuilder)
             return CreateReferences(ids, cellsPerAxis, planetRadiusMeters);
         }
 
+        var result = GetFullGeometry(ids, cellsPerAxis, seed, planetRadiusMeters);
+        RememberRequest(ids, cellsPerAxis, planetRadiusMeters);
+        return result;
+    }
+
+    public IReadOnlyList<PlanetSurfaceTileMesh> GetOrBuildGlobal(int level, int cellsPerAxis, int seed, double planetRadiusMeters)
+        => GetOrBuild(CreateGlobalIds(level), cellsPerAxis, seed, planetRadiusMeters);
+
+    public IReadOnlyList<PlanetSurfaceTileMesh> GetOrBuildGlobalFull(int level, int cellsPerAxis, int seed, double planetRadiusMeters)
+    {
+        var ids = CreateGlobalIds(level);
+        EnsureSeed(seed);
+        var result = GetFullGeometry(ids, cellsPerAxis, seed, planetRadiusMeters);
+        RememberRequest(ids, cellsPerAxis, planetRadiusMeters);
+        return result;
+    }
+
+    public void Clear()
+    {
+        cache.Clear();
+        activeSeed = null;
+        lastRequestedIds = null;
+        lastCellsPerAxis = 0;
+        lastPlanetRadiusMeters = 0.0;
+    }
+
+    private IReadOnlyList<PlanetSurfaceTileMesh> GetFullGeometry(IReadOnlyList<PlanetTileId> ids, int cellsPerAxis, int seed, double planetRadiusMeters)
+    {
         var result = new PlanetSurfaceTileMesh[ids.Count];
         for (var index = 0; index < ids.Count; index++)
         {
             result[index] = GetOrBuild(ids[index], cellsPerAxis, seed, planetRadiusMeters);
         }
 
-        RememberRequest(ids, cellsPerAxis, planetRadiusMeters);
         return result;
     }
 
-    public IReadOnlyList<PlanetSurfaceTileMesh> GetOrBuildGlobal(int level, int cellsPerAxis, int seed, double planetRadiusMeters)
+    private static IReadOnlyList<PlanetTileId> CreateGlobalIds(int level)
     {
         if (level < 0 || level > 8)
         {
@@ -62,16 +89,7 @@ public sealed class PlanetSurfaceMeshCache(PlanetSurfaceMeshBuilder meshBuilder)
             }
         }
 
-        return GetOrBuild(ids, cellsPerAxis, seed, planetRadiusMeters);
-    }
-
-    public void Clear()
-    {
-        cache.Clear();
-        activeSeed = null;
-        lastRequestedIds = null;
-        lastCellsPerAxis = 0;
-        lastPlanetRadiusMeters = 0.0;
+        return ids;
     }
 
     private IReadOnlyList<PlanetSurfaceTileMesh> CreateReferences(IReadOnlyList<PlanetTileId> ids, int cellsPerAxis, double planetRadiusMeters)

@@ -1,6 +1,6 @@
-const buildVersion = '0.0.5';
-const buildLabel = 'FIRST EDUCATIONAL MISSION';
-const pageTitle = `PlanetForge ${buildVersion} — First Educational Mission`;
+const buildVersion = '0.0.5.1';
+const buildLabel = 'GAMEPLAY CLARITY';
+const pageTitle = `PlanetForge ${buildVersion} — Gameplay Clarity`;
 const maximumAttempts = 100;
 const retryDelayMilliseconds = 100;
 

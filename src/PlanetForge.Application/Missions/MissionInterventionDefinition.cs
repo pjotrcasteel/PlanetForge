@@ -5,5 +5,7 @@ public sealed record MissionInterventionDefinition(
     string Name,
     int Cost,
     string Summary,
+    string EffectPreview,
+    string ImpactLabel,
     string Mechanism,
     string TradeOff);

@@ -10,11 +10,11 @@
 <main class="game-shell">
     <section class="hero-copy">
         <div>
-            <span class="eyebrow">MILESTONE 0.0.5 · FIRST EDUCATIONAL MISSION</span>
+            <span class="eyebrow">MILESTONE 0.0.5.1 · GAMEPLAY CLARITY</span>
             <h1>PlanetForge</h1>
-            <p>Learn planetary science by fixing a world. Read the evidence, build a plan, predict the outcome and let the simulation test your idea.</p>
+            <p>Diagnose a world, choose an intervention, predict what will happen and commit your plan to the simulation.</p>
         </div>
-        <div class="seed-chip">BUILD 0.0.5 · SEED @snapshot?.Seed</div>
+        <div class="seed-chip">BUILD 0.0.5.1 · SEED @snapshot?.Seed</div>
     </section>
 
     <section class="planet-stage">
@@ -33,36 +33,49 @@
             <div class="mission-briefing-copy">
                 <span class="eyebrow">MISSION 01 · ENERGY & FEEDBACK</span>
                 <h2>@FrozenWorldMission.Title</h2>
-                <p>This Earth-sized world drifted farther from its star. Cooling has expanded its bright cryosphere, which now reflects even more incoming energy. Reverse the feedback before the world settles into a permanent snowball state.</p>
+                <p>This Earth-sized world drifted farther from its star. Cooling expanded its bright cryosphere. More ice now reflects more sunlight, which drives additional cooling.</p>
             </div>
             <div class="mission-objective">
-                <span>OBJECTIVE</span>
-                <strong>@FrozenWorldMission.Objective</strong>
-                <small>Success requires @FrozenWorldMission.RequiredStableYears consecutive simulated years with stable liquid-water conditions.</small>
+                <span>YOUR JOB</span>
+                <strong>Break the snowball feedback and establish liquid water.</strong>
+                <small>Hold stable liquid-water conditions for @FrozenWorldMission.RequiredStableYears consecutive simulated years.</small>
             </div>
         </section>
 
-        <section class="mission-dashboard">
+        <section class="mission-dashboard mission-budget-dashboard">
             <article>
-                <span>INTERVENTION BUDGET</span>
+                <span>AVAILABLE</span>
                 <strong>@mission?.BudgetRemaining</strong>
-                <small>credits remaining</small>
+                <small>credits you can still reserve</small>
+            </article>
+            <article class="budget-reserved">
+                <span>RESERVED</span>
+                <strong>@ReservedCredits()</strong>
+                <small>queued, but not executed yet</small>
+            </article>
+            <article>
+                <span>SPENT</span>
+                <strong>@SpentCredits()</strong>
+                <small>committed in previous turns</small>
             </article>
             <article>
                 <span>MISSION TIME</span>
                 <strong>@mission?.MissionYearsElapsed / @FrozenWorldMission.MaximumMissionYears</strong>
-                <small>years elapsed</small>
+                <small>simulated years elapsed</small>
             </article>
-            <article>
-                <span>STABLE WATER</span>
-                <strong>@mission?.StableYears / @FrozenWorldMission.RequiredStableYears</strong>
-                <div class="progress-track"><div class="progress-fill" style="width:@FormatStableProgress()"></div></div>
-            </article>
-            <article class="@MissionStatusClass()">
-                <span>MISSION STATUS</span>
+        </section>
+
+        <section class="mission-progress-strip @MissionStatusClass()">
+            <div>
+                <span class="eyebrow">MISSION STATUS</span>
                 <strong>@FormatMissionStatus()</strong>
                 <small>@FormatMissionStatusDetail()</small>
-            </article>
+            </div>
+            <div class="stable-progress-copy">
+                <span>STABLE WATER</span>
+                <strong>@mission?.StableYears / @FrozenWorldMission.RequiredStableYears YEARS</strong>
+                <div class="progress-track"><div class="progress-fill" style="width:@FormatStableProgress()"></div></div>
+            </div>
         </section>
 
         @if (mission?.Status != MissionStatus.Active)
@@ -78,99 +91,106 @@
         {
             <section class="section-heading compact-heading">
                 <div>
-                    <span class="eyebrow">1 · OBSERVE</span>
-                    <h2>What is happening to this world?</h2>
+                    <span class="eyebrow">1 · DIAGNOSE</span>
+                    <h2>Why is the world freezing?</h2>
                 </div>
             </section>
 
-            <section class="observation-grid">
-                <article class="observation-card"><span>SURFACE TEMPERATURE</span><strong>@FormatSurfaceTemperature()</strong><small>Target @FormatTargetSurfaceTemperature()</small></article>
-                <article class="observation-card"><span>CRYOSPHERE</span><strong>@FormatCryosphere()</strong><small>Bright ice and snow raise reflectivity</small></article>
-                <article class="observation-card"><span>EFFECTIVE ALBEDO</span><strong>@FormatEffectiveAlbedo()</strong><small>Base @FormatAlbedo() + ice feedback</small></article>
+            <section class="observation-grid diagnosis-grid">
+                <article class="observation-card danger-observation"><span>TEMPERATURE</span><strong>@FormatSurfaceTemperature()</strong><small>Climate target @FormatTargetSurfaceTemperature()</small></article>
+                <article class="observation-card"><span>CRYOSPHERE</span><strong>@FormatCryosphere()</strong><small>Bright ice and snow reflect sunlight</small></article>
                 <article class="observation-card"><span>LIQUID WATER</span><strong>@FormatLiquidWater()</strong><small>@FormatWaterFractions()</small></article>
-                <article class="observation-card"><span>CO₂</span><strong>@FormatCarbonDioxide()</strong><small>@FormatCarbonDioxideForcing() forcing</small></article>
-                <article class="observation-card"><span>ORBIT</span><strong>@FormatOrbitalDistance()</strong><small>@FormatSolarFlux() stellar flux</small></article>
+                <article class="observation-card"><span>ENERGY INPUT</span><strong>@FormatSolarFlux()</strong><small>Orbit @FormatOrbitalDistance()</small></article>
             </section>
 
-            <section class="learning-callout">
-                <strong>Think like a planetary scientist.</strong>
-                <span>The temperature is not the only problem. More ice makes the planet brighter, so cooling can cause additional cooling. Your plan needs enough forcing to break that feedback loop.</span>
+            <section class="learning-callout diagnosis-callout">
+                <strong>Diagnosis</strong>
+                <span>@FormatDiagnosis()</span>
             </section>
 
             <section class="section-heading compact-heading">
                 <div>
-                    <span class="eyebrow">2 · PLAN</span>
-                    <h2>Choose your interventions</h2>
+                    <span class="eyebrow">2 · CHOOSE</span>
+                    <h2>Build a planetary intervention plan</h2>
                 </div>
                 @if (mission is not null && mission.PlannedInterventions.Count > 0)
                 {
-                    <button @onclick="ClearPlanAsync">Clear plan</button>
+                    <button @onclick="ClearPlanAsync">Clear reserved plan</button>
                 }
             </section>
 
             <section class="intervention-grid">
                 @foreach (var intervention in Mission.Interventions)
                 {
-                    <article class="intervention-card">
+                    <article class="intervention-card @(PlanCount(intervention.Type) > 0 ? "intervention-planned" : string.Empty)">
                         <div class="intervention-topline">
                             <span>@intervention.Cost CREDITS</span>
-                            <span>@PlanCount(intervention.Type)× PLANNED</span>
+                            <span>@PlanCount(intervention.Type)× RESERVED</span>
                         </div>
+                        <div class="impact-badge">@intervention.ImpactLabel</div>
                         <h3>@intervention.Name</h3>
                         <p>@intervention.Summary</p>
+                        <div class="effect-preview">
+                            <strong>PHYSICAL CHANGE</strong>
+                            <span>@intervention.EffectPreview</span>
+                        </div>
                         <div class="mechanism-note"><strong>WHY IT WORKS</strong><span>@intervention.Mechanism</span></div>
                         <small>@intervention.TradeOff</small>
-                        <button class="wide-button" disabled="@(!Mission.CanAfford(intervention.Type))" @onclick="() => PlanAsync(intervention.Type)">Add to plan · @intervention.Cost credits</button>
+                        <button class="wide-button" disabled="@(!Mission.CanAfford(intervention.Type))" @onclick="() => PlanAsync(intervention.Type)">
+                            @(PlanCount(intervention.Type) > 0 ? $"Reserve another · {intervention.Cost}" : $"Reserve intervention · {intervention.Cost}")
+                        </button>
                     </article>
                 }
             </section>
 
-            <section class="planned-action-bar">
-                <div>
-                    <span class="eyebrow">CURRENT PLAN</span>
-                    <strong>@FormatCurrentPlan()</strong>
+            <section class="mission-command-panel">
+                <div class="command-plan-summary">
+                    <span class="eyebrow">3 · COMMIT</span>
+                    <h2>@(ReservedCredits() > 0 ? "Your plan is queued — nothing has happened yet." : "Run the current trajectory or reserve an intervention.")</h2>
+                    <p><strong>Plan:</strong> @FormatCurrentPlan()</p>
+                    <div class="command-impact-row">
+                        <span>@FormatPlanImpact()</span>
+                        <span>@ReservedCredits() RESERVED · @mission?.BudgetRemaining AVAILABLE</span>
+                    </div>
+                    @if (ReservedCredits() > 0)
+                    {
+                        <div class="not-executed-warning">RESERVED ≠ SPENT · THE PLAN ONLY TAKES EFFECT WHEN YOU EXECUTE THE TURN</div>
+                    }
                 </div>
-                <span>@mission?.BudgetRemaining credits remain</span>
-            </section>
 
-            <section class="section-heading compact-heading">
-                <div>
-                    <span class="eyebrow">3 · PREDICT</span>
-                    <h2>Before you run the model, what do you expect?</h2>
+                <div class="command-prediction">
+                    <strong>What do you predict over the next @FrozenWorldMission.TurnYears years?</strong>
+                    <div class="prediction-buttons">
+                        <button class="@PredictionClass(MissionPrediction.Warmer)" @onclick="() => PredictAsync(MissionPrediction.Warmer)">↑ Warmer</button>
+                        <button class="@PredictionClass(MissionPrediction.LittleChange)" @onclick="() => PredictAsync(MissionPrediction.LittleChange)">≈ Little change</button>
+                        <button class="@PredictionClass(MissionPrediction.Cooler)" @onclick="() => PredictAsync(MissionPrediction.Cooler)">↓ Cooler</button>
+                    </div>
                 </div>
-            </section>
 
-            <section class="prediction-panel">
-                <p>Over the next @FrozenWorldMission.TurnYears years, will global mean surface temperature become…</p>
-                <div class="prediction-buttons">
-                    <button class="@PredictionClass(MissionPrediction.Warmer)" @onclick="() => PredictAsync(MissionPrediction.Warmer)">↑ Warmer</button>
-                    <button class="@PredictionClass(MissionPrediction.LittleChange)" @onclick="() => PredictAsync(MissionPrediction.LittleChange)">≈ Little change</button>
-                    <button class="@PredictionClass(MissionPrediction.Cooler)" @onclick="() => PredictAsync(MissionPrediction.Cooler)">↓ Cooler</button>
-                </div>
-            </section>
-
-            <section class="simulate-panel">
-                <div>
-                    <span class="eyebrow">4 · SIMULATE</span>
-                    <h2>Test your hypothesis</h2>
-                    <p>The queued interventions are applied together. PlanetForge then advances the coupled climate model by @FrozenWorldMission.TurnYears years.</p>
-                </div>
-                <button class="primary-button simulate-button" disabled="@(mission?.Prediction is null)" @onclick="SimulateTurnAsync">Simulate +@FrozenWorldMission.TurnYears years</button>
+                <button class="primary-button mission-execute-button" disabled="@(mission?.Prediction is null)" @onclick="SimulateTurnAsync">
+                    EXECUTE @(ReservedCredits() > 0 ? "PLAN" : "NO INTERVENTION") · +@FrozenWorldMission.TurnYears YEARS
+                </button>
+                <small class="command-help">@(mission?.Prediction is null ? "Choose a prediction to unlock the simulation." : "Ready. This commits reserved credits, applies the interventions and advances the climate model.")</small>
             </section>
         }
 
         @if (mission?.LastTurn is not null)
         {
-            <section class="result-panel @(mission.LastTurn.PredictionCorrect ? "prediction-correct" : "prediction-wrong")">
-                <div>
-                    <span class="eyebrow">5 · LEARN</span>
+            <section class="result-panel result-report @(mission.LastTurn.PredictionCorrect ? "prediction-correct" : "prediction-wrong")">
+                <div class="result-report-header">
+                    <span class="eyebrow">4 · LEARN</span>
                     <h2>@mission.LastTurn.Headline</h2>
-                    <p>@mission.LastTurn.Explanation</p>
+                    <p><strong>Executed:</strong> @FormatExecutedPlan() · <strong>@mission.LastTurn.CreditsSpent credits spent</strong></p>
                 </div>
-                <div class="result-deltas">
-                    <span><strong>@FormatSigned(mission.LastTurn.TemperatureDeltaKelvin, "°C")</strong> temperature</span>
-                    <span><strong>@FormatPercentagePointDelta(mission.LastTurn.CryosphereDelta)</strong> cryosphere</span>
-                    <span><strong>@FormatPercentagePointDelta(mission.LastTurn.EffectiveAlbedoDelta)</strong> effective albedo</span>
+                <div class="before-after-grid">
+                    <article><span>TEMPERATURE</span><strong>@FormatTemperature(mission.LastTurn.TemperatureBeforeKelvin) → @FormatTemperature(mission.LastTurn.TemperatureAfterKelvin)</strong><small>@FormatSigned(mission.LastTurn.TemperatureDeltaKelvin, "°C")</small></article>
+                    <article><span>CRYOSPHERE</span><strong>@FormatPercent(mission.LastTurn.CryosphereBefore) → @FormatPercent(mission.LastTurn.CryosphereAfter)</strong><small>@FormatPercentagePointDelta(mission.LastTurn.CryosphereDelta)</small></article>
+                    <article><span>LIQUID WATER</span><strong>@FormatPercent(mission.LastTurn.LiquidWaterBefore) → @FormatPercent(mission.LastTurn.LiquidWaterAfter)</strong><small>@FormatPercentagePointDelta(mission.LastTurn.LiquidWaterDelta)</small></article>
+                    <article><span>EFFECTIVE ALBEDO</span><strong>@FormatPercent(mission.LastTurn.EffectiveAlbedoBefore) → @FormatPercent(mission.LastTurn.EffectiveAlbedoAfter)</strong><small>@FormatPercentagePointDelta(mission.LastTurn.EffectiveAlbedoDelta)</small></article>
+                </div>
+                <div class="causal-explanation">
+                    <strong>WHAT HAPPENED?</strong>
+                    <p>@mission.LastTurn.Explanation</p>
                 </div>
             </section>
         }
@@ -179,7 +199,7 @@
             <div>
                 <span class="eyebrow">CURIOUS?</span>
                 <strong>Want the raw scientific controls?</strong>
-                <p>The mission hides parameters on purpose. Open the sandbox when you want to inspect or manipulate the simulation directly.</p>
+                <p>The mission translates physical parameters into decisions. Open the sandbox when you want to manipulate those parameters directly.</p>
             </div>
             <button @onclick="ToggleSandboxAsync">Open Advanced Sandbox</button>
         </section>
@@ -243,7 +263,7 @@
         <div class="science-copy">
             <span class="eyebrow">WHAT THIS MISSION TEACHES</span>
             <h2>Forcing starts the change. Feedback can amplify it.</h2>
-            <p>PlanetForge uses a real physical idea here: bright ice and snow reflect more incoming radiation than darker surfaces. Cooling can therefore expand the cryosphere, raise planetary albedo and cause additional cooling. The global cryosphere response and timescales remain deliberately simplified model assumptions.</p>
+            <p>Bright ice and snow reflect more incoming radiation than darker surfaces. Cooling can therefore expand the cryosphere, raise planetary albedo and cause additional cooling. PlanetForge uses that real mechanism while keeping the global cryosphere response deliberately simplified.</p>
         </div>
         <div class="formula-list">
             <div><span>Stellar energy</span><code>F ∝ 1 / d²</code></div>
@@ -356,15 +376,54 @@
     }
 
     private int PlanCount(MissionInterventionType type) => mission?.PlannedInterventions.Count(value => value == type) ?? 0;
+    private int ReservedCredits() => mission?.PlannedInterventions.Sum(type => Mission.GetDefinition(type).Cost) ?? 0;
+    private int SpentCredits() => mission is null ? 0 : FrozenWorldMission.StartingBudget - mission.BudgetRemaining - ReservedCredits();
 
     private string FormatCurrentPlan()
     {
         if (mission is null || mission.PlannedInterventions.Count == 0)
         {
-            return "No interventions queued — you may also simulate the current trajectory.";
+            return "No intervention — observe the natural trajectory.";
         }
 
-        return string.Join(" · ", mission.PlannedInterventions.GroupBy(type => type).Select(group => $"{group.Count()}× {Mission.GetDefinition(group.Key).Name}"));
+        return FormatInterventionList(mission.PlannedInterventions);
+    }
+
+    private string FormatExecutedPlan()
+        => mission?.LastTurn is null || mission.LastTurn.InterventionsApplied.Count == 0
+            ? "No intervention"
+            : FormatInterventionList(mission.LastTurn.InterventionsApplied);
+
+    private string FormatInterventionList(IReadOnlyList<MissionInterventionType> interventions)
+        => string.Join(" + ", interventions.GroupBy(type => type).Select(group => $"{group.Count()}× {Mission.GetDefinition(group.Key).Name}"));
+
+    private string FormatPlanImpact()
+    {
+        if (mission is null || mission.PlannedInterventions.Count == 0)
+        {
+            return "QUALITATIVE PREVIEW · NATURAL COOLING";
+        }
+
+        if (mission.PlannedInterventions.Contains(MissionInterventionType.OrbitalTransfer))
+        {
+            return "QUALITATIVE PREVIEW · VERY STRONG WARMING FORCING";
+        }
+
+        return mission.PlannedInterventions.Count >= 3
+            ? "QUALITATIVE PREVIEW · STRONG WARMING FORCING"
+            : "QUALITATIVE PREVIEW · MODERATE WARMING FORCING";
+    }
+
+    private string FormatDiagnosis()
+    {
+        if (snapshot is null)
+        {
+            return "Collecting planetary data…";
+        }
+
+        var current = FormatSurfaceTemperature();
+        var target = FormatTargetSurfaceTemperature();
+        return $"The surface is {current}, while the current forcing pulls the climate toward {target}. Ice covers {FormatCryosphere()} of the world and raises effective albedo to {FormatEffectiveAlbedo()}. Without enough warming forcing, the ice-albedo feedback keeps strengthening the cold state.";
     }
 
     private string PredictionClass(MissionPrediction prediction) => mission?.Prediction == prediction ? "prediction-selected" : string.Empty;
@@ -416,6 +475,7 @@
         return $"{celsius:+0.0;-0.0;0.0}°C";
     }
 
+    private static string FormatPercent(double value) => $"{value * 100.0:0.0}%";
     private static string FormatSigned(double value, string suffix) => $"{value:+0.0;-0.0;0.0}{suffix}";
     private static string FormatPercentagePointDelta(double value) => $"{value * 100.0:+0.0;-0.0;0.0} pp";
 
