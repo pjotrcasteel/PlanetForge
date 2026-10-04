@@ -1,5 +1,6 @@
 using PlanetForge.Application.Missions;
 using PlanetForge.Application.Surface.Hydrology;
+using PlanetForge.Domain.Physics;
 
 namespace PlanetForge.Application.Runs;
 
@@ -8,15 +9,17 @@ public sealed class PlanetRun(
     PlanetHydrologyModelBuilder hydrologyModelBuilder,
     PlanetHydrologyFeatureExtractor hydrologyFeatureExtractor)
 {
-    public const int SaveSchemaVersion = 2;
+    public const int SaveSchemaVersion = 3;
 
     private const int WaterSurveyGridLevel = 5;
     private const long MinimumRiverContributingLandCells = 8;
+    private const double ReferenceAnnualPrecipitationMillimeters = 950.0;
+    private static readonly int[] WaterCycleFrameYears = [1, 5, 20, 50, 100];
 
     private static readonly IReadOnlyList<PlanetRunEraDefinition> EraDefinitions =
     [
         new(PlanetRunEra.DeadRock, "Dead Rock", "Create persistent surface liquid water.", "A rocky planet with a climate that can support persistent surface liquid water."),
-        new(PlanetRunEra.WaterWorld, "Water World", "Map where liquid water can persist and flow across the terrain.", "Stable liquid water plus a spatial water-cycle model with drainage, lakes and runoff."),
+        new(PlanetRunEra.WaterWorld, "Water World", "Establish a persistent water cycle with precipitation, basin filling and connected runoff.", "Stable liquid water plus a spatial water-cycle model with precipitation, runoff, lakes and active drainage."),
         new(PlanetRunEra.FirstLife, "First Life", "Establish conditions in which life could plausibly originate and persist.", "Prebiotic chemistry, sustained free-energy gradients and a scientifically explicit origin-of-life model."),
         new(PlanetRunEra.GreenWorld, "Green World", "Allow photosynthetic ecosystems to transform suitable environments.", "Evolved photosynthetic lineages, available nutrients, suitable climate and persistent habitats."),
         new(PlanetRunEra.AnimalWorld, "Animal World", "Support complex mobile multicellular ecosystems.", "Sufficient ecosystem productivity, oxygen availability where required, and evolved multicellular lineages."),
@@ -52,6 +55,7 @@ public sealed class PlanetRun(
     private int insight;
     private bool researchChoiceAvailable;
     private PlanetWaterSurvey? waterSurvey;
+    private PlanetWaterCycleState? waterCycle;
 
     public IReadOnlyList<PlanetRunEraDefinition> Eras => EraDefinitions;
 
@@ -64,6 +68,7 @@ public sealed class PlanetRun(
         insight = 0;
         researchChoiceAvailable = false;
         waterSurvey = null;
+        waterCycle = null;
         journal.Clear();
         researchUnlocks.Clear();
         AddJournalEntry(
@@ -111,35 +116,47 @@ public sealed class PlanetRun(
 
     public PlanetRunSnapshot SurveyWaterWorld(CancellationToken cancellationToken)
     {
-        if (era != PlanetRunEra.WaterWorld)
-        {
-            throw new InvalidOperationException("A hydrological survey requires the Water World era.");
-        }
+        EnsureWaterWorld();
+        EnsureWaterSurvey(cancellationToken);
+        return CreateSnapshot();
+    }
 
-        if (waterSurvey is not null)
-        {
-            return CreateSnapshot();
-        }
+    public PlanetWaterWorldSimulationResult SimulateWaterWorld(CancellationToken cancellationToken)
+    {
+        EnsureWaterWorld();
+        var features = BuildWaterFeatures(cancellationToken);
+        EnsureWaterSurvey(features);
 
         var planet = CurrentMission.Planet;
-        var hydrology = hydrologyModelBuilder.Build(
-            WaterSurveyGridLevel,
-            planet.Seed,
-            planet.PhysicalParameters.RadiusMeters,
-            planet.SeaLevelMeters,
-            cancellationToken);
-        var features = hydrologyFeatureExtractor.Extract(hydrology, MinimumRiverContributingLandCells, cancellationToken);
-        waterSurvey = new PlanetWaterSurvey(
-            WaterSurveyGridLevel,
-            features.Watersheds.Count,
-            features.Lakes.Count,
-            features.RiverSegments.Count);
-        AddJournalEntry(
-            "water-pathways-mapped",
-            "Potential water pathways mapped",
-            $"Topography resolves {waterSurvey.WatershedCount} drainage basins, {waterSurvey.LakeCount} closed depressions and {waterSurvey.PotentialRiverSegmentCount} potential high-flow drainage segments. This is terrain-routing potential, not yet a rainfall or discharge simulation.",
-            6);
-        return CreateSnapshot();
+        var precipitation = EstimateAnnualPrecipitationMillimeters(planet);
+        var runoff = EstimateAnnualRunoffMillimeters(precipitation);
+        var startYear = waterCycle?.SimulatedYears ?? 0;
+        var frames = WaterCycleFrameYears
+            .Select(frameYears => BuildWaterCycleFrame(startYear + frameYears, precipitation, runoff, features))
+            .ToArray();
+
+        waterCycle = frames[^1].State;
+        if (!HasJournalEntry("first-precipitation"))
+        {
+            AddJournalEntryAt(
+                CurrentMission.MissionYearsElapsed + frames[0].Year,
+                "first-precipitation",
+                "The first persistent precipitation cycle begins",
+                "Liquid surface water now participates in a reduced global water-cycle model: evaporation supplies atmospheric moisture, precipitation returns it to the surface, and topography routes the runoff.",
+                4);
+        }
+
+        if (waterCycle.ActiveRiverSegmentCount > 0 && !HasJournalEntry("active-runoff-network"))
+        {
+            AddJournalEntryAt(
+                CurrentMission.MissionYearsElapsed + waterCycle.SimulatedYears,
+                "active-runoff-network",
+                "A connected runoff network becomes persistent",
+                $"The reduced hydrology model now supplies runoff to {waterCycle.ActiveRiverSegmentCount} terrain-derived drainage segments and fills {waterCycle.ActiveLakeCount} closed depressions strongly enough to persist in the current climate.",
+                6);
+        }
+
+        return new PlanetWaterWorldSimulationResult(CreateSnapshot(), frames);
     }
 
     public bool CanAfford(MissionInterventionType type) => frozenWorldMission.CanAfford(type);
@@ -179,7 +196,8 @@ public sealed class PlanetRun(
             journal.ToArray(),
             researchUnlocks.ToArray(),
             researchChoiceAvailable,
-            waterSurvey);
+            waterSurvey,
+            waterCycle);
 
     public PlanetRunSnapshot Restore(PlanetRunSave save)
     {
@@ -194,11 +212,109 @@ public sealed class PlanetRun(
         insight = save.Insight;
         researchChoiceAvailable = save.ResearchChoiceAvailable;
         waterSurvey = save.WaterSurvey;
+        waterCycle = save.WaterCycle;
         journal.Clear();
         journal.AddRange(save.Journal);
         researchUnlocks.Clear();
         researchUnlocks.AddRange(save.ResearchUnlocks);
         return CreateSnapshot();
+    }
+
+    private PlanetHydrologyFeatures BuildWaterFeatures(CancellationToken cancellationToken)
+    {
+        var planet = CurrentMission.Planet;
+        var hydrology = hydrologyModelBuilder.Build(
+            WaterSurveyGridLevel,
+            planet.Seed,
+            planet.PhysicalParameters.RadiusMeters,
+            planet.SeaLevelMeters,
+            cancellationToken);
+        return hydrologyFeatureExtractor.Extract(hydrology, MinimumRiverContributingLandCells, cancellationToken);
+    }
+
+    private void EnsureWaterSurvey(CancellationToken cancellationToken)
+    {
+        if (waterSurvey is not null)
+        {
+            return;
+        }
+
+        EnsureWaterSurvey(BuildWaterFeatures(cancellationToken));
+    }
+
+    private void EnsureWaterSurvey(PlanetHydrologyFeatures features)
+    {
+        if (waterSurvey is not null)
+        {
+            return;
+        }
+
+        waterSurvey = new PlanetWaterSurvey(
+            WaterSurveyGridLevel,
+            features.Watersheds.Count,
+            features.Lakes.Count,
+            features.RiverSegments.Count);
+        AddJournalEntry(
+            "water-pathways-mapped",
+            "Potential water pathways mapped",
+            $"Topography resolves {waterSurvey.WatershedCount} drainage basins, {waterSurvey.LakeCount} closed depressions and {waterSurvey.PotentialRiverSegmentCount} potential high-flow drainage segments. These are dry routing pathways until the water-cycle model supplies runoff.",
+            6);
+    }
+
+    private static PlanetWaterCycleFrame BuildWaterCycleFrame(
+        int year,
+        double annualPrecipitationMillimeters,
+        double annualRunoffMillimeters,
+        PlanetHydrologyFeatures features)
+    {
+        var wettingResponse = 1.0 - Math.Exp(-year / 18.0);
+        var runoffPotential = Math.Clamp(annualRunoffMillimeters / 350.0, 0.0, 1.0);
+        var riverActivation = Math.Clamp(wettingResponse * runoffPotential, 0.0, 1.0);
+        var lakeFillResponse = 1.0 - Math.Exp(-year / 30.0);
+        var lakeFill = Math.Clamp(lakeFillResponse * Math.Clamp(annualPrecipitationMillimeters / 700.0, 0.0, 1.0), 0.0, 1.0);
+        var activeRiverCount = features.RiverSegments.Count == 0 ? 0 : Math.Clamp((int)Math.Round(features.RiverSegments.Count * riverActivation), 1, features.RiverSegments.Count);
+        var activeLakeCount = features.Lakes.Count == 0 ? 0 : Math.Clamp((int)Math.Round(features.Lakes.Count * lakeFill), 1, features.Lakes.Count);
+        var maximumContribution = features.RiverSegments.Count == 0 ? 1L : features.RiverSegments.Max(segment => segment.ContributingLandCellCount);
+        var activeSegments = features.RiverSegments
+            .OrderByDescending(segment => segment.ContributingLandCellCount)
+            .ThenByDescending(segment => segment.StrahlerOrder)
+            .Take(activeRiverCount)
+            .Select(segment => new PlanetWaterPathSegment(
+                segment.FromDirection.X,
+                segment.FromDirection.Y,
+                segment.FromDirection.Z,
+                segment.ToDirection.X,
+                segment.ToDirection.Y,
+                segment.ToDirection.Z,
+                Math.Clamp(Math.Sqrt(segment.ContributingLandCellCount / (double)maximumContribution), 0.08, 1.0),
+                segment.StrahlerOrder))
+            .ToArray();
+        var state = new PlanetWaterCycleState(
+            year,
+            annualPrecipitationMillimeters,
+            annualRunoffMillimeters,
+            lakeFill,
+            riverActivation,
+            activeLakeCount,
+            activeRiverCount,
+            activeSegments);
+        return new PlanetWaterCycleFrame(year, state);
+    }
+
+    private static double EstimateAnnualPrecipitationMillimeters(Application.Rendering.PlanetRenderSnapshot planet)
+    {
+        var temperatureCelsius = planet.Climate.SurfaceTemperatureKelvin - PhysicalConstants.KelvinOffsetCelsius;
+        var liquidAvailability = Math.Clamp(planet.Water.LiquidFraction, 0.0, 1.0);
+        var thermalScale = Math.Exp(Math.Clamp((temperatureCelsius - 15.0) * 0.035, -1.0, 1.0));
+        var pressureRatio = Math.Max(planet.Atmosphere.SurfacePressurePascals, 1.0) / 101_325.0;
+        var pressureScale = Math.Clamp(Math.Sqrt(pressureRatio), 0.5, 1.5);
+        return ReferenceAnnualPrecipitationMillimeters * liquidAvailability * thermalScale * pressureScale;
+    }
+
+    private static double EstimateAnnualRunoffMillimeters(double annualPrecipitationMillimeters)
+    {
+        var runoffFraction = Math.Clamp(0.25 + (annualPrecipitationMillimeters / 2_000.0 * 0.20), 0.20, 0.45);
+        return annualPrecipitationMillimeters * runoffFraction;
     }
 
     private void EvaluateDiscoveries()
@@ -236,19 +352,30 @@ public sealed class PlanetRun(
     }
 
     private void AddJournalEntry(string key, string title, string description, int insightAwarded)
+        => AddJournalEntryAt(CurrentMission.MissionYearsElapsed, key, title, description, insightAwarded);
+
+    private void AddJournalEntryAt(double year, string key, string title, string description, int insightAwarded)
     {
         if (HasJournalEntry(key))
         {
             return;
         }
 
-        journal.Add(new PlanetJournalEntry(key, CurrentMission.MissionYearsElapsed, title, description, insightAwarded));
+        journal.Add(new PlanetJournalEntry(key, year, title, description, insightAwarded));
         insight += insightAwarded;
     }
 
     private bool HasJournalEntry(string key) => journal.Any(entry => entry.Key == key);
 
     private MissionSnapshot CurrentMission => mission ?? throw new InvalidOperationException("Start or restore the Planet Run before using it.");
+
+    private void EnsureWaterWorld()
+    {
+        if (era != PlanetRunEra.WaterWorld)
+        {
+            throw new InvalidOperationException("The water-cycle simulation requires the Water World era.");
+        }
+    }
 
     private PlanetRunSnapshot CreateSnapshot()
     {
@@ -263,6 +390,7 @@ public sealed class PlanetRun(
             researchUnlocks.ToArray(),
             choices,
             researchChoiceAvailable,
-            waterSurvey);
+            waterSurvey,
+            waterCycle);
     }
 }
