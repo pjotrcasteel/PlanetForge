@@ -62,6 +62,7 @@ public sealed class FrozenWorldMission(PlanetExperience planetExperience)
         planetExperience.ResetEarthReference();
         planetExperience.MoveOrbitOutward();
         planetExperience.AdvanceClimate(50.0);
+        InitializeInheritedSnowballCryosphere();
         currentPlanet = planetExperience.CreateInitialRenderSnapshot();
         budgetRemaining = StartingBudget;
         missionYearsElapsed = 0;
@@ -199,6 +200,19 @@ public sealed class FrozenWorldMission(PlanetExperience planetExperience)
     }
 
     private PlanetRenderSnapshot CurrentPlanet => currentPlanet ?? throw new InvalidOperationException("Start the mission before using it.");
+
+    private void InitializeInheritedSnowballCryosphere()
+    {
+        var state = planetExperience.ExportState();
+        var climateState = state.ClimateState with
+        {
+            CryosphereFraction = 1.0,
+            SeaIceFraction = 1.0,
+            LandIceFraction = 1.0,
+            SnowCoverFraction = 1.0,
+        };
+        planetExperience.RestoreState(state with { ClimateState = climateState });
+    }
 
     private void ApplyPlan()
     {
