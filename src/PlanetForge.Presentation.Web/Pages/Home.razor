@@ -1,21 +1,51 @@
+@using System.Text.Json
 @using PlanetForge.Application.Missions
+@using PlanetForge.Application.Runs
 @using PlanetForge.Domain.Atmosphere
 @using PlanetForge.Domain.Hydrology
 @using PlanetForge.Domain.Physics
 @implements IAsyncDisposable
 @inject PlanetExperience Experience
-@inject FrozenWorldMission Mission
+@inject PlanetRun Run
 @inject IJSRuntime JsRuntime
 
 <main class="game-shell">
     <section class="hero-copy">
         <div>
-            <span class="eyebrow">MILESTONE 0.0.5.1 · GAMEPLAY CLARITY</span>
+            <span class="eyebrow">MILESTONE 0.0.6 · PLANET RUN</span>
             <h1>PlanetForge</h1>
-            <p>Diagnose a world, choose an intervention, predict what will happen and commit your plan to the simulation.</p>
+            <p>Take one scientifically simulated world from a frozen dead rock toward a self-sustaining biosphere. Every era must be earned by creating the physical conditions that make the next one possible.</p>
         </div>
-        <div class="seed-chip">BUILD 0.0.5.1 · SEED @snapshot?.Seed</div>
+        <div class="seed-chip">BUILD 0.0.6 · SEED @snapshot?.Seed</div>
     </section>
+
+    @if (!sandboxMode && run is not null)
+    {
+        <section class="run-overview">
+            <div class="run-status-copy">
+                <span class="eyebrow">CURRENT PLANETARY ERA</span>
+                <h2>@FormatCurrentEra()</h2>
+                <p>@FormatCurrentEraGoal()</p>
+            </div>
+            <div class="insight-counter">
+                <span>SCIENTIFIC INSIGHT</span>
+                <strong>@run.Insight</strong>
+                <small>earned from first observations and planetary breakthroughs</small>
+            </div>
+        </section>
+
+        <section class="era-track" aria-label="Planetary progression eras">
+            @foreach (var eraDefinition in Run.Eras)
+            {
+                <article class="era-node @EraClass(eraDefinition.Era)">
+                    <span>ERA @((int)eraDefinition.Era + 1)</span>
+                    <strong>@eraDefinition.Name</strong>
+                    <small>@EraStatus(eraDefinition.Era)</small>
+                    <p>@eraDefinition.ScientificPrerequisite</p>
+                </article>
+            }
+        </section>
+    }
 
     <section class="planet-stage">
         <canvas id="planet-canvas" aria-label="Interactive simulated planet"></canvas>
@@ -31,46 +61,26 @@
     {
         <section class="mission-briefing">
             <div class="mission-briefing-copy">
-                <span class="eyebrow">MISSION 01 · ENERGY & FEEDBACK</span>
+                <span class="eyebrow">CHAPTER 01 · DEAD ROCK</span>
                 <h2>@FrozenWorldMission.Title</h2>
                 <p>This Earth-sized world drifted farther from its star. Cooling expanded its bright cryosphere. More ice now reflects more sunlight, which drives additional cooling.</p>
             </div>
             <div class="mission-objective">
-                <span>YOUR JOB</span>
-                <strong>Break the snowball feedback and establish liquid water.</strong>
-                <small>Hold stable liquid-water conditions for @FrozenWorldMission.RequiredStableYears consecutive simulated years.</small>
+                <span>ERA BREAKTHROUGH</span>
+                <strong>Break the snowball feedback and establish persistent surface liquid water.</strong>
+                <small>Hold stable liquid-water conditions for @FrozenWorldMission.RequiredStableYears consecutive simulated years to enter the Water World era.</small>
             </div>
         </section>
 
         <section class="mission-dashboard mission-budget-dashboard">
-            <article>
-                <span>AVAILABLE</span>
-                <strong>@mission?.BudgetRemaining</strong>
-                <small>credits you can still reserve</small>
-            </article>
-            <article class="budget-reserved">
-                <span>RESERVED</span>
-                <strong>@ReservedCredits()</strong>
-                <small>queued, but not executed yet</small>
-            </article>
-            <article>
-                <span>SPENT</span>
-                <strong>@SpentCredits()</strong>
-                <small>committed in previous turns</small>
-            </article>
-            <article>
-                <span>MISSION TIME</span>
-                <strong>@mission?.MissionYearsElapsed / @FrozenWorldMission.MaximumMissionYears</strong>
-                <small>simulated years elapsed</small>
-            </article>
+            <article><span>AVAILABLE</span><strong>@mission?.BudgetRemaining</strong><small>credits you can still reserve</small></article>
+            <article class="budget-reserved"><span>RESERVED</span><strong>@ReservedCredits()</strong><small>queued, but not executed yet</small></article>
+            <article><span>SPENT</span><strong>@SpentCredits()</strong><small>committed in previous turns</small></article>
+            <article><span>MISSION TIME</span><strong>@mission?.MissionYearsElapsed / @FrozenWorldMission.MaximumMissionYears</strong><small>simulated years elapsed</small></article>
         </section>
 
         <section class="mission-progress-strip @MissionStatusClass()">
-            <div>
-                <span class="eyebrow">MISSION STATUS</span>
-                <strong>@FormatMissionStatus()</strong>
-                <small>@FormatMissionStatusDetail()</small>
-            </div>
+            <div><span class="eyebrow">CHAPTER STATUS</span><strong>@FormatMissionStatus()</strong><small>@FormatMissionStatusDetail()</small></div>
             <div class="stable-progress-copy">
                 <span>STABLE WATER</span>
                 <strong>@mission?.StableYears / @FrozenWorldMission.RequiredStableYears YEARS</strong>
@@ -78,24 +88,26 @@
             </div>
         </section>
 
-        @if (mission?.Status != MissionStatus.Active)
+        @if (mission?.Status == MissionStatus.Failed)
         {
-            <section class="mission-resolution @MissionStatusClass()">
-                <span class="eyebrow">@FormatMissionStatus()</span>
-                <h2>@FormatMissionResolutionTitle()</h2>
-                <p>@FormatMissionResolutionCopy()</p>
-                <button class="primary-button" @onclick="RestartMissionAsync">Restart mission</button>
+            <section class="mission-resolution status-failed">
+                <span class="eyebrow">CHAPTER FAILED</span>
+                <h2>The world remained trapped in the cold state.</h2>
+                <p>The 250-year intervention window ended before persistent liquid-water conditions were maintained. The journal remains a record of what happened, but restarting begins a fresh Planet Run.</p>
+                <button class="primary-button" @onclick="RestartRunAsync">Restart Planet Run</button>
+            </section>
+        }
+        else if (mission?.Status == MissionStatus.Won)
+        {
+            <section class="mission-resolution status-won era-breakthrough">
+                <span class="eyebrow">ERA II REACHED · WATER WORLD</span>
+                <h2>The planet has crossed its first major physical threshold.</h2>
+                <p>Liquid surface water remained stable for fifty consecutive simulated years. This does not mean the planet is alive; it means a persistent hydrological world is now physically possible.</p>
             </section>
         }
         else
         {
-            <section class="section-heading compact-heading">
-                <div>
-                    <span class="eyebrow">1 · DIAGNOSE</span>
-                    <h2>Why is the world freezing?</h2>
-                </div>
-            </section>
-
+            <section class="section-heading compact-heading"><div><span class="eyebrow">1 · DIAGNOSE</span><h2>Why is the world freezing?</h2></div></section>
             <section class="observation-grid diagnosis-grid">
                 <article class="observation-card danger-observation"><span>TEMPERATURE</span><strong>@FormatSurfaceTemperature()</strong><small>Climate target @FormatTargetSurfaceTemperature()</small></article>
                 <article class="observation-card"><span>CRYOSPHERE</span><strong>@FormatCryosphere()</strong><small>Bright ice and snow reflect sunlight</small></article>
@@ -103,16 +115,10 @@
                 <article class="observation-card"><span>ENERGY INPUT</span><strong>@FormatSolarFlux()</strong><small>Orbit @FormatOrbitalDistance()</small></article>
             </section>
 
-            <section class="learning-callout diagnosis-callout">
-                <strong>Diagnosis</strong>
-                <span>@FormatDiagnosis()</span>
-            </section>
+            <section class="learning-callout diagnosis-callout"><strong>Diagnosis</strong><span>@FormatDiagnosis()</span></section>
 
             <section class="section-heading compact-heading">
-                <div>
-                    <span class="eyebrow">2 · CHOOSE</span>
-                    <h2>Build a planetary intervention plan</h2>
-                </div>
+                <div><span class="eyebrow">2 · CHOOSE</span><h2>Build a planetary intervention plan</h2></div>
                 @if (mission is not null && mission.PlannedInterventions.Count > 0)
                 {
                     <button @onclick="ClearPlanAsync">Clear reserved plan</button>
@@ -120,23 +126,17 @@
             </section>
 
             <section class="intervention-grid">
-                @foreach (var intervention in Mission.Interventions)
+                @foreach (var intervention in Run.Interventions)
                 {
                     <article class="intervention-card @(PlanCount(intervention.Type) > 0 ? "intervention-planned" : string.Empty)">
-                        <div class="intervention-topline">
-                            <span>@intervention.Cost CREDITS</span>
-                            <span>@PlanCount(intervention.Type)× RESERVED</span>
-                        </div>
+                        <div class="intervention-topline"><span>@intervention.Cost CREDITS</span><span>@PlanCount(intervention.Type)× RESERVED</span></div>
                         <div class="impact-badge">@intervention.ImpactLabel</div>
                         <h3>@intervention.Name</h3>
                         <p>@intervention.Summary</p>
-                        <div class="effect-preview">
-                            <strong>PHYSICAL CHANGE</strong>
-                            <span>@intervention.EffectPreview</span>
-                        </div>
+                        <div class="effect-preview"><strong>PHYSICAL CHANGE</strong><span>@intervention.EffectPreview</span></div>
                         <div class="mechanism-note"><strong>WHY IT WORKS</strong><span>@intervention.Mechanism</span></div>
                         <small>@intervention.TradeOff</small>
-                        <button class="wide-button" disabled="@(!Mission.CanAfford(intervention.Type))" @onclick="() => PlanAsync(intervention.Type)">
+                        <button class="wide-button" disabled="@(!Run.CanAfford(intervention.Type))" @onclick="() => PlanAsync(intervention.Type)">
                             @(PlanCount(intervention.Type) > 0 ? $"Reserve another · {intervention.Cost}" : $"Reserve intervention · {intervention.Cost}")
                         </button>
                     </article>
@@ -148,16 +148,12 @@
                     <span class="eyebrow">3 · COMMIT</span>
                     <h2>@(ReservedCredits() > 0 ? "Your plan is queued — nothing has happened yet." : "Run the current trajectory or reserve an intervention.")</h2>
                     <p><strong>Plan:</strong> @FormatCurrentPlan()</p>
-                    <div class="command-impact-row">
-                        <span>@FormatPlanImpact()</span>
-                        <span>@ReservedCredits() RESERVED · @mission?.BudgetRemaining AVAILABLE</span>
-                    </div>
+                    <div class="command-impact-row"><span>@FormatPlanImpact()</span><span>@ReservedCredits() RESERVED · @mission?.BudgetRemaining AVAILABLE</span></div>
                     @if (ReservedCredits() > 0)
                     {
                         <div class="not-executed-warning">RESERVED ≠ SPENT · THE PLAN ONLY TAKES EFFECT WHEN YOU EXECUTE THE TURN</div>
                     }
                 </div>
-
                 <div class="command-prediction">
                     <strong>What do you predict over the next @FrozenWorldMission.TurnYears years?</strong>
                     <div class="prediction-buttons">
@@ -166,7 +162,6 @@
                         <button class="@PredictionClass(MissionPrediction.Cooler)" @onclick="() => PredictAsync(MissionPrediction.Cooler)">↓ Cooler</button>
                     </div>
                 </div>
-
                 <button class="primary-button mission-execute-button" disabled="@(mission?.Prediction is null)" @onclick="SimulateTurnAsync">
                     EXECUTE @(ReservedCredits() > 0 ? "PLAN" : "NO INTERVENTION") · +@FrozenWorldMission.TurnYears YEARS
                 </button>
@@ -188,109 +183,110 @@
                     <article><span>LIQUID WATER</span><strong>@FormatPercent(mission.LastTurn.LiquidWaterBefore) → @FormatPercent(mission.LastTurn.LiquidWaterAfter)</strong><small>@FormatPercentagePointDelta(mission.LastTurn.LiquidWaterDelta)</small></article>
                     <article><span>EFFECTIVE ALBEDO</span><strong>@FormatPercent(mission.LastTurn.EffectiveAlbedoBefore) → @FormatPercent(mission.LastTurn.EffectiveAlbedoAfter)</strong><small>@FormatPercentagePointDelta(mission.LastTurn.EffectiveAlbedoDelta)</small></article>
                 </div>
-                <div class="causal-explanation">
-                    <strong>WHAT HAPPENED?</strong>
-                    <p>@mission.LastTurn.Explanation</p>
+                <div class="causal-explanation"><strong>WHAT HAPPENED?</strong><p>@mission.LastTurn.Explanation</p></div>
+            </section>
+        }
+
+        @if (run?.ResearchChoiceAvailable == true)
+        {
+            <section class="research-unlock-panel">
+                <div class="section-heading compact-heading">
+                    <div><span class="eyebrow">SCIENTIFIC BREAKTHROUGH</span><h2>Choose what your expedition learns to measure next</h2></div>
+                    <div class="insight-cost-chip">@run.Insight INSIGHT AVAILABLE</div>
+                </div>
+                <p class="research-intro">These unlocks do not improve the laws of physics. They improve what you can observe and analyse. Choose one capability for this run.</p>
+                <section class="research-choice-grid">
+                    @foreach (var research in run.ResearchChoices)
+                    {
+                        <article class="research-choice-card">
+                            <span>@research.InsightCost INSIGHT</span>
+                            <h3>@research.Name</h3>
+                            <p>@research.Capability</p>
+                            <small>@research.ScientificBasis</small>
+                            <button class="wide-button" disabled="@(run.Insight < research.InsightCost)" @onclick="() => SelectResearchAsync(research.Type)">Unlock @research.Name</button>
+                        </article>
+                    }
+                </section>
+            </section>
+        }
+        else if (run is not null && run.ResearchUnlocks.Count > 0)
+        {
+            <section class="unlocked-capability-panel">
+                <span class="eyebrow">ACTIVE RESEARCH CAPABILITY</span>
+                <strong>@FormatResearchUnlock(run.ResearchUnlocks[0])</strong>
+                <p>@FormatResearchCapability(run.ResearchUnlocks[0])</p>
+                @if (run.Era == PlanetRunEra.WaterWorld)
+                {
+                    <small>NEXT ERA OBJECTIVE · model a persistent spatial water cycle with drainage, lakes and runoff. That becomes the gameplay focus of 0.0.7.</small>
+                }
+            </section>
+        }
+
+        @if (run is not null)
+        {
+            <section class="planet-journal">
+                <div class="section-heading compact-heading"><div><span class="eyebrow">PLANET JOURNAL</span><h2>This world remembers what happened</h2></div><strong>@run.Journal.Count EVENTS</strong></div>
+                <div class="journal-list">
+                    @foreach (var entry in run.Journal.OrderByDescending(value => value.Year))
+                    {
+                        <article>
+                            <div class="journal-time">YEAR +@entry.Year.ToString("0")</div>
+                            <div><strong>@entry.Title</strong><p>@entry.Description</p></div>
+                            @if (entry.InsightAwarded > 0)
+                            {
+                                <span class="journal-insight">+@entry.InsightAwarded INSIGHT</span>
+                            }
+                        </article>
+                    }
                 </div>
             </section>
         }
 
         <section class="sandbox-entry">
-            <div>
-                <span class="eyebrow">CURIOUS?</span>
-                <strong>Want the raw scientific controls?</strong>
-                <p>The mission translates physical parameters into decisions. Open the sandbox when you want to manipulate those parameters directly.</p>
-            </div>
+            <div><span class="eyebrow">CURIOUS?</span><strong>Want the raw scientific controls?</strong><p>The run translates physical parameters into decisions. Sandbox changes are deliberately kept outside the persistent Planet Run.</p></div>
             <button @onclick="ToggleSandboxAsync">Open Advanced Sandbox</button>
         </section>
     }
     else
     {
         <section class="section-heading">
-            <div>
-                <span class="eyebrow">ADVANCED SANDBOX</span>
-                <h2>Direct scientific controls</h2>
-            </div>
-            <button @onclick="ToggleSandboxAsync">Return to mission · restart</button>
+            <div><span class="eyebrow">ADVANCED SANDBOX</span><h2>Direct scientific controls</h2></div>
+            <button @onclick="ToggleSandboxAsync">Return to Planet Run · restart run</button>
         </section>
-
-        <section class="learning-callout">
-            <strong>Sandbox mode exposes the machinery.</strong>
-            <span>These are model parameters and boundary conditions rather than game actions. The educational mission translates these same mechanisms into decisions with costs and consequences.</span>
-        </section>
-
+        <section class="learning-callout"><strong>Sandbox mode exposes the machinery.</strong><span>These are model parameters and boundary conditions rather than progression actions. Changes here are not written into the persistent Planet Run.</span></section>
         <section class="control-grid">
-            <article class="control-card accent-card">
-                <span class="control-label">ATMOSPHERIC MASS</span><strong>@FormatAtmosphereMass()</strong><small>@FormatPressure() pressure</small>
-                <div class="button-row"><button @onclick="DecreaseAtmosphereMassAsync">Remove gas</button><button @onclick="IncreaseAtmosphereMassAsync">Add gas</button></div>
-            </article>
-            <article class="control-card accent-card">
-                <span class="control-label">CARBON DIOXIDE</span><strong>@FormatCarbonDioxide()</strong><small>@FormatCarbonDioxideForcing() forcing</small>
-                <div class="button-row"><button @onclick="HalveCarbonDioxideAsync">½ CO₂</button><button @onclick="DoubleCarbonDioxideAsync">2× CO₂</button></div>
-            </article>
-            <article class="control-card accent-card">
-                <span class="control-label">TOTAL WATER</span><strong>@FormatWaterInventory()</strong><small>@FormatWaterFractions()</small>
-                <div class="button-row"><button @onclick="DecreaseWaterAsync">− Water</button><button @onclick="IncreaseWaterAsync">+ Water</button></div>
-            </article>
-            <article class="control-card">
-                <span class="control-label">ORBITAL DISTANCE</span><strong>@FormatOrbitalDistance()</strong><small>Inverse-square stellar irradiance</small>
-                <div class="button-row"><button @onclick="MoveOrbitInwardAsync">Toward star</button><button @onclick="MoveOrbitOutwardAsync">Away from star</button></div>
-            </article>
-            <article class="control-card">
-                <span class="control-label">STELLAR LUMINOSITY</span><strong>@FormatStellarLuminosity()</strong><small>@FormatSolarFlux() at planet</small>
-                <div class="button-row"><button @onclick="DimStarAsync">Dim</button><button @onclick="BrightenStarAsync">Brighten</button></div>
-            </article>
-            <article class="control-card">
-                <span class="control-label">BASE BOND ALBEDO</span><strong>@FormatAlbedo()</strong><small>Effective @FormatEffectiveAlbedo()</small>
-                <div class="button-row"><button @onclick="DarkenSurfaceAsync">Darken</button><button @onclick="BrightenSurfaceAsync">Brighten</button></div>
-            </article>
-            <article class="control-card">
-                <span class="control-label">PLANET MASS</span><strong>@FormatMass()</strong><small>Changes gravity and pressure</small>
-                <div class="button-row"><button @onclick="DecreaseMassAsync">− Mass</button><button @onclick="IncreaseMassAsync">+ Mass</button></div>
-            </article>
-            <article class="control-card">
-                <span class="control-label">PLANET RADIUS</span><strong>@FormatRadius()</strong><small>Changes gravity and surface area</small>
-                <div class="button-row"><button @onclick="DecreaseRadiusAsync">− Radius</button><button @onclick="IncreaseRadiusAsync">+ Radius</button></div>
-            </article>
-            <article class="control-card">
-                <span class="control-label">SIMULATION TIME</span><strong>@FormatSimulationYear()</strong><small>Advance climate inertia and feedback</small>
-                <div class="button-row"><button @onclick="AdvanceTenYearsAsync">+10 years</button><button @onclick="AdvanceFiftyYearsAsync">+50 years</button></div>
-            </article>
+            <article class="control-card accent-card"><span class="control-label">ATMOSPHERIC MASS</span><strong>@FormatAtmosphereMass()</strong><small>@FormatPressure() pressure</small><div class="button-row"><button @onclick="DecreaseAtmosphereMassAsync">Remove gas</button><button @onclick="IncreaseAtmosphereMassAsync">Add gas</button></div></article>
+            <article class="control-card accent-card"><span class="control-label">CARBON DIOXIDE</span><strong>@FormatCarbonDioxide()</strong><small>@FormatCarbonDioxideForcing() forcing</small><div class="button-row"><button @onclick="HalveCarbonDioxideAsync">½ CO₂</button><button @onclick="DoubleCarbonDioxideAsync">2× CO₂</button></div></article>
+            <article class="control-card accent-card"><span class="control-label">TOTAL WATER</span><strong>@FormatWaterInventory()</strong><small>@FormatWaterFractions()</small><div class="button-row"><button @onclick="DecreaseWaterAsync">− Water</button><button @onclick="IncreaseWaterAsync">+ Water</button></div></article>
+            <article class="control-card"><span class="control-label">ORBITAL DISTANCE</span><strong>@FormatOrbitalDistance()</strong><small>Inverse-square stellar irradiance</small><div class="button-row"><button @onclick="MoveOrbitInwardAsync">Toward star</button><button @onclick="MoveOrbitOutwardAsync">Away from star</button></div></article>
+            <article class="control-card"><span class="control-label">STELLAR LUMINOSITY</span><strong>@FormatStellarLuminosity()</strong><small>@FormatSolarFlux() at planet</small><div class="button-row"><button @onclick="DimStarAsync">Dim</button><button @onclick="BrightenStarAsync">Brighten</button></div></article>
+            <article class="control-card"><span class="control-label">BASE BOND ALBEDO</span><strong>@FormatAlbedo()</strong><small>Effective @FormatEffectiveAlbedo()</small><div class="button-row"><button @onclick="DarkenSurfaceAsync">Darken</button><button @onclick="BrightenSurfaceAsync">Brighten</button></div></article>
+            <article class="control-card"><span class="control-label">PLANET MASS</span><strong>@FormatMass()</strong><small>Changes gravity and pressure</small><div class="button-row"><button @onclick="DecreaseMassAsync">− Mass</button><button @onclick="IncreaseMassAsync">+ Mass</button></div></article>
+            <article class="control-card"><span class="control-label">PLANET RADIUS</span><strong>@FormatRadius()</strong><small>Changes gravity and surface area</small><div class="button-row"><button @onclick="DecreaseRadiusAsync">− Radius</button><button @onclick="IncreaseRadiusAsync">+ Radius</button></div></article>
+            <article class="control-card"><span class="control-label">SIMULATION TIME</span><strong>@FormatSimulationYear()</strong><small>Advance climate inertia and feedback</small><div class="button-row"><button @onclick="AdvanceTenYearsAsync">+10 years</button><button @onclick="AdvanceFiftyYearsAsync">+50 years</button></div></article>
         </section>
     }
 
     <section class="science-panel">
-        <div class="science-copy">
-            <span class="eyebrow">WHAT THIS MISSION TEACHES</span>
-            <h2>Forcing starts the change. Feedback can amplify it.</h2>
-            <p>Bright ice and snow reflect more incoming radiation than darker surfaces. Cooling can therefore expand the cryosphere, raise planetary albedo and cause additional cooling. PlanetForge uses that real mechanism while keeping the global cryosphere response deliberately simplified.</p>
-        </div>
-        <div class="formula-list">
-            <div><span>Stellar energy</span><code>F ∝ 1 / d²</code></div>
-            <div><span>CO₂ forcing</span><code>ΔF = 5.35 ln(C / C₀)</code></div>
-            <div><span>Ice feedback</span><code>αeff = αbase + 0.28 · fcryosphere</code></div>
-            <div><span>Thermal inertia</span><code>dT/dt = (Ttarget − T) / τ</code></div>
-        </div>
+        <div class="science-copy"><span class="eyebrow">SCIENCE CONTRACT</span><h2>Progression unlocks capability, never fantasy physics.</h2><p>PlanetForge can simplify a process into a reduced model, but every era transition must follow an explicit physical, chemical or biological prerequisite. Processes that are not yet modelled remain locked rather than being filled with invented mechanics.</p></div>
+        <div class="formula-list"><div><span>Stellar energy</span><code>F ∝ 1 / d²</code></div><div><span>CO₂ forcing</span><code>ΔF = 5.35 ln(C / C₀)</code></div><div><span>Ice feedback</span><code>αeff = αbase + 0.28 · fcryosphere</code></div><div><span>Thermal inertia</span><code>dT/dt = (Ttarget − T) / τ</code></div></div>
     </section>
 
-    <footer>
-        <span>LEARN BY EXPERIMENTING</span>
-        <span>COUPLED C# SIMULATION</span>
-        <span>NO COMMERCIAL ENGINE</span>
-    </footer>
+    <footer><span>SCIENTIFICALLY GROUNDED</span><span>PERSISTENT PLANET RUN</span><span>NO COMMERCIAL ENGINE</span></footer>
 </main>
 
 @code {
     private readonly CancellationTokenSource disposeCancellationTokenSource = new();
     private IJSObjectReference? rendererModule;
+    private IJSObjectReference? persistenceModule;
     private PlanetRenderSnapshot? snapshot;
+    private PlanetRunSnapshot? run;
     private MissionSnapshot? mission;
     private bool sandboxMode;
 
     protected override void OnInitialized()
     {
-        mission = Mission.Start();
-        snapshot = mission.Planet;
+        ApplyRun(Run.StartNew());
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -300,39 +296,43 @@
             return;
         }
 
+        persistenceModule = await JsRuntime.InvokeAsync<IJSObjectReference>("import", disposeCancellationTokenSource.Token, "./js/runPersistence.js");
+        var savedJson = await persistenceModule.InvokeAsync<string?>("load", disposeCancellationTokenSource.Token);
+        if (!string.IsNullOrWhiteSpace(savedJson))
+        {
+            try
+            {
+                var save = JsonSerializer.Deserialize<PlanetRunSave>(savedJson);
+                if (save is not null)
+                {
+                    ApplyRun(Run.Restore(save));
+                }
+            }
+            catch (JsonException)
+            {
+                ApplyRun(Run.StartNew());
+            }
+            catch (NotSupportedException)
+            {
+                ApplyRun(Run.StartNew());
+            }
+        }
+        else
+        {
+            await SaveRunAsync();
+        }
+
         rendererModule = await JsRuntime.InvokeAsync<IJSObjectReference>("import", disposeCancellationTokenSource.Token, "./js/planetRenderer.js");
         await rendererModule.InvokeVoidAsync("initialize", disposeCancellationTokenSource.Token, "planet-canvas", snapshot, GetOrCreateSurfaceLodReference());
+        StateHasChanged();
     }
 
-    private Task PlanAsync(MissionInterventionType type)
-    {
-        mission = Mission.QueueIntervention(type);
-        return Task.CompletedTask;
-    }
-
-    private Task ClearPlanAsync()
-    {
-        mission = Mission.ClearPlan();
-        return Task.CompletedTask;
-    }
-
-    private Task PredictAsync(MissionPrediction prediction)
-    {
-        mission = Mission.SelectPrediction(prediction);
-        return Task.CompletedTask;
-    }
-
-    private async Task SimulateTurnAsync()
-    {
-        mission = Mission.SimulateTurn();
-        await UpdateAsync(mission.Planet);
-    }
-
-    private async Task RestartMissionAsync()
-    {
-        mission = Mission.Restart();
-        await UpdateAsync(mission.Planet);
-    }
+    private async Task PlanAsync(MissionInterventionType type) => await ApplyRunAsync(Run.QueueIntervention(type), updatePlanet: false);
+    private async Task ClearPlanAsync() => await ApplyRunAsync(Run.ClearPlan(), updatePlanet: false);
+    private async Task PredictAsync(MissionPrediction prediction) => await ApplyRunAsync(Run.SelectPrediction(prediction), updatePlanet: false);
+    private async Task SimulateTurnAsync() => await ApplyRunAsync(Run.SimulateTurn(), updatePlanet: true);
+    private async Task SelectResearchAsync(PlanetResearchUnlock research) => await ApplyRunAsync(Run.SelectResearch(research), updatePlanet: false);
+    private async Task RestartRunAsync() => await ApplyRunAsync(Run.Restart(), updatePlanet: true);
 
     private async Task ToggleSandboxAsync()
     {
@@ -343,30 +343,58 @@
         }
 
         sandboxMode = false;
-        mission = Mission.Restart();
-        await UpdateAsync(mission.Planet);
+        await ApplyRunAsync(Run.Restart(), updatePlanet: true);
     }
 
-    private Task AdvanceTenYearsAsync() => UpdateAsync(Experience.AdvanceClimate(10.0));
-    private Task AdvanceFiftyYearsAsync() => UpdateAsync(Experience.AdvanceClimate(50.0));
-    private Task MoveOrbitInwardAsync() => UpdateAsync(Experience.MoveOrbitInward());
-    private Task MoveOrbitOutwardAsync() => UpdateAsync(Experience.MoveOrbitOutward());
-    private Task DimStarAsync() => UpdateAsync(Experience.DimStar());
-    private Task BrightenStarAsync() => UpdateAsync(Experience.BrightenStar());
-    private Task DarkenSurfaceAsync() => UpdateAsync(Experience.DarkenSurface());
-    private Task BrightenSurfaceAsync() => UpdateAsync(Experience.BrightenSurface());
-    private Task DecreaseMassAsync() => UpdateAsync(Experience.DecreaseMass());
-    private Task IncreaseMassAsync() => UpdateAsync(Experience.IncreaseMass());
-    private Task DecreaseRadiusAsync() => UpdateAsync(Experience.DecreaseRadius());
-    private Task IncreaseRadiusAsync() => UpdateAsync(Experience.IncreaseRadius());
-    private Task DecreaseAtmosphereMassAsync() => UpdateAsync(Experience.DecreaseAtmosphereMass());
-    private Task IncreaseAtmosphereMassAsync() => UpdateAsync(Experience.IncreaseAtmosphereMass());
-    private Task HalveCarbonDioxideAsync() => UpdateAsync(Experience.HalveCarbonDioxide());
-    private Task DoubleCarbonDioxideAsync() => UpdateAsync(Experience.DoubleCarbonDioxide());
-    private Task DecreaseWaterAsync() => UpdateAsync(Experience.DecreaseWater());
-    private Task IncreaseWaterAsync() => UpdateAsync(Experience.IncreaseWater());
+    private Task AdvanceTenYearsAsync() => UpdateSandboxAsync(Experience.AdvanceClimate(10.0));
+    private Task AdvanceFiftyYearsAsync() => UpdateSandboxAsync(Experience.AdvanceClimate(50.0));
+    private Task MoveOrbitInwardAsync() => UpdateSandboxAsync(Experience.MoveOrbitInward());
+    private Task MoveOrbitOutwardAsync() => UpdateSandboxAsync(Experience.MoveOrbitOutward());
+    private Task DimStarAsync() => UpdateSandboxAsync(Experience.DimStar());
+    private Task BrightenStarAsync() => UpdateSandboxAsync(Experience.BrightenStar());
+    private Task DarkenSurfaceAsync() => UpdateSandboxAsync(Experience.DarkenSurface());
+    private Task BrightenSurfaceAsync() => UpdateSandboxAsync(Experience.BrightenSurface());
+    private Task DecreaseMassAsync() => UpdateSandboxAsync(Experience.DecreaseMass());
+    private Task IncreaseMassAsync() => UpdateSandboxAsync(Experience.IncreaseMass());
+    private Task DecreaseRadiusAsync() => UpdateSandboxAsync(Experience.DecreaseRadius());
+    private Task IncreaseRadiusAsync() => UpdateSandboxAsync(Experience.IncreaseRadius());
+    private Task DecreaseAtmosphereMassAsync() => UpdateSandboxAsync(Experience.DecreaseAtmosphereMass());
+    private Task IncreaseAtmosphereMassAsync() => UpdateSandboxAsync(Experience.IncreaseAtmosphereMass());
+    private Task HalveCarbonDioxideAsync() => UpdateSandboxAsync(Experience.HalveCarbonDioxide());
+    private Task DoubleCarbonDioxideAsync() => UpdateSandboxAsync(Experience.DoubleCarbonDioxide());
+    private Task DecreaseWaterAsync() => UpdateSandboxAsync(Experience.DecreaseWater());
+    private Task IncreaseWaterAsync() => UpdateSandboxAsync(Experience.IncreaseWater());
 
-    private async Task UpdateAsync(PlanetRenderSnapshot nextSnapshot)
+    private void ApplyRun(PlanetRunSnapshot nextRun)
+    {
+        run = nextRun;
+        mission = nextRun.Mission;
+        snapshot = mission.Planet;
+    }
+
+    private async Task ApplyRunAsync(PlanetRunSnapshot nextRun, bool updatePlanet)
+    {
+        ApplyRun(nextRun);
+        if (updatePlanet && rendererModule is not null)
+        {
+            await rendererModule.InvokeVoidAsync("setPlanet", disposeCancellationTokenSource.Token, snapshot);
+        }
+
+        await SaveRunAsync();
+    }
+
+    private async Task SaveRunAsync()
+    {
+        if (persistenceModule is null)
+        {
+            return;
+        }
+
+        var json = JsonSerializer.Serialize(Run.ExportSave());
+        await persistenceModule.InvokeVoidAsync("save", disposeCancellationTokenSource.Token, json);
+    }
+
+    private async Task UpdateSandboxAsync(PlanetRenderSnapshot nextSnapshot)
     {
         snapshot = nextSnapshot;
         if (rendererModule is not null)
@@ -376,7 +404,7 @@
     }
 
     private int PlanCount(MissionInterventionType type) => mission?.PlannedInterventions.Count(value => value == type) ?? 0;
-    private int ReservedCredits() => mission?.PlannedInterventions.Sum(type => Mission.GetDefinition(type).Cost) ?? 0;
+    private int ReservedCredits() => mission?.PlannedInterventions.Sum(type => Run.GetDefinition(type).Cost) ?? 0;
     private int SpentCredits() => mission is null ? 0 : FrozenWorldMission.StartingBudget - mission.BudgetRemaining - ReservedCredits();
 
     private string FormatCurrentPlan()
@@ -390,50 +418,47 @@
     }
 
     private string FormatExecutedPlan()
-        => mission?.LastTurn is null || mission.LastTurn.InterventionsApplied.Count == 0
-            ? "No intervention"
-            : FormatInterventionList(mission.LastTurn.InterventionsApplied);
+        => mission?.LastTurn is null || mission.LastTurn.InterventionsApplied.Count == 0 ? "No intervention" : FormatInterventionList(mission.LastTurn.InterventionsApplied);
 
     private string FormatInterventionList(IReadOnlyList<MissionInterventionType> interventions)
-        => string.Join(" + ", interventions.GroupBy(type => type).Select(group => $"{group.Count()}× {Mission.GetDefinition(group.Key).Name}"));
+        => string.Join(" + ", interventions.GroupBy(type => type).Select(group => $"{group.Count()}× {Run.GetDefinition(group.Key).Name}"));
 
     private string FormatPlanImpact()
     {
-        if (mission is null || mission.PlannedInterventions.Count == 0)
-        {
-            return "QUALITATIVE PREVIEW · NATURAL COOLING";
-        }
-
-        if (mission.PlannedInterventions.Contains(MissionInterventionType.OrbitalTransfer))
-        {
-            return "QUALITATIVE PREVIEW · VERY STRONG WARMING FORCING";
-        }
-
-        return mission.PlannedInterventions.Count >= 3
-            ? "QUALITATIVE PREVIEW · STRONG WARMING FORCING"
-            : "QUALITATIVE PREVIEW · MODERATE WARMING FORCING";
+        if (mission is null || mission.PlannedInterventions.Count == 0) return "QUALITATIVE PREVIEW · NATURAL COOLING";
+        if (mission.PlannedInterventions.Contains(MissionInterventionType.OrbitalTransfer)) return "QUALITATIVE PREVIEW · VERY STRONG WARMING FORCING";
+        return mission.PlannedInterventions.Count >= 3 ? "QUALITATIVE PREVIEW · STRONG WARMING FORCING" : "QUALITATIVE PREVIEW · MODERATE WARMING FORCING";
     }
 
     private string FormatDiagnosis()
     {
-        if (snapshot is null)
-        {
-            return "Collecting planetary data…";
-        }
-
-        var current = FormatSurfaceTemperature();
-        var target = FormatTargetSurfaceTemperature();
-        return $"The surface is {current}, while the current forcing pulls the climate toward {target}. Ice covers {FormatCryosphere()} of the world and raises effective albedo to {FormatEffectiveAlbedo()}. Without enough warming forcing, the ice-albedo feedback keeps strengthening the cold state.";
+        if (snapshot is null) return "Collecting planetary data…";
+        return $"The surface is {FormatSurfaceTemperature()}, while the current forcing pulls the climate toward {FormatTargetSurfaceTemperature()}. Ice covers {FormatCryosphere()} of the world and raises effective albedo to {FormatEffectiveAlbedo()}. Without enough warming forcing, the ice-albedo feedback keeps strengthening the cold state.";
     }
+
+    private string FormatCurrentEra() => run is null ? "—" : Run.Eras.Single(value => value.Era == run.Era).Name;
+    private string FormatCurrentEraGoal() => run is null ? "—" : Run.Eras.Single(value => value.Era == run.Era).Goal;
+    private string EraClass(PlanetRunEra value) => run is null ? "era-locked" : value < run.Era ? "era-complete" : value == run.Era ? "era-current" : "era-locked";
+    private string EraStatus(PlanetRunEra value) => run is null ? "LOCKED" : value < run.Era ? "ACHIEVED" : value == run.Era ? "CURRENT" : "LOCKED";
+    private string FormatResearchUnlock(PlanetResearchUnlock value) => run?.ResearchChoices.FirstOrDefault(definition => definition.Type == value)?.Name ?? value switch
+    {
+        PlanetResearchUnlock.AtmosphericSpectroscopy => "Atmospheric Spectroscopy",
+        PlanetResearchUnlock.SurfaceRadiometry => "Surface Radiometry",
+        PlanetResearchUnlock.HydrologicalSurvey => "Hydrological Survey",
+        _ => value.ToString(),
+    };
+    private string FormatResearchCapability(PlanetResearchUnlock value) => value switch
+    {
+        PlanetResearchUnlock.AtmosphericSpectroscopy => "Detailed atmospheric composition and radiative-forcing analysis is now part of this expedition's scientific toolkit.",
+        PlanetResearchUnlock.SurfaceRadiometry => "Detailed reflected-versus-absorbed stellar-energy diagnostics are now part of this expedition's scientific toolkit.",
+        PlanetResearchUnlock.HydrologicalSurvey => "Detailed water inventory diagnostics are unlocked, preparing this run for basin and runoff mapping in the Water World era.",
+        _ => string.Empty,
+    };
 
     private string PredictionClass(MissionPrediction prediction) => mission?.Prediction == prediction ? "prediction-selected" : string.Empty;
     private string MissionStatusClass() => mission?.Status switch { MissionStatus.Won => "status-won", MissionStatus.Failed => "status-failed", _ => "status-active" };
-    private string FormatMissionStatus() => mission?.Status switch { MissionStatus.Won => "MISSION COMPLETE", MissionStatus.Failed => "MISSION FAILED", _ => "IN PROGRESS" };
-    private string FormatMissionStatusDetail() => mission?.Status switch { MissionStatus.Won => "Stable liquid water established", MissionStatus.Failed => "Time window exhausted", _ => "Break the snowball feedback" };
-    private string FormatMissionResolutionTitle() => mission?.Status == MissionStatus.Won ? "You broke the snowball feedback." : "The world remained trapped in the cold state.";
-    private string FormatMissionResolutionCopy() => mission?.Status == MissionStatus.Won
-        ? "The planet maintained liquid-water conditions for fifty consecutive years. Your interventions changed the forcing strongly enough for ice retreat to lower albedo and reinforce the recovery."
-        : "The mission reached its 250-year limit without fifty consecutive stable years. Review the final forcing, cryosphere and albedo, then try a different combination or timing of interventions.";
+    private string FormatMissionStatus() => mission?.Status switch { MissionStatus.Won => "ERA BREAKTHROUGH", MissionStatus.Failed => "CHAPTER FAILED", _ => "IN PROGRESS" };
+    private string FormatMissionStatusDetail() => mission?.Status switch { MissionStatus.Won => "Persistent liquid water established", MissionStatus.Failed => "Intervention window exhausted", _ => "Break the snowball feedback" };
     private string FormatStableProgress() => $"{Math.Clamp((mission?.StableYears ?? 0) / (double)FrozenWorldMission.RequiredStableYears * 100.0, 0.0, 100.0):0}%";
     private string FormatSimulationYear() => snapshot is null ? "—" : $"YEAR +{snapshot.ClimateFeedback.ElapsedYears:0}";
     private string FormatOrbitalDistance() => snapshot is null ? "—" : $"{snapshot.PhysicalParameters.OrbitalDistanceMeters / PhysicalConstants.AstronomicalUnitMeters:0.00} AU";
@@ -456,16 +481,8 @@
 
     private string FormatWaterState()
     {
-        if (snapshot is null || snapshot.WaterParameters.TotalMassKilograms <= 0.0)
-        {
-            return "DRY";
-        }
-
-        if (snapshot.Water.LiquidFraction >= snapshot.Water.IceFraction && snapshot.Water.LiquidFraction >= snapshot.Water.VaporFraction)
-        {
-            return "LIQUID WATER";
-        }
-
+        if (snapshot is null || snapshot.WaterParameters.TotalMassKilograms <= 0.0) return "DRY";
+        if (snapshot.Water.LiquidFraction >= snapshot.Water.IceFraction && snapshot.Water.LiquidFraction >= snapshot.Water.VaporFraction) return "LIQUID WATER";
         return snapshot.Water.IceFraction >= snapshot.Water.VaporFraction ? "ICE WORLD" : "STEAM WORLD";
     }
 
@@ -492,6 +509,11 @@
             catch (JSDisconnectedException)
             {
             }
+        }
+
+        if (persistenceModule is not null)
+        {
+            await persistenceModule.DisposeAsync();
         }
 
         DisposeSurfaceLodReference();
