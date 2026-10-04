@@ -211,6 +211,33 @@ public sealed class PlanetExperience(
         return CreateSnapshot();
     }
 
+    public PlanetExperienceState ExportState()
+    {
+        _ = CreateSnapshot();
+        return new PlanetExperienceState(
+            state.Seed,
+            state.PhysicalParameters,
+            state.AtmosphereParameters,
+            state.WaterParameters,
+            climateState!);
+    }
+
+    public PlanetRenderSnapshot RestoreState(PlanetExperienceState restoredState)
+    {
+        ArgumentNullException.ThrowIfNull(restoredState);
+        state.Reseed(restoredState.Seed);
+        state.SetPhysicalParameters(restoredState.PhysicalParameters);
+        state.SetAtmosphereParameters(restoredState.AtmosphereParameters);
+        state.SetWaterParameters(restoredState.WaterParameters);
+        climateState = restoredState.ClimateState;
+        surfaceView = null;
+        localAnchorDirection = null;
+        cachedLocalSurfaceKey = null;
+        cachedLocalSurface = null;
+        surfaceMeshCache.Clear();
+        return CreateInitialRenderSnapshot();
+    }
+
     private PlanetRenderSnapshot CreateSnapshot(bool includeFullGlobalGeometry)
     {
         var basePhysics = PlanetPhysicsCalculator.Calculate(state.PhysicalParameters);
