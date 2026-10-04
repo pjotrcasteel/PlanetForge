@@ -19,9 +19,9 @@ public sealed record PlanetWaterCycleState
         double annualRunoffMillimeters,
         double lakeFillFraction,
         double riverActivationFraction,
-        int activeLakeCount,
-        int activeRiverSegmentCount,
-        IReadOnlyList<PlanetWaterPathSegment> activeRiverSegments)
+        int availableLakeCount,
+        int availableRiverSegmentCount,
+        IReadOnlyList<PlanetWaterPathSegment> availableRiverSegments)
     {
         SimulatedYears = simulatedYears;
         AnnualPrecipitationMillimeters = annualPrecipitationMillimeters;
@@ -31,13 +31,13 @@ public sealed record PlanetWaterCycleState
         var lakeMaturity = MaturationResponse(simulatedYears, LakeMaturationYears);
         LakeFillFraction = Math.Clamp(lakeFillFraction * lakeMaturity, 0.0, 1.0);
         RiverActivationFraction = Math.Clamp(riverActivationFraction * riverMaturity, 0.0, 1.0);
-        ActiveLakeCount = ScaleCount(activeLakeCount, lakeMaturity);
+        ActiveLakeCount = ScaleCount(availableLakeCount, LakeFillFraction);
 
-        var availableRiverCount = Math.Min(activeRiverSegmentCount, activeRiverSegments.Count);
-        var maturedRiverCount = ScaleCount(availableRiverCount, riverMaturity);
+        var availableRiverCount = Math.Min(availableRiverSegmentCount, availableRiverSegments.Count);
+        var activeRiverCount = ScaleCount(availableRiverCount, RiverActivationFraction);
         var dischargeScale = InitialDischargeScale + ((1.0 - InitialDischargeScale) * riverMaturity);
-        ActiveRiverSegments = activeRiverSegments
-            .Take(maturedRiverCount)
+        ActiveRiverSegments = availableRiverSegments
+            .Take(activeRiverCount)
             .Select(segment => segment with
             {
                 RelativeDischarge = Math.Clamp(segment.RelativeDischarge * dischargeScale, 0.08, 1.0),
