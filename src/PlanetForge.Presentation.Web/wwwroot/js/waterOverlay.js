@@ -4,6 +4,7 @@ const verticalFieldOfViewRadians = Math.PI / 4.2;
 const minimumCameraAltitudeMeters = 3.0;
 const maximumCameraAltitudeRatio = 4.2;
 const localTransitionAltitudeMeters = 20_000.0;
+const localExitAltitudeMeters = 25_000.0;
 
 export function initialize(overlayCanvasId, inputCanvasId, planetRadiusMeters) {
     const canvas = document.getElementById(overlayCanvasId);
@@ -61,6 +62,8 @@ function installInput(s) {
         const deltaY = event.clientY - s.lastY;
         s.lastX = event.clientX;
         s.lastY = event.clientY;
+        const altitudeMeters = Math.max(0.0, (s.distance - 1.0) * s.planetRadiusMeters);
+        if (altitudeMeters <= localExitAltitudeMeters) return;
         s.yaw += deltaX * 0.008;
         s.pitch = clamp(s.pitch + deltaY * 0.008, -1.25, 1.25);
     });
