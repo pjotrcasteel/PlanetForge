@@ -55,7 +55,7 @@ jobs:
           grep -q '<base href="/PlanetForge/" />' "$INDEX"
           grep -q "hydrology-foundation.css?v=${GITHUB_SHA}" "$INDEX"
           grep -q "foundation-simulator.css?v=${GITHUB_SHA}" "$INDEX"
-          grep -q "PF 0.0.9 · ${SHORT_SHA}" "$INDEX"
+          grep -Eq "PF [0-9]+\.[0-9]+\.[0-9]+ · ${SHORT_SHA}" "$INDEX"
           if grep -q '__BUILD_SHA_SHORT__' "$INDEX"; then
             echo 'Build SHA placeholder was not replaced.'
             exit 1
