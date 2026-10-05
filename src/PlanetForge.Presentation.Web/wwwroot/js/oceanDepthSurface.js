@@ -114,7 +114,7 @@ function installVisualTestApi() {
     if (!new URLSearchParams(window.location.search).has('visualTest')) return;
     window.__planetForgeOceanTest = {
         measureDepthVariation() {
-            if (!state) return { sampledPixels: 0, luminanceRange: 0.0, maximumAlpha: 0.0 };
+            if (!state) return emptyMetrics();
             draw(state);
             state.dirty = false;
             return measureDepthVariation(state);
@@ -122,21 +122,34 @@ function installVisualTestApi() {
     };
 }
 
+function emptyMetrics() {
+    return { sampledPixels: 0, luminanceRange: 0.0, maximumAlpha: 0.0, canvasWidth: 0, canvasHeight: 0, tileCount: 0, seaIceFraction: 0.0, glError: -1 };
+}
+
 function measureDepthVariation(s) {
     const { gl, canvas } = s;
-    if (canvas.width === 0 || canvas.height === 0) return { sampledPixels: 0, luminanceRange: 0.0, maximumAlpha: 0.0 };
+    const metrics = {
+        sampledPixels: 0,
+        luminanceRange: 0.0,
+        maximumAlpha: 0.0,
+        canvasWidth: canvas.width,
+        canvasHeight: canvas.height,
+        tileCount: s.tiles.size,
+        seaIceFraction: s.seaIceFraction,
+        glError: gl.getError()
+    };
+    if (canvas.width === 0 || canvas.height === 0) return metrics;
+
     const pixels = new Uint8Array(canvas.width * canvas.height * 4);
     gl.readPixels(0, 0, canvas.width, canvas.height, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
     let minimum = 1.0;
     let maximum = 0.0;
-    let maximumAlpha = 0.0;
-    let sampledPixels = 0;
 
     for (let y = 0; y < canvas.height; y += 4) {
         for (let x = 0; x < canvas.width; x += 4) {
             const offset = ((y * canvas.width) + x) * 4;
             const alpha = pixels[offset + 3] / 255.0;
-            maximumAlpha = Math.max(maximumAlpha, alpha);
+            metrics.maximumAlpha = Math.max(metrics.maximumAlpha, alpha);
             if (alpha < 0.20) continue;
             const red = pixels[offset] / 255.0;
             const green = pixels[offset + 1] / 255.0;
@@ -144,11 +157,13 @@ function measureDepthVariation(s) {
             const luminance = (red * 0.2126) + (green * 0.7152) + (blue * 0.0722);
             minimum = Math.min(minimum, luminance);
             maximum = Math.max(maximum, luminance);
-            sampledPixels++;
+            metrics.sampledPixels++;
         }
     }
 
-    return { sampledPixels, luminanceRange: sampledPixels > 0 ? maximum - minimum : 0.0, maximumAlpha };
+    metrics.luminanceRange = metrics.sampledPixels > 0 ? maximum - minimum : 0.0;
+    metrics.glError = gl.getError();
+    return metrics;
 }
 
 function render() {
@@ -180,7 +195,7 @@ function draw(s) {
     const viewProjection = multiply(projection, lookAt(eye, [0, 0, 0], [0, 1, 0]));
 
     gl.enable(gl.DEPTH_TEST);
-    gl.enable(gl.CULL_FACE);
+    gl.disable(gl.CULL_FACE);
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
     gl.useProgram(program);
