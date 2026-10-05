@@ -1,5 +1,6 @@
 using PlanetForge.Domain.Persistence;
 using PlanetForge.Domain.Surface;
+using PlanetForge.Domain.WorldGeneration;
 
 namespace PlanetForge.Domain.Tests.Persistence;
 
@@ -39,7 +40,7 @@ public sealed class PlanetSaveSnapshotTests
         var header = PlanetSaveHeader.CreateCurrent(42);
 
         Assert.AreEqual(1, header.SchemaVersion.Value);
-        Assert.AreEqual(1, header.World.GenerationVersion.Value);
+        Assert.AreEqual(PlanetGenerationVersion.Current.Value, header.World.GenerationVersion.Value);
         Assert.AreEqual(42, header.World.Seed);
     }
 
