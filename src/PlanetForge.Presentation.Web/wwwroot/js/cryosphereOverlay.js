@@ -430,7 +430,7 @@ float patchField(vec3 direction, vec3 offset) {
 
 void main() {
     float latitudeDegrees = degrees(asin(clamp(abs(vDirection.y), 0.0, 1.0)));
-    bool ocean = vElevationMeters < uSeaLevelMeters;
+    bool ocean = vElevationMeters < 0.0;
     float latitudeFactor = sin(radians(latitudeDegrees));
     float localTemperature = uSurfaceTemperatureKelvin - (${latitudeCoolingKelvin.toFixed(1)} * pow(latitudeFactor, 1.45)) - (max(vElevationMeters, 0.0) * ${elevationLapseRateKelvinPerMeter.toFixed(4)});
     float broad = broadIceField(vDirection);
