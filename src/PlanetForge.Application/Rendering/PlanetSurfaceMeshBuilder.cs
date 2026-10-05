@@ -11,6 +11,10 @@ public sealed class PlanetSurfaceMeshBuilder(PlanetSurfaceTileSampler tileSample
     private const double MinimumNormalSampleAngleRadians = 0.00005;
     private const double MaximumNormalSampleAngleRadians = 0.004;
 
+    public PlanetSurfaceMeshBuilder(PlanetSurfaceTileSampler tileSampler) : this(tileSampler, tileSampler.ElevationSource)
+    {
+    }
+
     public PlanetSurfaceTileMesh BuildTile(PlanetTileId id, int cellsPerAxis, int seed, double planetRadiusMeters)
     {
         ValidatePlanetRadius(planetRadiusMeters);
