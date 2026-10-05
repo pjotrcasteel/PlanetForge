@@ -6,9 +6,9 @@ namespace PlanetForge.Domain.Tests.WorldGeneration;
 public sealed class PlanetGenerationVersionTests
 {
     [TestMethod]
-    public void Current_IsVersionTwo()
+    public void Current_IsVersionThree()
     {
-        Assert.AreEqual(2, PlanetGenerationVersion.Current.Value);
+        Assert.AreEqual(3, PlanetGenerationVersion.Current.Value);
     }
 
     [TestMethod]
