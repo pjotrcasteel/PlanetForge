@@ -68,7 +68,7 @@ public sealed class ProceduralPlanetElevationSourceTests
     public void SampleElevationMeters_GlobalSample_ContainsMountainsBasinsAndOceans()
     {
         var source = new ProceduralPlanetElevationSource();
-        var elevations = FibonacciDirections(512).Select(direction => source.SampleElevationMeters(direction, 42)).ToArray();
+        var elevations = FibonacciDirections(2_048).Select(direction => source.SampleElevationMeters(direction, 42)).ToArray();
         var landFraction = elevations.Count(elevation => elevation > 0.0) / (double)elevations.Length;
 
         Assert.IsGreaterThan(4_500.0, elevations.Max());
