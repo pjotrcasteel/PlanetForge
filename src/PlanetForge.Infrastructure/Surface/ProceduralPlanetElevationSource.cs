@@ -65,7 +65,7 @@ public sealed class ProceduralPlanetElevationSource : IPlanetElevationSource
             var crestHeight = centralCrest * (0.58 + (ridgeNoise * 0.52));
             var shoulderHeight = foothills * (0.20 + (ridgeNoise * 0.16));
             var parallelHeight = secondaryRidges * (0.16 + (ridgeNoise * 0.16));
-            var range = (crestHeight + shoulderHeight + parallelHeight) * mix(0.42, 1.0, continuity) * arcExtent;
+            var range = (crestHeight + shoulderHeight + parallelHeight) * Lerp(0.42, 1.0, continuity) * arcExtent;
             strongestBelt = Math.Max(strongestBelt, range);
         }
 
@@ -172,8 +172,6 @@ public sealed class ProceduralPlanetElevationSource : IPlanetElevationSource
     private static double Fade(double value) => value * value * value * (value * ((value * 6.0) - 15.0) + 10.0);
 
     private static double Lerp(double from, double to, double amount) => from + ((to - from) * amount);
-
-    private static double mix(double from, double to, double amount) => from + ((to - from) * amount);
 
     private static double ToUnitRange(double value) => Math.Clamp((value + 1.0) * 0.5, 0.0, 1.0);
 
