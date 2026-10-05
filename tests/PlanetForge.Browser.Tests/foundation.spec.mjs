@@ -4,6 +4,7 @@ test('FrozenToMelting_PreservesFragmentedPolarIceAndThawsEquator', async ({ page
   await page.goto('/?visualTest=1');
   await expect(page.getByText('FROZEN WORLD')).toBeVisible();
   await page.waitForFunction(() => Boolean(window.__planetForgeCryosphereTest));
+  await page.waitForFunction(() => Boolean(window.__planetForgeOceanTest));
 
   await orientPitch(page, 0.0);
   const frozenEquatorCoverage = await measureCenterCoverage(page);
@@ -15,6 +16,7 @@ test('FrozenToMelting_PreservesFragmentedPolarIceAndThawsEquator', async ({ page
 
   await orientPitch(page, 0.0);
   const meltedEquatorCoverage = await measureCenterCoverage(page);
+  const oceanDepthVariation = await page.evaluate(() => window.__planetForgeOceanTest.measureDepthVariation());
   await page.screenshot({ path: testInfo.outputPath('year-50-equator.png'), fullPage: true });
 
   await orientPitch(page, 1.25);
@@ -32,6 +34,7 @@ test('FrozenToMelting_PreservesFragmentedPolarIceAndThawsEquator', async ({ page
   const metrics = {
     frozenEquatorCoverage,
     meltedEquatorCoverage,
+    oceanDepthVariation,
     northPoleCoverage,
     southPoleCoverage,
     northPolarRegionCoverage,
@@ -39,11 +42,14 @@ test('FrozenToMelting_PreservesFragmentedPolarIceAndThawsEquator', async ({ page
     northFragmentation,
     southFragmentation
   };
-  console.log(`Cryosphere metrics: ${JSON.stringify(metrics)}`);
-  await testInfo.attach('cryosphere-metrics', { body: JSON.stringify(metrics, null, 2), contentType: 'application/json' });
+  console.log(`Foundation metrics: ${JSON.stringify(metrics)}`);
+  await testInfo.attach('foundation-metrics', { body: JSON.stringify(metrics, null, 2), contentType: 'application/json' });
 
   expect(frozenEquatorCoverage).toBeGreaterThan(0.80);
   expect(meltedEquatorCoverage).toBeLessThan(0.15);
+
+  expect(oceanDepthVariation.sampledPixels).toBeGreaterThan(1000);
+  expect(oceanDepthVariation.luminanceRange).toBeGreaterThan(0.08);
 
   expect(northPolarRegionCoverage).toBeGreaterThan(0.04);
   expect(southPolarRegionCoverage).toBeGreaterThan(0.08);
