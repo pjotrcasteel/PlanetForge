@@ -5,7 +5,7 @@ const minimumCameraAltitudeMeters = 3.0;
 const maximumCameraAltitudeRatio = 4.2;
 const localTransitionAltitudeMeters = 20_000.0;
 const localExitAltitudeMeters = 25_000.0;
-const waterSurfaceOffset = 1.00018;
+const waterSurfaceOffset = 1.000006;
 const finalSeaIceLatitudeDegrees = 68.0;
 
 export function initialize(inputCanvasId, snapshot) {
@@ -62,12 +62,7 @@ export function setPlanet(snapshot) {
             if (!tile?.key || !tile.surfaceVertexCount) continue;
             activeKeys.add(tile.key);
             if (!tile.positions?.length) continue;
-            const existing = state.tiles.get(tile.key);
-            if (existing) state.gl.deleteBuffer(existing.positionBuffer);
-            const positionBuffer = state.gl.createBuffer();
-            state.gl.bindBuffer(state.gl.ARRAY_BUFFER, positionBuffer);
-            state.gl.bufferData(state.gl.ARRAY_BUFFER, new Float32Array(tile.positions), state.gl.STATIC_DRAW);
-            state.tiles.set(tile.key, { positionBuffer, vertexCount: tile.surfaceVertexCount });
+            replaceTile(state, tile);
         }
 
         for (const [key, tile] of state.tiles) {
@@ -89,9 +84,22 @@ export function dispose() {
     state = null;
 }
 
+function replaceTile(s, tile) {
+    const existing = s.tiles.get(tile.key);
+    if (existing) s.gl.deleteBuffer(existing.positionBuffer);
+    const positionBuffer = s.gl.createBuffer();
+    s.gl.bindBuffer(s.gl.ARRAY_BUFFER, positionBuffer);
+    s.gl.bufferData(s.gl.ARRAY_BUFFER, new Float32Array(tile.positions), s.gl.STATIC_DRAW);
+    s.tiles.set(tile.key, { positionBuffer, vertexCount: tile.surfaceVertexCount });
+}
+
 function installInput(s) {
     const canvas = s.inputCanvas;
-    canvas.addEventListener('pointerdown', event => { s.dragging = true; s.lastX = event.clientX; s.lastY = event.clientY; });
+    canvas.addEventListener('pointerdown', event => {
+        s.dragging = true;
+        s.lastX = event.clientX;
+        s.lastY = event.clientY;
+    });
     canvas.addEventListener('pointerup', () => s.dragging = false);
     canvas.addEventListener('pointercancel', () => s.dragging = false);
     canvas.addEventListener('pointermove', event => {
@@ -173,7 +181,10 @@ function measureDepthVariation(s) {
 function render() {
     if (!state) return;
     resize(state);
-    if (state.dirty) { draw(state); state.dirty = false; }
+    if (state.dirty) {
+        draw(state);
+        state.dirty = false;
+    }
     requestAnimationFrame(render);
 }
 
@@ -259,7 +270,11 @@ function lookAt(eye, center, up) {
 
 function multiply(a, b) {
     const out = new Float32Array(16);
-    for (let column = 0; column < 4; column++) for (let row = 0; row < 4; row++) out[column*4+row] = a[row]*b[column*4] + a[4+row]*b[column*4+1] + a[8+row]*b[column*4+2] + a[12+row]*b[column*4+3];
+    for (let column = 0; column < 4; column++) {
+        for (let row = 0; row < 4; row++) {
+            out[column*4+row] = a[row]*b[column*4] + a[4+row]*b[column*4+1] + a[8+row]*b[column*4+2] + a[12+row]*b[column*4+3];
+        }
+    }
     return out;
 }
 
@@ -323,7 +338,7 @@ float fbm(vec3 p) {
 }
 
 void main() {
-    if (vElevationMeters >= 20.0) discard;
+    if (vElevationMeters >= 0.0) discard;
 
     vec3 radial = normalize(vDirection);
     float latitudeDegrees = degrees(asin(clamp(abs(radial.y), 0.0, 1.0)));
@@ -340,7 +355,7 @@ void main() {
     float openWater = 1.0 - smoothstep(0.30, 0.58, seaCoverage);
     if (openWater <= 0.01) discard;
 
-    float depthMeters = max(-vElevationMeters, 0.0);
+    float depthMeters = -vElevationMeters;
     float shelfTransition = smoothstep(650.0, 2400.0, depthMeters);
     float slopeTransition = smoothstep(2100.0, 4100.0, depthMeters);
     float abyssTransition = smoothstep(3900.0, 5700.0, depthMeters);
@@ -348,8 +363,8 @@ void main() {
 
     vec3 coastalWater = vec3(0.075, 0.47, 0.50);
     vec3 shelfWater = vec3(0.024, 0.33, 0.43);
-    vec3 slopeWater = vec3(0.010, 0.17, 0.30);
-    vec3 abyssWater = vec3(0.003, 0.042, 0.105);
+    vec3 slopeWater = vec3(0.015, 0.19, 0.31);
+    vec3 abyssWater = vec3(0.008, 0.075, 0.14);
 
     vec3 color = mix(coastalWater, shelfWater, shelfTransition);
     color = mix(color, slopeWater, slopeTransition);
@@ -370,7 +385,6 @@ void main() {
     color = mix(color, vec3(0.045, 0.12, 0.19), fresnel * 0.16);
     color += vec3(specular * 0.70, specular * 0.86, specular);
 
-    float shorelineAlpha = smoothstep(2.0, 24.0, depthMeters);
     float waterAlpha = smoothstep(0.02, 0.42, openWater);
-    outColor = vec4(clamp(color, 0.0, 1.0), 0.98 * shorelineAlpha * waterAlpha);
+    outColor = vec4(clamp(color, 0.0, 1.0), 0.98 * waterAlpha);
 }`;
