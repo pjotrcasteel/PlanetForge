@@ -453,7 +453,9 @@ void main() {
     float alpineSnow = ocean ? 0.0 : smoothstep(localSnowlineMeters, localSnowlineMeters + 600.0, vElevationMeters);
     alpineSnow *= 1.0 - smoothstep(264.0, 271.0, localTemperature);
 
-    float landCoverage = mix(frozenLandSheet, max(fragmentedLand, alpineSnow * 0.30), landBreakup);
+    float residualLandSheet = frozenLandSheet * (1.0 - landBreakup);
+    float brokenLandCoverage = max(fragmentedLand, alpineSnow * 0.30) * landBreakup;
+    float landCoverage = max(residualLandSheet, brokenLandCoverage);
     float coverage = ocean
         ? smoothstep(0.30, 0.58, seaCoverage)
         : smoothstep(0.42, 0.68, landCoverage);
