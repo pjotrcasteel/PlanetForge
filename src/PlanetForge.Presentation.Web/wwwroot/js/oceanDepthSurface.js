@@ -6,6 +6,7 @@ const maximumCameraAltitudeRatio = 4.2;
 const localTransitionAltitudeMeters = 20_000.0;
 const localExitAltitudeMeters = 25_000.0;
 const waterSurfaceOffset = 1.00018;
+const finalSeaIceLatitudeDegrees = 68.0;
 
 export function initialize(inputCanvasId, snapshot) {
     const inputCanvas = document.getElementById(inputCanvasId);
@@ -36,6 +37,7 @@ export function initialize(inputCanvasId, snapshot) {
         lastX: 0,
         lastY: 0,
         planetRadiusMeters: 6_371_000.0,
+        seaIceFraction: 1.0,
         visible: true,
         tiles: new Map(),
         dirty: true,
@@ -47,7 +49,8 @@ export function initialize(inputCanvasId, snapshot) {
             viewProjection: gl.getUniformLocation(program, 'uViewProjection'),
             lightDirection: gl.getUniformLocation(program, 'uLightDirection'),
             cameraPosition: gl.getUniformLocation(program, 'uCameraPosition'),
-            planetRadiusMeters: gl.getUniformLocation(program, 'uPlanetRadiusMeters')
+            planetRadiusMeters: gl.getUniformLocation(program, 'uPlanetRadiusMeters'),
+            seaIceFraction: gl.getUniformLocation(program, 'uSeaIceFraction')
         }
     };
 
@@ -60,6 +63,7 @@ export function initialize(inputCanvasId, snapshot) {
 export function setPlanet(snapshot) {
     if (!state || !snapshot) return;
     state.planetRadiusMeters = snapshot.physicalParameters?.radiusMeters ?? state.planetRadiusMeters;
+    state.seaIceFraction = snapshot.climateFeedback?.seaIceFraction ?? snapshot.climateFeedback?.cryosphereFraction ?? state.seaIceFraction;
     state.visible = !snapshot.localSurface;
 
     const surfaceTiles = snapshot.surfaceTiles ?? [];
@@ -231,6 +235,7 @@ function draw(s) {
     gl.uniform3f(s.uniforms.lightDirection, 0.72, 0.42, 0.55);
     gl.uniform3f(s.uniforms.cameraPosition, eye[0], eye[1], eye[2]);
     gl.uniform1f(s.uniforms.planetRadiusMeters, s.planetRadiusMeters);
+    gl.uniform1f(s.uniforms.seaIceFraction, s.seaIceFraction);
 
     for (const tile of s.tiles.values()) {
         gl.bindBuffer(gl.ARRAY_BUFFER, tile.positionBuffer);
@@ -324,6 +329,7 @@ in vec3 vDirection;
 in float vElevationMeters;
 uniform vec3 uLightDirection;
 uniform vec3 uCameraPosition;
+uniform float uSeaIceFraction;
 out vec4 outColor;
 
 float hash31(vec3 p) {
@@ -353,8 +359,28 @@ float valueNoise(vec3 p) {
     return mix(nxy0, nxy1, smoothLocal.z);
 }
 
+float fbm(vec3 p) {
+    return valueNoise(p) * 0.56 + valueNoise((p * 2.07) + vec3(4.0, -7.0, 2.0)) * 0.29 + valueNoise((p * 4.21) + vec3(-3.0, 5.0, 8.0)) * 0.15;
+}
+
 void main() {
     if (vElevationMeters >= 25.0) discard;
+
+    vec3 radial = normalize(vDirection);
+    float latitudeDegrees = degrees(asin(clamp(abs(radial.y), 0.0, 1.0)));
+    float macro = fbm((radial * 5.0) + vec3(4.0, -2.0, 7.0));
+    float warpedLatitudeDegrees = latitudeDegrees + ((macro - 0.5) * 16.0);
+    float seaRetreat = pow(1.0 - clamp(uSeaIceFraction, 0.0, 1.0), 0.82);
+    float seaBreakup = smoothstep(0.10, 0.52, seaRetreat);
+    float seaIceLineDegrees = mix(-25.0, ${finalSeaIceLatitudeDegrees.toFixed(1)}, seaRetreat);
+    float frozenSeaSheet = smoothstep(seaIceLineDegrees - 1.5, seaIceLineDegrees + 5.0, warpedLatitudeDegrees);
+    float seaPatch = fbm((radial * 9.0) + vec3(-3.0, 7.0, 4.0));
+    float polarSeaBias = smoothstep(58.0, 84.0, warpedLatitudeDegrees);
+    float fragmentedSea = smoothstep(seaIceLineDegrees - 4.0, seaIceLineDegrees + 7.5, warpedLatitudeDegrees)
+        * smoothstep(0.56, 0.70, seaPatch + (polarSeaBias * 0.09));
+    float seaCoverage = mix(frozenSeaSheet, fragmentedSea, seaBreakup);
+    float openWater = 1.0 - smoothstep(0.18, 0.62, seaCoverage);
+    if (openWater <= 0.02) discard;
 
     float depthMeters = max(-vElevationMeters, 0.0);
     float shore = 1.0 - smoothstep(0.0, 180.0, depthMeters);
@@ -371,11 +397,11 @@ void main() {
     color = mix(color, coastalWater, max(shore, shelf * 0.58));
     color = mix(color, deepWater, abyss);
 
-    float basinNoise = (valueNoise((vDirection * 3.2) + vec3(4.0, -7.0, 2.0)) - 0.5) * 0.035;
-    float shelfNoise = (valueNoise((vDirection * 12.0) + vec3(-3.0, 5.0, 8.0)) - 0.5) * 0.020 * (1.0 - abyss);
+    float basinNoise = (valueNoise((radial * 3.2) + vec3(4.0, -7.0, 2.0)) - 0.5) * 0.035;
+    float shelfNoise = (valueNoise((radial * 12.0) + vec3(-3.0, 5.0, 8.0)) - 0.5) * 0.020 * (1.0 - abyss);
     color += vec3(basinNoise * 0.28, basinNoise * 0.65, basinNoise) + vec3(0.0, shelfNoise * 0.55, shelfNoise);
 
-    vec3 normal = normalize(vDirection);
+    vec3 normal = radial;
     vec3 light = normalize(uLightDirection);
     vec3 viewDirection = normalize(uCameraPosition - (normal * ${waterSurfaceOffset.toFixed(6)}));
     float diffuse = 0.76 + (0.24 * max(dot(normal, light), 0.0));
@@ -388,5 +414,5 @@ void main() {
     color += vec3(specular * 0.72, specular * 0.86, specular);
 
     float coastAlpha = smoothstep(-15.0, 55.0, depthMeters);
-    outColor = vec4(clamp(color, 0.0, 1.0), 0.94 * coastAlpha);
+    outColor = vec4(clamp(color, 0.0, 1.0), 0.94 * coastAlpha * openWater);
 }`;
