@@ -41,16 +41,19 @@ jobs:
       - name: Prepare GitHub Pages
         run: |
           INDEX=./artifacts/web/wwwroot/index.html
+          BUILD_VERSION=./artifacts/web/wwwroot/js/buildVersion.js
           sed -i 's#<base href="/" />#<base href="/PlanetForge/" />#' "$INDEX"
           sed -i "s#css/app.css\"#css/app.css?v=${GITHUB_SHA}\"#" "$INDEX"
           sed -i "s#css/mission-clarity.css\"#css/mission-clarity.css?v=${GITHUB_SHA}\"#" "$INDEX"
           sed -i "s#css/planet-run.css\"#css/planet-run.css?v=${GITHUB_SHA}\"#" "$INDEX"
           sed -i "s#css/hydrology-foundation.css\"#css/hydrology-foundation.css?v=${GITHUB_SHA}\"#" "$INDEX"
           sed -i "s#js/buildVersion.js\"#js/buildVersion.js?v=${GITHUB_SHA}\"#" "$INDEX"
+          sed -i "s#__BUILD_SHA__#${GITHUB_SHA}#g" "$BUILD_VERSION"
           touch ./artifacts/web/wwwroot/.nojekyll
           test -f ./artifacts/web/wwwroot/_framework/blazor.webassembly.js
           grep -q '<base href="/PlanetForge/" />' "$INDEX"
           grep -q "hydrology-foundation.css?v=${GITHUB_SHA}" "$INDEX"
+          grep -q "const buildCommit = '${GITHUB_SHA}'" "$BUILD_VERSION"
 
       - name: Configure Pages
         uses: actions/configure-pages@v5
