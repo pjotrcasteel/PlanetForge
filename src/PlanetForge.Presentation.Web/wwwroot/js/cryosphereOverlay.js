@@ -299,7 +299,7 @@ function draw(s) {
 
 function createProgram(gl, vertexSource, fragmentSource) {
     const vertex = compile(gl, gl.VERTEX_SHADER, vertexSource);
-    const fragment = compile(gl, gl.FRAGMENT_SHADER, fragmentSource);
+    const fragment = compile(gl, gl.FRAGMENT_SHADER, fragmentShaderSource);
     const program = gl.createProgram();
     gl.attachShader(program, vertex);
     gl.attachShader(program, fragment);
@@ -456,15 +456,17 @@ void main() {
     float seaPatchNoise = breakupField(vDirection, vec3(-3.0, 7.0, 4.0));
     float seaPolarBias = smoothstep(57.0, 84.0, warpedLatitudeDegrees);
     float fragmentedSea = smoothstep(seaIceLineDegrees - 3.5, seaIceLineDegrees + 7.0, warpedLatitudeDegrees)
-        * smoothstep(0.55, 0.64, seaPatchNoise + (seaPolarBias * 0.10));
+        * smoothstep(0.60, 0.69, seaPatchNoise + (seaPolarBias * 0.07));
     float seaCoverage = mix(frozenSeaSheet, fragmentedSea, seaBreakup);
 
     float landPatchNoise = breakupField(vDirection, vec3(8.0, -5.0, 2.0));
     float landPolarBias = smoothstep(58.0, 83.0, warpedLatitudeDegrees);
-    float terrainRetention = 1.0 - smoothstep(0.10, 0.24, vPhysicalSlope);
-    float ruggedRetention = smoothstep(1100.0, 3400.0, elevation) * (1.0 - smoothstep(0.20, 0.34, vPhysicalSlope));
+    float terrainRetention = 1.0 - smoothstep(0.012, 0.045, vPhysicalSlope);
+    float ruggedRetention = smoothstep(1100.0, 3400.0, elevation) * (1.0 - smoothstep(0.025, 0.060, vPhysicalSlope));
+    float highlandRetention = smoothstep(650.0, 2800.0, elevation);
     float fragmentedLand = smoothstep(landIceLineDegrees - 4.5, landIceLineDegrees + 8.0, warpedLatitudeDegrees)
         * smoothstep(0.58, 0.69, landPatchNoise + (landPolarBias * 0.08) + (ruggedRetention * 0.08));
+    fragmentedLand *= mix(0.58, 1.0, max(highlandRetention, ruggedRetention));
 
     float snowlineMeters = mix(-1200.0, ${finalAlpineSnowlineMeters.toFixed(1)}, snowRetreat);
     float localSnowlineMeters = snowlineMeters + ((0.5 - broad) * 360.0) - (ruggedRetention * 420.0);
@@ -508,9 +510,9 @@ void main() {
 
     float glacierMacro = valueNoise((vDirection * 6.5) + vec3(-4.0, 2.0, 9.0));
     float glacierFlow = valueNoise((vDirection * 16.0) + vec3(7.0, -6.0, 1.0));
-    float glacierFine = valueNoise((vDirection * 42.0) + vec3(-8.0, 3.0, -5.0));
-    float glacierTexture = (glacierMacro * 0.50) + (glacierFlow * 0.34) + (glacierFine * 0.16);
-    float sparseFracture = 1.0 - smoothstep(0.018, 0.070, abs(valueNoise((vDirection * 54.0) + vec3(9.0, 2.0, -4.0)) - 0.5));
+    float glacierFine = valueNoise((vDirection * 38.0) + vec3(-8.0, 3.0, -5.0));
+    float glacierTexture = (glacierMacro * 0.54) + (glacierFlow * 0.34) + (glacierFine * 0.12);
+    float sparseFracture = 1.0 - smoothstep(0.010, 0.040, abs(valueNoise((vDirection * 28.0) + vec3(9.0, 2.0, -4.0)) - 0.5));
     vec3 seaIce = mix(vec3(0.48, 0.64, 0.70), vec3(0.78, 0.87, 0.89), 0.50 + (glacierTexture * 0.22));
     vec3 landIce = mix(vec3(0.66, 0.70, 0.70), vec3(0.91, 0.92, 0.89), 0.48 + (glacierTexture * 0.24));
     vec3 snow = mix(vec3(0.80, 0.82, 0.80), vec3(0.98, 0.97, 0.93), 0.55 + (glacierTexture * 0.18));
@@ -518,10 +520,10 @@ void main() {
     vec3 iceMaterial = ocean ? seaIce : mix(landIce, snow, snowInfluence);
     iceMaterial *= 0.78 + (0.30 * hillshade);
     iceMaterial *= mix(0.96, 1.035, glacierTexture);
-    iceMaterial *= 1.0 - (sparseFracture * (ocean ? 0.055 : 0.025) * mix(0.25, 1.0, seaBreakup));
+    iceMaterial *= 1.0 - (sparseFracture * (ocean ? 0.030 : 0.005) * mix(0.25, 1.0, seaBreakup));
 
     float frozenWorldStrength = min(min(clamp(uSeaIceFraction, 0.0, 1.0), clamp(uLandIceFraction, 0.0, 1.0)), clamp(uSnowCoverFraction, 0.0, 1.0));
-    float windScour = ocean ? 0.0 : frozenWorldStrength * smoothstep(0.06, 0.20, vPhysicalSlope) * smoothstep(1800.0, 5000.0, elevation);
+    float windScour = ocean ? 0.0 : frozenWorldStrength * smoothstep(0.008, 0.035, vPhysicalSlope) * smoothstep(1800.0, 5000.0, elevation);
     iceMaterial = mix(iceMaterial, terrainMaterial * 1.12, windScour * 0.34);
 
     if (coverage < 0.08) {
