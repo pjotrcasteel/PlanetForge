@@ -7,8 +7,6 @@ namespace PlanetForge.Presentation.Web.Pages;
 
 public partial class Home
 {
-    private const double FrostFreeTerrainTemperatureKelvin = 292.0;
-
     private DotNetObjectReference<Home>? surfaceLodReference;
     private PlanetLocalSurfaceMesh? lastFullLocalSurface;
     private int remainingGuaranteedFullDeliveries;
@@ -33,14 +31,14 @@ public partial class Home
         };
 
         snapshot = EnsureLocalSurfaceDelivery(Experience.UpdateSurfaceView(view));
-        return CreateTerrainRenderSnapshot(snapshot);
+        return snapshot;
     }
 
     [JSInvokable("MoveLocalSurfaceAnchor")]
     public PlanetRenderSnapshot MoveLocalSurfaceAnchor(double eastMeters, double northMeters)
     {
         snapshot = EnsureLocalSurfaceDelivery(Experience.MoveLocalSurfaceAnchor(eastMeters, northMeters));
-        return CreateTerrainRenderSnapshot(snapshot);
+        return snapshot;
     }
 
     private PlanetRenderSnapshot EnsureLocalSurfaceDelivery(PlanetRenderSnapshot nextSnapshot)
@@ -69,13 +67,6 @@ public partial class Home
         var guaranteedSurface = lastFullLocalSurface with { CameraAltitudeMeters = localSurface.CameraAltitudeMeters };
         return nextSnapshot with { LocalSurface = guaranteedSurface };
     }
-
-    private static PlanetRenderSnapshot CreateTerrainRenderSnapshot(PlanetRenderSnapshot source)
-        => source with
-        {
-            Climate = source.Climate with { SurfaceTemperatureKelvin = Math.Max(source.Climate.SurfaceTemperatureKelvin, FrostFreeTerrainTemperatureKelvin) },
-            Water = source.Water with { IceFraction = 0.0 },
-        };
 
     private DotNetObjectReference<Home> GetOrCreateSurfaceLodReference() => surfaceLodReference ??= DotNetObjectReference.Create(this);
 
