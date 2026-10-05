@@ -10,16 +10,8 @@ const finalSeaIceLatitudeDegrees = 68.0;
 
 export function initialize(inputCanvasId, snapshot) {
     const inputCanvas = document.getElementById(inputCanvasId);
-    const stage = inputCanvas?.closest('.planet-stage');
-    if (!inputCanvas || !stage) return;
-
-    let canvas = document.getElementById('ocean-depth-canvas');
-    if (!canvas) {
-        canvas = document.createElement('canvas');
-        canvas.id = 'ocean-depth-canvas';
-        canvas.setAttribute('aria-hidden', 'true');
-        stage.appendChild(canvas);
-    }
+    const canvas = document.getElementById('ocean-depth-canvas');
+    if (!inputCanvas || !canvas) return;
 
     const gl = canvas.getContext('webgl2', { antialias: true, alpha: true, premultipliedAlpha: false });
     if (!gl) return;
@@ -90,7 +82,6 @@ export function dispose() {
     for (const tile of state.tiles.values()) state.gl.deleteBuffer(tile.positionBuffer);
     state.tiles.clear();
     state.gl.deleteProgram(state.program);
-    state.canvas.remove();
     state = null;
 }
 
