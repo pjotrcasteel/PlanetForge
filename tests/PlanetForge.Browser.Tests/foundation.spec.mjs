@@ -20,13 +20,30 @@ test('FrozenToMelting_PreservesPolarCapsAndThawsEquator', async ({ page }, testI
 
   await orientPitch(page, 1.25);
   const northPoleCoverage = await measureCenterCoverage(page);
+  const northPolarRegionCoverage = await measurePolarRegionCoverage(page);
+  const northFragmentation = await measureFragmentation(page);
   await page.screenshot({ path: testInfo.outputPath('year-50-north.png'), fullPage: true });
+  await setCryosphereVisible(page, false);
+  await page.screenshot({ path: testInfo.outputPath('year-50-north-base-only.png'), fullPage: true });
+  await setCryosphereVisible(page, true);
 
   await orientPitch(page, -1.25);
   const southPoleCoverage = await measureCenterCoverage(page);
+  const southPolarRegionCoverage = await measurePolarRegionCoverage(page);
+  const southFragmentation = await measureFragmentation(page);
   await page.screenshot({ path: testInfo.outputPath('year-50-south.png'), fullPage: true });
 
-  const metrics = { frozenEquatorCoverage, meltedEquatorCoverage, northPoleCoverage, southPoleCoverage, meltedUpperEdgeVariation };
+  const metrics = {
+    frozenEquatorCoverage,
+    meltedEquatorCoverage,
+    northPoleCoverage,
+    southPoleCoverage,
+    northPolarRegionCoverage,
+    southPolarRegionCoverage,
+    northFragmentation,
+    southFragmentation,
+    meltedUpperEdgeVariation
+  };
   console.log(`Cryosphere metrics: ${JSON.stringify(metrics)}`);
   await testInfo.attach('cryosphere-metrics', { body: JSON.stringify(metrics, null, 2), contentType: 'application/json' });
 
@@ -68,6 +85,20 @@ async function measureCenterCoverage(page) {
   return page.evaluate(() => window.__planetForgeCryosphereTest.measureCenterCoverage());
 }
 
+async function measurePolarRegionCoverage(page) {
+  return page.evaluate(() => window.__planetForgeCryosphereTest.measurePolarRegionCoverage());
+}
+
+async function measureFragmentation(page) {
+  return page.evaluate(() => window.__planetForgeCryosphereTest.measureFragmentation());
+}
+
 async function measureUpperEdgeVariation(page) {
   return page.evaluate(() => window.__planetForgeCryosphereTest.measureUpperEdgeVariation());
+}
+
+async function setCryosphereVisible(page, visible) {
+  await page.locator('#cryosphere-overlay-canvas').evaluate((element, isVisible) => {
+    element.style.visibility = isVisible ? 'visible' : 'hidden';
+  }, visible);
 }
