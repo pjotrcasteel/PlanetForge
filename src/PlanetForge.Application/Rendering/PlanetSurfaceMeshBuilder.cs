@@ -10,6 +10,7 @@ public sealed class PlanetSurfaceMeshBuilder(PlanetSurfaceTileSampler tileSample
     private const double MaximumSkirtDepthMeters = 500.0;
     private const double MinimumNormalSampleAngleRadians = 0.00005;
     private const double MaximumNormalSampleAngleRadians = 0.004;
+    private const float GlobalReliefNormalExaggeration = 12.0f;
 
     public PlanetSurfaceMeshBuilder(PlanetSurfaceTileSampler tileSampler) : this(tileSampler, tileSampler.ElevationSource)
     {
@@ -100,9 +101,16 @@ public sealed class PlanetSurfaceMeshBuilder(PlanetSurfaceTileSampler tileSample
         var eastMinus = SampleRenderPosition(OffsetDirection(direction, east, -sampleAngle), seed, planetRadiusMeters);
         var northPlus = SampleRenderPosition(OffsetDirection(direction, north, sampleAngle), seed, planetRadiusMeters);
         var northMinus = SampleRenderPosition(OffsetDirection(direction, north, -sampleAngle), seed, planetRadiusMeters);
-        var normal = Vector3.Normalize(Vector3.Cross(eastPlus - eastMinus, northPlus - northMinus));
-        var radial = new Vector3((float)direction.X, (float)direction.Y, (float)direction.Z);
-        return Vector3.Dot(normal, radial) < 0f ? -normal : normal;
+        var physicalNormal = Vector3.Normalize(Vector3.Cross(eastPlus - eastMinus, northPlus - northMinus));
+        var radial = Vector3.Normalize(new Vector3((float)direction.X, (float)direction.Y, (float)direction.Z));
+
+        if (Vector3.Dot(physicalNormal, radial) < 0f)
+        {
+            physicalNormal = -physicalNormal;
+        }
+
+        var tangentComponent = physicalNormal - (radial * Vector3.Dot(physicalNormal, radial));
+        return Vector3.Normalize(radial + (tangentComponent * GlobalReliefNormalExaggeration));
     }
 
     private Vector3 SampleRenderPosition(PlanetVector direction, int seed, double planetRadiusMeters)
