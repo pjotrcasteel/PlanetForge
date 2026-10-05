@@ -15,6 +15,7 @@ public sealed class ProceduralPlanetElevationSource : IPlanetElevationSource
     private const int PlateauSeedSalt = 0x13579BDF;
     private const int BasinSeedSalt = 0x02468ACE;
     private const int MountainBreakSeedSalt = 0x4F1BBCDC;
+    private const int MountainWarpSeedSalt = 0x37A4F91D;
 
     public double SampleElevationMeters(PlanetVector direction, int seed)
     {
@@ -54,11 +55,13 @@ public sealed class ProceduralPlanetElevationSource : IPlanetElevationSource
 
             var arcCenter = PlanetVector.Normalize(projectedAnchor);
             var signedDistance = PlanetVector.Dot(direction, normal);
-            var distanceFromGreatCircle = Math.Abs(signedDistance);
+            var warp = FractalNoise(direction, seed ^ MountainWarpSeedSalt ^ (index * 761), 3.4, 3, 2.07, 0.50) * 0.032;
+            var warpedSignedDistance = signedDistance + warp;
+            var distanceFromRange = Math.Abs(warpedSignedDistance);
             var arcExtent = SmoothStep(-0.18, 0.78, PlanetVector.Dot(direction, arcCenter));
-            var foothills = 1.0 - SmoothStep(0.035, 0.145, distanceFromGreatCircle);
-            var centralCrest = 1.0 - SmoothStep(0.006, 0.052, distanceFromGreatCircle);
-            var secondaryRidges = SampleSecondaryRidges(signedDistance);
+            var foothills = 1.0 - SmoothStep(0.035, 0.145, distanceFromRange);
+            var centralCrest = 1.0 - SmoothStep(0.006, 0.052, distanceFromRange);
+            var secondaryRidges = SampleSecondaryRidges(warpedSignedDistance);
             var ridgeNoise = ToUnitRange(RidgedNoise(direction, seed ^ RidgeSeedSalt ^ (index * 1_297), 11.0, 4, 2.06, 0.50));
             var breakNoise = ToUnitRange(FractalNoise(direction, seed ^ MountainBreakSeedSalt ^ (index * 977), 4.6, 3, 2.13, 0.52));
             var continuity = SmoothStep(0.20, 0.68, breakNoise);
