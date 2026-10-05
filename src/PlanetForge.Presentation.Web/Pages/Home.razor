@@ -55,7 +55,7 @@
         }
 
         rendererModule = await JsRuntime.InvokeAsync<IJSObjectReference>("import", disposeCancellationTokenSource.Token, "./js/planetRenderer.js");
-        await rendererModule.InvokeVoidAsync("initialize", disposeCancellationTokenSource.Token, "planet-canvas", CreateTerrainRenderSnapshot(snapshot), GetOrCreateSurfaceLodReference());
+        await rendererModule.InvokeVoidAsync("initialize", disposeCancellationTokenSource.Token, "planet-canvas", snapshot, GetOrCreateSurfaceLodReference());
 
         cryosphereRendererModule = await JsRuntime.InvokeAsync<IJSObjectReference>("import", disposeCancellationTokenSource.Token, "./js/cryosphereOverlay.js");
         await cryosphereRendererModule.InvokeVoidAsync("initialize", disposeCancellationTokenSource.Token, "cryosphere-overlay-canvas", "planet-canvas", snapshot);
@@ -237,7 +237,7 @@
 
         if (rendererModule is not null)
         {
-            await rendererModule.InvokeVoidAsync("setPlanet", disposeCancellationTokenSource.Token, CreateTerrainRenderSnapshot(snapshot));
+            await rendererModule.InvokeVoidAsync("setPlanet", disposeCancellationTokenSource.Token, snapshot);
         }
 
         if (cryosphereRendererModule is not null)
