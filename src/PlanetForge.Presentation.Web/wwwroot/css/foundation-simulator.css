@@ -21,6 +21,7 @@
 }
 
 .foundation-stage #planet-canvas,
+.foundation-stage #ocean-depth-canvas,
 .foundation-stage #cryosphere-overlay-canvas,
 .foundation-stage #water-overlay-canvas {
     position: absolute;
@@ -33,13 +34,18 @@
     z-index: 1;
 }
 
-.foundation-stage #water-overlay-canvas {
+.foundation-stage #ocean-depth-canvas {
     z-index: 2;
     pointer-events: none;
 }
 
-.foundation-stage #cryosphere-overlay-canvas {
+.foundation-stage #water-overlay-canvas {
     z-index: 3;
+    pointer-events: none;
+}
+
+.foundation-stage #cryosphere-overlay-canvas {
+    z-index: 4;
     pointer-events: none;
 }
 
