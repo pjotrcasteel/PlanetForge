@@ -14,6 +14,7 @@ public sealed class ProceduralPlanetElevationSource : IPlanetElevationSource
     private const int DetailSeedSalt = 0x6D2B79F5;
     private const int PlateauSeedSalt = 0x13579BDF;
     private const int BasinSeedSalt = 0x02468ACE;
+    private const int MountainBreakSeedSalt = 0x4F1BBCDC;
 
     public double SampleElevationMeters(PlanetVector direction, int seed)
     {
@@ -25,12 +26,12 @@ public sealed class ProceduralPlanetElevationSource : IPlanetElevationSource
         var plateaus = SampleSphericalRegions(direction, seed, PlateauSeedSalt, PlateauCount, 0.82, 0.965) * landMask;
         var basins = SampleSphericalRegions(direction, seed, BasinSeedSalt, BasinCount, 0.88, 0.985) * landMask;
         var normalizedElevation = Math.Clamp(
-            (continental * 0.65) +
-            (regional * 0.14) +
-            (mountainBelts * 0.46) +
-            (plateaus * 0.13) -
-            (basins * 0.12) +
-            (detail * 0.04) -
+            (continental * 0.61) +
+            (regional * 0.13) +
+            (mountainBelts * 0.58) +
+            (plateaus * 0.11) -
+            (basins * 0.14) +
+            (detail * 0.035) -
             0.055,
             -1.0,
             1.0);
@@ -52,15 +53,30 @@ public sealed class ProceduralPlanetElevationSource : IPlanetElevationSource
             }
 
             var arcCenter = PlanetVector.Normalize(projectedAnchor);
-            var distanceFromGreatCircle = Math.Abs(PlanetVector.Dot(direction, normal));
-            var beltWidth = 1.0 - SmoothStep(0.02, 0.14, distanceFromGreatCircle);
-            var arcExtent = SmoothStep(-0.10, 0.72, PlanetVector.Dot(direction, arcCenter));
-            strongestBelt = Math.Max(strongestBelt, beltWidth * arcExtent);
+            var signedDistance = PlanetVector.Dot(direction, normal);
+            var distanceFromGreatCircle = Math.Abs(signedDistance);
+            var arcExtent = SmoothStep(-0.18, 0.78, PlanetVector.Dot(direction, arcCenter));
+            var foothills = 1.0 - SmoothStep(0.035, 0.145, distanceFromGreatCircle);
+            var centralCrest = 1.0 - SmoothStep(0.006, 0.052, distanceFromGreatCircle);
+            var secondaryRidges = SampleSecondaryRidges(signedDistance);
+            var ridgeNoise = ToUnitRange(RidgedNoise(direction, seed ^ RidgeSeedSalt ^ (index * 1_297), 11.0, 4, 2.06, 0.50));
+            var breakNoise = ToUnitRange(FractalNoise(direction, seed ^ MountainBreakSeedSalt ^ (index * 977), 4.6, 3, 2.13, 0.52));
+            var continuity = SmoothStep(0.20, 0.68, breakNoise);
+            var crestHeight = centralCrest * (0.58 + (ridgeNoise * 0.52));
+            var shoulderHeight = foothills * (0.20 + (ridgeNoise * 0.16));
+            var parallelHeight = secondaryRidges * (0.16 + (ridgeNoise * 0.16));
+            var range = (crestHeight + shoulderHeight + parallelHeight) * mix(0.42, 1.0, continuity) * arcExtent;
+            strongestBelt = Math.Max(strongestBelt, range);
         }
 
-        var ridgeNoise = RidgedNoise(direction, seed ^ RidgeSeedSalt, 8.5, 3, 2.10, 0.48);
-        var mountainRoughness = 0.72 + (0.28 * Math.Max(0.0, ridgeNoise));
-        return strongestBelt * mountainRoughness * landMask * landMask;
+        return strongestBelt * landMask * landMask;
+    }
+
+    private static double SampleSecondaryRidges(double signedDistance)
+    {
+        var first = 1.0 - SmoothStep(0.010, 0.027, Math.Abs(signedDistance - 0.062));
+        var second = 1.0 - SmoothStep(0.010, 0.027, Math.Abs(signedDistance + 0.062));
+        return Math.Max(first, second);
     }
 
     private static double SampleSphericalRegions(PlanetVector direction, int seed, int seedSalt, int count, double edgeDot, double coreDot)
@@ -156,6 +172,10 @@ public sealed class ProceduralPlanetElevationSource : IPlanetElevationSource
     private static double Fade(double value) => value * value * value * (value * ((value * 6.0) - 15.0) + 10.0);
 
     private static double Lerp(double from, double to, double amount) => from + ((to - from) * amount);
+
+    private static double mix(double from, double to, double amount) => from + ((to - from) * amount);
+
+    private static double ToUnitRange(double value) => Math.Clamp((value + 1.0) * 0.5, 0.0, 1.0);
 
     private static double SmoothStep(double edge0, double edge1, double value)
     {
