@@ -10,7 +10,7 @@ public sealed class PlanetSurfaceMeshBuilder(PlanetSurfaceTileSampler tileSample
     private const double MaximumSkirtDepthMeters = 500.0;
     private const double MinimumNormalSampleAngleRadians = 0.00005;
     private const double MaximumNormalSampleAngleRadians = 0.004;
-    private const float GlobalReliefNormalExaggeration = 12.0f;
+    private const float GlobalReliefNormalExaggeration = 20.0f;
 
     public PlanetSurfaceMeshBuilder(PlanetSurfaceTileSampler tileSampler) : this(tileSampler, tileSampler.ElevationSource)
     {
