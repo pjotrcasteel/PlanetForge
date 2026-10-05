@@ -10,6 +10,7 @@ public sealed class PlanetSurfaceMeshBuilder(PlanetSurfaceTileSampler tileSample
     private const double MaximumSkirtDepthMeters = 500.0;
     private const double MinimumNormalSampleAngleRadians = 0.00005;
     private const double MaximumNormalSampleAngleRadians = 0.004;
+    private const float GlobalReliefNormalExaggeration = 20.0f;
 
     public PlanetSurfaceMeshBuilder(PlanetSurfaceTileSampler tileSampler) : this(tileSampler, tileSampler.ElevationSource)
     {
@@ -84,11 +85,30 @@ public sealed class PlanetSurfaceMeshBuilder(PlanetSurfaceTileSampler tileSample
         {
             for (var x = 0; x <= cellsPerAxis; x++)
             {
-                result[ToPointIndex(x, y, cellsPerAxis)] = CalculateTerrainNormal(tile.GetPoint(x, y).Direction, seed, planetRadiusMeters, sampleAngle);
+                result[ToPointIndex(x, y, cellsPerAxis)] = IsTileBoundary(x, y, cellsPerAxis)
+                    ? CalculateTerrainNormal(tile.GetPoint(x, y).Direction, seed, planetRadiusMeters, sampleAngle)
+                    : CalculateTerrainNormalFromTile(tile, x, y, planetRadiusMeters);
             }
         }
 
         return result;
+    }
+
+    private static Vector3 CalculateTerrainNormalFromTile(PlanetSurfaceTile tile, int x, int y, double planetRadiusMeters)
+    {
+        var west = ToRenderVector(tile.GetPoint(x - 1, y), planetRadiusMeters);
+        var east = ToRenderVector(tile.GetPoint(x + 1, y), planetRadiusMeters);
+        var north = ToRenderVector(tile.GetPoint(x, y - 1), planetRadiusMeters);
+        var south = ToRenderVector(tile.GetPoint(x, y + 1), planetRadiusMeters);
+        var center = ToRenderVector(tile.GetPoint(x, y), planetRadiusMeters);
+        var normal = Vector3.Normalize(Vector3.Cross(east - west, south - north));
+
+        if (Vector3.Dot(normal, center) < 0f)
+        {
+            normal = -normal;
+        }
+
+        return ExaggerateTerrainNormal(normal, center);
     }
 
     private Vector3 CalculateTerrainNormal(PlanetVector direction, int seed, double planetRadiusMeters, double sampleAngle)
@@ -102,7 +122,13 @@ public sealed class PlanetSurfaceMeshBuilder(PlanetSurfaceTileSampler tileSample
         var northMinus = SampleRenderPosition(OffsetDirection(direction, north, -sampleAngle), seed, planetRadiusMeters);
         var normal = Vector3.Normalize(Vector3.Cross(eastPlus - eastMinus, northPlus - northMinus));
         var radial = new Vector3((float)direction.X, (float)direction.Y, (float)direction.Z);
-        return Vector3.Dot(normal, radial) < 0f ? -normal : normal;
+
+        if (Vector3.Dot(normal, radial) < 0f)
+        {
+            normal = -normal;
+        }
+
+        return ExaggerateTerrainNormal(normal, radial);
     }
 
     private Vector3 SampleRenderPosition(PlanetVector direction, int seed, double planetRadiusMeters)
@@ -110,6 +136,15 @@ public sealed class PlanetSurfaceMeshBuilder(PlanetSurfaceTileSampler tileSample
         var elevationMeters = elevationSource.SampleElevationMeters(direction, seed);
         return ToRenderVector(direction * (planetRadiusMeters + elevationMeters), planetRadiusMeters);
     }
+
+    private static Vector3 ExaggerateTerrainNormal(Vector3 physicalNormal, Vector3 radialPosition)
+    {
+        var radial = Vector3.Normalize(radialPosition);
+        var tangentComponent = physicalNormal - (radial * Vector3.Dot(physicalNormal, radial));
+        return Vector3.Normalize(radial + (tangentComponent * GlobalReliefNormalExaggeration));
+    }
+
+    private static bool IsTileBoundary(int x, int y, int cellsPerAxis) => x == 0 || y == 0 || x == cellsPerAxis || y == cellsPerAxis;
 
     private static PlanetVector OffsetDirection(PlanetVector direction, PlanetVector tangent, double angle)
         => PlanetVector.Normalize((direction * Math.Cos(angle)) + (tangent * Math.Sin(angle)));

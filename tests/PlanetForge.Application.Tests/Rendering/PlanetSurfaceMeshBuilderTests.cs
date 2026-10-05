@@ -64,6 +64,17 @@ public sealed class PlanetSurfaceMeshBuilderTests
     }
 
     [TestMethod]
+    public void BuildTile_GlobalResolution_ReusesSampledInteriorForNormals()
+    {
+        var source = new CountingElevationSource();
+        var builder = CreateBuilder(source);
+
+        _ = builder.BuildTile(new PlanetTileId(CubeFace.PositiveZ, 1, 0, 0), 24, 42, EarthRadiusMeters);
+
+        Assert.IsLessThan(1_100, source.SampleCount);
+    }
+
+    [TestMethod]
     public void BuildTile_AddsSkirtsBelowSurfaceRadius()
     {
         var builder = CreateBuilder(new FlatElevationSource());
@@ -114,5 +125,16 @@ public sealed class PlanetSurfaceMeshBuilderTests
     private sealed class SlopedElevationSource : IPlanetElevationSource
     {
         public double SampleElevationMeters(PlanetVector direction, int seed) => direction.X * 250_000.0;
+    }
+
+    private sealed class CountingElevationSource : IPlanetElevationSource
+    {
+        public int SampleCount { get; private set; }
+
+        public double SampleElevationMeters(PlanetVector direction, int seed)
+        {
+            SampleCount++;
+            return direction.X * 1_000.0;
+        }
     }
 }
