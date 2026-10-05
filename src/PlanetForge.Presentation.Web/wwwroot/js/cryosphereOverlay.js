@@ -470,39 +470,48 @@ void main() {
     float coarseTexture = valueNoise((vDirection * 22.0) + vec3(5.0, -3.0, 6.0));
     float fineTexture = valueNoise((vDirection * 65.0) + vec3(-7.0, 4.0, 2.0));
     float fractureField = abs(valueNoise((vDirection * 115.0) + vec3(9.0, 2.0, -4.0)) - 0.5) * 2.0;
-    float texture = (coarseTexture * 0.45) + (fineTexture * 0.35) + (fractureField * 0.20);
+    float surfaceTexture = (coarseTexture * 0.25) + (fineTexture * 0.75);
+    float iceTexture = (fineTexture * 0.62) + (fractureField * 0.38);
 
     vec3 normal = normalize(vNormal);
     vec3 radial = normalize(vDirection);
     float direct = max(dot(normal, normalize(uLightDirection)), 0.0);
     float terrainSlope = clamp(1.0 - dot(normal, radial), 0.0, 0.75);
-    float illumination = 0.38 + (0.62 * smoothstep(0.0, 0.88, direct));
-    illumination *= 1.0 - (terrainSlope * 0.60);
+    float hillshade = 0.34 + (0.66 * smoothstep(0.0, 0.88, direct));
+    hillshade *= 1.0 - (terrainSlope * 0.72);
+    float ambientRelief = 0.58 + (0.42 * hillshade);
 
-    float normalizedLandHeight = clamp(max(vElevationMeters, 0.0) / 6500.0, 0.0, 1.0);
     float normalizedDepth = clamp(max(-vElevationMeters, 0.0) / 6000.0, 0.0, 1.0);
+    float upland = smoothstep(550.0, 1700.0, max(vElevationMeters, 0.0));
+    float highland = smoothstep(1700.0, 3300.0, max(vElevationMeters, 0.0));
+    float peak = smoothstep(3300.0, 5500.0, max(vElevationMeters, 0.0));
     vec3 deepOcean = vec3(0.025, 0.13, 0.19);
     vec3 shallowOcean = vec3(0.045, 0.29, 0.34);
-    vec3 lowRock = vec3(0.30, 0.25, 0.19);
-    vec3 highRock = vec3(0.52, 0.45, 0.35);
-    vec3 barePeak = vec3(0.67, 0.62, 0.54);
+    vec3 lowRock = vec3(0.27, 0.23, 0.18);
+    vec3 uplandRock = vec3(0.45, 0.38, 0.29);
+    vec3 highRock = vec3(0.61, 0.54, 0.43);
+    vec3 barePeak = vec3(0.74, 0.70, 0.61);
     vec3 oceanMaterial = mix(shallowOcean, deepOcean, smoothstep(0.0, 1.0, normalizedDepth));
-    vec3 landMaterial = mix(lowRock, highRock, smoothstep(0.05, 0.62, normalizedLandHeight));
-    landMaterial = mix(landMaterial, barePeak, smoothstep(0.62, 1.0, normalizedLandHeight));
+    vec3 landMaterial = mix(lowRock, uplandRock, upland);
+    landMaterial = mix(landMaterial, highRock, highland);
+    landMaterial = mix(landMaterial, barePeak, peak);
     vec3 terrainMaterial = ocean ? oceanMaterial : landMaterial;
-    terrainMaterial *= mix(0.90, 1.08, (coarseTexture * 0.65) + (fineTexture * 0.35));
-    terrainMaterial *= illumination;
+    terrainMaterial *= mix(0.94, 1.06, surfaceTexture);
+    terrainMaterial *= ambientRelief;
 
-    vec3 seaIce = mix(vec3(0.56, 0.72, 0.78), vec3(0.84, 0.91, 0.92), 0.58 + (texture * 0.24));
-    vec3 landIce = mix(vec3(0.60, 0.68, 0.71), vec3(0.91, 0.93, 0.91), 0.50 + (texture * 0.32));
-    vec3 snow = mix(vec3(0.76, 0.81, 0.82), vec3(0.98, 0.98, 0.95), 0.56 + (texture * 0.22));
-    float snowInfluence = ocean ? 0.0 : clamp((alpineSnow * 0.70) + (uSnowCoverFraction * 0.24), 0.0, 0.84);
+    vec3 seaIce = mix(vec3(0.43, 0.62, 0.70), vec3(0.76, 0.86, 0.89), 0.50 + (iceTexture * 0.28));
+    vec3 landIce = mix(vec3(0.61, 0.68, 0.70), vec3(0.90, 0.92, 0.90), 0.46 + (iceTexture * 0.30));
+    vec3 snow = mix(vec3(0.78, 0.82, 0.82), vec3(0.97, 0.97, 0.94), 0.54 + (iceTexture * 0.20));
+    float snowInfluence = ocean ? 0.0 : clamp((alpineSnow * 0.66) + (uSnowCoverFraction * 0.20), 0.0, 0.72);
     vec3 iceMaterial = ocean ? seaIce : mix(landIce, snow, snowInfluence);
-    iceMaterial *= mix(0.72, 1.10, illumination);
-    iceMaterial *= mix(0.94, 1.07, texture);
+    iceMaterial *= 0.72 + (0.36 * hillshade);
+    iceMaterial *= mix(0.96, 1.04, iceTexture);
 
-    float crack = smoothstep(0.015, 0.11, fractureField) * (ocean ? 0.10 : 0.05);
-    iceMaterial *= 1.0 - (crack * mix(0.18, 1.0, seaBreakup));
+    float crack = (1.0 - smoothstep(0.025, 0.11, fractureField)) * (ocean ? 0.22 : 0.09);
+    iceMaterial *= 1.0 - (crack * mix(0.35, 1.0, seaBreakup));
+    float frozenWorldStrength = min(min(clamp(uSeaIceFraction, 0.0, 1.0), clamp(uLandIceFraction, 0.0, 1.0)), clamp(uSnowCoverFraction, 0.0, 1.0));
+    float windScour = ocean ? 0.0 : frozenWorldStrength * smoothstep(0.015, 0.10, terrainSlope) * smoothstep(1500.0, 4800.0, vElevationMeters);
+    iceMaterial = mix(iceMaterial, terrainMaterial * 1.08, windScour * 0.38);
 
     if (coverage < 0.08) {
         if (uFullSurface == 0) discard;
