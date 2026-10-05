@@ -11,8 +11,8 @@ const polarCoreStartDegrees = 68.0;
 const polarCoreFullDegrees = 76.0;
 const polarEdgeStartDegrees = 65.0;
 const polarEdgeFullDegrees = 77.0;
-const finalSeaIceLatitudeDegrees = 70.0;
-const finalLandIceLatitudeDegrees = 73.0;
+const finalSeaIceLatitudeDegrees = 69.0;
+const finalLandIceLatitudeDegrees = 72.0;
 const finalAlpineSnowlineMeters = 4_300.0;
 const alpineSnowTransitionMeters = 650.0;
 
@@ -414,7 +414,7 @@ void main() {
         - (max(vElevationMeters, 0.0) * ${elevationLapseRateKelvinPerMeter.toFixed(4)});
 
     float terrainNoise = iceNoise(vDirection);
-    float broadWarpDegrees = (terrainNoise - 0.5) * 13.5;
+    float broadWarpDegrees = (terrainNoise - 0.5) * 13.0;
     float elevationColdBiasDegrees = ocean ? 0.0 : clamp(max(vElevationMeters, 0.0) / 900.0, 0.0, 5.0);
     float iceSuitabilityDegrees = latitudeDegrees + broadWarpDegrees + elevationColdBiasDegrees;
 
@@ -424,8 +424,8 @@ void main() {
 
     float seaIceLineDegrees = mix(-25.0, ${finalSeaIceLatitudeDegrees.toFixed(1)}, seaRetreat);
     float landIceLineDegrees = mix(-25.0, ${finalLandIceLatitudeDegrees.toFixed(1)}, landRetreat);
-    float seaSheet = smoothstep(seaIceLineDegrees - 1.0, seaIceLineDegrees + 5.0, iceSuitabilityDegrees);
-    float landSheet = smoothstep(landIceLineDegrees - 0.5, landIceLineDegrees + 5.5, iceSuitabilityDegrees);
+    float seaSheet = smoothstep(seaIceLineDegrees - 1.5, seaIceLineDegrees + 6.0, iceSuitabilityDegrees);
+    float landSheet = smoothstep(landIceLineDegrees - 0.5, landIceLineDegrees + 6.0, iceSuitabilityDegrees);
 
     float snowlineMeters = mix(-1200.0, ${finalAlpineSnowlineMeters.toFixed(1)}, snowRetreat);
     float localSnowlineMeters = snowlineMeters + ((0.5 - terrainNoise) * 260.0);
@@ -439,33 +439,44 @@ void main() {
     float permanentPolar = max(polarEdge, polarCore * 0.86);
     float permanentAlpine = ocean ? 0.0 : smoothstep(4800.0, 5500.0, vElevationMeters) * (1.0 - smoothstep(258.0, 266.0, localTemperature));
 
-    float seaCoverage = max(seaSheet, permanentPolar);
-    float landCoverage = max(max(landSheet, alpineSnow * 0.50), max(permanentPolar * 0.78, permanentAlpine * 0.62));
-    seaCoverage = smoothstep(0.18, 0.72, seaCoverage);
-    landCoverage = smoothstep(0.22, 0.76, landCoverage);
+    float packBroadA = valueNoise((vDirection * 3.1) + vec3(5.0, -4.0, 7.0));
+    float packBroadB = valueNoise((vDirection * 6.2) + vec3(-8.0, 2.0, 4.0));
+    float packBroadC = valueNoise((vDirection * 11.0) + vec3(3.0, 8.0, -6.0));
+    float packRegionField = (packBroadA * 0.56) + (packBroadB * 0.29) + (packBroadC * 0.15);
+    float packWarpDegrees = (packRegionField - 0.5) * 24.0;
+    float irregularSeaEnvelope = smoothstep(seaIceLineDegrees - 3.0, seaIceLineDegrees + 8.0, latitudeDegrees + packWarpDegrees);
 
-    float floeMacro = valueNoise((vDirection * 16.0) + vec3(-4.0, 5.0, 9.0));
-    float floeMedium = valueNoise((vDirection * 37.0) + vec3(8.0, -3.0, 2.0));
-    float floeFine = valueNoise((vDirection * 79.0) + vec3(-2.0, 11.0, -6.0));
-    float floeField = (floeMacro * 0.22) + (floeMedium * 0.50) + (floeFine * 0.28);
-    float polarDensity = smoothstep(57.0, 88.0, iceSuitabilityDegrees);
-    float floeThreshold = mix(0.64, 0.31, polarDensity);
-    float floePresence = smoothstep(floeThreshold - 0.055, floeThreshold + 0.045, floeField);
+    float fragmentationStrength = smoothstep(0.10, 0.40, seaRetreat);
+    float frozenSeaCoverage = smoothstep(0.16, 0.72, max(seaSheet, permanentPolar));
+    float meltingSeaCoverage = smoothstep(0.14, 0.66, max(irregularSeaEnvelope, polarEdge * 0.44));
+    float seaCoverage = mix(frozenSeaCoverage, meltingSeaCoverage, fragmentationStrength);
 
-    float leadNoiseA = valueNoise((vDirection * 48.0) + vec3(1.0, 7.0, -5.0));
-    float leadNoiseB = valueNoise((vDirection * 71.0) + vec3(-9.0, 4.0, 6.0));
-    float leadA = 1.0 - smoothstep(0.020, 0.070, abs(leadNoiseA - 0.50));
-    float leadB = 1.0 - smoothstep(0.018, 0.055, abs(leadNoiseB - 0.50));
-    float fracture = max(leadA * 0.88, leadB * 0.72);
-    float fracturedFloes = floePresence * (1.0 - fracture);
-    float fragmentationStrength = smoothstep(0.12, 0.42, seaRetreat);
-    float seaPackMask = mix(1.0, fracturedFloes, fragmentationStrength);
-    seaCoverage *= seaPackMask;
+    float floeMacro = valueNoise((vDirection * 12.0) + vec3(-4.0, 5.0, 9.0));
+    float floeMedium = valueNoise((vDirection * 26.0) + vec3(8.0, -3.0, 2.0));
+    float floeFine = valueNoise((vDirection * 52.0) + vec3(-2.0, 11.0, -6.0));
+    float floeField = (floeMacro * 0.34) + (floeMedium * 0.44) + (floeFine * 0.22);
+    float floeThreshold = mix(0.54, 0.44, smoothstep(63.0, 84.0, iceSuitabilityDegrees));
+    float floePresence = smoothstep(floeThreshold - 0.075, floeThreshold + 0.065, floeField);
 
-    float landEdgeNoise = valueNoise((vDirection * 22.0) + vec3(3.0, -7.0, 4.0));
-    float landEdgeBreakup = smoothstep(0.22, 0.78, landCoverage + ((landEdgeNoise - 0.5) * 0.42));
-    float landBreakupStrength = smoothstep(0.18, 0.62, landRetreat);
-    landCoverage = mix(landCoverage, landEdgeBreakup, landBreakupStrength * (1.0 - smoothstep(76.0, 84.0, latitudeDegrees)));
+    float leadNoiseA = valueNoise((vDirection * 34.0) + vec3(1.0, 7.0, -5.0));
+    float leadNoiseB = valueNoise((vDirection * 57.0) + vec3(-9.0, 4.0, 6.0));
+    float leadA = 1.0 - smoothstep(0.018, 0.050, abs(leadNoiseA - 0.50));
+    float leadB = 1.0 - smoothstep(0.015, 0.042, abs(leadNoiseB - 0.50));
+    float fracture = max(leadA * 0.70, leadB * 0.52);
+    float floeMask = max(floePresence * (1.0 - fracture), smoothstep(84.0, 89.0, latitudeDegrees) * 0.52);
+    seaCoverage *= mix(1.0, floeMask, fragmentationStrength * 0.88);
+
+    float glacierBroadA = valueNoise((vDirection * 4.6) + vec3(-2.0, 6.0, 5.0));
+    float glacierBroadB = valueNoise((vDirection * 8.8) + vec3(7.0, -5.0, -3.0));
+    float glacierDetail = valueNoise((vDirection * 17.0) + vec3(1.0, 4.0, -9.0));
+    float glacierField = (glacierBroadA * 0.57) + (glacierBroadB * 0.30) + (glacierDetail * 0.13);
+    float glacierColdBias = smoothstep(64.0, 82.0, iceSuitabilityDegrees) * 0.13;
+    float glacierPatchMask = smoothstep(0.40, 0.61, glacierField + glacierColdBias);
+
+    float landBaseCoverage = max(max(landSheet, alpineSnow * 0.48), max(permanentPolar * 0.64, permanentAlpine * 0.62));
+    landBaseCoverage = smoothstep(0.22, 0.76, landBaseCoverage);
+    float landBreakupStrength = smoothstep(0.16, 0.58, landRetreat);
+    float landCoverage = landBaseCoverage * mix(1.0, mix(0.22, 1.0, glacierPatchMask), landBreakupStrength * 0.82);
 
     float coverage = ocean ? seaCoverage : landCoverage;
     if (coverage < 0.045) discard;
@@ -473,20 +484,20 @@ void main() {
     float surfaceTexture = valueNoise((vDirection * 19.0) + vec3(6.0, -2.0, 3.0));
     float fineTexture = valueNoise((vDirection * 43.0) + vec3(-5.0, 8.0, 1.0));
     float visualTexture = (surfaceTexture * 0.66) + (fineTexture * 0.34);
-    float edgeTexture = mix(0.92, 1.025, visualTexture);
+    float edgeTexture = mix(0.93, 1.025, visualTexture);
 
     vec3 frozenSeaColor = vec3(0.84, 0.91, 0.93);
-    vec3 meltingSeaColor = vec3(0.60, 0.75, 0.81);
+    vec3 meltingSeaColor = vec3(0.61, 0.76, 0.82);
     vec3 frozenLandColor = vec3(0.92, 0.94, 0.93);
-    vec3 meltingLandColor = vec3(0.70, 0.77, 0.78);
+    vec3 meltingLandColor = vec3(0.72, 0.79, 0.80);
     vec3 seaIceColor = mix(frozenSeaColor, meltingSeaColor, fragmentationStrength);
     vec3 landIceColor = mix(frozenLandColor, meltingLandColor, smoothstep(0.10, 0.55, landRetreat));
     vec3 iceColor = (ocean ? seaIceColor : landIceColor) * edgeTexture;
 
-    float seaAlpha = mix(0.88, 0.66, fragmentationStrength) * coverage;
+    float seaAlpha = mix(0.88, 0.68, fragmentationStrength) * coverage;
     float landFade = smoothstep(0.08, 0.55, landRetreat);
-    float landAlpha = mix(0.84, 0.46, landFade) * coverage;
-    float textureAlpha = mix(0.88, 1.0, visualTexture);
+    float landAlpha = mix(0.84, 0.50, landFade) * coverage;
+    float textureAlpha = mix(0.90, 1.0, visualTexture);
     float alpha = clamp((ocean ? seaAlpha : landAlpha) * textureAlpha, 0.0, ocean ? 0.84 : 0.82);
     outColor = vec4(iceColor, alpha);
 }`;
