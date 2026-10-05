@@ -55,22 +55,25 @@ export function setPlanet(snapshot) {
     state.seaIceFraction = snapshot.climateFeedback?.seaIceFraction ?? snapshot.climateFeedback?.cryosphereFraction ?? state.seaIceFraction;
     state.visible = !snapshot.localSurface;
 
-    const activeKeys = new Set();
-    for (const tile of snapshot.surfaceTiles ?? []) {
-        if (!tile?.key || !tile.surfaceVertexCount || !tile.positions?.length) continue;
-        activeKeys.add(tile.key);
-        const existing = state.tiles.get(tile.key);
-        if (existing) state.gl.deleteBuffer(existing.positionBuffer);
-        const positionBuffer = state.gl.createBuffer();
-        state.gl.bindBuffer(state.gl.ARRAY_BUFFER, positionBuffer);
-        state.gl.bufferData(state.gl.ARRAY_BUFFER, new Float32Array(tile.positions), state.gl.STATIC_DRAW);
-        state.tiles.set(tile.key, { positionBuffer, vertexCount: tile.surfaceVertexCount });
-    }
+    const surfaceTiles = snapshot.surfaceTiles ?? [];
+    if (surfaceTiles.length > 0) {
+        const activeKeys = new Set();
+        for (const tile of surfaceTiles) {
+            if (!tile?.key || !tile.surfaceVertexCount || !tile.positions?.length) continue;
+            activeKeys.add(tile.key);
+            const existing = state.tiles.get(tile.key);
+            if (existing) state.gl.deleteBuffer(existing.positionBuffer);
+            const positionBuffer = state.gl.createBuffer();
+            state.gl.bindBuffer(state.gl.ARRAY_BUFFER, positionBuffer);
+            state.gl.bufferData(state.gl.ARRAY_BUFFER, new Float32Array(tile.positions), state.gl.STATIC_DRAW);
+            state.tiles.set(tile.key, { positionBuffer, vertexCount: tile.surfaceVertexCount });
+        }
 
-    for (const [key, tile] of state.tiles) {
-        if (activeKeys.has(key)) continue;
-        state.gl.deleteBuffer(tile.positionBuffer);
-        state.tiles.delete(key);
+        for (const [key, tile] of state.tiles) {
+            if (activeKeys.has(key)) continue;
+            state.gl.deleteBuffer(tile.positionBuffer);
+            state.tiles.delete(key);
+        }
     }
 
     state.dirty = true;
