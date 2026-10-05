@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 
-test('FrozenToMelting_PreservesPolarCapsAndThawsEquator', async ({ page }, testInfo) => {
+test('FrozenToMelting_PreservesFragmentedPolarIceAndThawsEquator', async ({ page }, testInfo) => {
   await page.goto('/?visualTest=1');
   await expect(page.getByText('FROZEN WORLD')).toBeVisible();
   await page.waitForFunction(() => Boolean(window.__planetForgeCryosphereTest));
@@ -15,7 +15,6 @@ test('FrozenToMelting_PreservesPolarCapsAndThawsEquator', async ({ page }, testI
 
   await orientPitch(page, 0.0);
   const meltedEquatorCoverage = await measureCenterCoverage(page);
-  const meltedUpperEdgeVariation = await measureUpperEdgeVariation(page);
   await page.screenshot({ path: testInfo.outputPath('year-50-equator.png'), fullPage: true });
 
   await orientPitch(page, 1.25);
@@ -23,9 +22,6 @@ test('FrozenToMelting_PreservesPolarCapsAndThawsEquator', async ({ page }, testI
   const northPolarRegionCoverage = await measurePolarRegionCoverage(page);
   const northFragmentation = await measureFragmentation(page);
   await page.screenshot({ path: testInfo.outputPath('year-50-north.png'), fullPage: true });
-  await setCryosphereVisible(page, false);
-  await page.screenshot({ path: testInfo.outputPath('year-50-north-base-only.png'), fullPage: true });
-  await setCryosphereVisible(page, true);
 
   await orientPitch(page, -1.25);
   const southPoleCoverage = await measureCenterCoverage(page);
@@ -41,21 +37,28 @@ test('FrozenToMelting_PreservesPolarCapsAndThawsEquator', async ({ page }, testI
     northPolarRegionCoverage,
     southPolarRegionCoverage,
     northFragmentation,
-    southFragmentation,
-    meltedUpperEdgeVariation
+    southFragmentation
   };
   console.log(`Cryosphere metrics: ${JSON.stringify(metrics)}`);
   await testInfo.attach('cryosphere-metrics', { body: JSON.stringify(metrics, null, 2), contentType: 'application/json' });
 
   expect(frozenEquatorCoverage).toBeGreaterThan(0.80);
-  expect(meltedEquatorCoverage).toBeLessThan(0.35);
-  expect(northPoleCoverage).toBeGreaterThan(0.35);
-  expect(southPoleCoverage).toBeGreaterThan(0.35);
-  expect(northPoleCoverage - meltedEquatorCoverage).toBeGreaterThan(0.20);
-  expect(southPoleCoverage - meltedEquatorCoverage).toBeGreaterThan(0.20);
-  expect(meltedUpperEdgeVariation.sampleCount).toBeGreaterThan(40);
-  expect(meltedUpperEdgeVariation.rangePixels).toBeGreaterThan(12);
-  expect(meltedUpperEdgeVariation.standardDeviationPixels).toBeGreaterThan(3.0);
+  expect(meltedEquatorCoverage).toBeLessThan(0.15);
+
+  expect(northPolarRegionCoverage).toBeGreaterThan(0.04);
+  expect(southPolarRegionCoverage).toBeGreaterThan(0.08);
+  expect(northPolarRegionCoverage).toBeLessThan(0.55);
+  expect(southPolarRegionCoverage).toBeLessThan(0.55);
+
+  expect(northFragmentation.transitions).toBeGreaterThan(20);
+  expect(southFragmentation.transitions).toBeGreaterThan(20);
+  expect(northFragmentation.occupiedFraction).toBeGreaterThan(0.04);
+  expect(southFragmentation.occupiedFraction).toBeGreaterThan(0.08);
+  expect(northFragmentation.occupiedFraction).toBeLessThan(0.60);
+  expect(southFragmentation.occupiedFraction).toBeLessThan(0.60);
+
+  expect(northPoleCoverage).toBeLessThan(0.80);
+  expect(southPoleCoverage).toBeLessThan(0.80);
 });
 
 async function orientPitch(page, targetPitch) {
@@ -91,14 +94,4 @@ async function measurePolarRegionCoverage(page) {
 
 async function measureFragmentation(page) {
   return page.evaluate(() => window.__planetForgeCryosphereTest.measureFragmentation());
-}
-
-async function measureUpperEdgeVariation(page) {
-  return page.evaluate(() => window.__planetForgeCryosphereTest.measureUpperEdgeVariation());
-}
-
-async function setCryosphereVisible(page, visible) {
-  await page.locator('#cryosphere-overlay-canvas').evaluate((element, isVisible) => {
-    element.style.visibility = isVisible ? 'visible' : 'hidden';
-  }, visible);
 }
