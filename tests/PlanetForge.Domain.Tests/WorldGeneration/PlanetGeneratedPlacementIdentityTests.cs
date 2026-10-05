@@ -28,7 +28,7 @@ public sealed class PlanetGeneratedPlacementIdentityTests
         var baseline = PlanetGeneratedPlacementIdentity.Create(world, address, "tree", 0);
 
         Assert.AreNotEqual(baseline, PlanetGeneratedPlacementIdentity.Create(PlanetWorldIdentity.CreateCurrent(43), address, "tree", 0));
-        Assert.AreNotEqual(baseline, PlanetGeneratedPlacementIdentity.Create(new PlanetWorldIdentity(42, new PlanetGenerationVersion(2)), address, "tree", 0));
+        Assert.AreNotEqual(baseline, PlanetGeneratedPlacementIdentity.Create(new PlanetWorldIdentity(42, new PlanetGenerationVersion(1)), address, "tree", 0));
         Assert.AreNotEqual(baseline, PlanetGeneratedPlacementIdentity.Create(world, movedAddress, "tree", 0));
         Assert.AreNotEqual(baseline, PlanetGeneratedPlacementIdentity.Create(world, address, "rock", 0));
         Assert.AreNotEqual(baseline, PlanetGeneratedPlacementIdentity.Create(world, address, "tree", 1));
