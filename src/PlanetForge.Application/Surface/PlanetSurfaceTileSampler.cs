@@ -4,6 +4,8 @@ namespace PlanetForge.Application.Surface;
 
 public sealed class PlanetSurfaceTileSampler(IPlanetElevationSource elevationSource)
 {
+    public IPlanetElevationSource ElevationSource { get; } = elevationSource;
+
     public PlanetSurfaceTile Sample(PlanetTileId id, int cellsPerAxis, int seed)
     {
         if (cellsPerAxis < 1 || cellsPerAxis > 256)
@@ -25,7 +27,7 @@ public sealed class PlanetSurfaceTileSampler(IPlanetElevationSource elevationSou
                 var globalX = checked((id.X * cellsPerAxis) + x);
                 var u = ToFaceCoordinate(globalX, globalCellsPerAxis);
                 var direction = CubedSphereProjection.ToUnitSphere(id.Face, u, v);
-                var elevationMeters = elevationSource.SampleElevationMeters(direction, seed);
+                var elevationMeters = ElevationSource.SampleElevationMeters(direction, seed);
                 points[(y * pointsPerAxis) + x] = new PlanetSurfacePoint(direction, elevationMeters);
             }
         }

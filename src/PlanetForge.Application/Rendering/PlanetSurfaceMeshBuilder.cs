@@ -4,10 +4,16 @@ using PlanetForge.Domain.Surface;
 
 namespace PlanetForge.Application.Rendering;
 
-public sealed class PlanetSurfaceMeshBuilder(PlanetSurfaceTileSampler tileSampler)
+public sealed class PlanetSurfaceMeshBuilder(PlanetSurfaceTileSampler tileSampler, IPlanetElevationSource elevationSource)
 {
     private const double MinimumSkirtDepthMeters = 5.0;
     private const double MaximumSkirtDepthMeters = 500.0;
+    private const double MinimumNormalSampleAngleRadians = 0.00005;
+    private const double MaximumNormalSampleAngleRadians = 0.004;
+
+    public PlanetSurfaceMeshBuilder(PlanetSurfaceTileSampler tileSampler) : this(tileSampler, tileSampler.ElevationSource)
+    {
+    }
 
     public PlanetSurfaceTileMesh BuildTile(PlanetTileId id, int cellsPerAxis, int seed, double planetRadiusMeters)
     {
@@ -18,6 +24,7 @@ public sealed class PlanetSurfaceMeshBuilder(PlanetSurfaceTileSampler tileSample
         var totalTriangleCount = surfaceTriangleCount + skirtTriangleCount;
         var positions = new float[totalTriangleCount * 9];
         var normals = new float[totalTriangleCount * 9];
+        var vertexNormals = BuildVertexNormals(tile, cellsPerAxis, seed, planetRadiusMeters);
         var offset = 0;
 
         for (var y = 0; y < cellsPerAxis; y++)
@@ -28,8 +35,12 @@ public sealed class PlanetSurfaceMeshBuilder(PlanetSurfaceTileSampler tileSample
                 var b = ToRenderVector(tile.GetPoint(x + 1, y), planetRadiusMeters);
                 var c = ToRenderVector(tile.GetPoint(x, y + 1), planetRadiusMeters);
                 var d = ToRenderVector(tile.GetPoint(x + 1, y + 1), planetRadiusMeters);
-                WriteSurfaceTriangle(positions, normals, ref offset, a, c, b);
-                WriteSurfaceTriangle(positions, normals, ref offset, b, c, d);
+                var normalA = vertexNormals[ToPointIndex(x, y, cellsPerAxis)];
+                var normalB = vertexNormals[ToPointIndex(x + 1, y, cellsPerAxis)];
+                var normalC = vertexNormals[ToPointIndex(x, y + 1, cellsPerAxis)];
+                var normalD = vertexNormals[ToPointIndex(x + 1, y + 1, cellsPerAxis)];
+                WriteSurfaceTriangle(positions, normals, ref offset, a, normalA, c, normalC, b, normalB);
+                WriteSurfaceTriangle(positions, normals, ref offset, b, normalB, c, normalC, d, normalD);
             }
         }
 
@@ -61,6 +72,49 @@ public sealed class PlanetSurfaceMeshBuilder(PlanetSurfaceTileSampler tileSample
 
         return result;
     }
+
+    private Vector3[] BuildVertexNormals(PlanetSurfaceTile tile, int cellsPerAxis, int seed, double planetRadiusMeters)
+    {
+        var bounds = PlanetTileGeometry.CalculateBounds(tile.Id);
+        var sampleAngle = Math.Clamp(bounds.AngularRadiusRadians * 0.7 / cellsPerAxis, MinimumNormalSampleAngleRadians, MaximumNormalSampleAngleRadians);
+        var pointCount = (cellsPerAxis + 1) * (cellsPerAxis + 1);
+        var result = new Vector3[pointCount];
+
+        for (var y = 0; y <= cellsPerAxis; y++)
+        {
+            for (var x = 0; x <= cellsPerAxis; x++)
+            {
+                result[ToPointIndex(x, y, cellsPerAxis)] = CalculateTerrainNormal(tile.GetPoint(x, y).Direction, seed, planetRadiusMeters, sampleAngle);
+            }
+        }
+
+        return result;
+    }
+
+    private Vector3 CalculateTerrainNormal(PlanetVector direction, int seed, double planetRadiusMeters, double sampleAngle)
+    {
+        var reference = Math.Abs(direction.Y) < 0.9 ? PlanetVector.UnitY : PlanetVector.UnitX;
+        var east = PlanetVector.Normalize(PlanetVector.Cross(reference, direction));
+        var north = PlanetVector.Normalize(PlanetVector.Cross(direction, east));
+        var eastPlus = SampleRenderPosition(OffsetDirection(direction, east, sampleAngle), seed, planetRadiusMeters);
+        var eastMinus = SampleRenderPosition(OffsetDirection(direction, east, -sampleAngle), seed, planetRadiusMeters);
+        var northPlus = SampleRenderPosition(OffsetDirection(direction, north, sampleAngle), seed, planetRadiusMeters);
+        var northMinus = SampleRenderPosition(OffsetDirection(direction, north, -sampleAngle), seed, planetRadiusMeters);
+        var normal = Vector3.Normalize(Vector3.Cross(eastPlus - eastMinus, northPlus - northMinus));
+        var radial = new Vector3((float)direction.X, (float)direction.Y, (float)direction.Z);
+        return Vector3.Dot(normal, radial) < 0f ? -normal : normal;
+    }
+
+    private Vector3 SampleRenderPosition(PlanetVector direction, int seed, double planetRadiusMeters)
+    {
+        var elevationMeters = elevationSource.SampleElevationMeters(direction, seed);
+        return ToRenderVector(direction * (planetRadiusMeters + elevationMeters), planetRadiusMeters);
+    }
+
+    private static PlanetVector OffsetDirection(PlanetVector direction, PlanetVector tangent, double angle)
+        => PlanetVector.Normalize((direction * Math.Cos(angle)) + (tangent * Math.Sin(angle)));
+
+    private static int ToPointIndex(int x, int y, int cellsPerAxis) => (y * (cellsPerAxis + 1)) + x;
 
     private static void WriteSkirts(
         PlanetSurfaceTile tile,
@@ -120,24 +174,32 @@ public sealed class PlanetSurfaceMeshBuilder(PlanetSurfaceTileSampler tileSample
         return new Vector3((float)normalized.X, (float)normalized.Y, (float)normalized.Z);
     }
 
-    private static void WriteSurfaceTriangle(float[] positions, float[] normals, ref int offset, Vector3 a, Vector3 b, Vector3 c)
+    private static void WriteSurfaceTriangle(
+        float[] positions,
+        float[] normals,
+        ref int offset,
+        Vector3 a,
+        Vector3 normalA,
+        Vector3 b,
+        Vector3 normalB,
+        Vector3 c,
+        Vector3 normalC)
     {
-        var normal = Vector3.Cross(b - a, c - a);
+        var faceNormal = Vector3.Cross(b - a, c - a);
         var center = (a + b + c) / 3f;
 
-        if (Vector3.Dot(normal, center) < 0f)
+        if (Vector3.Dot(faceNormal, center) < 0f)
         {
             (b, c) = (c, b);
-            normal = -normal;
+            (normalB, normalC) = (normalC, normalB);
         }
 
-        normal = Vector3.Normalize(normal);
         WriteVector(positions, offset, a);
         WriteVector(positions, offset + 3, b);
         WriteVector(positions, offset + 6, c);
-        WriteVector(normals, offset, normal);
-        WriteVector(normals, offset + 3, normal);
-        WriteVector(normals, offset + 6, normal);
+        WriteVector(normals, offset, normalA);
+        WriteVector(normals, offset + 3, normalB);
+        WriteVector(normals, offset + 6, normalC);
         offset += 9;
     }
 

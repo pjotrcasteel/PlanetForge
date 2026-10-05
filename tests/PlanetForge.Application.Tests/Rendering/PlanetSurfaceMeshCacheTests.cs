@@ -77,8 +77,9 @@ public sealed class PlanetSurfaceMeshCacheTests
 
     private static PlanetSurfaceMeshCache CreateCache()
     {
-        var sampler = new PlanetSurfaceTileSampler(new FlatElevationSource());
-        return new PlanetSurfaceMeshCache(new PlanetSurfaceMeshBuilder(sampler));
+        var elevationSource = new FlatElevationSource();
+        var sampler = new PlanetSurfaceTileSampler(elevationSource);
+        return new PlanetSurfaceMeshCache(new PlanetSurfaceMeshBuilder(sampler, elevationSource));
     }
 
     private sealed class FlatElevationSource : IPlanetElevationSource
