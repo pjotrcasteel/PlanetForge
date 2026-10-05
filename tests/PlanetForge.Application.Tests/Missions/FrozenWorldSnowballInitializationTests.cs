@@ -26,7 +26,7 @@ public sealed class FrozenWorldSnowballInitializationTests
     {
         var elevationSource = new FlatElevationSource();
         var sampler = new PlanetSurfaceTileSampler(elevationSource);
-        var meshBuilder = new PlanetSurfaceMeshBuilder(sampler);
+        var meshBuilder = new PlanetSurfaceMeshBuilder(sampler, elevationSource);
         var meshCache = new PlanetSurfaceMeshCache(meshBuilder);
         var localSampler = new PlanetLocalSurfacePatchSampler(elevationSource);
         var localMeshBuilder = new PlanetLocalSurfaceMeshBuilder();
