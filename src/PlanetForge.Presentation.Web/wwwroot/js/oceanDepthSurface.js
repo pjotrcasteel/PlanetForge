@@ -41,10 +41,7 @@ export function initialize(inputCanvasId, snapshot) {
         visible: true,
         tiles: new Map(),
         dirty: true,
-        attributes: {
-            position: gl.getAttribLocation(program, 'aPosition'),
-            normal: gl.getAttribLocation(program, 'aNormal')
-        },
+        positionAttribute: gl.getAttribLocation(program, 'aPosition'),
         uniforms: {
             viewProjection: gl.getUniformLocation(program, 'uViewProjection'),
             lightDirection: gl.getUniformLocation(program, 'uLightDirection'),
@@ -74,17 +71,19 @@ export function setPlanet(snapshot) {
 
     const activeKeys = new Set();
     for (const tile of surfaceTiles) {
-        if (!tile?.key || !tile.surfaceVertexCount) continue;
+        if (!tile?.key || !tile.surfaceVertexCount || !tile.positions?.length) continue;
         activeKeys.add(tile.key);
-        if (!tile.positions?.length || !tile.normals?.length) continue;
         const existing = state.tiles.get(tile.key);
-        if (existing) deleteTileBuffers(state.gl, existing);
-        state.tiles.set(tile.key, createTileBuffer(state.gl, tile));
+        if (existing) state.gl.deleteBuffer(existing.positionBuffer);
+        const positionBuffer = state.gl.createBuffer();
+        state.gl.bindBuffer(state.gl.ARRAY_BUFFER, positionBuffer);
+        state.gl.bufferData(state.gl.ARRAY_BUFFER, new Float32Array(tile.positions), state.gl.STATIC_DRAW);
+        state.tiles.set(tile.key, { positionBuffer, vertexCount: tile.surfaceVertexCount });
     }
 
     for (const [key, tile] of state.tiles) {
         if (activeKeys.has(key)) continue;
-        deleteTileBuffers(state.gl, tile);
+        state.gl.deleteBuffer(tile.positionBuffer);
         state.tiles.delete(key);
     }
 
@@ -94,28 +93,11 @@ export function setPlanet(snapshot) {
 export function dispose() {
     if (!state) return;
     if (window.__planetForgeOceanTest) delete window.__planetForgeOceanTest;
-    for (const tile of state.tiles.values()) deleteTileBuffers(state.gl, tile);
+    for (const tile of state.tiles.values()) state.gl.deleteBuffer(tile.positionBuffer);
     state.tiles.clear();
     state.gl.deleteProgram(state.program);
     state.canvas.remove();
     state = null;
-}
-
-function createTileBuffer(gl, tile) {
-    const positionBuffer = gl.createBuffer();
-    gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
-    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(tile.positions), gl.STATIC_DRAW);
-
-    const normalBuffer = gl.createBuffer();
-    gl.bindBuffer(gl.ARRAY_BUFFER, normalBuffer);
-    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(tile.normals), gl.STATIC_DRAW);
-
-    return { positionBuffer, normalBuffer, vertexCount: tile.surfaceVertexCount };
-}
-
-function deleteTileBuffers(gl, tile) {
-    gl.deleteBuffer(tile.positionBuffer);
-    gl.deleteBuffer(tile.normalBuffer);
 }
 
 function installInput(s) {
@@ -171,10 +153,9 @@ function measureDepthVariation(s) {
     let minimum = 1.0;
     let maximum = 0.0;
     let sampledPixels = 0;
-    const step = 4;
 
-    for (let y = 0; y < height; y += step) {
-        for (let x = 0; x < width; x += step) {
+    for (let y = 0; y < height; y += 4) {
+        for (let x = 0; x < width; x += 4) {
             const offset = ((y * width) + x) * 4;
             if (pixels[offset + 3] < 180) continue;
             const red = pixels[offset] / 255.0;
@@ -220,11 +201,9 @@ function draw(s) {
     const altitudeMeters = Math.max(0.0, (s.distance - 1.0) * s.planetRadiusMeters);
     if (altitudeMeters <= localTransitionAltitudeMeters) return;
 
-    const aspect = canvas.width / Math.max(canvas.height, 1);
-    const projection = perspective(verticalFieldOfViewRadians, aspect, 0.002, 20.0);
+    const projection = perspective(verticalFieldOfViewRadians, canvas.width / Math.max(canvas.height, 1), 0.002, 20.0);
     const eye = orbitEye(s.yaw, s.pitch, s.distance);
-    const view = lookAt(eye, [0, 0, 0], [0, 1, 0]);
-    const viewProjection = multiply(projection, view);
+    const viewProjection = multiply(projection, lookAt(eye, [0, 0, 0], [0, 1, 0]));
 
     gl.enable(gl.DEPTH_TEST);
     gl.enable(gl.CULL_FACE);
@@ -239,11 +218,8 @@ function draw(s) {
 
     for (const tile of s.tiles.values()) {
         gl.bindBuffer(gl.ARRAY_BUFFER, tile.positionBuffer);
-        gl.enableVertexAttribArray(s.attributes.position);
-        gl.vertexAttribPointer(s.attributes.position, 3, gl.FLOAT, false, 0, 0);
-        gl.bindBuffer(gl.ARRAY_BUFFER, tile.normalBuffer);
-        gl.enableVertexAttribArray(s.attributes.normal);
-        gl.vertexAttribPointer(s.attributes.normal, 3, gl.FLOAT, false, 0, 0);
+        gl.enableVertexAttribArray(s.positionAttribute);
+        gl.vertexAttribPointer(s.positionAttribute, 3, gl.FLOAT, false, 0, 0);
         gl.drawArrays(gl.TRIANGLES, 0, tile.vertexCount);
     }
 
@@ -291,9 +267,7 @@ function lookAt(eye, center, up) {
 function multiply(a, b) {
     const out = new Float32Array(16);
     for (let column = 0; column < 4; column++) {
-        for (let row = 0; row < 4; row++) {
-            out[column*4+row] = a[row]*b[column*4] + a[4+row]*b[column*4+1] + a[8+row]*b[column*4+2] + a[12+row]*b[column*4+3];
-        }
+        for (let row = 0; row < 4; row++) out[column*4+row] = a[row]*b[column*4] + a[4+row]*b[column*4+1] + a[8+row]*b[column*4+2] + a[12+row]*b[column*4+3];
     }
     return out;
 }
@@ -310,7 +284,6 @@ function clamp(value,min,max) { return Math.max(min, Math.min(max, value)); }
 const vertexShaderSource = `#version 300 es
 precision highp float;
 in vec3 aPosition;
-in vec3 aNormal;
 uniform mat4 uViewProjection;
 uniform float uPlanetRadiusMeters;
 out vec3 vDirection;
@@ -341,22 +314,20 @@ float hash31(vec3 p) {
 float valueNoise(vec3 p) {
     vec3 cell = floor(p);
     vec3 local = fract(p);
-    vec3 smoothLocal = local * local * (3.0 - (2.0 * local));
-    float n000 = hash31(cell + vec3(0.0, 0.0, 0.0));
+    vec3 f = local * local * (3.0 - (2.0 * local));
+    float n000 = hash31(cell + vec3(0.0));
     float n100 = hash31(cell + vec3(1.0, 0.0, 0.0));
     float n010 = hash31(cell + vec3(0.0, 1.0, 0.0));
     float n110 = hash31(cell + vec3(1.0, 1.0, 0.0));
     float n001 = hash31(cell + vec3(0.0, 0.0, 1.0));
     float n101 = hash31(cell + vec3(1.0, 0.0, 1.0));
     float n011 = hash31(cell + vec3(0.0, 1.0, 1.0));
-    float n111 = hash31(cell + vec3(1.0, 1.0, 1.0));
-    float nx00 = mix(n000, n100, smoothLocal.x);
-    float nx10 = mix(n010, n110, smoothLocal.x);
-    float nx01 = mix(n001, n101, smoothLocal.x);
-    float nx11 = mix(n011, n111, smoothLocal.x);
-    float nxy0 = mix(nx00, nx10, smoothLocal.y);
-    float nxy1 = mix(nx01, nx11, smoothLocal.y);
-    return mix(nxy0, nxy1, smoothLocal.z);
+    float n111 = hash31(cell + vec3(1.0));
+    float nx00 = mix(n000, n100, f.x);
+    float nx10 = mix(n010, n110, f.x);
+    float nx01 = mix(n001, n101, f.x);
+    float nx11 = mix(n011, n111, f.x);
+    return mix(mix(nx00, nx10, f.y), mix(nx01, nx11, f.y), f.z);
 }
 
 float fbm(vec3 p) {
@@ -364,7 +335,7 @@ float fbm(vec3 p) {
 }
 
 void main() {
-    if (vElevationMeters >= 25.0) discard;
+    if (vElevationMeters >= 20.0) discard;
 
     vec3 radial = normalize(vDirection);
     float latitudeDegrees = degrees(asin(clamp(abs(radial.y), 0.0, 1.0)));
@@ -376,43 +347,47 @@ void main() {
     float frozenSeaSheet = smoothstep(seaIceLineDegrees - 1.5, seaIceLineDegrees + 5.0, warpedLatitudeDegrees);
     float seaPatch = fbm((radial * 9.0) + vec3(-3.0, 7.0, 4.0));
     float polarSeaBias = smoothstep(58.0, 84.0, warpedLatitudeDegrees);
-    float fragmentedSea = smoothstep(seaIceLineDegrees - 4.0, seaIceLineDegrees + 7.5, warpedLatitudeDegrees)
-        * smoothstep(0.56, 0.70, seaPatch + (polarSeaBias * 0.09));
+    float fragmentedSea = smoothstep(seaIceLineDegrees - 4.0, seaIceLineDegrees + 7.5, warpedLatitudeDegrees) * smoothstep(0.56, 0.70, seaPatch + (polarSeaBias * 0.09));
     float seaCoverage = mix(frozenSeaSheet, fragmentedSea, seaBreakup);
     float openWater = 1.0 - smoothstep(0.18, 0.62, seaCoverage);
     if (openWater <= 0.02) discard;
 
     float depthMeters = max(-vElevationMeters, 0.0);
-    float shore = 1.0 - smoothstep(0.0, 180.0, depthMeters);
-    float shelf = 1.0 - smoothstep(180.0, 900.0, depthMeters);
-    float upperSlope = 1.0 - smoothstep(900.0, 2300.0, depthMeters);
-    float abyss = smoothstep(3000.0, 5600.0, depthMeters);
+    float coastBand = 1.0 - smoothstep(0.0, 420.0, depthMeters);
+    float shelfBand = 1.0 - smoothstep(420.0, 1600.0, depthMeters);
+    float slopeBand = 1.0 - smoothstep(1600.0, 3300.0, depthMeters);
+    float abyssBand = smoothstep(3600.0, 5600.0, depthMeters);
 
-    vec3 coastalWater = vec3(0.075, 0.39, 0.43);
-    vec3 shelfWater = vec3(0.035, 0.27, 0.34);
-    vec3 slopeWater = vec3(0.022, 0.18, 0.27);
-    vec3 deepWater = vec3(0.012, 0.085, 0.15);
+    vec3 coastalWater = vec3(0.075, 0.46, 0.48);
+    vec3 shelfWater = vec3(0.030, 0.34, 0.42);
+    vec3 slopeWater = vec3(0.015, 0.20, 0.32);
+    vec3 deepWater = vec3(0.006, 0.060, 0.125);
 
-    vec3 color = mix(slopeWater, shelfWater, upperSlope);
-    color = mix(color, coastalWater, max(shore, shelf * 0.58));
-    color = mix(color, deepWater, abyss);
+    vec3 color = deepWater;
+    color = mix(color, slopeWater, slopeBand);
+    color = mix(color, shelfWater, shelfBand);
+    color = mix(color, coastalWater, coastBand);
+    color = mix(color, deepWater, abyssBand * 0.88);
 
-    float basinNoise = (valueNoise((radial * 3.2) + vec3(4.0, -7.0, 2.0)) - 0.5) * 0.035;
-    float shelfNoise = (valueNoise((radial * 12.0) + vec3(-3.0, 5.0, 8.0)) - 0.5) * 0.020 * (1.0 - abyss);
-    color += vec3(basinNoise * 0.28, basinNoise * 0.65, basinNoise) + vec3(0.0, shelfNoise * 0.55, shelfNoise);
+    float shelfEdge = 1.0 - smoothstep(0.0, 420.0, abs(depthMeters - 1150.0));
+    float basinNoise = (valueNoise((radial * 3.2) + vec3(4.0, -7.0, 2.0)) - 0.5) * 0.050;
+    float regionalNoise = (valueNoise((radial * 8.0) + vec3(-3.0, 5.0, 8.0)) - 0.5) * 0.026 * (1.0 - abyssBand);
+    color += vec3(basinNoise * 0.18, basinNoise * 0.48, basinNoise * 0.70);
+    color += vec3(0.0, regionalNoise * 0.62, regionalNoise);
+    color += vec3(0.0, 0.018, 0.024) * shelfEdge;
 
     vec3 normal = radial;
     vec3 light = normalize(uLightDirection);
     vec3 viewDirection = normalize(uCameraPosition - (normal * ${waterSurfaceOffset.toFixed(6)}));
-    float diffuse = 0.76 + (0.24 * max(dot(normal, light), 0.0));
-    float fresnel = pow(1.0 - max(dot(normal, viewDirection), 0.0), 3.0);
+    float diffuse = 0.82 + (0.18 * max(dot(normal, light), 0.0));
+    float fresnel = pow(1.0 - max(dot(normal, viewDirection), 0.0), 3.2);
     vec3 halfVector = normalize(light + viewDirection);
-    float specular = pow(max(dot(normal, halfVector), 0.0), 54.0) * 0.16;
+    float specular = pow(max(dot(normal, halfVector), 0.0), 64.0) * 0.11;
 
     color *= diffuse;
-    color = mix(color, vec3(0.08, 0.20, 0.27), fresnel * 0.25);
-    color += vec3(specular * 0.72, specular * 0.86, specular);
+    color = mix(color, vec3(0.055, 0.14, 0.21), fresnel * 0.20);
+    color += vec3(specular * 0.70, specular * 0.86, specular);
 
-    float coastAlpha = smoothstep(-15.0, 55.0, depthMeters);
-    outColor = vec4(clamp(color, 0.0, 1.0), 0.94 * coastAlpha * openWater);
+    float coastAlpha = smoothstep(2.0, 24.0, depthMeters);
+    outColor = vec4(clamp(color, 0.0, 1.0), 0.97 * coastAlpha * openWater);
 }`;
