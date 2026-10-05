@@ -41,25 +41,26 @@ public sealed class PlanetSurfaceMeshBuilderTests
     }
 
     [TestMethod]
-    public void BuildTile_SurfaceNormals_AreFlatPerTriangle()
+    public void BuildTile_SurfaceNormals_AreSmoothPerVertex()
     {
         var builder = CreateBuilder(new ConstantElevationSource(1_000.0));
         var tile = builder.BuildTile(new PlanetTileId(CubeFace.PositiveZ, 0, 0, 0), 4, 42, EarthRadiusMeters);
-        var surfaceFloatCount = tile.SurfaceTriangleCount * 9;
+        var first = new Vector3(tile.Normals[0], tile.Normals[1], tile.Normals[2]);
+        var second = new Vector3(tile.Normals[3], tile.Normals[4], tile.Normals[5]);
 
-        for (var offset = 0; offset < surfaceFloatCount; offset += 9)
-        {
-            var first = new Vector3(tile.Normals[offset], tile.Normals[offset + 1], tile.Normals[offset + 2]);
-            var second = new Vector3(tile.Normals[offset + 3], tile.Normals[offset + 4], tile.Normals[offset + 5]);
-            var third = new Vector3(tile.Normals[offset + 6], tile.Normals[offset + 7], tile.Normals[offset + 8]);
+        Assert.IsGreaterThan(0.000001f, Vector3.Distance(first, second));
+    }
 
-            Assert.AreEqual(first.X, second.X, 0.000001f);
-            Assert.AreEqual(first.Y, second.Y, 0.000001f);
-            Assert.AreEqual(first.Z, second.Z, 0.000001f);
-            Assert.AreEqual(first.X, third.X, 0.000001f);
-            Assert.AreEqual(first.Y, third.Y, 0.000001f);
-            Assert.AreEqual(first.Z, third.Z, 0.000001f);
-        }
+    [TestMethod]
+    public void BuildTile_TerrainSlope_ChangesNormalFromRadialDirection()
+    {
+        var builder = CreateBuilder(new SlopedElevationSource());
+        var tile = builder.BuildTile(new PlanetTileId(CubeFace.PositiveZ, 0, 0, 0), 8, 42, EarthRadiusMeters);
+        var offset = (tile.SurfaceTriangleCount / 2) * 9;
+        var position = Vector3.Normalize(new Vector3(tile.Positions[offset], tile.Positions[offset + 1], tile.Positions[offset + 2]));
+        var normal = new Vector3(tile.Normals[offset], tile.Normals[offset + 1], tile.Normals[offset + 2]);
+
+        Assert.IsGreaterThan(0.0001f, Vector3.Distance(position, normal));
     }
 
     [TestMethod]
@@ -97,7 +98,7 @@ public sealed class PlanetSurfaceMeshBuilderTests
     private static PlanetSurfaceMeshBuilder CreateBuilder(IPlanetElevationSource elevationSource)
     {
         var sampler = new PlanetSurfaceTileSampler(elevationSource);
-        return new PlanetSurfaceMeshBuilder(sampler);
+        return new PlanetSurfaceMeshBuilder(sampler, elevationSource);
     }
 
     private sealed class FlatElevationSource : IPlanetElevationSource
@@ -108,5 +109,10 @@ public sealed class PlanetSurfaceMeshBuilderTests
     private sealed class ConstantElevationSource(double elevationMeters) : IPlanetElevationSource
     {
         public double SampleElevationMeters(PlanetVector direction, int seed) => elevationMeters;
+    }
+
+    private sealed class SlopedElevationSource : IPlanetElevationSource
+    {
+        public double SampleElevationMeters(PlanetVector direction, int seed) => direction.X * 250_000.0;
     }
 }
