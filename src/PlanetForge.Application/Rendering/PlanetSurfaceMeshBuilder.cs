@@ -122,24 +122,22 @@ public sealed class PlanetSurfaceMeshBuilder(PlanetSurfaceTileSampler tileSample
 
     private static void WriteSurfaceTriangle(float[] positions, float[] normals, ref int offset, Vector3 a, Vector3 b, Vector3 c)
     {
-        var normalA = Vector3.Normalize(a);
-        var normalB = Vector3.Normalize(b);
-        var normalC = Vector3.Normalize(c);
-        var faceNormal = Vector3.Cross(b - a, c - a);
+        var normal = Vector3.Cross(b - a, c - a);
         var center = (a + b + c) / 3f;
 
-        if (Vector3.Dot(faceNormal, center) < 0f)
+        if (Vector3.Dot(normal, center) < 0f)
         {
             (b, c) = (c, b);
-            (normalB, normalC) = (normalC, normalB);
+            normal = -normal;
         }
 
+        normal = Vector3.Normalize(normal);
         WriteVector(positions, offset, a);
         WriteVector(positions, offset + 3, b);
         WriteVector(positions, offset + 6, c);
-        WriteVector(normals, offset, normalA);
-        WriteVector(normals, offset + 3, normalB);
-        WriteVector(normals, offset + 6, normalC);
+        WriteVector(normals, offset, normal);
+        WriteVector(normals, offset + 3, normal);
+        WriteVector(normals, offset + 6, normal);
         offset += 9;
     }
 

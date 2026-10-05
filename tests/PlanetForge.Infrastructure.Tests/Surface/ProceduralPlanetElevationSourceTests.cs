@@ -63,4 +63,30 @@ public sealed class ProceduralPlanetElevationSourceTests
             Assert.IsLessThanOrEqualTo(9_000.0, elevationMeters);
         }
     }
+
+    [TestMethod]
+    public void SampleElevationMeters_GlobalSample_ContainsMountainsBasinsAndOceans()
+    {
+        var source = new ProceduralPlanetElevationSource();
+        var elevations = FibonacciDirections(512).Select(direction => source.SampleElevationMeters(direction, 42)).ToArray();
+        var landFraction = elevations.Count(elevation => elevation > 0.0) / (double)elevations.Length;
+
+        Assert.IsGreaterThan(4_500.0, elevations.Max());
+        Assert.IsLessThan(-2_000.0, elevations.Min());
+        Assert.IsGreaterThan(0.15, landFraction);
+        Assert.IsLessThan(0.45, landFraction);
+    }
+
+    private static IEnumerable<PlanetVector> FibonacciDirections(int count)
+    {
+        var goldenRatio = (1.0 + Math.Sqrt(5.0)) / 2.0;
+
+        for (var index = 0; index < count; index++)
+        {
+            var y = 1.0 - (2.0 * (index + 0.5) / count);
+            var radius = Math.Sqrt(Math.Max(0.0, 1.0 - (y * y)));
+            var angle = 2.0 * Math.PI * index / goldenRatio;
+            yield return new PlanetVector(radius * Math.Cos(angle), y, radius * Math.Sin(angle));
+        }
+    }
 }
