@@ -1,1 +1,1 @@
-export { initialize, setPlanet, dispose } from './cryosphereSurface.js';
+export { initialize, setPlanet, dispose } from './cryosphereSurfaceAdapter.js';
