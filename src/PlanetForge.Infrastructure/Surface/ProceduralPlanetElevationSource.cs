@@ -16,7 +16,6 @@ public sealed class ProceduralPlanetElevationSource : IPlanetElevationSource
     private const int BasinSeedSalt = 0x02468ACE;
     private const int MountainBreakSeedSalt = 0x4F1BBCDC;
     private const int MountainWarpSeedSalt = 0x37A4F91D;
-    private const int MountainValleySeedSalt = 0x7A12C5E3;
 
     public double SampleElevationMeters(PlanetVector direction, int seed)
     {
@@ -72,18 +71,14 @@ public sealed class ProceduralPlanetElevationSource : IPlanetElevationSource
                 RidgeProfile(Math.Abs(warpedSignedDistance + splitOffset), 0.004, 0.034));
             var innerRidges = SampleParallelRidges(warpedSignedDistance, Lerp(0.045, 0.068, ridgeNoise), 0.008, 0.030);
             var outerRidges = SampleParallelRidges(warpedSignedDistance, Lerp(0.082, 0.110, breakNoise), 0.012, 0.035);
-            var valleyNoise = ToUnitRange(ValueNoise(
-                (direction.X * 24.0) + (index * 1.7),
-                (direction.Y * 24.0) - (index * 2.3),
-                (direction.Z * 24.0) + (index * 0.9),
-                seed ^ MountainValleySeedSalt));
-            var valleyCut = SmoothStep(0.76, 0.93, valleyNoise) * foothills;
+            var valleySignal = Math.Abs(ridgeNoise - breakNoise);
+            var valleyCut = SmoothStep(0.28, 0.58, valleySignal) * foothills;
             var crestHeight = splitCrest * (0.56 + (ridgeNoise * 0.54));
             var innerHeight = innerRidges * (0.18 + (ridgeNoise * 0.20));
             var outerHeight = outerRidges * (0.08 + (breakNoise * 0.13));
             var shoulderHeight = foothills * (0.14 + (ridgeNoise * 0.12));
             var range = (crestHeight + innerHeight + outerHeight + shoulderHeight) * Lerp(0.44, 1.0, continuity);
-            range = Math.Max(0.0, range - (valleyCut * (0.10 + (splitCrest * 0.16))));
+            range = Math.Max(0.0, range - (valleyCut * (0.08 + (splitCrest * 0.12))));
             strongestBelt = Math.Max(strongestBelt, range * arcExtent);
         }
 
