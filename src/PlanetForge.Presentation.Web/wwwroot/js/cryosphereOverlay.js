@@ -443,8 +443,8 @@ void main() {
 
     float landPatchNoise = patchField(vDirection, vec3(8.0, -5.0, 2.0));
     float landPolarBias = smoothstep(58.0, 83.0, warpedLatitudeDegrees);
-    float landPatchSignal = landPatchNoise + (landPolarBias * 0.20);
-    float landPatchMask = smoothstep(0.505, 0.565, landPatchSignal);
+    float landPatchSignal = landPatchNoise + (landPolarBias * 0.16);
+    float landPatchMask = smoothstep(0.54, 0.61, landPatchSignal);
     float landEdgeEnvelope = smoothstep(landIceLineDegrees - 4.5, landIceLineDegrees + 8.0, warpedLatitudeDegrees);
     float fragmentedLand = landEdgeEnvelope * landPatchMask;
 
@@ -453,10 +453,10 @@ void main() {
     float alpineSnow = ocean ? 0.0 : smoothstep(localSnowlineMeters, localSnowlineMeters + 600.0, vElevationMeters);
     alpineSnow *= 1.0 - smoothstep(264.0, 271.0, localTemperature);
 
-    float landCoverage = mix(frozenLandSheet, max(fragmentedLand, alpineSnow * 0.38), landBreakup);
+    float landCoverage = mix(frozenLandSheet, max(fragmentedLand, alpineSnow * 0.30), landBreakup);
     float coverage = ocean
         ? smoothstep(0.30, 0.58, seaCoverage)
-        : smoothstep(0.24, 0.54, landCoverage);
+        : smoothstep(0.42, 0.68, landCoverage);
     if (coverage < 0.08) discard;
 
     float surfaceTexture = valueNoise((vDirection * 18.0) + vec3(5.0, -3.0, 6.0));
