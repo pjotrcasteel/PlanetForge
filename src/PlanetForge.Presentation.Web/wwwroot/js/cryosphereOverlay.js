@@ -38,9 +38,13 @@ export function initialize(overlayCanvasId, inputCanvasId, snapshot) {
         visible: true,
         tiles: new Map(),
         dirty: true,
-        attributes: { position: gl.getAttribLocation(program, 'aPosition') },
+        attributes: {
+            position: gl.getAttribLocation(program, 'aPosition'),
+            normal: gl.getAttribLocation(program, 'aNormal')
+        },
         uniforms: {
             viewProjection: gl.getUniformLocation(program, 'uViewProjection'),
+            lightDirection: gl.getUniformLocation(program, 'uLightDirection'),
             planetRadiusMeters: gl.getUniformLocation(program, 'uPlanetRadiusMeters'),
             seaLevelMeters: gl.getUniformLocation(program, 'uSeaLevelMeters'),
             surfaceTemperatureKelvin: gl.getUniformLocation(program, 'uSurfaceTemperatureKelvin'),
@@ -72,24 +76,26 @@ export function setPlanet(snapshot) {
         for (const tile of surfaceTiles) {
             if (!tile?.key || !tile.surfaceVertexCount) continue;
             activeKeys.add(tile.key);
-            if (!tile.positions?.length) continue;
+            if (!tile.positions?.length || !tile.normals?.length) continue;
             const existing = state.tiles.get(tile.key);
-            if (existing) state.gl.deleteBuffer(existing.positionBuffer);
+            if (existing) deleteTileBuffers(state.gl, existing);
             state.tiles.set(tile.key, createTileBuffer(state.gl, tile));
         }
+
         for (const [key, tile] of state.tiles) {
             if (activeKeys.has(key)) continue;
-            state.gl.deleteBuffer(tile.positionBuffer);
+            deleteTileBuffers(state.gl, tile);
             state.tiles.delete(key);
         }
     }
+
     state.dirty = true;
 }
 
 export function dispose() {
     if (!state) return;
     if (window.__planetForgeCryosphereTest) delete window.__planetForgeCryosphereTest;
-    for (const tile of state.tiles.values()) state.gl.deleteBuffer(tile.positionBuffer);
+    for (const tile of state.tiles.values()) deleteTileBuffers(state.gl, tile);
     state.tiles.clear();
     state.gl.deleteProgram(state.program);
     state = null;
@@ -99,7 +105,17 @@ function createTileBuffer(gl, tile) {
     const positionBuffer = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(tile.positions), gl.STATIC_DRAW);
-    return { positionBuffer, vertexCount: tile.surfaceVertexCount };
+
+    const normalBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, normalBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(tile.normals), gl.STATIC_DRAW);
+
+    return { positionBuffer, normalBuffer, vertexCount: tile.surfaceVertexCount };
+}
+
+function deleteTileBuffers(gl, tile) {
+    gl.deleteBuffer(tile.positionBuffer);
+    gl.deleteBuffer(tile.normalBuffer);
 }
 
 function installVisualTestApi() {
@@ -160,6 +176,7 @@ function measureFragmentation(s) {
     let transitions = 0;
     let occupied = 0;
     let sampled = 0;
+
     for (let y = yStart; y <= yEnd; y += step) {
         let previousCovered = alphaAt(pixels, width, xStart, y) >= 70;
         for (let x = xStart; x <= xEnd; x += step) {
@@ -170,6 +187,7 @@ function measureFragmentation(s) {
             previousCovered = covered;
         }
     }
+
     return { transitions, occupiedFraction: sampled > 0 ? occupied / sampled : 0.0 };
 }
 
@@ -204,7 +222,10 @@ function installInput(s) {
 function render() {
     if (!state) return;
     resize(state);
-    if (state.dirty) { draw(state); state.dirty = false; }
+    if (state.dirty) {
+        draw(state);
+        state.dirty = false;
+    }
     requestAnimationFrame(render);
 }
 
@@ -224,31 +245,40 @@ function draw(s) {
     gl.clearColor(0, 0, 0, 0);
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
     if (!s.visible) return;
+
     const altitudeMeters = Math.max(0.0, (s.distance - 1.0) * s.planetRadiusMeters);
     if (altitudeMeters <= localTransitionAltitudeMeters) return;
+
     const aspect = canvas.width / Math.max(canvas.height, 1);
     const projection = perspective(verticalFieldOfViewRadians, aspect, 0.002, 20.0);
     const eye = orbitEye(s.yaw, s.pitch, s.distance);
     const view = lookAt(eye, [0, 0, 0], [0, 1, 0]);
     const viewProjection = multiply(projection, view);
+
     gl.enable(gl.DEPTH_TEST);
     gl.enable(gl.CULL_FACE);
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
     gl.useProgram(program);
     gl.uniformMatrix4fv(s.uniforms.viewProjection, false, viewProjection);
+    gl.uniform3f(s.uniforms.lightDirection, 0.7, 0.35, 0.6);
     gl.uniform1f(s.uniforms.planetRadiusMeters, s.planetRadiusMeters);
     gl.uniform1f(s.uniforms.seaLevelMeters, s.seaLevelMeters);
     gl.uniform1f(s.uniforms.surfaceTemperatureKelvin, s.surfaceTemperatureKelvin);
     gl.uniform1f(s.uniforms.seaIceFraction, s.seaIceFraction);
     gl.uniform1f(s.uniforms.landIceFraction, s.landIceFraction);
     gl.uniform1f(s.uniforms.snowCoverFraction, s.snowCoverFraction);
+
     for (const tile of s.tiles.values()) {
         gl.bindBuffer(gl.ARRAY_BUFFER, tile.positionBuffer);
         gl.enableVertexAttribArray(s.attributes.position);
         gl.vertexAttribPointer(s.attributes.position, 3, gl.FLOAT, false, 0, 0);
+        gl.bindBuffer(gl.ARRAY_BUFFER, tile.normalBuffer);
+        gl.enableVertexAttribArray(s.attributes.normal);
+        gl.vertexAttribPointer(s.attributes.normal, 3, gl.FLOAT, false, 0, 0);
         gl.drawArrays(gl.TRIANGLES, 0, tile.vertexCount);
     }
+
     gl.disable(gl.BLEND);
 }
 
@@ -277,22 +307,34 @@ function orbitEye(yaw, pitch, distance) {
     const cp = Math.cos(pitch);
     return [distance * cp * Math.sin(yaw), distance * Math.sin(pitch), distance * cp * Math.cos(yaw)];
 }
+
 function perspective(fov, aspect, near, far) {
     const f = 1 / Math.tan(fov / 2), nf = 1 / (near - far);
     return new Float32Array([f/aspect,0,0,0, 0,f,0,0, 0,0,(far+near)*nf,-1, 0,0,2*far*near*nf,0]);
 }
+
 function lookAt(eye, center, up) {
     const z = normalize([eye[0]-center[0], eye[1]-center[1], eye[2]-center[2]]);
     const x = normalize(cross(up, z));
     const y = cross(z, x);
     return new Float32Array([x[0],y[0],z[0],0, x[1],y[1],z[1],0, x[2],y[2],z[2],0, -dot(x,eye),-dot(y,eye),-dot(z,eye),1]);
 }
+
 function multiply(a, b) {
     const out = new Float32Array(16);
-    for (let column = 0; column < 4; column++) for (let row = 0; row < 4; row++) out[column*4+row] = a[row]*b[column*4] + a[4+row]*b[column*4+1] + a[8+row]*b[column*4+2] + a[12+row]*b[column*4+3];
+    for (let column = 0; column < 4; column++) {
+        for (let row = 0; row < 4; row++) {
+            out[column*4+row] = a[row]*b[column*4] + a[4+row]*b[column*4+1] + a[8+row]*b[column*4+2] + a[12+row]*b[column*4+3];
+        }
+    }
     return out;
 }
-function normalize(v) { const magnitude = Math.hypot(v[0], v[1], v[2]) || 1.0; return [v[0]/magnitude, v[1]/magnitude, v[2]/magnitude]; }
+
+function normalize(v) {
+    const magnitude = Math.hypot(v[0], v[1], v[2]) || 1.0;
+    return [v[0]/magnitude, v[1]/magnitude, v[2]/magnitude];
+}
+
 function cross(a,b) { return [a[1]*b[2]-a[2]*b[1], a[2]*b[0]-a[0]*b[2], a[0]*b[1]-a[1]*b[0]]; }
 function dot(a,b) { return a[0]*b[0] + a[1]*b[1] + a[2]*b[2]; }
 function clamp(value,min,max) { return Math.max(min, Math.min(max, value)); }
@@ -300,13 +342,16 @@ function clamp(value,min,max) { return Math.max(min, Math.min(max, value)); }
 const vertexShaderSource = `#version 300 es
 precision highp float;
 in vec3 aPosition;
+in vec3 aNormal;
 uniform mat4 uViewProjection;
 uniform float uPlanetRadiusMeters;
 out vec3 vDirection;
+out vec3 vNormal;
 out float vElevationMeters;
 void main() {
     float radius = length(aPosition);
     vDirection = normalize(aPosition);
+    vNormal = normalize(aNormal);
     vElevationMeters = (radius - 1.0) * uPlanetRadiusMeters;
     gl_Position = uViewProjection * vec4(aPosition, 1.0);
 }`;
@@ -314,18 +359,22 @@ void main() {
 const fragmentShaderSource = `#version 300 es
 precision highp float;
 in vec3 vDirection;
+in vec3 vNormal;
 in float vElevationMeters;
+uniform vec3 uLightDirection;
 uniform float uSeaLevelMeters;
 uniform float uSurfaceTemperatureKelvin;
 uniform float uSeaIceFraction;
 uniform float uLandIceFraction;
 uniform float uSnowCoverFraction;
 out vec4 outColor;
+
 float hash31(vec3 p) {
     p = fract(p * 0.1031);
     p += dot(p, p.yzx + 33.33);
     return fract((p.x + p.y) * p.z);
 }
+
 float valueNoise(vec3 p) {
     vec3 cell = floor(p);
     vec3 local = fract(p);
@@ -346,18 +395,21 @@ float valueNoise(vec3 p) {
     float nxy1 = mix(nx01, nx11, smoothLocal.y);
     return mix(nxy0, nxy1, smoothLocal.z);
 }
+
 float broadIceField(vec3 direction) {
     float a = valueNoise((direction * 2.8) + vec3(4.0, -2.0, 7.0));
     float b = valueNoise((direction * 5.6) + vec3(-6.0, 4.0, 1.0));
     float c = valueNoise((direction * 10.5) + vec3(2.0, 7.0, -5.0));
     return (a * 0.56) + (b * 0.30) + (c * 0.14);
 }
+
 float patchField(vec3 direction, vec3 offset) {
     float a = valueNoise((direction * 7.5) + offset);
     float b = valueNoise((direction * 15.5) + (offset.yzx * 1.7));
     float c = valueNoise((direction * 29.0) + (offset.zxy * 2.3));
     return (a * 0.50) + (b * 0.34) + (c * 0.16);
 }
+
 void main() {
     float latitudeDegrees = degrees(asin(clamp(abs(vDirection.y), 0.0, 1.0)));
     bool ocean = vElevationMeters < uSeaLevelMeters;
@@ -397,17 +449,34 @@ void main() {
     float landCoverage = max(residualLandSheet, brokenLandCoverage);
     float coverage = ocean ? smoothstep(0.30, 0.58, seaCoverage) : smoothstep(0.42, 0.68, landCoverage);
     if (coverage < 0.08) discard;
-    float surfaceTexture = valueNoise((vDirection * 18.0) + vec3(5.0, -3.0, 6.0));
-    float detailTexture = valueNoise((vDirection * 42.0) + vec3(-7.0, 4.0, 2.0));
-    float visualTexture = mix(0.95, 1.025, (surfaceTexture * 0.72) + (detailTexture * 0.28));
-    vec3 frozenSeaColor = vec3(0.88, 0.93, 0.94);
-    vec3 meltingSeaColor = vec3(0.76, 0.86, 0.89);
-    vec3 frozenLandColor = vec3(0.94, 0.95, 0.93);
-    vec3 meltingLandColor = vec3(0.84, 0.86, 0.83);
-    vec3 iceColor = ocean ? mix(frozenSeaColor, meltingSeaColor, seaBreakup) : mix(frozenLandColor, meltingLandColor, landBreakup);
-    iceColor *= visualTexture;
-    float seaAlpha = mix(0.94, 0.84, seaBreakup) * coverage;
-    float landAlpha = mix(0.92, 0.78, landBreakup) * coverage;
-    float alpha = clamp(ocean ? seaAlpha : landAlpha, 0.0, 0.94);
+
+    float coarseTexture = valueNoise((vDirection * 22.0) + vec3(5.0, -3.0, 6.0));
+    float fineTexture = valueNoise((vDirection * 65.0) + vec3(-7.0, 4.0, 2.0));
+    float fractureField = abs(valueNoise((vDirection * 115.0) + vec3(9.0, 2.0, -4.0)) - 0.5) * 2.0;
+    float texture = (coarseTexture * 0.45) + (fineTexture * 0.35) + (fractureField * 0.20);
+
+    vec3 normal = normalize(vNormal);
+    vec3 radial = normalize(vDirection);
+    float direct = max(dot(normal, normalize(uLightDirection)), 0.0);
+    float terrainSlope = clamp(1.0 - dot(normal, radial), 0.0, 0.7);
+    float illumination = 0.48 + (0.52 * smoothstep(0.0, 0.85, direct));
+    illumination *= 1.0 - (terrainSlope * 0.55);
+
+    vec3 seaIce = mix(vec3(0.56, 0.72, 0.78), vec3(0.78, 0.87, 0.89), 0.58 + (texture * 0.24));
+    vec3 landIce = mix(vec3(0.64, 0.69, 0.70), vec3(0.91, 0.92, 0.88), 0.48 + (texture * 0.34));
+    vec3 snow = mix(vec3(0.76, 0.78, 0.75), vec3(0.96, 0.96, 0.92), 0.55 + (texture * 0.22));
+    float snowInfluence = ocean ? 0.0 : clamp((alpineSnow * 0.75) + (uSnowCoverFraction * 0.22), 0.0, 0.85);
+    vec3 iceColor = ocean ? seaIce : mix(landIce, snow, snowInfluence);
+
+    float frozenWorldStrength = min(min(clamp(uSeaIceFraction, 0.0, 1.0), clamp(uLandIceFraction, 0.0, 1.0)), clamp(uSnowCoverFraction, 0.0, 1.0));
+    float materialContrast = mix(0.92, 1.08, texture);
+    iceColor *= illumination * materialContrast;
+
+    float crack = smoothstep(0.02, 0.13, fractureField) * (ocean ? 0.09 : 0.045);
+    iceColor *= 1.0 - (crack * mix(0.25, 1.0, seaBreakup));
+
+    float seaAlpha = mix(0.995, 0.91, seaBreakup) * coverage;
+    float landAlpha = mix(0.985, 0.90, landBreakup) * coverage;
+    float alpha = clamp(ocean ? seaAlpha : landAlpha, 0.0, mix(0.95, 0.995, frozenWorldStrength));
     outColor = vec4(iceColor, alpha);
 }`;
