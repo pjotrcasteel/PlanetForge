@@ -377,8 +377,8 @@ void main() {
     float frozenLandSheet = smoothstep(landIceLineDegrees - 1.5, landIceLineDegrees + 5.5, warpedLatitudeDegrees);
     float seaPatchNoise = patchField(vDirection, vec3(-3.0, 7.0, 4.0));
     float seaPolarBias = smoothstep(57.0, 84.0, warpedLatitudeDegrees);
-    float seaPatchSignal = seaPatchNoise + (seaPolarBias * 0.15);
-    float seaPatchMask = smoothstep(0.535, 0.585, seaPatchSignal);
+    float seaPatchSignal = seaPatchNoise + (seaPolarBias * 0.10);
+    float seaPatchMask = smoothstep(0.56, 0.62, seaPatchSignal);
     float seaEdgeEnvelope = smoothstep(seaIceLineDegrees - 3.5, seaIceLineDegrees + 7.0, warpedLatitudeDegrees);
     float fragmentedSea = seaEdgeEnvelope * seaPatchMask;
     float seaCoverage = mix(frozenSeaSheet, fragmentedSea, seaBreakup);
