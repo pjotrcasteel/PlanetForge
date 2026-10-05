@@ -36,7 +36,6 @@ export function setPlanet(snapshot) {
     state.equilibriumTemperature = snapshot.physics.equilibriumTemperatureKelvin;
     state.surfaceTemperature = snapshot.climate.surfaceTemperatureKelvin;
     state.solarFlux = snapshot.physics.solarFluxWattsPerSquareMeter;
-    state.iceFraction = snapshot.water.iceFraction;
     state.liquidFraction = snapshot.water.liquidFraction;
     state.vaporFraction = snapshot.water.vaporFraction;
 
@@ -99,7 +98,7 @@ function createState(canvas, gl, dotNetReference) {
         surfaceRequestInFlight: false, surfaceRequestPending: false,
         seaLevelMeters: 0, planetRadiusMeters: 6371000, atmosphereDensity: 0.6,
         equilibriumTemperature: 255, surfaceTemperature: 288, solarFlux: 1361,
-        iceFraction: 0, liquidFraction: 1, vaporFraction: 0,
+        liquidFraction: 1, vaporFraction: 0,
         globeAttributes: {
             position: gl.getAttribLocation(globeProgram, 'aPosition'),
             normal: gl.getAttribLocation(globeProgram, 'aNormal')
@@ -114,7 +113,6 @@ function createState(canvas, gl, dotNetReference) {
             equilibriumTemperature: gl.getUniformLocation(globeProgram, 'uEquilibriumTemperature'),
             surfaceTemperature: gl.getUniformLocation(globeProgram, 'uSurfaceTemperature'),
             solarFlux: gl.getUniformLocation(globeProgram, 'uSolarFlux'),
-            iceFraction: gl.getUniformLocation(globeProgram, 'uIceFraction'),
             liquidFraction: gl.getUniformLocation(globeProgram, 'uLiquidFraction'),
             vaporFraction: gl.getUniformLocation(globeProgram, 'uVaporFraction'),
             mode: gl.getUniformLocation(globeProgram, 'uMode')
@@ -129,7 +127,6 @@ function createState(canvas, gl, dotNetReference) {
             light: gl.getUniformLocation(localProgram, 'uLightDirection'),
             seaLevelMeters: gl.getUniformLocation(localProgram, 'uSeaLevelMeters'),
             surfaceTemperature: gl.getUniformLocation(localProgram, 'uSurfaceTemperature'),
-            iceFraction: gl.getUniformLocation(localProgram, 'uIceFraction'),
             liquidFraction: gl.getUniformLocation(localProgram, 'uLiquidFraction'),
             vaporFraction: gl.getUniformLocation(localProgram, 'uVaporFraction'),
             objectMode: gl.getUniformLocation(localProgram, 'uObjectMode')
@@ -472,7 +469,6 @@ function renderGlobe(s) {
     gl.uniform1f(s.globeUniforms.equilibriumTemperature, s.equilibriumTemperature);
     gl.uniform1f(s.globeUniforms.surfaceTemperature, s.surfaceTemperature);
     gl.uniform1f(s.globeUniforms.solarFlux, s.solarFlux);
-    gl.uniform1f(s.globeUniforms.iceFraction, s.iceFraction);
     gl.uniform1f(s.globeUniforms.liquidFraction, s.liquidFraction);
     gl.uniform1f(s.globeUniforms.vaporFraction, s.vaporFraction);
     gl.uniform1i(s.globeUniforms.mode, isPreBiologicalSurface(s) ? 2 : 0);
@@ -507,7 +503,6 @@ function renderLocal(s) {
     gl.uniform3f(s.localUniforms.light, 0.45, 0.82, 0.35);
     gl.uniform1f(s.localUniforms.seaLevelMeters, s.seaLevelMeters);
     gl.uniform1f(s.localUniforms.surfaceTemperature, s.surfaceTemperature);
-    gl.uniform1f(s.localUniforms.iceFraction, s.iceFraction);
     gl.uniform1f(s.localUniforms.liquidFraction, s.liquidFraction);
     gl.uniform1f(s.localUniforms.vaporFraction, s.vaporFraction);
 
@@ -668,7 +663,6 @@ uniform float uAtmosphere;
 uniform float uEquilibriumTemperature;
 uniform float uSurfaceTemperature;
 uniform float uSolarFlux;
-uniform float uIceFraction;
 uniform float uLiquidFraction;
 uniform float uVaporFraction;
 uniform int uMode;
@@ -688,7 +682,7 @@ void main() {
     vec3 shallowOcean = vec3(0.06, 0.31, 0.36);
     vec3 lowland = preBiological ? vec3(0.34, 0.30, 0.24) : vec3(0.18, 0.38, 0.22);
     vec3 highland = preBiological ? vec3(0.42, 0.36, 0.29) : vec3(0.39, 0.36, 0.22);
-    vec3 peak = preBiological ? vec3(0.58, 0.56, 0.52) : vec3(0.62, 0.65, 0.59);
+    vec3 peak = preBiological ? vec3(0.48, 0.43, 0.37) : vec3(0.62, 0.65, 0.59);
     vec3 baseColor;
 
     if (uLiquidFraction > 0.001 && vElevationMeters < uSeaLevelMeters - 1500.0) baseColor = deepOcean;
@@ -696,13 +690,6 @@ void main() {
     else if (vElevationMeters < 1200.0) baseColor = lowland;
     else if (vElevationMeters < 3500.0) baseColor = highland;
     else baseColor = peak;
-
-    float latitude = abs(normalize(vWorldPosition).y);
-    float temperatureCold = 1.0 - smoothstep(265.0, 292.0, uSurfaceTemperature);
-    float polar = smoothstep(0.42, 0.92, latitude);
-    float phaseIce = clamp(uIceFraction, 0.0, 1.0);
-    float frost = max(phaseIce * (0.52 + 0.48 * polar), temperatureCold * polar * 0.45);
-    baseColor = mix(baseColor, vec3(0.77, 0.88, 0.90), clamp(frost, 0.0, 0.96));
 
     float heat = smoothstep(315.0, 430.0, uSurfaceTemperature);
     if (vElevationMeters >= uSeaLevelMeters || uLiquidFraction <= 0.001) baseColor = mix(baseColor, vec3(0.48, 0.25, 0.11), heat * 0.76);
@@ -737,7 +724,6 @@ in float vElevationMeters;
 uniform vec3 uLightDirection;
 uniform float uSeaLevelMeters;
 uniform float uSurfaceTemperature;
-uniform float uIceFraction;
 uniform float uLiquidFraction;
 uniform float uVaporFraction;
 uniform int uObjectMode;
@@ -755,7 +741,7 @@ void main() {
     vec3 shallowOcean = vec3(0.06, 0.31, 0.36);
     vec3 lowland = preBiological ? vec3(0.34, 0.30, 0.24) : vec3(0.18, 0.38, 0.22);
     vec3 highland = preBiological ? vec3(0.42, 0.36, 0.29) : vec3(0.39, 0.36, 0.22);
-    vec3 peak = preBiological ? vec3(0.58, 0.56, 0.52) : vec3(0.62, 0.65, 0.59);
+    vec3 peak = preBiological ? vec3(0.48, 0.43, 0.37) : vec3(0.62, 0.65, 0.59);
     vec3 baseColor;
 
     if (uLiquidFraction > 0.001 && vElevationMeters < uSeaLevelMeters - 1500.0) baseColor = deepOcean;
@@ -764,9 +750,6 @@ void main() {
     else if (vElevationMeters < 3500.0) baseColor = highland;
     else baseColor = peak;
 
-    float phaseIce = clamp(uIceFraction, 0.0, 1.0);
-    float cold = 1.0 - smoothstep(265.0, 292.0, uSurfaceTemperature);
-    baseColor = mix(baseColor, vec3(0.77, 0.88, 0.90), clamp(max(phaseIce * 0.7, cold * 0.2), 0.0, 0.92));
     float heat = smoothstep(315.0, 430.0, uSurfaceTemperature);
     if (vElevationMeters >= uSeaLevelMeters || uLiquidFraction <= 0.001) baseColor = mix(baseColor, vec3(0.48, 0.25, 0.11), heat * 0.76);
     baseColor = mix(baseColor, vec3(0.56, 0.45, 0.31), clamp(uVaporFraction * 0.22, 0.0, 0.22));
