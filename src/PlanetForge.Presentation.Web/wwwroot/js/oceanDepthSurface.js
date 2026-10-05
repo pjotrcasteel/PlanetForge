@@ -59,8 +59,9 @@ export function setPlanet(snapshot) {
     if (surfaceTiles.length > 0) {
         const activeKeys = new Set();
         for (const tile of surfaceTiles) {
-            if (!tile?.key || !tile.surfaceVertexCount || !tile.positions?.length) continue;
+            if (!tile?.key || !tile.surfaceVertexCount) continue;
             activeKeys.add(tile.key);
+            if (!tile.positions?.length) continue;
             const existing = state.tiles.get(tile.key);
             if (existing) state.gl.deleteBuffer(existing.positionBuffer);
             const positionBuffer = state.gl.createBuffer();
