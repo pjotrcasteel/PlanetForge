@@ -41,20 +41,24 @@ public sealed class PlanetSurfaceMeshBuilderTests
     }
 
     [TestMethod]
-    public void BuildTile_SurfaceNormals_FollowEachVertexRadialDirection()
+    public void BuildTile_SurfaceNormals_AreFlatPerTriangle()
     {
-        var builder = CreateBuilder(new FlatElevationSource());
+        var builder = CreateBuilder(new ConstantElevationSource(1_000.0));
         var tile = builder.BuildTile(new PlanetTileId(CubeFace.PositiveZ, 0, 0, 0), 4, 42, EarthRadiusMeters);
         var surfaceFloatCount = tile.SurfaceTriangleCount * 9;
 
-        for (var offset = 0; offset < surfaceFloatCount; offset += 3)
+        for (var offset = 0; offset < surfaceFloatCount; offset += 9)
         {
-            var position = Vector3.Normalize(new Vector3(tile.Positions[offset], tile.Positions[offset + 1], tile.Positions[offset + 2]));
-            var normal = new Vector3(tile.Normals[offset], tile.Normals[offset + 1], tile.Normals[offset + 2]);
+            var first = new Vector3(tile.Normals[offset], tile.Normals[offset + 1], tile.Normals[offset + 2]);
+            var second = new Vector3(tile.Normals[offset + 3], tile.Normals[offset + 4], tile.Normals[offset + 5]);
+            var third = new Vector3(tile.Normals[offset + 6], tile.Normals[offset + 7], tile.Normals[offset + 8]);
 
-            Assert.AreEqual(position.X, normal.X, 0.000001f);
-            Assert.AreEqual(position.Y, normal.Y, 0.000001f);
-            Assert.AreEqual(position.Z, normal.Z, 0.000001f);
+            Assert.AreEqual(first.X, second.X, 0.000001f);
+            Assert.AreEqual(first.Y, second.Y, 0.000001f);
+            Assert.AreEqual(first.Z, second.Z, 0.000001f);
+            Assert.AreEqual(first.X, third.X, 0.000001f);
+            Assert.AreEqual(first.Y, third.Y, 0.000001f);
+            Assert.AreEqual(first.Z, third.Z, 0.000001f);
         }
     }
 
