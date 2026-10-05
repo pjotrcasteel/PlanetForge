@@ -26,13 +26,15 @@ public sealed class ProceduralPlanetElevationSource : IPlanetElevationSource
         var mountainBelts = SampleMountainBelts(direction, seed, landMask);
         var plateaus = SampleSphericalRegions(direction, seed, PlateauSeedSalt, PlateauCount, 0.82, 0.965) * landMask;
         var basins = SampleSphericalRegions(direction, seed, BasinSeedSalt, BasinCount, 0.88, 0.985) * landMask;
+        var uplandRelief = Math.Max(0.0, regional) * Lerp(0.45, 1.0, ToUnitRange(detail)) * landMask;
         var normalizedElevation = Math.Clamp(
-            (continental * 0.61) +
-            (regional * 0.13) +
-            (mountainBelts * 0.58) +
-            (plateaus * 0.11) -
-            (basins * 0.14) +
-            (detail * 0.035) -
+            (continental * 0.60) +
+            (regional * 0.12) +
+            (mountainBelts * 0.60) +
+            (uplandRelief * 0.07) +
+            (plateaus * 0.10) -
+            (basins * 0.15) +
+            (detail * 0.032) -
             0.055,
             -1.0,
             1.0);
@@ -59,26 +61,40 @@ public sealed class ProceduralPlanetElevationSource : IPlanetElevationSource
             var warpedSignedDistance = signedDistance + warp;
             var distanceFromRange = Math.Abs(warpedSignedDistance);
             var arcExtent = SmoothStep(-0.18, 0.78, PlanetVector.Dot(direction, arcCenter));
-            var foothills = 1.0 - SmoothStep(0.035, 0.145, distanceFromRange);
-            var centralCrest = 1.0 - SmoothStep(0.006, 0.052, distanceFromRange);
-            var secondaryRidges = SampleSecondaryRidges(warpedSignedDistance);
+            var foothills = 1.0 - SmoothStep(0.040, 0.165, distanceFromRange);
             var ridgeNoise = ToUnitRange(RidgedNoise(direction, seed ^ RidgeSeedSalt ^ (index * 1_297), 11.0, 4, 2.06, 0.50));
             var breakNoise = ToUnitRange(FractalNoise(direction, seed ^ MountainBreakSeedSalt ^ (index * 977), 4.6, 3, 2.13, 0.52));
             var continuity = SmoothStep(0.20, 0.68, breakNoise);
-            var crestHeight = centralCrest * (0.58 + (ridgeNoise * 0.52));
-            var shoulderHeight = foothills * (0.20 + (ridgeNoise * 0.16));
-            var parallelHeight = secondaryRidges * (0.16 + (ridgeNoise * 0.16));
-            var range = (crestHeight + shoulderHeight + parallelHeight) * Lerp(0.42, 1.0, continuity) * arcExtent;
-            strongestBelt = Math.Max(strongestBelt, range);
+            var splitOffset = Lerp(0.008, 0.018, ridgeNoise);
+            var splitCrest = Math.Max(
+                RidgeProfile(Math.Abs(warpedSignedDistance - splitOffset), 0.004, 0.034),
+                RidgeProfile(Math.Abs(warpedSignedDistance + splitOffset), 0.004, 0.034));
+            var innerRidges = SampleParallelRidges(warpedSignedDistance, Lerp(0.045, 0.068, ridgeNoise), 0.008, 0.030);
+            var outerRidges = SampleParallelRidges(warpedSignedDistance, Lerp(0.082, 0.110, breakNoise), 0.012, 0.035);
+            var valleySignal = Math.Abs(ridgeNoise - breakNoise);
+            var valleyCut = SmoothStep(0.28, 0.58, valleySignal) * foothills;
+            var crestHeight = splitCrest * (0.56 + (ridgeNoise * 0.54));
+            var innerHeight = innerRidges * (0.18 + (ridgeNoise * 0.20));
+            var outerHeight = outerRidges * (0.08 + (breakNoise * 0.13));
+            var shoulderHeight = foothills * (0.14 + (ridgeNoise * 0.12));
+            var range = (crestHeight + innerHeight + outerHeight + shoulderHeight) * Lerp(0.44, 1.0, continuity);
+            range = Math.Max(0.0, range - (valleyCut * (0.08 + (splitCrest * 0.12))));
+            strongestBelt = Math.Max(strongestBelt, range * arcExtent);
         }
 
         return strongestBelt * landMask * landMask;
     }
 
-    private static double SampleSecondaryRidges(double signedDistance)
+    private static double RidgeProfile(double distance, double coreWidth, double shoulderWidth)
     {
-        var first = 1.0 - SmoothStep(0.010, 0.027, Math.Abs(signedDistance - 0.062));
-        var second = 1.0 - SmoothStep(0.010, 0.027, Math.Abs(signedDistance + 0.062));
+        var core = 1.0 - SmoothStep(coreWidth, shoulderWidth, distance);
+        return core * core;
+    }
+
+    private static double SampleParallelRidges(double signedDistance, double separation, double coreWidth, double shoulderWidth)
+    {
+        var first = RidgeProfile(Math.Abs(signedDistance - separation), coreWidth, shoulderWidth);
+        var second = RidgeProfile(Math.Abs(signedDistance + separation), coreWidth, shoulderWidth);
         return Math.Max(first, second);
     }
 

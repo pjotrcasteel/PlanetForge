@@ -12,6 +12,7 @@ const finalLandIceLatitudeDegrees = 70.0;
 const finalAlpineSnowlineMeters = 4_400.0;
 const landReliefExaggeration = 22.0;
 const oceanReliefExaggeration = 4.0;
+const visualNormalExaggeration = 20.0;
 
 export function initialize(overlayCanvasId, inputCanvasId, snapshot) {
     const canvas = document.getElementById(overlayCanvasId);
@@ -202,7 +203,7 @@ function isIcePixel(pixels, offset) {
     const green = pixels[offset + 1] / 255.0;
     const blue = pixels[offset + 2] / 255.0;
     const luminance = (red * 0.2126) + (green * 0.7152) + (blue * 0.0722);
-    return luminance > 0.40 && green >= red * 0.82 && blue >= red * 0.82;
+    return luminance > 0.40 && green >= red * 0.80 && blue >= red * 0.80;
 }
 
 function installInput(s) {
@@ -274,7 +275,7 @@ function draw(s) {
     gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
     gl.useProgram(program);
     gl.uniformMatrix4fv(s.uniforms.viewProjection, false, viewProjection);
-    gl.uniform3f(s.uniforms.lightDirection, 0.7, 0.35, 0.6);
+    gl.uniform3f(s.uniforms.lightDirection, 0.72, 0.42, 0.55);
     gl.uniform1f(s.uniforms.planetRadiusMeters, s.planetRadiusMeters);
     gl.uniform1f(s.uniforms.seaLevelMeters, s.seaLevelMeters);
     gl.uniform1f(s.uniforms.surfaceTemperatureKelvin, s.surfaceTemperatureKelvin);
@@ -298,7 +299,7 @@ function draw(s) {
 
 function createProgram(gl, vertexSource, fragmentSource) {
     const vertex = compile(gl, gl.VERTEX_SHADER, vertexSource);
-    const fragment = compile(gl, gl.FRAGMENT_SHADER, fragmentSource);
+    const fragment = compile(gl, gl.FRAGMENT_SHADER, fragmentShaderSource);
     const program = gl.createProgram();
     gl.attachShader(program, vertex);
     gl.attachShader(program, fragment);
@@ -360,23 +361,29 @@ in vec3 aNormal;
 uniform mat4 uViewProjection;
 uniform float uPlanetRadiusMeters;
 out vec3 vDirection;
-out vec3 vNormal;
+out vec3 vVisualNormal;
+out float vPhysicalSlope;
 out float vElevationMeters;
 void main() {
     float physicalRadius = length(aPosition);
-    vDirection = normalize(aPosition);
-    vNormal = normalize(aNormal);
+    vec3 radial = normalize(aPosition);
+    vec3 physicalNormal = normalize(aNormal);
+    if (dot(physicalNormal, radial) < 0.0) physicalNormal = -physicalNormal;
+    vec3 tangentNormal = physicalNormal - (radial * dot(physicalNormal, radial));
+    vDirection = radial;
+    vVisualNormal = normalize(radial + (tangentNormal * ${visualNormalExaggeration.toFixed(1)}));
+    vPhysicalSlope = clamp(1.0 - dot(physicalNormal, radial), 0.0, 0.5);
     vElevationMeters = (physicalRadius - 1.0) * uPlanetRadiusMeters;
     float exaggeration = vElevationMeters >= 0.0 ? ${landReliefExaggeration.toFixed(1)} : ${oceanReliefExaggeration.toFixed(1)};
     float visualRadius = 1.0 + ((vElevationMeters * exaggeration) / uPlanetRadiusMeters);
-    vec3 visualPosition = vDirection * visualRadius;
-    gl_Position = uViewProjection * vec4(visualPosition, 1.0);
+    gl_Position = uViewProjection * vec4(radial * visualRadius, 1.0);
 }`;
 
 const fragmentShaderSource = `#version 300 es
 precision highp float;
 in vec3 vDirection;
-in vec3 vNormal;
+in vec3 vVisualNormal;
+in float vPhysicalSlope;
 in float vElevationMeters;
 uniform vec3 uLightDirection;
 uniform float uSeaLevelMeters;
@@ -414,28 +421,28 @@ float valueNoise(vec3 p) {
     return mix(nxy0, nxy1, smoothLocal.z);
 }
 
-float broadIceField(vec3 direction) {
-    float a = valueNoise((direction * 2.8) + vec3(4.0, -2.0, 7.0));
-    float b = valueNoise((direction * 5.6) + vec3(-6.0, 4.0, 1.0));
-    float c = valueNoise((direction * 10.5) + vec3(2.0, 7.0, -5.0));
-    return (a * 0.56) + (b * 0.30) + (c * 0.14);
+float broadField(vec3 direction) {
+    float a = valueNoise((direction * 2.6) + vec3(4.0, -2.0, 7.0));
+    float b = valueNoise((direction * 5.2) + vec3(-6.0, 4.0, 1.0));
+    float c = valueNoise((direction * 9.5) + vec3(2.0, 7.0, -5.0));
+    return (a * 0.58) + (b * 0.29) + (c * 0.13);
 }
 
-float patchField(vec3 direction, vec3 offset) {
-    float a = valueNoise((direction * 7.5) + offset);
-    float b = valueNoise((direction * 15.5) + (offset.yzx * 1.7));
-    float c = valueNoise((direction * 29.0) + (offset.zxy * 2.3));
-    return (a * 0.50) + (b * 0.34) + (c * 0.16);
+float breakupField(vec3 direction, vec3 offset) {
+    float a = valueNoise((direction * 7.0) + offset);
+    float b = valueNoise((direction * 15.0) + (offset.yzx * 1.7));
+    return (a * 0.68) + (b * 0.32);
 }
 
 void main() {
     float latitudeDegrees = degrees(asin(clamp(abs(vDirection.y), 0.0, 1.0)));
     bool ocean = vElevationMeters < 0.0;
     float latitudeFactor = sin(radians(latitudeDegrees));
-    float localTemperature = uSurfaceTemperatureKelvin - (${latitudeCoolingKelvin.toFixed(1)} * pow(latitudeFactor, 1.45)) - (max(vElevationMeters, 0.0) * ${elevationLapseRateKelvinPerMeter.toFixed(4)});
-    float broad = broadIceField(vDirection);
-    float elevationColdBiasDegrees = ocean ? 0.0 : clamp(max(vElevationMeters, 0.0) / 900.0, 0.0, 5.0);
-    float warpedLatitudeDegrees = latitudeDegrees + ((broad - 0.5) * 20.0) + elevationColdBiasDegrees;
+    float elevation = max(vElevationMeters, 0.0);
+    float localTemperature = uSurfaceTemperatureKelvin - (${latitudeCoolingKelvin.toFixed(1)} * pow(latitudeFactor, 1.45)) - (elevation * ${elevationLapseRateKelvinPerMeter.toFixed(4)});
+    float broad = broadField(vDirection);
+    float elevationColdBiasDegrees = ocean ? 0.0 : clamp(elevation / 780.0, 0.0, 7.0);
+    float warpedLatitudeDegrees = latitudeDegrees + ((broad - 0.5) * 17.0) + elevationColdBiasDegrees;
     float seaRetreat = pow(1.0 - clamp(uSeaIceFraction, 0.0, 1.0), 0.82);
     float landRetreat = pow(1.0 - clamp(uLandIceFraction, 0.0, 1.0), 0.70);
     float snowRetreat = pow(1.0 - clamp(uSnowCoverFraction, 0.0, 1.0), 0.78);
@@ -445,73 +452,79 @@ void main() {
     float landIceLineDegrees = mix(-25.0, ${finalLandIceLatitudeDegrees.toFixed(1)}, landRetreat);
     float frozenSeaSheet = smoothstep(seaIceLineDegrees - 1.5, seaIceLineDegrees + 5.0, warpedLatitudeDegrees);
     float frozenLandSheet = smoothstep(landIceLineDegrees - 1.5, landIceLineDegrees + 5.5, warpedLatitudeDegrees);
-    float seaPatchNoise = patchField(vDirection, vec3(-3.0, 7.0, 4.0));
+
+    float seaPatchNoise = breakupField(vDirection, vec3(-3.0, 7.0, 4.0));
     float seaPolarBias = smoothstep(57.0, 84.0, warpedLatitudeDegrees);
-    float seaPatchSignal = seaPatchNoise + (seaPolarBias * 0.10);
-    float seaPatchMask = smoothstep(0.56, 0.62, seaPatchSignal);
-    float seaEdgeEnvelope = smoothstep(seaIceLineDegrees - 3.5, seaIceLineDegrees + 7.0, warpedLatitudeDegrees);
-    float fragmentedSea = seaEdgeEnvelope * seaPatchMask;
+    float fragmentedSea = smoothstep(seaIceLineDegrees - 3.5, seaIceLineDegrees + 7.0, warpedLatitudeDegrees)
+        * smoothstep(0.60, 0.69, seaPatchNoise + (seaPolarBias * 0.07));
     float seaCoverage = mix(frozenSeaSheet, fragmentedSea, seaBreakup);
-    float landPatchNoise = patchField(vDirection, vec3(8.0, -5.0, 2.0));
+
+    float landPatchNoise = breakupField(vDirection, vec3(8.0, -5.0, 2.0));
     float landPolarBias = smoothstep(58.0, 83.0, warpedLatitudeDegrees);
-    float landPatchSignal = landPatchNoise + (landPolarBias * 0.08);
-    float landPatchMask = smoothstep(0.61, 0.68, landPatchSignal);
-    float landEdgeEnvelope = smoothstep(landIceLineDegrees - 4.5, landIceLineDegrees + 8.0, warpedLatitudeDegrees);
-    float fragmentedLand = landEdgeEnvelope * landPatchMask;
+    float terrainRetention = 1.0 - smoothstep(0.012, 0.045, vPhysicalSlope);
+    float ruggedRetention = smoothstep(1100.0, 3400.0, elevation) * (1.0 - smoothstep(0.025, 0.060, vPhysicalSlope));
+    float highlandRetention = smoothstep(650.0, 2800.0, elevation);
+    float fragmentedLand = smoothstep(landIceLineDegrees - 4.5, landIceLineDegrees + 8.0, warpedLatitudeDegrees)
+        * smoothstep(0.58, 0.69, landPatchNoise + (landPolarBias * 0.08) + (ruggedRetention * 0.08));
+    fragmentedLand *= mix(0.58, 1.0, max(highlandRetention, ruggedRetention));
+
     float snowlineMeters = mix(-1200.0, ${finalAlpineSnowlineMeters.toFixed(1)}, snowRetreat);
-    float localSnowlineMeters = snowlineMeters + ((0.5 - broad) * 320.0);
-    float alpineSnow = ocean ? 0.0 : smoothstep(localSnowlineMeters, localSnowlineMeters + 600.0, vElevationMeters);
+    float localSnowlineMeters = snowlineMeters + ((0.5 - broad) * 360.0) - (ruggedRetention * 420.0);
+    float alpineSnow = ocean ? 0.0 : smoothstep(localSnowlineMeters, localSnowlineMeters + 700.0, elevation);
     alpineSnow *= 1.0 - smoothstep(264.0, 271.0, localTemperature);
+    alpineSnow *= mix(0.58, 1.0, terrainRetention);
+
     float residualLandSheet = frozenLandSheet * (1.0 - landBreakup);
-    float brokenLandCoverage = max(fragmentedLand, alpineSnow * 0.30) * landBreakup;
+    float mountainIce = max(alpineSnow, ruggedRetention * clamp(uSnowCoverFraction, 0.0, 1.0) * 0.58);
+    float brokenLandCoverage = max(fragmentedLand, mountainIce) * landBreakup;
     float landCoverage = max(residualLandSheet, brokenLandCoverage);
-    float coverage = ocean ? smoothstep(0.30, 0.58, seaCoverage) : smoothstep(0.42, 0.68, landCoverage);
+    float coverage = ocean ? smoothstep(0.30, 0.58, seaCoverage) : smoothstep(0.38, 0.67, landCoverage);
 
-    float coarseTexture = valueNoise((vDirection * 22.0) + vec3(5.0, -3.0, 6.0));
-    float fineTexture = valueNoise((vDirection * 65.0) + vec3(-7.0, 4.0, 2.0));
-    float fractureField = abs(valueNoise((vDirection * 115.0) + vec3(9.0, 2.0, -4.0)) - 0.5) * 2.0;
-    float surfaceTexture = (coarseTexture * 0.25) + (fineTexture * 0.75);
-    float iceTexture = (fineTexture * 0.62) + (fractureField * 0.38);
-
-    vec3 normal = normalize(vNormal);
+    vec3 normal = normalize(vVisualNormal);
     vec3 radial = normalize(vDirection);
     float direct = max(dot(normal, normalize(uLightDirection)), 0.0);
-    float terrainSlope = clamp(1.0 - dot(normal, radial), 0.0, 0.75);
-    float hillshade = 0.34 + (0.66 * smoothstep(0.0, 0.88, direct));
-    hillshade *= 1.0 - (terrainSlope * 0.72);
-    float ambientRelief = 0.58 + (0.42 * hillshade);
+    float hillshade = 0.38 + (0.62 * smoothstep(0.0, 0.90, direct));
+    float reliefShadow = 1.0 - (clamp(1.0 - dot(normal, radial), 0.0, 0.78) * 0.48);
+    float illumination = (0.62 + (0.38 * hillshade)) * reliefShadow;
 
     float normalizedDepth = clamp(max(-vElevationMeters, 0.0) / 6000.0, 0.0, 1.0);
-    float upland = smoothstep(550.0, 1700.0, max(vElevationMeters, 0.0));
-    float highland = smoothstep(1700.0, 3300.0, max(vElevationMeters, 0.0));
-    float peak = smoothstep(3300.0, 5500.0, max(vElevationMeters, 0.0));
+    float upland = smoothstep(450.0, 1500.0, elevation);
+    float highland = smoothstep(1500.0, 3000.0, elevation);
+    float alpine = smoothstep(3000.0, 4800.0, elevation);
+    float summit = smoothstep(4800.0, 6800.0, elevation);
+    float rockVariation = (valueNoise((vDirection * 18.0) + vec3(5.0, -3.0, 6.0)) - 0.5) * 0.08;
     vec3 deepOcean = vec3(0.025, 0.13, 0.19);
     vec3 shallowOcean = vec3(0.045, 0.29, 0.34);
-    vec3 lowRock = vec3(0.27, 0.23, 0.18);
-    vec3 uplandRock = vec3(0.45, 0.38, 0.29);
-    vec3 highRock = vec3(0.61, 0.54, 0.43);
-    vec3 barePeak = vec3(0.74, 0.70, 0.61);
-    vec3 oceanMaterial = mix(shallowOcean, deepOcean, smoothstep(0.0, 1.0, normalizedDepth));
+    vec3 lowRock = vec3(0.25, 0.21, 0.17);
+    vec3 uplandRock = vec3(0.39, 0.32, 0.24);
+    vec3 highRock = vec3(0.53, 0.44, 0.33);
+    vec3 alpineRock = vec3(0.64, 0.57, 0.47);
+    vec3 summitRock = vec3(0.72, 0.68, 0.60);
+    vec3 oceanMaterial = mix(shallowOcean, deepOcean, normalizedDepth);
     vec3 landMaterial = mix(lowRock, uplandRock, upland);
     landMaterial = mix(landMaterial, highRock, highland);
-    landMaterial = mix(landMaterial, barePeak, peak);
-    vec3 terrainMaterial = ocean ? oceanMaterial : landMaterial;
-    terrainMaterial *= mix(0.94, 1.06, surfaceTexture);
-    terrainMaterial *= ambientRelief;
+    landMaterial = mix(landMaterial, alpineRock, alpine);
+    landMaterial = mix(landMaterial, summitRock, summit);
+    landMaterial *= 1.0 + rockVariation;
+    vec3 terrainMaterial = (ocean ? oceanMaterial : landMaterial) * illumination;
 
-    vec3 seaIce = mix(vec3(0.43, 0.62, 0.70), vec3(0.76, 0.86, 0.89), 0.50 + (iceTexture * 0.28));
-    vec3 landIce = mix(vec3(0.61, 0.68, 0.70), vec3(0.90, 0.92, 0.90), 0.46 + (iceTexture * 0.30));
-    vec3 snow = mix(vec3(0.78, 0.82, 0.82), vec3(0.97, 0.97, 0.94), 0.54 + (iceTexture * 0.20));
-    float snowInfluence = ocean ? 0.0 : clamp((alpineSnow * 0.66) + (uSnowCoverFraction * 0.20), 0.0, 0.72);
+    float glacierMacro = valueNoise((vDirection * 6.5) + vec3(-4.0, 2.0, 9.0));
+    float glacierFlow = valueNoise((vDirection * 16.0) + vec3(7.0, -6.0, 1.0));
+    float glacierFine = valueNoise((vDirection * 38.0) + vec3(-8.0, 3.0, -5.0));
+    float glacierTexture = (glacierMacro * 0.54) + (glacierFlow * 0.34) + (glacierFine * 0.12);
+    float sparseFracture = 1.0 - smoothstep(0.010, 0.040, abs(valueNoise((vDirection * 28.0) + vec3(9.0, 2.0, -4.0)) - 0.5));
+    vec3 seaIce = mix(vec3(0.48, 0.64, 0.70), vec3(0.78, 0.87, 0.89), 0.50 + (glacierTexture * 0.22));
+    vec3 landIce = mix(vec3(0.66, 0.70, 0.70), vec3(0.91, 0.92, 0.89), 0.48 + (glacierTexture * 0.24));
+    vec3 snow = mix(vec3(0.80, 0.82, 0.80), vec3(0.98, 0.97, 0.93), 0.55 + (glacierTexture * 0.18));
+    float snowInfluence = ocean ? 0.0 : clamp((alpineSnow * 0.80) + (ruggedRetention * 0.18), 0.0, 0.88);
     vec3 iceMaterial = ocean ? seaIce : mix(landIce, snow, snowInfluence);
-    iceMaterial *= 0.72 + (0.36 * hillshade);
-    iceMaterial *= mix(0.96, 1.04, iceTexture);
+    iceMaterial *= 0.78 + (0.30 * hillshade);
+    iceMaterial *= mix(0.96, 1.035, glacierTexture);
+    iceMaterial *= 1.0 - (sparseFracture * (ocean ? 0.030 : 0.005) * mix(0.25, 1.0, seaBreakup));
 
-    float crack = (1.0 - smoothstep(0.025, 0.11, fractureField)) * (ocean ? 0.22 : 0.09);
-    iceMaterial *= 1.0 - (crack * mix(0.35, 1.0, seaBreakup));
     float frozenWorldStrength = min(min(clamp(uSeaIceFraction, 0.0, 1.0), clamp(uLandIceFraction, 0.0, 1.0)), clamp(uSnowCoverFraction, 0.0, 1.0));
-    float windScour = ocean ? 0.0 : frozenWorldStrength * smoothstep(0.015, 0.10, terrainSlope) * smoothstep(1500.0, 4800.0, vElevationMeters);
-    iceMaterial = mix(iceMaterial, terrainMaterial * 1.08, windScour * 0.38);
+    float windScour = ocean ? 0.0 : frozenWorldStrength * smoothstep(0.008, 0.035, vPhysicalSlope) * smoothstep(1800.0, 5000.0, elevation);
+    iceMaterial = mix(iceMaterial, terrainMaterial * 1.12, windScour * 0.34);
 
     if (coverage < 0.08) {
         if (uFullSurface == 0) discard;
@@ -519,7 +532,7 @@ void main() {
         return;
     }
 
-    float iceBlend = smoothstep(0.08, 0.62, coverage);
+    float iceBlend = smoothstep(0.08, 0.64, coverage);
     vec3 material = uFullSurface == 1 ? mix(terrainMaterial, iceMaterial, iceBlend) : iceMaterial;
     float alpha = uFullSurface == 1 ? 1.0 : clamp(coverage, 0.0, 0.98);
     outColor = vec4(material, alpha);

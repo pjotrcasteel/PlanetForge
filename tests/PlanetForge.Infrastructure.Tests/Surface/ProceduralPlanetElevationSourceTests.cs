@@ -68,13 +68,28 @@ public sealed class ProceduralPlanetElevationSourceTests
     public void SampleElevationMeters_GlobalSample_ContainsMountainsBasinsAndOceans()
     {
         var source = new ProceduralPlanetElevationSource();
-        var elevations = FibonacciDirections(512).Select(direction => source.SampleElevationMeters(direction, 42)).ToArray();
+        var elevations = FibonacciDirections(2_048).Select(direction => source.SampleElevationMeters(direction, 42)).ToArray();
         var landFraction = elevations.Count(elevation => elevation > 0.0) / (double)elevations.Length;
 
         Assert.IsGreaterThan(4_500.0, elevations.Max());
         Assert.IsLessThan(-2_000.0, elevations.Min());
         Assert.IsGreaterThan(0.15, landFraction);
         Assert.IsLessThan(0.45, landFraction);
+    }
+
+    [TestMethod]
+    public void SampleElevationMeters_GlobalSample_ContainsVariedHighlandStructure()
+    {
+        var source = new ProceduralPlanetElevationSource();
+        var highlands = FibonacciDirections(1_024)
+            .Select(direction => source.SampleElevationMeters(direction, 42))
+            .Where(elevation => elevation > 1_500.0)
+            .ToArray();
+        var elevationBands = highlands.Select(elevation => (int)Math.Floor(elevation / 500.0)).Distinct().Count();
+
+        Assert.IsGreaterThan(12, highlands.Length);
+        Assert.IsGreaterThanOrEqualTo(6, elevationBands);
+        Assert.IsGreaterThan(2_500.0, highlands.Max() - highlands.Min());
     }
 
     private static IEnumerable<PlanetVector> FibonacciDirections(int count)
