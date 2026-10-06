@@ -139,6 +139,12 @@ function installVisualTestApi() {
             state.dirty = false;
             return measureIceCoverage(state, 0.18);
         },
+        measureCenterTransparency() {
+            if (!state) return 0.0;
+            draw(state);
+            state.dirty = false;
+            return measureTransparency(state, 0.48);
+        },
         measurePolarRegionCoverage() {
             if (!state) return 0.0;
             draw(state);
@@ -164,6 +170,18 @@ function measureIceCoverage(s, fraction) {
     let covered = 0;
     for (let offset = 0; offset < pixels.length; offset += 4) if (isIcePixel(pixels, offset)) covered++;
     return covered / (sampleSize * sampleSize);
+}
+
+function measureTransparency(s, fraction) {
+    const { gl, canvas } = s;
+    const sampleSize = Math.max(32, Math.min(300, Math.floor(Math.min(canvas.width, canvas.height) * fraction)));
+    const x = Math.max(0, Math.floor((canvas.width - sampleSize) / 2));
+    const y = Math.max(0, Math.floor((canvas.height - sampleSize) / 2));
+    const pixels = new Uint8Array(sampleSize * sampleSize * 4);
+    gl.readPixels(x, y, sampleSize, sampleSize, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+    let transparent = 0;
+    for (let offset = 3; offset < pixels.length; offset += 4) if (pixels[offset] < 24) transparent++;
+    return transparent / (sampleSize * sampleSize);
 }
 
 function measureFragmentation(s) {
