@@ -50,6 +50,8 @@ test('FrozenToMelting_PreservesFragmentedPolarIceAndThawsEquator', async ({ page
 
   expect(oceanDepthVariation.sampledPixels).toBeGreaterThan(1000);
   expect(oceanDepthVariation.luminanceRange).toBeGreaterThan(0.08);
+  expect(oceanDepthVariation.maximumAlpha).toBeGreaterThan(0.995);
+  expect(oceanDepthVariation.glError).toBe(0);
 
   expect(northPolarRegionCoverage).toBeGreaterThan(0.04);
   expect(southPolarRegionCoverage).toBeGreaterThan(0.08);
