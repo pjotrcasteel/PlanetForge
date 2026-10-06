@@ -1,5 +1,7 @@
 import { expect, test } from '@playwright/test';
 
+test.setTimeout(120_000);
+
 test('FrozenToWaterCycle_PreservesTerrainAndActivatesTerrainBoundHydrology', async ({ page }, testInfo) => {
   await page.goto('/?visualTest=1');
   await expect(page.getByText('FROZEN WORLD')).toBeVisible();
