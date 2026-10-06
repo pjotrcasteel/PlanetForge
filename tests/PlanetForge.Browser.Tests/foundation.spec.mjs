@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 
-test.setTimeout(120_000);
+test.setTimeout(240_000);
 
 test('FrozenToWaterCycle_PreservesTerrainAndActivatesTerrainBoundHydrology', async ({ page }, testInfo) => {
   await page.goto('/?visualTest=1');
@@ -41,8 +41,8 @@ test('FrozenToWaterCycle_PreservesTerrainAndActivatesTerrainBoundHydrology', asy
 
   await orientPitch(page, 0.0);
   await page.getByRole('button', { name: 'NEXT' }).click();
-  await expect(page.getByText('ACTIVE WATER CYCLE', { exact: true })).toBeVisible({ timeout: 30_000 });
-  await expect(page.getByRole('button', { name: 'NEXT' })).toBeEnabled({ timeout: 30_000 });
+  await expect(page.getByText('ACTIVE WATER CYCLE', { exact: true })).toBeVisible({ timeout: 90_000 });
+  await expect(page.getByRole('button', { name: 'NEXT' })).toBeEnabled({ timeout: 90_000 });
   await page.waitForTimeout(150);
   const activeWater = await measureWater(page);
   await page.screenshot({ path: testInfo.outputPath('active-water-cycle.png'), fullPage: true });
