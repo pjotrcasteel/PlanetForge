@@ -53,18 +53,25 @@ function ensureCoastalCanvas(inputCanvasId) {
 function retainGeometry(snapshot) {
     if (!snapshot) return snapshot;
 
-    if (snapshot.surfaceTiles?.length > 0) retainedSurfaceTiles = snapshot.surfaceTiles;
+    const geometryTiles = (snapshot.surfaceTiles ?? []).filter(hasGeometry);
+    if (geometryTiles.length > 0) retainedSurfaceTiles = geometryTiles;
     if (snapshot.physicalParameters) retainedPhysicalParameters = snapshot.physicalParameters;
 
-    const hasSurfaceTiles = snapshot.surfaceTiles?.length > 0;
+    const hasIncomingGeometry = geometryTiles.length > 0;
     const hasPhysicalParameters = Boolean(snapshot.physicalParameters);
-    if ((hasSurfaceTiles || retainedSurfaceTiles.length === 0) && (hasPhysicalParameters || !retainedPhysicalParameters)) return snapshot;
+    if ((hasIncomingGeometry || retainedSurfaceTiles.length === 0) && (hasPhysicalParameters || !retainedPhysicalParameters)) {
+        return hasIncomingGeometry && geometryTiles.length !== snapshot.surfaceTiles?.length ? { ...snapshot, surfaceTiles: geometryTiles } : snapshot;
+    }
 
     return {
         ...snapshot,
-        surfaceTiles: hasSurfaceTiles ? snapshot.surfaceTiles : retainedSurfaceTiles,
+        surfaceTiles: hasIncomingGeometry ? geometryTiles : retainedSurfaceTiles,
         physicalParameters: snapshot.physicalParameters ?? retainedPhysicalParameters
     };
+}
+
+function hasGeometry(tile) {
+    return Boolean(tile?.key && tile.surfaceVertexCount > 0 && tile.positions?.length >= 3 && tile.normals?.length >= 3);
 }
 
 function exposeCoastalMeshStats(snapshot) {
