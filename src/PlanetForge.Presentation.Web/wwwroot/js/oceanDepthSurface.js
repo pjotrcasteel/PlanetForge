@@ -162,7 +162,7 @@ function measureDepthVariation(s) {
             const offset = ((y * canvas.width) + x) * 4;
             const alpha = pixels[offset + 3] / 255.0;
             metrics.maximumAlpha = Math.max(metrics.maximumAlpha, alpha);
-            if (alpha < 0.20) continue;
+            if (alpha < 0.95) continue;
             const red = pixels[offset] / 255.0;
             const green = pixels[offset + 1] / 255.0;
             const blue = pixels[offset + 2] / 255.0;
@@ -210,9 +210,11 @@ function draw(s) {
     const viewProjection = multiply(projection, lookAt(eye, [0, 0, 0], [0, 1, 0]));
 
     gl.enable(gl.DEPTH_TEST);
-    gl.disable(gl.CULL_FACE);
-    gl.enable(gl.BLEND);
-    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+    gl.depthMask(true);
+    gl.enable(gl.CULL_FACE);
+    gl.frontFace(gl.CCW);
+    gl.cullFace(gl.BACK);
+    gl.disable(gl.BLEND);
     gl.useProgram(program);
     gl.uniformMatrix4fv(s.uniforms.viewProjection, false, viewProjection);
     gl.uniform3f(s.uniforms.lightDirection, 0.72, 0.42, 0.55);
@@ -226,8 +228,6 @@ function draw(s) {
         gl.vertexAttribPointer(s.positionAttribute, 3, gl.FLOAT, false, 0, 0);
         gl.drawArrays(gl.TRIANGLES, 0, tile.vertexCount);
     }
-
-    gl.disable(gl.BLEND);
 }
 
 function createProgram(gl) {
@@ -341,6 +341,9 @@ void main() {
     if (vElevationMeters >= 0.0) discard;
 
     vec3 radial = normalize(vDirection);
+    vec3 viewDirection = normalize(uCameraPosition - (radial * ${waterSurfaceOffset.toFixed(6)}));
+    if (dot(radial, viewDirection) <= 0.0) discard;
+
     float latitudeDegrees = degrees(asin(clamp(abs(radial.y), 0.0, 1.0)));
     float macro = fbm((radial * 5.0) + vec3(4.0,-2.0,7.0));
     float warpedLatitudeDegrees = latitudeDegrees + ((macro - 0.5) * 16.0);
@@ -353,38 +356,47 @@ void main() {
     float fragmentedSea = smoothstep(seaIceLineDegrees - 4.0, seaIceLineDegrees + 7.5, warpedLatitudeDegrees) * smoothstep(0.56, 0.70, seaPatch + (polarSeaBias * 0.09));
     float seaCoverage = mix(frozenSeaSheet, fragmentedSea, seaBreakup);
     float openWater = 1.0 - smoothstep(0.30, 0.58, seaCoverage);
-    if (openWater <= 0.01) discard;
+    if (openWater <= 0.08) discard;
 
-    float depthMeters = -vElevationMeters;
-    float shelfTransition = smoothstep(650.0, 2400.0, depthMeters);
-    float slopeTransition = smoothstep(2100.0, 4100.0, depthMeters);
-    float abyssTransition = smoothstep(3900.0, 5700.0, depthMeters);
-    float coastGlow = 1.0 - smoothstep(0.0, 1250.0, depthMeters);
+    float physicalDepth = max(-vElevationMeters, 0.0);
+    float basinField = fbm((radial * 1.85) + vec3(2.0,-5.0,8.0));
+    float ridgeField = fbm((radial * 4.4) + vec3(-6.0,3.0,1.0));
+    float trenchField = fbm((radial * 7.2) + vec3(5.0,6.0,-4.0));
+    float basinShape = smoothstep(0.22, 0.84, (basinField * 0.72) + (ridgeField * 0.28));
+    float proceduralDepth = mix(700.0, 5900.0, basinShape);
+    proceduralDepth += (trenchField - 0.5) * 620.0;
+    float coastAnchor = 1.0 - smoothstep(280.0, 1500.0, physicalDepth);
+    float depthMeters = mix(proceduralDepth, physicalDepth, coastAnchor * 0.90);
+    depthMeters = mix(depthMeters, physicalDepth, 0.10);
+    depthMeters = clamp(depthMeters, 0.0, 6800.0);
 
-    vec3 coastalWater = vec3(0.075, 0.47, 0.50);
-    vec3 shelfWater = vec3(0.024, 0.33, 0.43);
-    vec3 slopeWater = vec3(0.015, 0.19, 0.31);
-    vec3 abyssWater = vec3(0.008, 0.075, 0.14);
+    float shelfTransition = smoothstep(520.0, 1750.0, depthMeters);
+    float slopeTransition = smoothstep(1650.0, 3650.0, depthMeters);
+    float abyssTransition = smoothstep(3900.0, 5900.0, depthMeters);
+    float coastGlow = 1.0 - smoothstep(0.0, 950.0, physicalDepth);
+
+    vec3 coastalWater = vec3(0.070, 0.43, 0.47);
+    vec3 shelfWater = vec3(0.028, 0.29, 0.37);
+    vec3 slopeWater = vec3(0.016, 0.17, 0.27);
+    vec3 abyssWater = vec3(0.007, 0.055, 0.105);
 
     vec3 color = mix(coastalWater, shelfWater, shelfTransition);
     color = mix(color, slopeWater, slopeTransition);
     color = mix(color, abyssWater, abyssTransition);
-    color = mix(color, vec3(0.10, 0.53, 0.52), coastGlow * 0.22);
+    color = mix(color, vec3(0.095, 0.47, 0.48), coastGlow * 0.18);
 
-    float regional = valueNoise((radial * 7.0) + vec3(3.0,-4.0,8.0)) - 0.5;
-    color += vec3(0.0, regional * 0.026, regional * 0.040) * (1.0 - abyssTransition);
+    float regional = fbm((radial * 6.5) + vec3(3.0,-4.0,8.0)) - 0.5;
+    color += vec3(0.0, regional * 0.018, regional * 0.026) * (1.0 - abyssTransition);
 
     vec3 normal = radial;
     vec3 light = normalize(uLightDirection);
-    vec3 viewDirection = normalize(uCameraPosition - (normal * ${waterSurfaceOffset.toFixed(6)}));
-    float diffuse = 0.86 + (0.14 * max(dot(normal, light), 0.0));
+    float diffuse = 0.88 + (0.12 * max(dot(normal, light), 0.0));
     float fresnel = pow(1.0 - max(dot(normal, viewDirection), 0.0), 3.2);
     vec3 halfVector = normalize(light + viewDirection);
-    float specular = pow(max(dot(normal, halfVector), 0.0), 72.0) * 0.09;
+    float specular = pow(max(dot(normal, halfVector), 0.0), 88.0) * 0.065;
     color *= diffuse;
-    color = mix(color, vec3(0.045, 0.12, 0.19), fresnel * 0.16);
-    color += vec3(specular * 0.70, specular * 0.86, specular);
+    color = mix(color, vec3(0.035, 0.095, 0.15), fresnel * 0.12);
+    color += vec3(specular * 0.62, specular * 0.78, specular);
 
-    float waterAlpha = smoothstep(0.02, 0.42, openWater);
-    outColor = vec4(clamp(color, 0.0, 1.0), 0.98 * waterAlpha);
+    outColor = vec4(clamp(color, 0.0, 1.0), 1.0);
 }`;
