@@ -400,5 +400,6 @@ void main() {
     color = mix(color, vec3(0.025, 0.085, 0.135), fresnel * 0.08);
     color += vec3(specular * 0.60, specular * 0.76, specular);
 
-    outColor = vec4(clamp(color, 0.0, 1.0), 1.0);
+    float shoreOpacity = mix(0.64, 1.0, smoothstep(35.0, 520.0, physicalDepth));
+    outColor = vec4(clamp(color, 0.0, 1.0), shoreOpacity);
 }`;
