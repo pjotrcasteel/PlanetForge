@@ -1,19 +1,23 @@
 import * as surface from './cryosphereSurface.js';
 import * as ocean from './oceanDepthSurface.js';
+import * as coast from './coastalSurface.js';
 
 export function initialize(overlayCanvasId, inputCanvasId, snapshot) {
     const adapted = adaptSnapshot(snapshot);
     surface.initialize(overlayCanvasId, inputCanvasId, adapted);
     ocean.initialize(inputCanvasId, adapted);
+    coast.initialize(inputCanvasId, adapted);
 }
 
 export function setPlanet(snapshot) {
     const adapted = adaptSnapshot(snapshot);
     surface.setPlanet(adapted);
     ocean.setPlanet(adapted);
+    coast.setPlanet(adapted);
 }
 
 export function dispose() {
+    coast.dispose();
     ocean.dispose();
     surface.dispose();
 }
