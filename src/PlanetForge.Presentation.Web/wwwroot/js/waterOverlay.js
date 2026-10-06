@@ -201,27 +201,38 @@ function insertNearest(items, candidate, maximumCount) {
 }
 
 function buildRiverSegments(s, paths) {
+    const riverPaths = buildConnectedRiverPaths(paths);
     const segments = [];
     let minimumElevation = Number.POSITIVE_INFINITY;
     let maximumElevation = Number.NEGATIVE_INFINITY;
 
-    for (const path of paths) {
-        const from = unitPoint(path.fromX, path.fromY, path.fromZ);
-        const to = unitPoint(path.toX, path.toY, path.toZ);
+    for (const riverPath of riverPaths) {
         const points = [];
-        for (let sampleIndex = 0; sampleIndex < riverSamplesPerSegment; sampleIndex++) {
-            const t = sampleIndex / (riverSamplesPerSegment - 1);
-            const direction = sphericalInterpolate(from, to, t);
-            const terrainElevation = sampleTerrainElevation(s, direction);
-            minimumElevation = Math.min(minimumElevation, terrainElevation);
-            maximumElevation = Math.max(maximumElevation, terrainElevation);
-            points.push(surfacePoint(direction, terrainElevation, s.planetRadiusMeters));
+        let reachedOcean = false;
+        for (let pathIndex = 0; pathIndex < riverPath.length && !reachedOcean; pathIndex++) {
+            const path = riverPath[pathIndex];
+            const from = unitPoint(path.fromX, path.fromY, path.fromZ);
+            const to = unitPoint(path.toX, path.toY, path.toZ);
+            for (let sampleIndex = 0; sampleIndex < riverSamplesPerSegment; sampleIndex++) {
+                if (pathIndex > 0 && sampleIndex === 0) continue;
+                const t = sampleIndex / (riverSamplesPerSegment - 1);
+                const direction = sphericalInterpolate(from, to, t);
+                const terrainElevation = sampleTerrainElevation(s, direction);
+                minimumElevation = Math.min(minimumElevation, terrainElevation);
+                maximumElevation = Math.max(maximumElevation, terrainElevation);
+                if (terrainElevation < -50.0) {
+                    reachedOcean = true;
+                    break;
+                }
+                points.push(surfacePoint(direction, terrainElevation, s.planetRadiusMeters));
+            }
         }
 
+        if (points.length < 2) continue;
         segments.push({
             points,
-            discharge: clamp(path.relativeDischarge ?? 0.2, 0.08, 1.0),
-            streamOrder: Math.max(1, path.streamOrder ?? 1)
+            discharge: Math.max(...riverPath.map(path => clamp(path.relativeDischarge ?? 0.2, 0.08, 1.0))),
+            streamOrder: Math.max(...riverPath.map(path => Math.max(1, path.streamOrder ?? 1)))
         });
         s.metrics.riverPointCount += points.length;
     }
@@ -229,6 +240,46 @@ function buildRiverSegments(s, paths) {
     s.metrics.minimumRiverElevationMeters = Number.isFinite(minimumElevation) ? minimumElevation : null;
     s.metrics.maximumRiverElevationMeters = Number.isFinite(maximumElevation) ? maximumElevation : null;
     return segments;
+}
+
+function buildConnectedRiverPaths(paths) {
+    if (!paths?.length) return [];
+
+    const nodes = paths.map((path, index) => {
+        const from = unitPoint(path.fromX, path.fromY, path.fromZ);
+        const to = unitPoint(path.toX, path.toY, path.toZ);
+        return { index, path, fromKey: riverPointKey(from), toKey: riverPointKey(to) };
+    });
+    const byFrom = new Map(nodes.map(node => [node.fromKey, node]));
+    const targetKeys = new Set(nodes.map(node => node.toKey));
+    const visited = new Set();
+    const result = [];
+    const starts = nodes
+        .filter(node => !targetKeys.has(node.fromKey))
+        .sort((first, second) => riverPriority(second.path) - riverPriority(first.path));
+
+    for (const startNode of starts) appendConnectedRiverPath(startNode, byFrom, visited, result);
+    for (const node of nodes) if (!visited.has(node.index)) appendConnectedRiverPath(node, byFrom, visited, result);
+    return result;
+}
+
+function appendConnectedRiverPath(startNode, byFrom, visited, result) {
+    const riverPath = [];
+    let current = startNode;
+    while (current && !visited.has(current.index)) {
+        visited.add(current.index);
+        riverPath.push(current.path);
+        current = byFrom.get(current.toKey);
+    }
+    if (riverPath.length > 0) result.push(riverPath);
+}
+
+function riverPointKey(direction) {
+    return `${direction[0].toFixed(6)}:${direction[1].toFixed(6)}:${direction[2].toFixed(6)}`;
+}
+
+function riverPriority(path) {
+    return (Math.max(1, path.streamOrder ?? 1) * 10.0) + clamp(path.relativeDischarge ?? 0.2, 0.08, 1.0);
 }
 
 function buildLakeGroups(s, cells, fillFraction) {
