@@ -346,13 +346,13 @@ void main(){
     float shoreline=(1.0-smoothstep(20.0,520.0,elevation))*smoothstep(0.015,0.30,vCoast);
     float rockyReach=(1.0-smoothstep(120.0,1200.0,elevation))*smoothstep(0.02,0.45,vCoast);
     float cliffReach=(1.0-smoothstep(220.0,1900.0,elevation))*smoothstep(0.02,0.38,vCoast);
-    float slope=smoothstep(0.003,0.028,vPhysicalSlope);
-    float steep=smoothstep(0.014,0.058,vPhysicalSlope);
-    float cliff=smoothstep(0.030,0.085,vPhysicalSlope);
+    float slope=smoothstep(0.003,0.030,vPhysicalSlope);
+    float steep=smoothstep(0.020,0.085,vPhysicalSlope);
+    float cliff=smoothstep(0.085,0.220,vPhysicalSlope);
     float macro=noise3(radial*17.0+vec3(4,-3,7)),detail=noise3(radial*43.0+vec3(-6,5,2));
     float breakup=clamp(macro*0.42+detail*0.58,0.0,1.0);
-    float beach=shoreline*(1.0-steep)*smoothstep(0.26,0.62,breakup);
-    float rocky=rockyReach*smoothstep(0.08,0.78,slope)*(1.0-cliff*0.55);
+    float beach=shoreline*(1.0-smoothstep(0.0,0.72,steep))*smoothstep(0.22,0.58,breakup);
+    float rocky=rockyReach*smoothstep(0.12,0.82,slope)*(1.0-cliff*0.62);
     float cliffCoast=cliffReach*cliff;
     float exposure=smoothstep(0.06,0.72,1.0-clamp(uSeaIceFraction,0.0,1.0));
     if(max(beach,max(rocky*0.92,cliffCoast))*exposure<0.020) discard;
