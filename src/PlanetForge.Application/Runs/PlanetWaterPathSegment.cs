@@ -8,9 +8,4 @@ public sealed record PlanetWaterPathSegment(
     double ToY,
     double ToZ,
     double RelativeDischarge,
-    int StreamOrder)
-{
-    public double FromElevationMeters { get; init; }
-
-    public double ToElevationMeters { get; init; }
-}
+    int StreamOrder);
