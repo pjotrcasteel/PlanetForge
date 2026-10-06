@@ -20,6 +20,7 @@ test('FrozenToMelting_PreservesFragmentedPolarIceAndThawsEquator', async ({ page
   const meltedEquatorCoverage = await measureCenterCoverage(page);
   const oceanDepthVariation = await page.evaluate(() => window.__planetForgeOceanTest.measureDepthVariation());
   const meltedCoast = await measureCoast(page);
+  const coastMeshStats = await page.evaluate(() => window.__planetForgeCoastMeshStats);
   await page.screenshot({ path: testInfo.outputPath('year-50-equator.png'), fullPage: true });
 
   await orientPitch(page, 1.25);
@@ -40,6 +41,7 @@ test('FrozenToMelting_PreservesFragmentedPolarIceAndThawsEquator', async ({ page
     oceanDepthVariation,
     frozenCoast,
     meltedCoast,
+    coastMeshStats,
     northPoleCoverage,
     southPoleCoverage,
     northPolarRegionCoverage,
