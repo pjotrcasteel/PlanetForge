@@ -405,6 +405,6 @@ void main() {
     float wetEdge = shoreline * (1.0-steep) * (1.0-smoothstep(0.0,105.0,elevation));
     material = mix(material, wetSandColor, wetEdge * 0.38);
 
-    float alpha = clamp(beach*0.50 + rocky*0.54 + cliffCoast*0.72, 0.0, 0.72) * exposure;
+    float alpha = clamp(beach*0.70 + rocky*0.74 + cliffCoast*0.96, 0.0, 0.96) * exposure;
     outColor = vec4(material, alpha);
 }`;
