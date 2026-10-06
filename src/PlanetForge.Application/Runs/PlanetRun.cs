@@ -58,6 +58,7 @@ public sealed class PlanetRun(
     private bool researchChoiceAvailable;
     private PlanetWaterSurvey? waterSurvey;
     private PlanetWaterCycleState? waterCycle;
+    private PlanetHydrologyFeatures? waterFeatures;
 
     public IReadOnlyList<PlanetRunEraDefinition> Eras => EraDefinitions;
 
@@ -71,6 +72,7 @@ public sealed class PlanetRun(
         researchChoiceAvailable = false;
         waterSurvey = null;
         waterCycle = null;
+        waterFeatures = null;
         journal.Clear();
         researchUnlocks.Clear();
         AddJournalEntry(
@@ -126,7 +128,7 @@ public sealed class PlanetRun(
     public PlanetWaterWorldSimulationResult SimulateWaterWorld(CancellationToken cancellationToken)
     {
         EnsureWaterWorld();
-        var features = BuildWaterFeatures(cancellationToken);
+        var features = EnsureWaterFeatures(cancellationToken);
         EnsureWaterSurvey(features);
 
         var planet = CurrentMission.Planet;
@@ -222,6 +224,12 @@ public sealed class PlanetRun(
         return CreateSnapshot();
     }
 
+    private PlanetHydrologyFeatures EnsureWaterFeatures(CancellationToken cancellationToken)
+    {
+        waterFeatures ??= BuildWaterFeatures(cancellationToken);
+        return waterFeatures;
+    }
+
     private PlanetHydrologyFeatures BuildWaterFeatures(CancellationToken cancellationToken)
     {
         var planet = CurrentMission.Planet;
@@ -241,7 +249,7 @@ public sealed class PlanetRun(
             return;
         }
 
-        EnsureWaterSurvey(BuildWaterFeatures(cancellationToken));
+        EnsureWaterSurvey(EnsureWaterFeatures(cancellationToken));
     }
 
     private void EnsureWaterSurvey(PlanetHydrologyFeatures features)
