@@ -119,7 +119,8 @@ function adaptSnapshot(snapshot) {
         ...snapshot,
         climateFeedback: {
             ...feedback,
-            landIceFraction: visibleLandIceFraction
+            landIceFraction: visibleLandIceFraction,
+            snowCoverFraction: nearFrozen ? 1.0 : feedback.snowCoverFraction
         }
     };
 }
