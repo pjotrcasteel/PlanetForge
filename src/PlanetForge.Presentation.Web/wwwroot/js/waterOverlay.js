@@ -213,10 +213,11 @@ function buildRiverSegments(s, paths) {
             const path = riverPath[pathIndex];
             const from = unitPoint(path.fromX, path.fromY, path.fromZ);
             const to = unitPoint(path.toX, path.toY, path.toZ);
+            const bend = chooseTerrainRiverBend(s, from, to);
             for (let sampleIndex = 0; sampleIndex < riverSamplesPerSegment; sampleIndex++) {
                 if (pathIndex > 0 && sampleIndex === 0) continue;
                 const t = sampleIndex / (riverSamplesPerSegment - 1);
-                const direction = sphericalInterpolate(from, to, t);
+                const direction = terrainRiverDirection(from, to, bend, t);
                 const terrainElevation = sampleTerrainElevation(s, direction);
                 minimumElevation = Math.min(minimumElevation, terrainElevation);
                 maximumElevation = Math.max(maximumElevation, terrainElevation);
@@ -240,6 +241,45 @@ function buildRiverSegments(s, paths) {
     s.metrics.minimumRiverElevationMeters = Number.isFinite(minimumElevation) ? minimumElevation : null;
     s.metrics.maximumRiverElevationMeters = Number.isFinite(maximumElevation) ? maximumElevation : null;
     return segments;
+}
+
+function chooseTerrainRiverBend(s, from, to) {
+    const angle = Math.acos(clamp(dot(from, to), -1.0, 1.0));
+    if (angle < 0.00001) return 0.0;
+
+    const routeNormal = safeNormalize(cross(from, to), createSurfaceTangent(from));
+    const midpoint = sphericalInterpolate(from, to, 0.5);
+    const bendCandidates = [-0.18, -0.09, 0.0, 0.09, 0.18];
+    let bestBend = 0.0;
+    let bestScore = Number.POSITIVE_INFINITY;
+    for (const bend of bendCandidates) {
+        const offset = bend * angle;
+        const candidate = normalize([
+            midpoint[0] * Math.cos(offset) + routeNormal[0] * Math.sin(offset),
+            midpoint[1] * Math.cos(offset) + routeNormal[1] * Math.sin(offset),
+            midpoint[2] * Math.cos(offset) + routeNormal[2] * Math.sin(offset)
+        ]);
+        const elevation = sampleTerrainElevation(s, candidate);
+        const score = elevation + (Math.abs(bend) * 900.0);
+        if (score >= bestScore) continue;
+        bestScore = score;
+        bestBend = bend;
+    }
+    return bestBend;
+}
+
+function terrainRiverDirection(from, to, bend, t) {
+    const base = sphericalInterpolate(from, to, t);
+    if (bend === 0.0 || t <= 0.0 || t >= 1.0) return base;
+
+    const angle = Math.acos(clamp(dot(from, to), -1.0, 1.0));
+    const routeNormal = safeNormalize(cross(from, to), createSurfaceTangent(base));
+    const offset = bend * angle * Math.sin(Math.PI * t);
+    return normalize([
+        base[0] * Math.cos(offset) + routeNormal[0] * Math.sin(offset),
+        base[1] * Math.cos(offset) + routeNormal[1] * Math.sin(offset),
+        base[2] * Math.cos(offset) + routeNormal[2] * Math.sin(offset)
+    ]);
 }
 
 function buildConnectedRiverPaths(paths) {
@@ -512,8 +552,8 @@ function drawRiver(context, river, eye, viewProjection, width, height) {
     const orderScale = clamp((river.streamOrder - 1) * 0.16, 0.0, 0.58);
     const coreWidth = 0.55 + (river.discharge * 1.55) + orderScale;
     for (const points of visibleRuns) {
-        drawSmoothPolyline(context, points, `rgba(8, 38, 50, ${0.52 + river.discharge * 0.14})`, coreWidth + 0.95);
-        drawSmoothPolyline(context, points, `rgba(41, 121, 143, ${0.66 + river.discharge * 0.18})`, coreWidth);
+        drawSmoothPolyline(context, points, `rgba(7, 31, 39, ${0.34 + river.discharge * 0.12})`, coreWidth + 0.85);
+        drawSmoothPolyline(context, points, `rgba(27, 91, 108, ${0.46 + river.discharge * 0.16})`, coreWidth);
     }
 }
 
