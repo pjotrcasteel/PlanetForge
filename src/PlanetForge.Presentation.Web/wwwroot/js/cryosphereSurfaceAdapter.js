@@ -110,7 +110,11 @@ function adaptSnapshot(snapshot) {
     if (!Number.isFinite(inherited)) return snapshot;
 
     const physicalFraction = Math.max(0.0, Math.min(1.0, inherited));
-    const visibleLandIceFraction = physicalFraction >= 0.999 ? 1.0 : Math.pow(physicalFraction, 2.2);
+    const seaIceFraction = feedback.seaIceFraction ?? feedback.cryosphereFraction;
+    const nearFrozen = physicalFraction >= 0.95 && (!Number.isFinite(seaIceFraction) || seaIceFraction >= 0.99);
+    const preservedHighIce = physicalFraction >= 0.85;
+    const visibleLandIceFraction = nearFrozen ? 1.0 : preservedHighIce ? physicalFraction : 0.85 * Math.pow(physicalFraction / 0.85, 2.2);
+
     return {
         ...snapshot,
         climateFeedback: {
