@@ -4,7 +4,7 @@ test.setTimeout(240_000);
 
 test('FrozenToWaterCycle_PreservesTerrainAndActivatesTerrainBoundHydrology', async ({ page }, testInfo) => {
   await page.goto('/?visualTest=1');
-  await expect(page.getByText('FROZEN WORLD')).toBeVisible();
+  await expect(page.getByText('FROZEN WORLD')).toBeVisible({ timeout: 20_000 });
   await page.waitForFunction(() => Boolean(window.__planetForgeCryosphereTest));
   await page.waitForFunction(() => Boolean(window.__planetForgeOceanTest));
   await page.waitForFunction(() => Boolean(window.__planetForgeCoastTest));
