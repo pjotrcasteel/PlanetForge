@@ -7,14 +7,14 @@ export function initialize(overlayCanvasId, inputCanvasId, snapshot) {
     const adapted = adaptSnapshot(snapshot);
     surface.initialize(overlayCanvasId, inputCanvasId, adapted);
     ocean.initialize(inputCanvasId, adapted);
-    coast.initialize(inputCanvasId, adapted);
+    coast.initialize(inputCanvasId, adaptCoastalSnapshot(adapted));
 }
 
 export function setPlanet(snapshot) {
     const adapted = adaptSnapshot(snapshot);
     surface.setPlanet(adapted);
     ocean.setPlanet(adapted);
-    coast.setPlanet(adapted);
+    coast.setPlanet(adaptCoastalSnapshot(adapted));
 }
 
 export function dispose() {
@@ -42,6 +42,20 @@ function ensureCoastalCanvas(inputCanvasId) {
 
     const waterOverlay = document.getElementById('water-overlay-canvas');
     parent.insertBefore(canvas, waterOverlay ?? null);
+}
+
+function adaptCoastalSnapshot(snapshot) {
+    const feedback = snapshot?.climateFeedback;
+    const landIceFraction = feedback?.landIceFraction;
+    if (!feedback || !Number.isFinite(landIceFraction)) return snapshot;
+
+    return {
+        ...snapshot,
+        climateFeedback: {
+            ...feedback,
+            snowCoverFraction: landIceFraction
+        }
+    };
 }
 
 function adaptSnapshot(snapshot) {
