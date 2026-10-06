@@ -3,6 +3,7 @@ import * as ocean from './oceanDepthSurface.js';
 import * as coast from './coastalSurface.js';
 
 export function initialize(overlayCanvasId, inputCanvasId, snapshot) {
+    ensureCoastalCanvas(inputCanvasId);
     const adapted = adaptSnapshot(snapshot);
     surface.initialize(overlayCanvasId, inputCanvasId, adapted);
     ocean.initialize(inputCanvasId, adapted);
@@ -18,8 +19,29 @@ export function setPlanet(snapshot) {
 
 export function dispose() {
     coast.dispose();
+    document.getElementById('coastal-relief-canvas')?.remove();
     ocean.dispose();
     surface.dispose();
+}
+
+function ensureCoastalCanvas(inputCanvasId) {
+    if (document.getElementById('coastal-relief-canvas')) return;
+    const inputCanvas = document.getElementById(inputCanvasId);
+    const parent = inputCanvas?.parentElement;
+    if (!parent) return;
+
+    const canvas = document.createElement('canvas');
+    canvas.id = 'coastal-relief-canvas';
+    canvas.setAttribute('aria-hidden', 'true');
+    canvas.style.position = 'absolute';
+    canvas.style.inset = '0';
+    canvas.style.width = '100%';
+    canvas.style.height = '100%';
+    canvas.style.zIndex = '4';
+    canvas.style.pointerEvents = 'none';
+
+    const waterOverlay = document.getElementById('water-overlay-canvas');
+    parent.insertBefore(canvas, waterOverlay ?? null);
 }
 
 function adaptSnapshot(snapshot) {
