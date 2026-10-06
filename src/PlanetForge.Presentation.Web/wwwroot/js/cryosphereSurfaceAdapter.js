@@ -5,6 +5,7 @@ import * as coast from './coastalReliefSurface.js';
 export function initialize(overlayCanvasId, inputCanvasId, snapshot) {
     ensureCoastalCanvas(inputCanvasId);
     const adapted = adaptSnapshot(snapshot);
+    exposeCoastalMeshStats(adapted);
     surface.initialize(overlayCanvasId, inputCanvasId, adapted);
     ocean.initialize(inputCanvasId, adapted);
     coast.initialize(inputCanvasId, adapted);
@@ -12,6 +13,7 @@ export function initialize(overlayCanvasId, inputCanvasId, snapshot) {
 
 export function setPlanet(snapshot) {
     const adapted = adaptSnapshot(snapshot);
+    exposeCoastalMeshStats(adapted);
     surface.setPlanet(adapted);
     ocean.setPlanet(adapted);
     coast.setPlanet(adapted);
@@ -20,6 +22,7 @@ export function setPlanet(snapshot) {
 export function dispose() {
     coast.dispose();
     document.getElementById('coastal-relief-canvas')?.remove();
+    if (window.__planetForgeCoastMeshStats) delete window.__planetForgeCoastMeshStats;
     ocean.dispose();
     surface.dispose();
 }
@@ -42,6 +45,34 @@ function ensureCoastalCanvas(inputCanvasId) {
 
     const waterOverlay = document.getElementById('water-overlay-canvas');
     parent.insertBefore(canvas, waterOverlay ?? null);
+}
+
+function exposeCoastalMeshStats(snapshot) {
+    if (!new URLSearchParams(window.location.search).has('visualTest')) return;
+    const radiusMeters = snapshot?.physicalParameters?.radiusMeters ?? 6_371_000.0;
+    let minimum = Number.POSITIVE_INFINITY;
+    let maximum = Number.NEGATIVE_INFINITY;
+    let nearSea = 0;
+    let lowLand = 0;
+    let land = 0;
+    let ocean = 0;
+    let vertices = 0;
+
+    for (const tile of snapshot?.surfaceTiles ?? []) {
+        const positions = tile?.positions ?? [];
+        for (let index = 0; index + 2 < positions.length; index += 3) {
+            const radius = Math.hypot(positions[index], positions[index + 1], positions[index + 2]);
+            const elevation = (radius - 1.0) * radiusMeters;
+            minimum = Math.min(minimum, elevation);
+            maximum = Math.max(maximum, elevation);
+            if (Math.abs(elevation) <= 2_000.0) nearSea++;
+            if (elevation >= 0.0 && elevation <= 5_000.0) lowLand++;
+            if (elevation >= 0.0) land++; else ocean++;
+            vertices++;
+        }
+    }
+
+    window.__planetForgeCoastMeshStats = { minimum, maximum, nearSea, lowLand, land, ocean, vertices };
 }
 
 function adaptSnapshot(snapshot) {
