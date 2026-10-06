@@ -12,6 +12,7 @@ test('FrozenToWaterCycle_PreservesTerrainAndActivatesTerrainBoundHydrology', asy
 
   await orientPitch(page, 0.0);
   const frozenEquatorCoverage = await measureCenterCoverage(page);
+  const frozenCryosphereTransparency = await measureCenterTransparency(page);
   const frozenCoast = await measureCoast(page);
   const frozenWater = await measureWater(page);
   await page.screenshot({ path: testInfo.outputPath('year-0-frozen.png'), fullPage: true });
@@ -22,6 +23,7 @@ test('FrozenToWaterCycle_PreservesTerrainAndActivatesTerrainBoundHydrology', asy
 
   await orientPitch(page, 0.0);
   const meltedEquatorCoverage = await measureCenterCoverage(page);
+  const meltedCryosphereTransparency = await measureCenterTransparency(page);
   const oceanDepthVariation = await page.evaluate(() => window.__planetForgeOceanTest.measureDepthVariation());
   const meltedCoast = await measureCoast(page);
   const coastMeshStats = await page.evaluate(() => window.__planetForgeCoastMeshStats);
@@ -49,7 +51,9 @@ test('FrozenToWaterCycle_PreservesTerrainAndActivatesTerrainBoundHydrology', asy
 
   const metrics = {
     frozenEquatorCoverage,
+    frozenCryosphereTransparency,
     meltedEquatorCoverage,
+    meltedCryosphereTransparency,
     oceanDepthVariation,
     frozenCoast,
     meltedCoast,
@@ -67,7 +71,9 @@ test('FrozenToWaterCycle_PreservesTerrainAndActivatesTerrainBoundHydrology', asy
   await testInfo.attach('foundation-metrics', { body: JSON.stringify(metrics, null, 2), contentType: 'application/json' });
 
   expect(frozenEquatorCoverage).toBeGreaterThan(0.80);
+  expect(frozenCryosphereTransparency).toBeLessThan(0.05);
   expect(meltedEquatorCoverage).toBeLessThan(0.15);
+  expect(meltedCryosphereTransparency).toBeGreaterThan(0.10);
 
   expect(oceanDepthVariation.sampledPixels).toBeGreaterThan(1000);
   expect(oceanDepthVariation.luminanceRange).toBeGreaterThan(0.08);
@@ -135,6 +141,10 @@ async function orientPitch(page, targetPitch) {
 
 async function measureCenterCoverage(page) {
   return page.evaluate(() => window.__planetForgeCryosphereTest.measureCenterCoverage());
+}
+
+async function measureCenterTransparency(page) {
+  return page.evaluate(() => window.__planetForgeCryosphereTest.measureCenterTransparency());
 }
 
 async function measurePolarRegionCoverage(page) {
