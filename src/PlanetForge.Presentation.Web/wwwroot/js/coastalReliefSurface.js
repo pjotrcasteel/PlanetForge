@@ -24,6 +24,7 @@ export function initialize(inputCanvasId, snapshot) {
         seaIceFraction: 1.0,
         visible: true,
         tiles: new Map(),
+        meshStats: createMeshStats(),
         dirty: true,
         attributes: {
             position: gl.getAttribLocation(program, 'aPosition'),
@@ -34,8 +35,7 @@ export function initialize(inputCanvasId, snapshot) {
             lightDirection: gl.getUniformLocation(program, 'uLightDirection'),
             cameraPosition: gl.getUniformLocation(program, 'uCameraPosition'),
             planetRadiusMeters: gl.getUniformLocation(program, 'uPlanetRadiusMeters'),
-            seaIceFraction: gl.getUniformLocation(program, 'uSeaIceFraction'),
-            depthOnly: gl.getUniformLocation(program, 'uDepthOnly')
+            seaIceFraction: gl.getUniformLocation(program, 'uSeaIceFraction')
         }
     };
 
@@ -54,9 +54,11 @@ export function setPlanet(snapshot) {
     const surfaceTiles = snapshot.surfaceTiles ?? [];
     if (surfaceTiles.length > 0) {
         const activeKeys = new Set();
+        state.meshStats = createMeshStats();
         for (const tile of surfaceTiles) {
             if (!tile?.key || !tile.surfaceVertexCount || !tile.positions?.length || !tile.normals?.length) continue;
             activeKeys.add(tile.key);
+            recordMeshStats(state.meshStats, tile.positions, state.planetRadiusMeters);
             replaceTile(state, tile);
         }
         for (const [key, tile] of state.tiles) {
@@ -64,6 +66,7 @@ export function setPlanet(snapshot) {
             deleteTileBuffers(state.gl, tile);
             state.tiles.delete(key);
         }
+        finalizeMeshStats(state.meshStats);
     }
     state.dirty = true;
 }
@@ -75,6 +78,27 @@ export function dispose() {
     state.tiles.clear();
     state.gl.deleteProgram(state.program);
     state = null;
+}
+
+function createMeshStats() {
+    return { minimum: Number.POSITIVE_INFINITY, maximum: Number.NEGATIVE_INFINITY, minimumLand: Number.POSITIVE_INFINITY, maximumOcean: Number.NEGATIVE_INFINITY, nearSea: 0, lowLand: 0, vertices: 0 };
+}
+
+function recordMeshStats(stats, positions, radiusMeters) {
+    for (let index = 0; index + 2 < positions.length; index += 3) {
+        const elevation = (Math.hypot(positions[index], positions[index + 1], positions[index + 2]) - 1.0) * radiusMeters;
+        stats.minimum = Math.min(stats.minimum, elevation);
+        stats.maximum = Math.max(stats.maximum, elevation);
+        if (elevation >= 0.0) stats.minimumLand = Math.min(stats.minimumLand, elevation);
+        else stats.maximumOcean = Math.max(stats.maximumOcean, elevation);
+        if (Math.abs(elevation) <= 5000.0) stats.nearSea++;
+        if (elevation >= 0.0 && elevation <= 12000.0) stats.lowLand++;
+        stats.vertices++;
+    }
+}
+
+function finalizeMeshStats(stats) {
+    for (const key of ['minimum', 'maximum', 'minimumLand', 'maximumOcean']) if (!Number.isFinite(stats[key])) stats[key] = null;
 }
 
 function replaceTile(s, tile) {
@@ -126,7 +150,7 @@ function installVisualTestApi() {
     if (!new URLSearchParams(window.location.search).has('visualTest')) return;
     window.__planetForgeCoastTest = {
         measure() {
-            if (!state) return { visiblePixels: 0, maximumAlpha: 0.0, glError: -1 };
+            if (!state) return { visiblePixels: 0, maximumAlpha: 0.0, meshStats: null, glError: -1 };
             draw(state);
             state.dirty = false;
             return measureCoast(state);
@@ -145,7 +169,7 @@ function measureCoast(s) {
         maximumAlpha = Math.max(maximumAlpha, alpha);
         if (alpha > 0.05) visiblePixels++;
     }
-    return { visiblePixels, maximumAlpha, glError: gl.getError() };
+    return { visiblePixels, maximumAlpha, meshStats: s.meshStats, glError: gl.getError() };
 }
 
 function render() {
@@ -177,34 +201,21 @@ function draw(s) {
     const viewProjection = multiply(projection, lookAt(eye, [0, 0, 0], [0, 1, 0]));
 
     gl.enable(gl.DEPTH_TEST);
+    gl.depthMask(true);
+    gl.depthFunc(gl.LESS);
     gl.enable(gl.CULL_FACE);
     gl.frontFace(gl.CCW);
     gl.cullFace(gl.BACK);
+    gl.enable(gl.BLEND);
+    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
     gl.useProgram(program);
     gl.uniformMatrix4fv(s.uniforms.viewProjection, false, viewProjection);
     gl.uniform3f(s.uniforms.lightDirection, 0.72, 0.42, 0.55);
     gl.uniform3f(s.uniforms.cameraPosition, eye[0], eye[1], eye[2]);
     gl.uniform1f(s.uniforms.planetRadiusMeters, s.planetRadiusMeters);
     gl.uniform1f(s.uniforms.seaIceFraction, s.seaIceFraction);
-
-    gl.disable(gl.BLEND);
-    gl.depthMask(true);
-    gl.depthFunc(gl.LESS);
-    gl.colorMask(false, false, false, false);
-    gl.uniform1i(s.uniforms.depthOnly, 1);
     drawTiles(s);
-
-    gl.colorMask(true, true, true, true);
-    gl.depthMask(false);
-    gl.depthFunc(gl.LEQUAL);
-    gl.enable(gl.BLEND);
-    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
-    gl.uniform1i(s.uniforms.depthOnly, 0);
-    drawTiles(s);
-
     gl.disable(gl.BLEND);
-    gl.depthMask(true);
-    gl.depthFunc(gl.LESS);
 }
 
 function drawTiles(s) {
@@ -241,27 +252,12 @@ function compile(gl, type, source) {
     return shader;
 }
 
-function orbitEye(yaw, pitch, distance) {
-    const cp = Math.cos(pitch);
-    return [distance * cp * Math.sin(yaw), distance * Math.sin(pitch), distance * cp * Math.cos(yaw)];
-}
-function perspective(fov, aspect, near, far) {
-    const f = 1 / Math.tan(fov / 2), nf = 1 / (near - far);
-    return new Float32Array([f/aspect,0,0,0, 0,f,0,0, 0,0,(far+near)*nf,-1, 0,0,2*far*near*nf,0]);
-}
-function lookAt(eye, center, up) {
-    const z = normalize([eye[0]-center[0], eye[1]-center[1], eye[2]-center[2]]);
-    const x = normalize(cross(up, z));
-    const y = cross(z, x);
-    return new Float32Array([x[0],y[0],z[0],0, x[1],y[1],z[1],0, x[2],y[2],z[2],0, -dot(x,eye),-dot(y,eye),-dot(z,eye),1]);
-}
-function multiply(a, b) {
-    const out = new Float32Array(16);
-    for (let column = 0; column < 4; column++) for (let row = 0; row < 4; row++) out[column*4+row] = a[row]*b[column*4] + a[4+row]*b[column*4+1] + a[8+row]*b[column*4+2] + a[12+row]*b[column*4+3];
-    return out;
-}
-function normalize(v) { const length = Math.hypot(v[0],v[1],v[2]) || 1.0; return [v[0]/length,v[1]/length,v[2]/length]; }
-function cross(a,b) { return [a[1]*b[2]-a[2]*b[1], a[2]*b[0]-a[0]*b[2], a[0]*b[1]-a[1]*b[0]]; }
+function orbitEye(yaw, pitch, distance) { const cp=Math.cos(pitch); return [distance*cp*Math.sin(yaw), distance*Math.sin(pitch), distance*cp*Math.cos(yaw)]; }
+function perspective(fov, aspect, near, far) { const f=1/Math.tan(fov/2), nf=1/(near-far); return new Float32Array([f/aspect,0,0,0,0,f,0,0,0,0,(far+near)*nf,-1,0,0,2*far*near*nf,0]); }
+function lookAt(eye,center,up) { const z=normalize([eye[0]-center[0],eye[1]-center[1],eye[2]-center[2]]),x=normalize(cross(up,z)),y=cross(z,x); return new Float32Array([x[0],y[0],z[0],0,x[1],y[1],z[1],0,x[2],y[2],z[2],0,-dot(x,eye),-dot(y,eye),-dot(z,eye),1]); }
+function multiply(a,b) { const out=new Float32Array(16); for(let c=0;c<4;c++) for(let r=0;r<4;r++) out[c*4+r]=a[r]*b[c*4]+a[4+r]*b[c*4+1]+a[8+r]*b[c*4+2]+a[12+r]*b[c*4+3]; return out; }
+function normalize(v) { const length=Math.hypot(v[0],v[1],v[2])||1; return [v[0]/length,v[1]/length,v[2]/length]; }
+function cross(a,b) { return [a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]]; }
 function dot(a,b) { return a[0]*b[0]+a[1]*b[1]+a[2]*b[2]; }
 function clamp(value,min,max) { return Math.max(min,Math.min(max,value)); }
 
@@ -276,17 +272,17 @@ out vec3 vVisualNormal;
 out float vPhysicalSlope;
 out float vElevationMeters;
 void main() {
-    float physicalRadius = length(aPosition);
-    vec3 radial = normalize(aPosition);
-    vec3 physicalNormal = normalize(aNormal);
-    if (dot(physicalNormal, radial) < 0.0) physicalNormal = -physicalNormal;
-    vec3 tangentNormal = physicalNormal - radial * dot(physicalNormal, radial);
-    vDirection = radial;
-    vVisualNormal = normalize(radial + tangentNormal * ${visualNormalExaggeration.toFixed(1)});
-    vPhysicalSlope = clamp(1.0 - dot(physicalNormal, radial), 0.0, 0.5);
-    vElevationMeters = (physicalRadius - 1.0) * uPlanetRadiusMeters;
-    float visualRadius = 1.0 + ((vElevationMeters * ${landReliefExaggeration.toFixed(1)}) / uPlanetRadiusMeters);
-    gl_Position = uViewProjection * vec4(radial * visualRadius, 1.0);
+    float physicalRadius=length(aPosition);
+    vec3 radial=normalize(aPosition);
+    vec3 physicalNormal=normalize(aNormal);
+    if(dot(physicalNormal,radial)<0.0) physicalNormal=-physicalNormal;
+    vec3 tangentNormal=physicalNormal-radial*dot(physicalNormal,radial);
+    vDirection=radial;
+    vVisualNormal=normalize(radial+tangentNormal*${visualNormalExaggeration.toFixed(1)});
+    vPhysicalSlope=clamp(1.0-dot(physicalNormal,radial),0.0,0.5);
+    vElevationMeters=(physicalRadius-1.0)*uPlanetRadiusMeters;
+    float visualRadius=1.0+((vElevationMeters*${landReliefExaggeration.toFixed(1)})/uPlanetRadiusMeters);
+    gl_Position=uViewProjection*vec4(radial*visualRadius,1.0);
 }`;
 
 const fragmentShaderSource = `#version 300 es
@@ -298,65 +294,40 @@ in float vElevationMeters;
 uniform vec3 uLightDirection;
 uniform vec3 uCameraPosition;
 uniform float uSeaIceFraction;
-uniform bool uDepthOnly;
 out vec4 outColor;
 
-float hash31(vec3 p) {
-    p = fract(p * 0.1031);
-    p += dot(p, p.yzx + 33.33);
-    return fract((p.x + p.y) * p.z);
-}
-float noise3(vec3 p) {
-    vec3 c=floor(p), l=fract(p), f=l*l*(3.0-2.0*l);
-    float a=hash31(c),b=hash31(c+vec3(1,0,0)),d=hash31(c+vec3(0,1,0)),e=hash31(c+vec3(1,1,0));
-    float g=hash31(c+vec3(0,0,1)),h=hash31(c+vec3(1,0,1)),i=hash31(c+vec3(0,1,1)),j=hash31(c+vec3(1));
-    return mix(mix(mix(a,b,f.x),mix(d,e,f.x),f.y),mix(mix(g,h,f.x),mix(i,j,f.x),f.y),f.z);
-}
+float hash31(vec3 p){p=fract(p*0.1031);p+=dot(p,p.yzx+33.33);return fract((p.x+p.y)*p.z);}
+float noise3(vec3 p){vec3 c=floor(p),l=fract(p),f=l*l*(3.0-2.0*l);float a=hash31(c),b=hash31(c+vec3(1,0,0)),d=hash31(c+vec3(0,1,0)),e=hash31(c+vec3(1,1,0)),g=hash31(c+vec3(0,0,1)),h=hash31(c+vec3(1,0,1)),i=hash31(c+vec3(0,1,1)),j=hash31(c+vec3(1));return mix(mix(mix(a,b,f.x),mix(d,e,f.x),f.y),mix(mix(g,h,f.x),mix(i,j,f.x),f.y),f.z);}
 
-void main() {
-    if (uDepthOnly) { outColor=vec4(0.0); return; }
-    if (vElevationMeters < 0.0) discard;
-
+void main(){
+    if(vElevationMeters<0.0) discard;
     float elevation=vElevationMeters;
-    vec3 radial=normalize(vDirection);
-    vec3 normal=normalize(vVisualNormal);
-    vec3 viewDirection=normalize(uCameraPosition-radial);
-    if (dot(radial,viewDirection)<=0.0) discard;
+    vec3 radial=normalize(vDirection),normal=normalize(vVisualNormal),viewDirection=normalize(uCameraPosition-radial);
+    if(dot(radial,viewDirection)<=0.0) discard;
 
-    float shoreline=1.0-smoothstep(20.0,420.0,elevation);
-    float cliffReach=1.0-smoothstep(220.0,1150.0,elevation);
+    float shoreline=1.0-smoothstep(80.0,2500.0,elevation);
+    float cliffReach=1.0-smoothstep(900.0,6500.0,elevation);
     float slope=smoothstep(0.002,0.024,vPhysicalSlope);
     float steep=smoothstep(0.011,0.052,vPhysicalSlope);
     float cliff=smoothstep(0.024,0.078,vPhysicalSlope);
-    float macro=noise3(radial*17.0+vec3(4,-3,7));
-    float detail=noise3(radial*43.0+vec3(-6,5,2));
+    float macro=noise3(radial*17.0+vec3(4,-3,7)),detail=noise3(radial*43.0+vec3(-6,5,2));
     float breakup=clamp(macro*0.68+detail*0.32,0.0,1.0);
-
     float beach=shoreline*(1.0-steep)*smoothstep(0.22,0.60,breakup);
     float rocky=shoreline*smoothstep(0.10,0.72,slope)*(1.0-cliff*0.48);
     float cliffCoast=cliffReach*cliff;
     float exposure=smoothstep(0.06,0.72,1.0-clamp(uSeaIceFraction,0.0,1.0));
-    if (max(beach,max(rocky*0.92,cliffCoast))*exposure<0.018) discard;
+    if(max(beach,max(rocky*0.92,cliffCoast))*exposure<0.018) discard;
 
-    vec3 beachColor=vec3(0.68,0.59,0.43);
-    vec3 wetSand=vec3(0.40,0.38,0.31);
-    vec3 rockColor=vec3(0.30,0.29,0.27);
-    vec3 cliffColor=vec3(0.15,0.16,0.16);
-    vec3 cliffTop=vec3(0.50,0.45,0.36);
+    vec3 beachColor=vec3(0.68,0.59,0.43),wetSand=vec3(0.40,0.38,0.31),rockColor=vec3(0.30,0.29,0.26),cliffColor=vec3(0.15,0.16,0.16),cliffTop=vec3(0.50,0.45,0.36);
     vec3 material=mix(beachColor,rockColor,clamp(rocky,0.0,1.0));
     material=mix(material,cliffColor,clamp(cliffCoast,0.0,1.0));
-
     vec3 light=normalize(uLightDirection);
-    float direct=max(dot(normal,light),0.0);
-    float radialDirect=max(dot(radial,light),0.0);
-    float faceDelta=clamp(direct-radialDirect,-0.45,0.45);
+    float direct=max(dot(normal,light),0.0),radialDirect=max(dot(radial,light),0.0),faceDelta=clamp(direct-radialDirect,-0.45,0.45);
     float illumination=clamp(0.66+0.36*direct,0.40,1.04)*(1.0-max(-faceDelta,0.0)*0.92-cliffCoast*0.24);
     material*=illumination;
-    float cliffHighlight=cliffCoast*smoothstep(0.20,0.78,direct)*smoothstep(0.18,0.62,breakup);
-    material=mix(material,cliffTop,cliffHighlight*0.50);
-    float wetEdge=shoreline*(1.0-steep)*(1.0-smoothstep(0.0,120.0,elevation));
+    material=mix(material,cliffTop,cliffCoast*smoothstep(0.20,0.78,direct)*smoothstep(0.18,0.62,breakup)*0.50);
+    float wetEdge=shoreline*(1.0-steep)*(1.0-smoothstep(0.0,520.0,elevation));
     material=mix(material,wetSand,wetEdge*0.40);
-
-    float alpha=clamp(beach*0.72+rocky*0.76+cliffCoast*0.96,0.0,0.96)*exposure;
+    float alpha=clamp(beach*0.68+rocky*0.72+cliffCoast*0.94,0.0,0.94)*exposure;
     outColor=vec4(material,alpha);
 }`;
