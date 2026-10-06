@@ -5,9 +5,11 @@ test('FrozenToMelting_PreservesFragmentedPolarIceAndThawsEquator', async ({ page
   await expect(page.getByText('FROZEN WORLD')).toBeVisible();
   await page.waitForFunction(() => Boolean(window.__planetForgeCryosphereTest));
   await page.waitForFunction(() => Boolean(window.__planetForgeOceanTest));
+  await page.waitForFunction(() => Boolean(window.__planetForgeCoastTest));
 
   await orientPitch(page, 0.0);
   const frozenEquatorCoverage = await measureCenterCoverage(page);
+  const frozenCoast = await measureCoast(page);
   await page.screenshot({ path: testInfo.outputPath('year-0-frozen.png'), fullPage: true });
 
   await page.getByRole('button', { name: 'NEXT' }).click();
@@ -17,6 +19,8 @@ test('FrozenToMelting_PreservesFragmentedPolarIceAndThawsEquator', async ({ page
   await orientPitch(page, 0.0);
   const meltedEquatorCoverage = await measureCenterCoverage(page);
   const oceanDepthVariation = await page.evaluate(() => window.__planetForgeOceanTest.measureDepthVariation());
+  const meltedCoast = await measureCoast(page);
+  const coastMeshStats = await page.evaluate(() => window.__planetForgeCoastMeshStats);
   await page.screenshot({ path: testInfo.outputPath('year-50-equator.png'), fullPage: true });
 
   await orientPitch(page, 1.25);
@@ -35,6 +39,9 @@ test('FrozenToMelting_PreservesFragmentedPolarIceAndThawsEquator', async ({ page
     frozenEquatorCoverage,
     meltedEquatorCoverage,
     oceanDepthVariation,
+    frozenCoast,
+    meltedCoast,
+    coastMeshStats,
     northPoleCoverage,
     southPoleCoverage,
     northPolarRegionCoverage,
@@ -52,6 +59,11 @@ test('FrozenToMelting_PreservesFragmentedPolarIceAndThawsEquator', async ({ page
   expect(oceanDepthVariation.luminanceRange).toBeGreaterThan(0.08);
   expect(oceanDepthVariation.maximumAlpha).toBeGreaterThan(0.995);
   expect(oceanDepthVariation.glError).toBe(0);
+
+  expect(frozenCoast.visiblePixels).toBeLessThan(50);
+  expect(meltedCoast.visiblePixels).toBeGreaterThan(100);
+  expect(meltedCoast.maximumAlpha).toBeGreaterThan(0.20);
+  expect(meltedCoast.glError).toBe(0);
 
   expect(northPolarRegionCoverage).toBeGreaterThan(0.04);
   expect(southPolarRegionCoverage).toBeGreaterThan(0.08);
@@ -102,4 +114,8 @@ async function measurePolarRegionCoverage(page) {
 
 async function measureFragmentation(page) {
   return page.evaluate(() => window.__planetForgeCryosphereTest.measureFragmentation());
+}
+
+async function measureCoast(page) {
+  return page.evaluate(() => window.__planetForgeCoastTest.measure());
 }
