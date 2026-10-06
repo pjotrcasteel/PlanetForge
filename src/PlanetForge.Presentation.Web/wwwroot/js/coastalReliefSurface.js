@@ -5,8 +5,8 @@ const minimumCameraAltitudeMeters = 3.0;
 const maximumCameraAltitudeRatio = 4.2;
 const localTransitionAltitudeMeters = 20_000.0;
 const localExitAltitudeMeters = 25_000.0;
-const landReliefExaggeration = 28.0;
-const visualNormalExaggeration = 30.0;
+const landReliefExaggeration = 32.0;
+const visualNormalExaggeration = 38.0;
 
 export function initialize(inputCanvasId, snapshot) {
     const inputCanvas = document.getElementById(inputCanvasId);
@@ -21,6 +21,7 @@ export function initialize(inputCanvasId, snapshot) {
         yaw: -0.65, pitch: 0.24, distance: 3.15,
         dragging: false, lastX: 0, lastY: 0,
         planetRadiusMeters: 6_371_000.0,
+        seaLevelMeters: 0.0,
         seaIceFraction: 1.0,
         visible: true,
         tiles: new Map(),
@@ -36,6 +37,7 @@ export function initialize(inputCanvasId, snapshot) {
             lightDirection: gl.getUniformLocation(program, 'uLightDirection'),
             cameraPosition: gl.getUniformLocation(program, 'uCameraPosition'),
             planetRadiusMeters: gl.getUniformLocation(program, 'uPlanetRadiusMeters'),
+            seaLevelMeters: gl.getUniformLocation(program, 'uSeaLevelMeters'),
             seaIceFraction: gl.getUniformLocation(program, 'uSeaIceFraction')
         }
     };
@@ -49,6 +51,7 @@ export function initialize(inputCanvasId, snapshot) {
 export function setPlanet(snapshot) {
     if (!state || !snapshot) return;
     state.planetRadiusMeters = snapshot.physicalParameters?.radiusMeters ?? state.planetRadiusMeters;
+    state.seaLevelMeters = snapshot.seaLevelMeters ?? state.seaLevelMeters;
     state.seaIceFraction = snapshot.climateFeedback?.seaIceFraction ?? snapshot.climateFeedback?.cryosphereFraction ?? state.seaIceFraction;
     state.visible = !snapshot.localSurface;
 
@@ -105,29 +108,32 @@ function finalizeMeshStats(stats) {
 function replaceTile(s, tile) {
     const existing = s.tiles.get(tile.key);
     if (existing) deleteTileBuffers(s.gl, existing);
-    const coastFlags = createCoastFlags(tile.positions, s.planetRadiusMeters);
-    for (const flag of coastFlags) if (flag > 0.5) s.meshStats.coastalVertices++;
+    const coastFlags = createCoastWeights(tile.positions, s.planetRadiusMeters, s.seaLevelMeters);
+    for (const flag of coastFlags) if (flag > 0.05) s.meshStats.coastalVertices++;
     const positionBuffer = createBuffer(s.gl, tile.positions);
     const normalBuffer = createBuffer(s.gl, tile.normals);
     const coastBuffer = createBuffer(s.gl, coastFlags);
     s.tiles.set(tile.key, { positionBuffer, normalBuffer, coastBuffer, vertexCount: tile.surfaceVertexCount });
 }
 
-function createCoastFlags(positions, radiusMeters) {
+function createCoastWeights(positions, radiusMeters, seaLevelMeters) {
     const vertexCount = Math.floor(positions.length / 3);
-    const flags = new Float32Array(vertexCount);
+    const weights = new Float32Array(vertexCount);
     for (let vertex = 0; vertex + 2 < vertexCount; vertex += 3) {
         const elevations = [0, 1, 2].map(offset => {
             const index = (vertex + offset) * 3;
-            return (Math.hypot(positions[index], positions[index + 1], positions[index + 2]) - 1.0) * radiusMeters;
+            return ((Math.hypot(positions[index], positions[index + 1], positions[index + 2]) - 1.0) * radiusMeters) - seaLevelMeters;
         });
         const crossesSeaLevel = Math.min(...elevations) < 0.0 && Math.max(...elevations) >= 0.0;
         if (!crossesSeaLevel) continue;
-        flags[vertex] = 1.0;
-        flags[vertex + 1] = 1.0;
-        flags[vertex + 2] = 1.0;
+
+        for (let offset = 0; offset < 3; offset++) {
+            const relativeElevation = elevations[offset];
+            const landProximity = relativeElevation >= 0.0 ? 1.0 - clamp(relativeElevation / 1_600.0, 0.0, 1.0) : 0.0;
+            weights[vertex + offset] = Math.max(weights[vertex + offset], landProximity);
+        }
     }
-    return flags;
+    return weights;
 }
 
 function createBuffer(gl, values) {
@@ -235,6 +241,7 @@ function draw(s) {
     gl.uniform3f(s.uniforms.lightDirection, 0.72, 0.42, 0.55);
     gl.uniform3f(s.uniforms.cameraPosition, eye[0], eye[1], eye[2]);
     gl.uniform1f(s.uniforms.planetRadiusMeters, s.planetRadiusMeters);
+    gl.uniform1f(s.uniforms.seaLevelMeters, s.seaLevelMeters);
     gl.uniform1f(s.uniforms.seaIceFraction, s.seaIceFraction);
     drawTiles(s);
     gl.disable(gl.BLEND);
@@ -293,6 +300,7 @@ in vec3 aNormal;
 in float aCoast;
 uniform mat4 uViewProjection;
 uniform float uPlanetRadiusMeters;
+uniform float uSeaLevelMeters;
 out vec3 vDirection;
 out vec3 vVisualNormal;
 out float vPhysicalSlope;
@@ -322,6 +330,7 @@ in float vElevationMeters;
 in float vCoast;
 uniform vec3 uLightDirection;
 uniform vec3 uCameraPosition;
+uniform float uSeaLevelMeters;
 uniform float uSeaIceFraction;
 out vec4 outColor;
 
@@ -329,26 +338,26 @@ float hash31(vec3 p){p=fract(p*0.1031);p+=dot(p,p.yzx+33.33);return fract((p.x+p
 float noise3(vec3 p){vec3 c=floor(p),l=fract(p),f=l*l*(3.0-2.0*l);float a=hash31(c),b=hash31(c+vec3(1,0,0)),d=hash31(c+vec3(0,1,0)),e=hash31(c+vec3(1,1,0)),g=hash31(c+vec3(0,0,1)),h=hash31(c+vec3(1,0,1)),i=hash31(c+vec3(0,1,1)),j=hash31(c+vec3(1));return mix(mix(mix(a,b,f.x),mix(d,e,f.x),f.y),mix(mix(g,h,f.x),mix(i,j,f.x),f.y),f.z);}
 
 void main(){
-    if(vCoast<0.5||vElevationMeters<0.0) discard;
-    float elevation=vElevationMeters;
+    float elevation=vElevationMeters-uSeaLevelMeters;
+    if(vCoast<0.02||elevation<0.0) discard;
     vec3 radial=normalize(vDirection),normal=normalize(vVisualNormal),viewDirection=normalize(uCameraPosition-radial);
     if(dot(radial,viewDirection)<=0.0) discard;
 
-    float shoreline=1.0-smoothstep(30.0,850.0,elevation);
-    float rockyReach=1.0-smoothstep(180.0,1600.0,elevation);
-    float cliffReach=1.0-smoothstep(350.0,2400.0,elevation);
-    float slope=smoothstep(0.003,0.028,vPhysicalSlope);
-    float steep=smoothstep(0.014,0.058,vPhysicalSlope);
-    float cliff=smoothstep(0.030,0.085,vPhysicalSlope);
+    float shoreline=(1.0-smoothstep(20.0,520.0,elevation))*smoothstep(0.015,0.30,vCoast);
+    float rockyReach=(1.0-smoothstep(120.0,1200.0,elevation))*smoothstep(0.02,0.45,vCoast);
+    float cliffReach=(1.0-smoothstep(220.0,1900.0,elevation))*smoothstep(0.02,0.38,vCoast);
+    float slope=smoothstep(0.003,0.030,vPhysicalSlope);
+    float steep=smoothstep(0.020,0.085,vPhysicalSlope);
+    float cliff=smoothstep(0.085,0.220,vPhysicalSlope);
     float macro=noise3(radial*17.0+vec3(4,-3,7)),detail=noise3(radial*43.0+vec3(-6,5,2));
     float breakup=clamp(macro*0.42+detail*0.58,0.0,1.0);
-    float beach=shoreline*(1.0-steep)*smoothstep(0.34,0.66,breakup);
-    float rocky=rockyReach*smoothstep(0.08,0.78,slope)*(1.0-cliff*0.55);
+    float beach=shoreline*(1.0-smoothstep(0.0,0.72,steep))*smoothstep(0.22,0.58,breakup);
+    float rocky=rockyReach*smoothstep(0.12,0.82,slope)*(1.0-cliff*0.62);
     float cliffCoast=cliffReach*cliff;
     float exposure=smoothstep(0.06,0.72,1.0-clamp(uSeaIceFraction,0.0,1.0));
     if(max(beach,max(rocky*0.92,cliffCoast))*exposure<0.020) discard;
 
-    vec3 beachColor=vec3(0.67,0.58,0.42),wetSand=vec3(0.37,0.36,0.30),rockColor=vec3(0.30,0.29,0.27),cliffColor=vec3(0.15,0.16,0.16),cliffTop=vec3(0.48,0.44,0.36);
+    vec3 beachColor=vec3(0.72,0.62,0.44),wetSand=vec3(0.34,0.33,0.28),rockColor=vec3(0.29,0.28,0.26),cliffColor=vec3(0.12,0.13,0.13),cliffTop=vec3(0.50,0.46,0.38);
     vec3 material=mix(beachColor,rockColor,clamp(rocky,0.0,1.0));
     material=mix(material,cliffColor,clamp(cliffCoast,0.0,1.0));
     vec3 light=normalize(uLightDirection);
@@ -358,6 +367,6 @@ void main(){
     material=mix(material,cliffTop,cliffCoast*smoothstep(0.26,0.80,direct)*smoothstep(0.30,0.70,breakup)*0.42);
     float wetEdge=shoreline*(1.0-steep)*(1.0-smoothstep(0.0,300.0,elevation));
     material=mix(material,wetSand,wetEdge*0.34);
-    float alpha=clamp(beach*0.48+rocky*0.58+cliffCoast*0.78,0.0,0.78)*exposure;
+    float alpha=clamp(beach*0.68+rocky*0.58+cliffCoast*0.88,0.0,0.88)*exposure;
     outColor=vec4(material,alpha);
 }`;
