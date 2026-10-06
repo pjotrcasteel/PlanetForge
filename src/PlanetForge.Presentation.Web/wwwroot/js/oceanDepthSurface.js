@@ -359,44 +359,37 @@ void main() {
     if (openWater <= 0.08) discard;
 
     float physicalDepth = max(-vElevationMeters, 0.0);
-    float basinField = fbm((radial * 1.85) + vec3(2.0,-5.0,8.0));
-    float ridgeField = fbm((radial * 4.4) + vec3(-6.0,3.0,1.0));
-    float trenchField = fbm((radial * 7.2) + vec3(5.0,6.0,-4.0));
-    float basinShape = smoothstep(0.22, 0.84, (basinField * 0.72) + (ridgeField * 0.28));
-    float proceduralDepth = mix(700.0, 5900.0, basinShape);
-    proceduralDepth += (trenchField - 0.5) * 620.0;
-    float coastAnchor = 1.0 - smoothstep(280.0, 1500.0, physicalDepth);
-    float depthMeters = mix(proceduralDepth, physicalDepth, coastAnchor * 0.90);
-    depthMeters = mix(depthMeters, physicalDepth, 0.10);
-    depthMeters = clamp(depthMeters, 0.0, 6800.0);
+    float shelf = 1.0 - smoothstep(180.0, 1250.0, physicalDepth);
+    float coast = 1.0 - smoothstep(0.0, 520.0, physicalDepth);
+    float deepening = smoothstep(900.0, 2600.0, physicalDepth);
 
-    float shelfTransition = smoothstep(520.0, 1750.0, depthMeters);
-    float slopeTransition = smoothstep(1650.0, 3650.0, depthMeters);
-    float abyssTransition = smoothstep(3900.0, 5900.0, depthMeters);
-    float coastGlow = 1.0 - smoothstep(0.0, 950.0, physicalDepth);
+    vec3 deepOcean = vec3(0.008, 0.078, 0.135);
+    vec3 midOcean = vec3(0.012, 0.125, 0.190);
+    vec3 shelfOcean = vec3(0.030, 0.235, 0.285);
+    vec3 coastalOcean = vec3(0.060, 0.315, 0.330);
 
-    vec3 coastalWater = vec3(0.070, 0.43, 0.47);
-    vec3 shelfWater = vec3(0.028, 0.29, 0.37);
-    vec3 slopeWater = vec3(0.016, 0.17, 0.27);
-    vec3 abyssWater = vec3(0.007, 0.055, 0.105);
+    vec3 color = mix(midOcean, deepOcean, deepening);
+    color = mix(color, shelfOcean, shelf * 0.78);
+    color = mix(color, coastalOcean, coast * 0.58);
 
-    vec3 color = mix(coastalWater, shelfWater, shelfTransition);
-    color = mix(color, slopeWater, slopeTransition);
-    color = mix(color, abyssWater, abyssTransition);
-    color = mix(color, vec3(0.095, 0.47, 0.48), coastGlow * 0.18);
+    float fineVariation = fbm((radial * 18.0) + vec3(3.0,-4.0,8.0)) - 0.5;
+    float microVariation = valueNoise((radial * 44.0) + vec3(-2.0,9.0,5.0)) - 0.5;
+    color += vec3(0.0, fineVariation * 0.009, fineVariation * 0.014);
+    color += vec3(0.0, microVariation * 0.004, microVariation * 0.006);
 
-    float regional = fbm((radial * 6.5) + vec3(3.0,-4.0,8.0)) - 0.5;
-    color += vec3(0.0, regional * 0.018, regional * 0.026) * (1.0 - abyssTransition);
+    float waterMaturity = smoothstep(0.12, 0.78, openWater);
+    vec3 newlyOpenedWater = vec3(0.105, 0.190, 0.220);
+    color = mix(newlyOpenedWater, color, waterMaturity);
 
     vec3 normal = radial;
     vec3 light = normalize(uLightDirection);
-    float diffuse = 0.88 + (0.12 * max(dot(normal, light), 0.0));
-    float fresnel = pow(1.0 - max(dot(normal, viewDirection), 0.0), 3.2);
+    float diffuse = 0.92 + (0.08 * max(dot(normal, light), 0.0));
+    float fresnel = pow(1.0 - max(dot(normal, viewDirection), 0.0), 3.6);
     vec3 halfVector = normalize(light + viewDirection);
-    float specular = pow(max(dot(normal, halfVector), 0.0), 88.0) * 0.065;
+    float specular = pow(max(dot(normal, halfVector), 0.0), 104.0) * 0.045;
     color *= diffuse;
-    color = mix(color, vec3(0.035, 0.095, 0.15), fresnel * 0.12);
-    color += vec3(specular * 0.62, specular * 0.78, specular);
+    color = mix(color, vec3(0.025, 0.085, 0.135), fresnel * 0.08);
+    color += vec3(specular * 0.60, specular * 0.76, specular);
 
     outColor = vec4(clamp(color, 0.0, 1.0), 1.0);
 }`;
