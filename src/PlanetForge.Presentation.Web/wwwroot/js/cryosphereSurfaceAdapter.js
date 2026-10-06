@@ -1,20 +1,20 @@
 import * as surface from './cryosphereSurface.js';
 import * as ocean from './oceanDepthSurface.js';
-import * as coast from './coastalSurface.js';
+import * as coast from './coastalReliefSurface.js';
 
 export function initialize(overlayCanvasId, inputCanvasId, snapshot) {
     ensureCoastalCanvas(inputCanvasId);
     const adapted = adaptSnapshot(snapshot);
     surface.initialize(overlayCanvasId, inputCanvasId, adapted);
     ocean.initialize(inputCanvasId, adapted);
-    coast.initialize(inputCanvasId, adaptCoastalSnapshot(adapted));
+    coast.initialize(inputCanvasId, adapted);
 }
 
 export function setPlanet(snapshot) {
     const adapted = adaptSnapshot(snapshot);
     surface.setPlanet(adapted);
     ocean.setPlanet(adapted);
-    coast.setPlanet(adaptCoastalSnapshot(adapted));
+    coast.setPlanet(adapted);
 }
 
 export function dispose() {
@@ -42,20 +42,6 @@ function ensureCoastalCanvas(inputCanvasId) {
 
     const waterOverlay = document.getElementById('water-overlay-canvas');
     parent.insertBefore(canvas, waterOverlay ?? null);
-}
-
-function adaptCoastalSnapshot(snapshot) {
-    const feedback = snapshot?.climateFeedback;
-    const landIceFraction = feedback?.landIceFraction;
-    if (!feedback || !Number.isFinite(landIceFraction)) return snapshot;
-
-    return {
-        ...snapshot,
-        climateFeedback: {
-            ...feedback,
-            snowCoverFraction: landIceFraction
-        }
-    };
 }
 
 function adaptSnapshot(snapshot) {
