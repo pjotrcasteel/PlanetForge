@@ -5,7 +5,7 @@ const minimumCameraAltitudeMeters = 3.0;
 const maximumCameraAltitudeRatio = 4.2;
 const localTransitionAltitudeMeters = 20_000.0;
 const localExitAltitudeMeters = 25_000.0;
-const waterSurfaceOffset = 1.000006;
+const waterSurfaceClearanceMeters = 18.0;
 const finalSeaIceLatitudeDegrees = 68.0;
 
 export function initialize(inputCanvasId, snapshot) {
@@ -29,6 +29,7 @@ export function initialize(inputCanvasId, snapshot) {
         lastX: 0,
         lastY: 0,
         planetRadiusMeters: 6_371_000.0,
+        seaLevelMeters: 0.0,
         seaIceFraction: 1.0,
         visible: true,
         tiles: new Map(),
@@ -39,6 +40,7 @@ export function initialize(inputCanvasId, snapshot) {
             lightDirection: gl.getUniformLocation(program, 'uLightDirection'),
             cameraPosition: gl.getUniformLocation(program, 'uCameraPosition'),
             planetRadiusMeters: gl.getUniformLocation(program, 'uPlanetRadiusMeters'),
+            seaLevelMeters: gl.getUniformLocation(program, 'uSeaLevelMeters'),
             seaIceFraction: gl.getUniformLocation(program, 'uSeaIceFraction')
         }
     };
@@ -52,6 +54,7 @@ export function initialize(inputCanvasId, snapshot) {
 export function setPlanet(snapshot) {
     if (!state || !snapshot) return;
     state.planetRadiusMeters = snapshot.physicalParameters?.radiusMeters ?? state.planetRadiusMeters;
+    state.seaLevelMeters = snapshot.seaLevelMeters ?? state.seaLevelMeters;
     state.seaIceFraction = snapshot.climateFeedback?.seaIceFraction ?? snapshot.climateFeedback?.cryosphereFraction ?? state.seaIceFraction;
     state.visible = !snapshot.localSurface;
 
@@ -220,6 +223,7 @@ function draw(s) {
     gl.uniform3f(s.uniforms.lightDirection, 0.72, 0.42, 0.55);
     gl.uniform3f(s.uniforms.cameraPosition, eye[0], eye[1], eye[2]);
     gl.uniform1f(s.uniforms.planetRadiusMeters, s.planetRadiusMeters);
+    gl.uniform1f(s.uniforms.seaLevelMeters, s.seaLevelMeters);
     gl.uniform1f(s.uniforms.seaIceFraction, s.seaIceFraction);
 
     for (const tile of s.tiles.values()) {
@@ -292,6 +296,7 @@ precision highp float;
 in vec3 aPosition;
 uniform mat4 uViewProjection;
 uniform float uPlanetRadiusMeters;
+uniform float uSeaLevelMeters;
 out vec3 vDirection;
 out float vElevationMeters;
 void main() {
@@ -299,7 +304,8 @@ void main() {
     vec3 radial = normalize(aPosition);
     vDirection = radial;
     vElevationMeters = (physicalRadius - 1.0) * uPlanetRadiusMeters;
-    gl_Position = uViewProjection * vec4(radial * ${waterSurfaceOffset.toFixed(6)}, 1.0);
+    float waterSurfaceRadius = 1.0 + ((uSeaLevelMeters + 18.0) / uPlanetRadiusMeters);
+    gl_Position = uViewProjection * vec4(radial * waterSurfaceRadius, 1.0);
 }`;
 
 const fragmentShaderSource = `#version 300 es
@@ -308,6 +314,8 @@ in vec3 vDirection;
 in float vElevationMeters;
 uniform vec3 uLightDirection;
 uniform vec3 uCameraPosition;
+uniform float uPlanetRadiusMeters;
+uniform float uSeaLevelMeters;
 uniform float uSeaIceFraction;
 out vec4 outColor;
 
@@ -338,10 +346,12 @@ float fbm(vec3 p) {
 }
 
 void main() {
-    if (vElevationMeters >= 0.0) discard;
+    float physicalDepth = uSeaLevelMeters - vElevationMeters;
+    if (physicalDepth <= 0.0) discard;
 
     vec3 radial = normalize(vDirection);
-    vec3 viewDirection = normalize(uCameraPosition - (radial * ${waterSurfaceOffset.toFixed(6)}));
+    float waterSurfaceRadius = 1.0 + ((uSeaLevelMeters + 18.0) / uPlanetRadiusMeters);
+    vec3 viewDirection = normalize(uCameraPosition - (radial * waterSurfaceRadius));
     if (dot(radial, viewDirection) <= 0.0) discard;
 
     float latitudeDegrees = degrees(asin(clamp(abs(radial.y), 0.0, 1.0)));
@@ -358,7 +368,6 @@ void main() {
     float openWater = 1.0 - smoothstep(0.30, 0.58, seaCoverage);
     if (openWater <= 0.08) discard;
 
-    float physicalDepth = max(-vElevationMeters, 0.0);
     float shelf = 1.0 - smoothstep(180.0, 1250.0, physicalDepth);
     float coast = 1.0 - smoothstep(0.0, 520.0, physicalDepth);
     float deepening = smoothstep(900.0, 2600.0, physicalDepth);
