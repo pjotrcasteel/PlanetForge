@@ -2,9 +2,12 @@ import * as surface from './cryosphereSurface.js';
 import * as ocean from './oceanDepthSurface.js';
 import * as coast from './coastalReliefSurface.js';
 
+let retainedSurfaceTiles = [];
+let retainedPhysicalParameters;
+
 export function initialize(overlayCanvasId, inputCanvasId, snapshot) {
     ensureCoastalCanvas(inputCanvasId);
-    const adapted = adaptSnapshot(snapshot);
+    const adapted = adaptSnapshot(retainGeometry(snapshot));
     exposeCoastalMeshStats(adapted);
     surface.initialize(overlayCanvasId, inputCanvasId, adapted);
     ocean.initialize(inputCanvasId, adapted);
@@ -12,7 +15,7 @@ export function initialize(overlayCanvasId, inputCanvasId, snapshot) {
 }
 
 export function setPlanet(snapshot) {
-    const adapted = adaptSnapshot(snapshot);
+    const adapted = adaptSnapshot(retainGeometry(snapshot));
     exposeCoastalMeshStats(adapted);
     surface.setPlanet(adapted);
     ocean.setPlanet(adapted);
@@ -45,6 +48,23 @@ function ensureCoastalCanvas(inputCanvasId) {
 
     const waterOverlay = document.getElementById('water-overlay-canvas');
     parent.insertBefore(canvas, waterOverlay ?? null);
+}
+
+function retainGeometry(snapshot) {
+    if (!snapshot) return snapshot;
+
+    if (snapshot.surfaceTiles?.length > 0) retainedSurfaceTiles = snapshot.surfaceTiles;
+    if (snapshot.physicalParameters) retainedPhysicalParameters = snapshot.physicalParameters;
+
+    const hasSurfaceTiles = snapshot.surfaceTiles?.length > 0;
+    const hasPhysicalParameters = Boolean(snapshot.physicalParameters);
+    if ((hasSurfaceTiles || retainedSurfaceTiles.length === 0) && (hasPhysicalParameters || !retainedPhysicalParameters)) return snapshot;
+
+    return {
+        ...snapshot,
+        surfaceTiles: hasSurfaceTiles ? snapshot.surfaceTiles : retainedSurfaceTiles,
+        physicalParameters: snapshot.physicalParameters ?? retainedPhysicalParameters
+    };
 }
 
 function exposeCoastalMeshStats(snapshot) {
