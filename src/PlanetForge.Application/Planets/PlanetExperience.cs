@@ -15,7 +15,7 @@ public sealed class PlanetExperience(
     PlanetLocalSurfaceMeshBuilder localSurfaceMeshBuilder)
 {
     private const int GlobalSurfaceLevel = 1;
-    private const int SurfaceCellsPerAxis = 24;
+    private const int SurfaceCellsPerAxis = 32;
     private const int CoarseLocalSurfaceCellsPerAxis = 8;
     private const int MediumLocalSurfaceCellsPerAxis = 16;
     private const int DetailedLocalSurfaceCellsPerAxis = 24;
