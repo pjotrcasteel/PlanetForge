@@ -524,19 +524,19 @@ void main() {
     float illumination = clamp((0.36 + (0.72 * hillshade) + (slopeDelta * 0.28)) * faceShadow, 0.28, 1.12);
 
     float normalizedDepth = clamp(max(-elevationAboveSeaLevel, 0.0) / 6000.0, 0.0, 1.0);
-    float lowland = 1.0 - smoothstep(520.0, 1300.0, elevation);
-    float upland = smoothstep(500.0, 1650.0, elevation);
-    float high = smoothstep(1500.0, 3000.0, elevation);
+    float lowland = 1.0 - smoothstep(420.0, 1150.0, elevation);
+    float upland = smoothstep(380.0, 1450.0, elevation);
+    float high = smoothstep(1250.0, 2700.0, elevation);
     float rockyAlpine = smoothstep(2800.0, 4700.0, elevation);
     float rockNoise = ((macro - 0.5) * 0.14) + ((meso - 0.5) * 0.09) + ((detail - 0.5) * 0.03);
 
     vec3 deepOcean = vec3(0.025, 0.13, 0.19);
     vec3 shallowOcean = vec3(0.045, 0.29, 0.34);
-    vec3 basinRock = vec3(0.27, 0.22, 0.17);
-    vec3 lowRock = vec3(0.35, 0.27, 0.19);
-    vec3 uplandRock = vec3(0.46, 0.35, 0.23);
-    vec3 highRock = vec3(0.49, 0.42, 0.33);
-    vec3 ridgeRock = vec3(0.34, 0.32, 0.29);
+    vec3 basinRock = vec3(0.23, 0.19, 0.15);
+    vec3 lowRock = vec3(0.33, 0.25, 0.18);
+    vec3 uplandRock = vec3(0.44, 0.34, 0.23);
+    vec3 highRock = vec3(0.50, 0.43, 0.34);
+    vec3 ridgeRock = vec3(0.29, 0.29, 0.28);
     vec3 alpineRock = vec3(0.58, 0.54, 0.47);
     vec3 summitRock = vec3(0.69, 0.67, 0.62);
 
@@ -544,13 +544,15 @@ void main() {
     vec3 landMaterial = mix(basinRock, lowRock, smoothstep(0.0, 800.0, elevation));
     landMaterial = mix(landMaterial, uplandRock, upland);
     landMaterial = mix(landMaterial, highRock, high);
-    landMaterial = mix(landMaterial, ridgeRock, ridgeStrength * 0.72);
+    landMaterial = mix(landMaterial, ridgeRock, ridgeStrength * 0.86);
     landMaterial = mix(landMaterial, alpineRock, rockyAlpine);
     landMaterial = mix(landMaterial, summitRock, summit);
-    landMaterial = mix(landMaterial, vec3(0.30, 0.29, 0.28), exposedRidge * 0.50);
+    landMaterial = mix(landMaterial, vec3(0.27, 0.27, 0.26), exposedRidge * 0.66);
     landMaterial = mix(landMaterial, vec3(0.40, 0.30, 0.20), lowland * (1.0 - slope) * smoothstep(0.34, 0.72, macro) * 0.28);
     landMaterial *= 1.0 + rockNoise;
-    vec3 terrainMaterial = (ocean ? oceanMaterial : landMaterial) * illumination;
+    float elevationContrast = 0.92 + (smoothstep(600.0, 4200.0, elevation) * 0.12);
+    float ruggedShadow = 1.0 - (steep * 0.10) - (cliff * 0.14);
+    vec3 terrainMaterial = ocean ? oceanMaterial * illumination : landMaterial * illumination * elevationContrast * ruggedShadow;
 
     float iceMacro = fbm((radial * 4.6) + vec3(-4.0, 2.0, 9.0));
     float iceFlow = fbm((radial * 11.5) + vec3(7.0, -6.0, 1.0));
