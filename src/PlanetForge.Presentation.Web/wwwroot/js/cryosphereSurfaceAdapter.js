@@ -22,6 +22,13 @@ export function setPlanet(snapshot) {
     coast.setPlanet(adapted);
 }
 
+export function getRetainedSurfaceGeometry() {
+    return {
+        surfaceTiles: retainedSurfaceTiles,
+        physicalParameters: retainedPhysicalParameters
+    };
+}
+
 export function dispose() {
     coast.dispose();
     document.getElementById('coastal-relief-canvas')?.remove();
