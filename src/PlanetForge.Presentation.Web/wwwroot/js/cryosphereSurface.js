@@ -33,6 +33,7 @@ export function initialize(overlayCanvasId, inputCanvasId, snapshot) {
         lastX: 0,
         lastY: 0,
         planetRadiusMeters: 6_371_000.0,
+        seaLevelMeters: 0.0,
         surfaceTemperatureKelvin: 250.0,
         seaIceFraction: 1.0,
         landIceFraction: 1.0,
@@ -48,6 +49,7 @@ export function initialize(overlayCanvasId, inputCanvasId, snapshot) {
             viewProjection: gl.getUniformLocation(program, 'uViewProjection'),
             lightDirection: gl.getUniformLocation(program, 'uLightDirection'),
             planetRadiusMeters: gl.getUniformLocation(program, 'uPlanetRadiusMeters'),
+            seaLevelMeters: gl.getUniformLocation(program, 'uSeaLevelMeters'),
             surfaceTemperatureKelvin: gl.getUniformLocation(program, 'uSurfaceTemperatureKelvin'),
             seaIceFraction: gl.getUniformLocation(program, 'uSeaIceFraction'),
             landIceFraction: gl.getUniformLocation(program, 'uLandIceFraction'),
@@ -65,6 +67,7 @@ export function initialize(overlayCanvasId, inputCanvasId, snapshot) {
 export function setPlanet(snapshot) {
     if (!state || !snapshot) return;
     state.planetRadiusMeters = snapshot.physicalParameters?.radiusMeters ?? state.planetRadiusMeters;
+    state.seaLevelMeters = snapshot.seaLevelMeters ?? state.seaLevelMeters;
     state.surfaceTemperatureKelvin = snapshot.climate?.surfaceTemperatureKelvin ?? state.surfaceTemperatureKelvin;
     state.seaIceFraction = snapshot.climateFeedback?.seaIceFraction ?? snapshot.climateFeedback?.cryosphereFraction ?? state.seaIceFraction;
     state.landIceFraction = snapshot.climateFeedback?.landIceFraction ?? snapshot.climateFeedback?.cryosphereFraction ?? state.landIceFraction;
@@ -274,6 +277,7 @@ function draw(s) {
     gl.uniformMatrix4fv(s.uniforms.viewProjection, false, viewProjection);
     gl.uniform3f(s.uniforms.lightDirection, 0.72, 0.42, 0.55);
     gl.uniform1f(s.uniforms.planetRadiusMeters, s.planetRadiusMeters);
+    gl.uniform1f(s.uniforms.seaLevelMeters, s.seaLevelMeters);
     gl.uniform1f(s.uniforms.surfaceTemperatureKelvin, s.surfaceTemperatureKelvin);
     gl.uniform1f(s.uniforms.seaIceFraction, s.seaIceFraction);
     gl.uniform1f(s.uniforms.landIceFraction, s.landIceFraction);
@@ -356,6 +360,7 @@ in vec3 aPosition;
 in vec3 aNormal;
 uniform mat4 uViewProjection;
 uniform float uPlanetRadiusMeters;
+uniform float uSeaLevelMeters;
 uniform float uSeaIceFraction;
 uniform float uLandIceFraction;
 uniform float uSnowCoverFraction;
@@ -373,17 +378,18 @@ void main() {
     vVisualNormal = normalize(radial + (tangentNormal * ${visualNormalExaggeration.toFixed(1)}));
     vPhysicalSlope = clamp(1.0 - dot(physicalNormal, radial), 0.0, 0.5);
     vElevationMeters = (physicalRadius - 1.0) * uPlanetRadiusMeters;
-    float exaggeration = vElevationMeters >= 0.0 ? ${landReliefExaggeration.toFixed(1)} : ${oceanReliefExaggeration.toFixed(1)};
+    float elevationAboveSeaLevel = vElevationMeters - uSeaLevelMeters;
+    float exaggeration = elevationAboveSeaLevel >= 0.0 ? ${landReliefExaggeration.toFixed(1)} : ${oceanReliefExaggeration.toFixed(1)};
     float latitude = abs(radial.y);
     float polarSupport = smoothstep(0.40, 0.95, latitude);
-    float highlandSupport = smoothstep(900.0, 4200.0, max(vElevationMeters, 0.0));
+    float highlandSupport = smoothstep(900.0, 4200.0, max(elevationAboveSeaLevel, 0.0));
     float seaIce = clamp(uSeaIceFraction, 0.0, 1.0);
     float landIce = clamp(uLandIceFraction, 0.0, 1.0);
     float snow = clamp(uSnowCoverFraction, 0.0, 1.0);
     float seaIceThicknessMeters = (18.0 + (52.0 * polarSupport)) * seaIce;
     float landSupport = clamp((0.14 + (0.66 * polarSupport) + (0.36 * highlandSupport)) * max(landIce, snow * 0.55), 0.0, 1.0);
     float landIceThicknessMeters = (90.0 + (760.0 * polarSupport) + (340.0 * highlandSupport)) * landSupport;
-    float iceThicknessMeters = vElevationMeters < 0.0 ? seaIceThicknessMeters : landIceThicknessMeters;
+    float iceThicknessMeters = elevationAboveSeaLevel < 0.0 ? seaIceThicknessMeters : landIceThicknessMeters;
     float visualRadius = 1.0 + (((vElevationMeters * exaggeration) + (iceThicknessMeters * 18.0)) / uPlanetRadiusMeters);
     gl_Position = uViewProjection * vec4(radial * visualRadius, 1.0);
 }`;
@@ -396,6 +402,7 @@ in float vPhysicalSlope;
 in float vElevationMeters;
 uniform vec3 uLightDirection;
 uniform float uSurfaceTemperatureKelvin;
+uniform float uSeaLevelMeters;
 uniform float uSeaIceFraction;
 uniform float uLandIceFraction;
 uniform float uSnowCoverFraction;
@@ -435,8 +442,9 @@ void main() {
     vec3 radial = normalize(vDirection);
     vec3 normal = normalize(vVisualNormal);
     vec3 light = normalize(uLightDirection);
-    bool ocean = vElevationMeters < 0.0;
-    float elevation = max(vElevationMeters, 0.0);
+    float elevationAboveSeaLevel = vElevationMeters - uSeaLevelMeters;
+    bool ocean = elevationAboveSeaLevel < 0.0;
+    float elevation = max(elevationAboveSeaLevel, 0.0);
     float latitudeDegrees = degrees(asin(clamp(abs(radial.y), 0.0, 1.0)));
     float latitudeFactor = sin(radians(latitudeDegrees));
     float slope = smoothstep(0.002, 0.036, vPhysicalSlope);
@@ -515,7 +523,7 @@ void main() {
     float faceShadow = 1.0 - (max(-slopeDelta, 0.0) * 0.58) - (cliff * 0.16);
     float illumination = clamp((0.36 + (0.72 * hillshade) + (slopeDelta * 0.28)) * faceShadow, 0.28, 1.12);
 
-    float normalizedDepth = clamp(max(-vElevationMeters, 0.0) / 6000.0, 0.0, 1.0);
+    float normalizedDepth = clamp(max(-elevationAboveSeaLevel, 0.0) / 6000.0, 0.0, 1.0);
     float lowland = 1.0 - smoothstep(520.0, 1300.0, elevation);
     float upland = smoothstep(500.0, 1650.0, elevation);
     float high = smoothstep(1500.0, 3000.0, elevation);
@@ -561,13 +569,19 @@ void main() {
     float meltRockExposure = ocean ? 0.0 : landBreakup * exposedRidge * smoothstep(1200.0, 4300.0, elevation) * 0.72;
     iceMaterial = mix(iceMaterial, terrainMaterial * 1.08, clamp(frozenRockExposure + meltRockExposure, 0.0, 0.76));
 
+    float iceBlend = smoothstep(0.08, 0.88, coverage);
+    if (ocean) {
+        if (coverage < 0.05) discard;
+        outColor = vec4(iceMaterial, clamp(iceBlend * 0.98, 0.0, 0.98));
+        return;
+    }
+
     if (coverage < 0.05) {
         if (uFullSurface == 0) discard;
         outColor = vec4(terrainMaterial, 1.0);
         return;
     }
 
-    float iceBlend = smoothstep(0.08, 0.88, coverage);
     vec3 material = uFullSurface == 1 ? mix(terrainMaterial, iceMaterial, iceBlend) : iceMaterial;
     float alpha = uFullSurface == 1 ? 1.0 : clamp(coverage, 0.0, 0.98);
     outColor = vec4(material, alpha);
