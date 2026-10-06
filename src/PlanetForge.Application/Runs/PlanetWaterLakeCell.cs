@@ -4,4 +4,7 @@ public sealed record PlanetWaterLakeCell(
     double X,
     double Y,
     double Z,
-    double AngularRadiusRadians);
+    double AngularRadiusRadians)
+{
+    public double SurfaceElevationMeters { get; init; }
+}
