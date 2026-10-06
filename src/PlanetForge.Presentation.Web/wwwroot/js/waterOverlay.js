@@ -273,21 +273,48 @@ function surfacePoint(direction, elevationMeters, planetRadiusMeters) {
 }
 
 function groupLakeCells(cells) {
-    const remaining = new Set(cells.map((_, index) => index));
+    const directions = cells.map(cell => unitPoint(cell.x, cell.y, cell.z));
+    const maximumRadius = cells.reduce((maximum, cell) => Math.max(maximum, cell.angularRadiusRadians ?? 0.01), 0.01);
+    const binSize = Math.max(maximumRadius * 2.5, Math.PI / 180.0);
+    const latitudeBinCount = Math.max(4, Math.ceil(Math.PI / binSize));
+    const longitudeBinCount = Math.max(8, latitudeBinCount * 2);
+    const buckets = new Map();
+
+    for (let index = 0; index < cells.length; index++) {
+        const key = lakeBinKey(directions[index], latitudeBinCount, longitudeBinCount);
+        let bucket = buckets.get(key);
+        if (!bucket) {
+            bucket = [];
+            buckets.set(key, bucket);
+        }
+        bucket.push(index);
+    }
+
+    const visited = new Uint8Array(cells.length);
     const groups = [];
-    while (remaining.size > 0) {
-        const start = remaining.values().next().value;
-        remaining.delete(start);
+    for (let start = 0; start < cells.length; start++) {
+        if (visited[start]) continue;
+        visited[start] = 1;
         const queue = [start];
         const group = [];
         while (queue.length > 0) {
             const currentIndex = queue.pop();
-            const current = cells[currentIndex];
-            group.push(current);
-            for (const candidateIndex of [...remaining]) {
-                if (!lakeCellsTouch(current, cells[candidateIndex])) continue;
-                remaining.delete(candidateIndex);
-                queue.push(candidateIndex);
+            group.push(cells[currentIndex]);
+            const currentDirection = directions[currentIndex];
+            const { latitudeIndex, longitudeIndex } = lakeBin(currentDirection, latitudeBinCount, longitudeBinCount);
+            for (let latitudeOffset = -1; latitudeOffset <= 1; latitudeOffset++) {
+                const candidateLatitude = latitudeIndex + latitudeOffset;
+                if (candidateLatitude < 0 || candidateLatitude >= latitudeBinCount) continue;
+                for (let longitudeOffset = -1; longitudeOffset <= 1; longitudeOffset++) {
+                    const candidateLongitude = wrapBin(longitudeIndex + longitudeOffset, longitudeBinCount);
+                    const candidates = buckets.get(`${candidateLatitude}:${candidateLongitude}`) ?? [];
+                    for (const candidateIndex of candidates) {
+                        if (visited[candidateIndex]) continue;
+                        if (!lakeCellsTouch(cells[currentIndex], cells[candidateIndex], currentDirection, directions[candidateIndex])) continue;
+                        visited[candidateIndex] = 1;
+                        queue.push(candidateIndex);
+                    }
+                }
             }
         }
         groups.push(group);
@@ -295,10 +322,27 @@ function groupLakeCells(cells) {
     return groups;
 }
 
-function lakeCellsTouch(first, second) {
-    const firstDirection = unitPoint(first.x, first.y, first.z);
-    const secondDirection = unitPoint(second.x, second.y, second.z);
-    const separation = Math.acos(clamp(dot(firstDirection, secondDirection), -1.0, 1.0));
+function lakeBin(direction, latitudeBinCount, longitudeBinCount) {
+    const latitude = Math.asin(clamp(direction[1], -1.0, 1.0));
+    const longitude = Math.atan2(direction[2], direction[0]);
+    const latitudeIndex = clamp(Math.floor(((latitude + Math.PI * 0.5) / Math.PI) * latitudeBinCount), 0, latitudeBinCount - 1);
+    const longitudeIndex = wrapBin(Math.floor(((longitude + Math.PI) / (Math.PI * 2.0)) * longitudeBinCount), longitudeBinCount);
+    return { latitudeIndex, longitudeIndex };
+}
+
+function lakeBinKey(direction, latitudeBinCount, longitudeBinCount) {
+    const { latitudeIndex, longitudeIndex } = lakeBin(direction, latitudeBinCount, longitudeBinCount);
+    return `${latitudeIndex}:${longitudeIndex}`;
+}
+
+function wrapBin(index, count) {
+    return ((index % count) + count) % count;
+}
+
+function lakeCellsTouch(first, second, firstDirection = null, secondDirection = null) {
+    const firstPoint = firstDirection ?? unitPoint(first.x, first.y, first.z);
+    const secondPoint = secondDirection ?? unitPoint(second.x, second.y, second.z);
+    const separation = Math.acos(clamp(dot(firstPoint, secondPoint), -1.0, 1.0));
     const firstRadius = first.angularRadiusRadians ?? 0.01;
     const secondRadius = second.angularRadiusRadians ?? 0.01;
     return separation <= (firstRadius + secondRadius) * 1.18;
