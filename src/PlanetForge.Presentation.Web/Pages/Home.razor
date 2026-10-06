@@ -149,17 +149,16 @@
             {
                 disposeCancellationTokenSource.Token.ThrowIfCancellationRequested();
                 elapsedYears = startYear + frame.Year;
-                if (waterRendererModule is not null)
-                {
-                    await waterRendererModule.InvokeVoidAsync("setWaterCycle", disposeCancellationTokenSource.Token, frame.State);
-                }
-
                 StateHasChanged();
                 await Task.Delay(HydrologyFrameDelayMilliseconds, disposeCancellationTokenSource.Token);
             }
 
             ApplyRun(result.Run);
             currentStage = FoundationStage.ActiveWaterCycle;
+            if (waterRendererModule is not null && result.Frames.Count > 0)
+            {
+                await waterRendererModule.InvokeVoidAsync("setWaterCycle", disposeCancellationTokenSource.Token, result.Frames[^1].State);
+            }
         }
         finally
         {

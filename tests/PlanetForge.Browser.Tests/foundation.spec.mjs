@@ -1,15 +1,19 @@
 import { expect, test } from '@playwright/test';
 
-test('FrozenToMelting_PreservesFragmentedPolarIceAndThawsEquator', async ({ page }, testInfo) => {
+test.setTimeout(240_000);
+
+test('FrozenToWaterCycle_PreservesTerrainAndActivatesTerrainBoundHydrology', async ({ page }, testInfo) => {
   await page.goto('/?visualTest=1');
   await expect(page.getByText('FROZEN WORLD')).toBeVisible();
   await page.waitForFunction(() => Boolean(window.__planetForgeCryosphereTest));
   await page.waitForFunction(() => Boolean(window.__planetForgeOceanTest));
   await page.waitForFunction(() => Boolean(window.__planetForgeCoastTest));
+  await page.waitForFunction(() => Boolean(window.__planetForgeWaterTest));
 
   await orientPitch(page, 0.0);
   const frozenEquatorCoverage = await measureCenterCoverage(page);
   const frozenCoast = await measureCoast(page);
+  const frozenWater = await measureWater(page);
   await page.screenshot({ path: testInfo.outputPath('year-0-frozen.png'), fullPage: true });
 
   await page.getByRole('button', { name: 'NEXT' }).click();
@@ -35,12 +39,22 @@ test('FrozenToMelting_PreservesFragmentedPolarIceAndThawsEquator', async ({ page
   const southFragmentation = await measureFragmentation(page);
   await page.screenshot({ path: testInfo.outputPath('year-50-south.png'), fullPage: true });
 
+  await orientPitch(page, 0.0);
+  await page.getByRole('button', { name: 'NEXT' }).click();
+  await expect(page.getByText('ACTIVE WATER CYCLE', { exact: true })).toBeVisible({ timeout: 90_000 });
+  await expect(page.getByRole('button', { name: 'NEXT' })).toBeEnabled({ timeout: 90_000 });
+  await page.waitForTimeout(150);
+  const activeWater = await measureWater(page);
+  await page.screenshot({ path: testInfo.outputPath('active-water-cycle.png'), fullPage: true });
+
   const metrics = {
     frozenEquatorCoverage,
     meltedEquatorCoverage,
     oceanDepthVariation,
     frozenCoast,
     meltedCoast,
+    frozenWater,
+    activeWater,
     coastMeshStats,
     northPoleCoverage,
     southPoleCoverage,
@@ -64,6 +78,21 @@ test('FrozenToMelting_PreservesFragmentedPolarIceAndThawsEquator', async ({ page
   expect(meltedCoast.visiblePixels).toBeGreaterThan(100);
   expect(meltedCoast.maximumAlpha).toBeGreaterThan(0.20);
   expect(meltedCoast.glError).toBe(0);
+
+  expect(frozenWater.activeRiverSegmentCount).toBe(0);
+  expect(frozenWater.lakeCellCount).toBe(0);
+  expect(frozenWater.visiblePixels).toBe(0);
+
+  expect(activeWater.activeRiverSegmentCount).toBeGreaterThan(0);
+  expect(activeWater.riverPointCount).toBeGreaterThan(activeWater.activeRiverSegmentCount * 4);
+  expect(activeWater.terrainVertexCount).toBeGreaterThan(50_000);
+  expect(activeWater.terrainSampleCount).toBeGreaterThan(activeWater.riverPointCount);
+  expect(activeWater.terrainFallbackCount).toBeLessThanOrEqual(Math.max(1, Math.floor(activeWater.terrainSampleCount * 0.01)));
+  expect(activeWater.visiblePixels).toBeGreaterThan(100);
+  expect(activeWater.maximumAlpha).toBeGreaterThan(0.40);
+  expect(activeWater.minimumRiverElevationMeters).not.toBeNull();
+  expect(activeWater.maximumRiverElevationMeters).not.toBeNull();
+  expect(activeWater.maximumRiverElevationMeters).toBeGreaterThan(activeWater.minimumRiverElevationMeters);
 
   expect(northPolarRegionCoverage).toBeGreaterThan(0.04);
   expect(southPolarRegionCoverage).toBeGreaterThan(0.08);
@@ -118,4 +147,8 @@ async function measureFragmentation(page) {
 
 async function measureCoast(page) {
   return page.evaluate(() => window.__planetForgeCoastTest.measure());
+}
+
+async function measureWater(page) {
+  return page.evaluate(() => window.__planetForgeWaterTest.measure());
 }
