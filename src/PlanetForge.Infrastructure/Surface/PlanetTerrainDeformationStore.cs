@@ -20,33 +20,10 @@ public sealed class PlanetTerrainDeformationStore : IPlanetTerrainDeformationSto
                 return 0.0;
             }
 
-            var (latitudeIndex, longitudeIndex) = GetBin(normalized);
-            if (!state.Bins.TryGetValue(GetBinKey(latitudeIndex, longitudeIndex), out var deformations))
-            {
-                return 0.0;
-            }
-
-            var minimumDeltaMeters = 0.0;
-            foreach (var deformation in deformations)
-            {
-                var cosine = Math.Clamp(PlanetVector.Dot(normalized, deformation.CenterDirection), -1.0, 1.0);
-                var angularDistance = Math.Acos(cosine);
-                if (angularDistance >= deformation.ValleyAngularRadiusRadians)
-                {
-                    continue;
-                }
-
-                var valleyWeight = 1.0 - SmoothStep(
-                    deformation.ChannelAngularRadiusRadians,
-                    deformation.ValleyAngularRadiusRadians,
-                    angularDistance);
-                var channelWeight = 1.0 - SmoothStep(0.0, deformation.ChannelAngularRadiusRadians, angularDistance);
-                var deltaMeters = -((deformation.ValleyIncisionDepthMeters * valleyWeight)
-                    + (deformation.ChannelIncisionDepthMeters * channelWeight));
-                minimumDeltaMeters = Math.Min(minimumDeltaMeters, deltaMeters);
-            }
-
-            return minimumDeltaMeters;
+            var key = GetBinKey(GetBin(normalized));
+            var erosionMeters = SampleErosion(state.ErosionBins, key, normalized);
+            var depositionMeters = SampleDeposition(state.DepositionBins, key, normalized);
+            return erosionMeters + depositionMeters;
         }
     }
 
@@ -68,16 +45,30 @@ public sealed class PlanetTerrainDeformationStore : IPlanetTerrainDeformationSto
 
         lock (sync)
         {
-            if (!states.TryGetValue(seed, out var state))
-            {
-                state = new TerrainState();
-                states.Add(seed, state);
-            }
-
+            var state = GetOrCreateState(seed);
             foreach (var deformation in deformations)
             {
-                var normalized = ValidateAndNormalize(deformation);
-                AddToBins(state, normalized);
+                AddErosionToBins(state, ValidateAndNormalize(deformation));
+            }
+
+            state.Revision++;
+        }
+    }
+
+    public void ApplyDeposition(int seed, IReadOnlyList<PlanetTerrainDeposition> depositions)
+    {
+        ArgumentNullException.ThrowIfNull(depositions);
+        if (depositions.Count == 0)
+        {
+            return;
+        }
+
+        lock (sync)
+        {
+            var state = GetOrCreateState(seed);
+            foreach (var deposition in depositions)
+            {
+                AddDepositionToBins(state, ValidateAndNormalize(deposition));
             }
 
             state.Revision++;
@@ -98,6 +89,83 @@ public sealed class PlanetTerrainDeformationStore : IPlanetTerrainDeformationSto
         {
             states.Clear();
         }
+    }
+
+    private TerrainState GetOrCreateState(int seed)
+    {
+        if (states.TryGetValue(seed, out var state))
+        {
+            return state;
+        }
+
+        state = new TerrainState();
+        states.Add(seed, state);
+        return state;
+    }
+
+    private static double SampleErosion(
+        IReadOnlyDictionary<int, List<PlanetTerrainDeformation>> bins,
+        int key,
+        PlanetVector direction)
+    {
+        if (!bins.TryGetValue(key, out var deformations))
+        {
+            return 0.0;
+        }
+
+        var minimumDeltaMeters = 0.0;
+        foreach (var deformation in deformations)
+        {
+            var angularDistance = AngularDistance(direction, deformation.CenterDirection);
+            if (angularDistance >= deformation.ValleyAngularRadiusRadians)
+            {
+                continue;
+            }
+
+            var valleyWeight = 1.0 - SmoothStep(
+                deformation.ChannelAngularRadiusRadians,
+                deformation.ValleyAngularRadiusRadians,
+                angularDistance);
+            var channelWeight = 1.0 - SmoothStep(0.0, deformation.ChannelAngularRadiusRadians, angularDistance);
+            var deltaMeters = -((deformation.ValleyIncisionDepthMeters * valleyWeight)
+                + (deformation.ChannelIncisionDepthMeters * channelWeight));
+            minimumDeltaMeters = Math.Min(minimumDeltaMeters, deltaMeters);
+        }
+
+        return minimumDeltaMeters;
+    }
+
+    private static double SampleDeposition(
+        IReadOnlyDictionary<int, List<PlanetTerrainDeposition>> bins,
+        int key,
+        PlanetVector direction)
+    {
+        if (!bins.TryGetValue(key, out var depositions))
+        {
+            return 0.0;
+        }
+
+        var maximumDeltaMeters = 0.0;
+        foreach (var deposition in depositions)
+        {
+            var angularDistance = AngularDistance(direction, deposition.CenterDirection);
+            if (angularDistance >= deposition.ApronAngularRadiusRadians)
+            {
+                continue;
+            }
+
+            var apronWeight = 1.0 - SmoothStep(
+                deposition.CoreAngularRadiusRadians,
+                deposition.ApronAngularRadiusRadians,
+                angularDistance);
+            var coreWeight = 1.0 - SmoothStep(0.0, deposition.CoreAngularRadiusRadians, angularDistance);
+            var deltaMeters =
+                (deposition.ApronDepositionHeightMeters * apronWeight) +
+                (deposition.CoreDepositionHeightMeters * coreWeight);
+            maximumDeltaMeters = Math.Max(maximumDeltaMeters, deltaMeters);
+        }
+
+        return maximumDeltaMeters;
     }
 
     private static PlanetTerrainDeformation ValidateAndNormalize(PlanetTerrainDeformation deformation)
@@ -123,17 +191,46 @@ public sealed class PlanetTerrainDeformationStore : IPlanetTerrainDeformationSto
         return deformation with { CenterDirection = PlanetVector.Normalize(deformation.CenterDirection) };
     }
 
-    private static void AddToBins(TerrainState state, PlanetTerrainDeformation deformation)
+    private static PlanetTerrainDeposition ValidateAndNormalize(PlanetTerrainDeposition deposition)
     {
-        var latitude = Math.Asin(Math.Clamp(deformation.CenterDirection.Y, -1.0, 1.0));
-        var longitude = Math.Atan2(deformation.CenterDirection.Z, deformation.CenterDirection.X);
-        var latitudeRadius = deformation.ValleyAngularRadiusRadians;
-        var longitudeRadius = Math.Min(
-            Math.PI,
-            deformation.ValleyAngularRadiusRadians / Math.Max(Math.Cos(latitude), 0.08));
+        ArgumentNullException.ThrowIfNull(deposition);
 
-        var minimumLatitudeIndex = LatitudeToBin(Math.Max(-Math.PI * 0.5, latitude - latitudeRadius));
-        var maximumLatitudeIndex = LatitudeToBin(Math.Min(Math.PI * 0.5, latitude + latitudeRadius));
+        if (!double.IsFinite(deposition.CoreAngularRadiusRadians)
+            || !double.IsFinite(deposition.ApronAngularRadiusRadians)
+            || deposition.CoreAngularRadiusRadians <= 0.0
+            || deposition.ApronAngularRadiusRadians <= deposition.CoreAngularRadiusRadians)
+        {
+            throw new ArgumentOutOfRangeException(nameof(deposition), "Terrain deposition radii must be finite, positive and ordered.");
+        }
+
+        if (!double.IsFinite(deposition.CoreDepositionHeightMeters)
+            || !double.IsFinite(deposition.ApronDepositionHeightMeters)
+            || deposition.CoreDepositionHeightMeters < 0.0
+            || deposition.ApronDepositionHeightMeters < 0.0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(deposition), "Terrain deposition heights must be finite and non-negative.");
+        }
+
+        return deposition with { CenterDirection = PlanetVector.Normalize(deposition.CenterDirection) };
+    }
+
+    private static void AddErosionToBins(TerrainState state, PlanetTerrainDeformation deformation)
+        => AddToBins(state.ErosionBins, deformation.CenterDirection, deformation.ValleyAngularRadiusRadians, deformation);
+
+    private static void AddDepositionToBins(TerrainState state, PlanetTerrainDeposition deposition)
+        => AddToBins(state.DepositionBins, deposition.CenterDirection, deposition.ApronAngularRadiusRadians, deposition);
+
+    private static void AddToBins<T>(
+        Dictionary<int, List<T>> bins,
+        PlanetVector centerDirection,
+        double angularRadius,
+        T value)
+    {
+        var latitude = Math.Asin(Math.Clamp(centerDirection.Y, -1.0, 1.0));
+        var longitude = Math.Atan2(centerDirection.Z, centerDirection.X);
+        var longitudeRadius = Math.Min(Math.PI, angularRadius / Math.Max(Math.Cos(latitude), 0.08));
+        var minimumLatitudeIndex = LatitudeToBin(Math.Max(-Math.PI * 0.5, latitude - angularRadius));
+        var maximumLatitudeIndex = LatitudeToBin(Math.Min(Math.PI * 0.5, latitude + angularRadius));
         var longitudeIndices = EnumerateLongitudeBins(longitude, longitudeRadius);
 
         for (var latitudeIndex = minimumLatitudeIndex; latitudeIndex <= maximumLatitudeIndex; latitudeIndex++)
@@ -141,13 +238,13 @@ public sealed class PlanetTerrainDeformationStore : IPlanetTerrainDeformationSto
             foreach (var longitudeIndex in longitudeIndices)
             {
                 var key = GetBinKey(latitudeIndex, longitudeIndex);
-                if (!state.Bins.TryGetValue(key, out var bucket))
+                if (!bins.TryGetValue(key, out var bucket))
                 {
                     bucket = [];
-                    state.Bins.Add(key, bucket);
+                    bins.Add(key, bucket);
                 }
 
-                bucket.Add(deformation);
+                bucket.Add(value);
             }
         }
     }
@@ -187,7 +284,12 @@ public sealed class PlanetTerrainDeformationStore : IPlanetTerrainDeformationSto
 
     private static int WrapLongitudeBin(int index) => ((index % LongitudeBinCount) + LongitudeBinCount) % LongitudeBinCount;
 
+    private static int GetBinKey((int LatitudeIndex, int LongitudeIndex) bin) => GetBinKey(bin.LatitudeIndex, bin.LongitudeIndex);
+
     private static int GetBinKey(int latitudeIndex, int longitudeIndex) => (latitudeIndex * LongitudeBinCount) + longitudeIndex;
+
+    private static double AngularDistance(PlanetVector first, PlanetVector second)
+        => Math.Acos(Math.Clamp(PlanetVector.Dot(first, second), -1.0, 1.0));
 
     private static double SmoothStep(double edge0, double edge1, double value)
     {
@@ -202,7 +304,9 @@ public sealed class PlanetTerrainDeformationStore : IPlanetTerrainDeformationSto
 
     private sealed class TerrainState
     {
-        public Dictionary<int, List<PlanetTerrainDeformation>> Bins { get; } = [];
+        public Dictionary<int, List<PlanetTerrainDeformation>> ErosionBins { get; } = [];
+
+        public Dictionary<int, List<PlanetTerrainDeposition>> DepositionBins { get; } = [];
 
         public int Revision { get; set; }
     }

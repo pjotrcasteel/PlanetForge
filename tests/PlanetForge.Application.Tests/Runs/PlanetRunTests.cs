@@ -180,8 +180,9 @@ public sealed class PlanetRunTests
         var cryosphereRunoffModel = new PlanetCryosphereRunoffModel();
         var hydrologyExtractor = new PlanetHydrologyFeatureExtractor();
         var geomorphologyModel = new PlanetRiverGeomorphologyModel();
+        var sedimentModel = new PlanetRiverSedimentModel();
         var deformationStore = new TestTerrainDeformationStore();
-        return new PlanetRun(mission, hydrologyBuilder, runoffModel, cryosphereRunoffModel, hydrologyExtractor, geomorphologyModel, deformationStore);
+        return new PlanetRun(mission, hydrologyBuilder, runoffModel, cryosphereRunoffModel, hydrologyExtractor, geomorphologyModel, sedimentModel, deformationStore);
     }
 
     private static PlanetExperience CreateExperience(IPlanetElevationSource elevationSource)
@@ -206,6 +207,10 @@ public sealed class PlanetRunTests
         public int GetRevision(int seed) => 0;
 
         public void Apply(int seed, IReadOnlyList<PlanetTerrainDeformation> deformations)
+        {
+        }
+
+        public void ApplyDeposition(int seed, IReadOnlyList<PlanetTerrainDeposition> depositions)
         {
         }
 

@@ -13,6 +13,7 @@ public sealed class PlanetRun(
     PlanetCryosphereRunoffModel cryosphereRunoffModel,
     PlanetHydrologyFeatureExtractor hydrologyFeatureExtractor,
     PlanetRiverGeomorphologyModel riverGeomorphologyModel,
+    PlanetRiverSedimentModel riverSedimentModel,
     IPlanetTerrainDeformationStore terrainDeformationStore)
 {
     public const int SaveSchemaVersion = 3;
@@ -264,22 +265,47 @@ public sealed class PlanetRun(
             waterCycle.SimulatedYears,
             planet.PhysicalParameters.RadiusMeters,
             cancellationToken);
-        if (deformations.Count == 0)
+        var depositions = riverSedimentModel.Build(
+            activeSegments,
+            waterCycle.SimulatedYears,
+            planet.PhysicalParameters.RadiusMeters,
+            planet.SeaLevelMeters,
+            cancellationToken);
+        if (deformations.Count == 0 && depositions.Count == 0)
         {
             return;
         }
 
-        terrainDeformationStore.Apply(planet.Seed, deformations);
+        if (deformations.Count > 0)
+        {
+            terrainDeformationStore.Apply(planet.Seed, deformations);
+        }
+
+        if (depositions.Count > 0)
+        {
+            terrainDeformationStore.ApplyDeposition(planet.Seed, depositions);
+        }
+
         waterHydrology = null;
         mission = frozenWorldMission.RefreshTerrain();
 
-        if (!HasJournalEntry("river-incision-observed"))
+        if (deformations.Count > 0 && !HasJournalEntry("river-incision-observed"))
         {
             AddJournalEntryAt(
                 CurrentMission.MissionYearsElapsed + waterCycle.SimulatedYears,
                 "river-incision-observed",
                 "Persistent rivers begin reshaping the terrain",
                 "Discharge and slope now feed a geomorphic terrain layer: major channels incise into the surface while broader valleys emerge around persistent high-flow routes.",
+                4);
+        }
+
+        if (depositions.Count > 0 && !HasJournalEntry("sediment-deposition-observed"))
+        {
+            AddJournalEntryAt(
+                CurrentMission.MissionYearsElapsed + waterCycle.SimulatedYears,
+                "sediment-deposition-observed",
+                "Sediment begins building floodplains and deltas",
+                "Low-gradient high-discharge reaches now deposit transported sediment. River-mouth deposition modifies the canonical elevation surface, allowing coastlines to evolve from terrain rather than a visual shoreline effect.",
                 4);
         }
     }
