@@ -23,14 +23,15 @@ const iceVisualExaggeration = 18.0;
 const waterSurfaceClearanceMeters = 18.0;
 const globeSkirtVisibilityAltitudeMeters = 500_000.0;
 
-export function initialize(canvasId, snapshot, dotNetReference) {
+export function initialize(canvasId, snapshot, dotNetReference, generatorPreview = false) {
     const canvas = document.getElementById(canvasId);
     const gl = canvas?.getContext('webgl2', { antialias: true, alpha: true });
     if (!canvas || !gl) throw new Error('PlanetForge requires WebGL 2.');
 
-    document.title = 'PlanetForge 0.0.26.1 — Terrain Recovery';
+    document.title = 'PlanetForge 0.0.27 — Generator Lab';
     try {
         state = createState(canvas, gl, dotNetReference);
+        state.generatorPreview = generatorPreview;
         installInput(state);
         setPlanet(snapshot);
         installVisualTestApi();
@@ -46,17 +47,17 @@ export function setPlanet(snapshot) {
     if (!state) return;
     state.dirty = true;
     state.seed = snapshot.seed;
-    state.seaLevelMeters = snapshot.seaLevelMeters;
+    state.seaLevelMeters = state.generatorPreview ? 0.0 : snapshot.seaLevelMeters;
     state.planetRadiusMeters = snapshot.physicalParameters.radiusMeters;
     state.atmosphereDensity = snapshot.atmosphereDensity;
     state.equilibriumTemperature = snapshot.physics.equilibriumTemperatureKelvin;
-    state.surfaceTemperature = snapshot.climate.surfaceTemperatureKelvin;
+    state.surfaceTemperature = state.generatorPreview ? 288.0 : snapshot.climate.surfaceTemperatureKelvin;
     state.solarFlux = snapshot.physics.solarFluxWattsPerSquareMeter;
-    state.liquidFraction = snapshot.water.liquidFraction;
-    state.vaporFraction = snapshot.water.vaporFraction;
-    state.seaIceFraction = snapshot.climateFeedback?.seaIceFraction ?? snapshot.climateFeedback?.cryosphereFraction ?? state.seaIceFraction;
-    state.landIceFraction = snapshot.climateFeedback?.landIceFraction ?? snapshot.climateFeedback?.cryosphereFraction ?? state.landIceFraction;
-    state.snowCoverFraction = snapshot.climateFeedback?.snowCoverFraction ?? snapshot.climateFeedback?.cryosphereFraction ?? state.snowCoverFraction;
+    state.liquidFraction = state.generatorPreview ? 1.0 : snapshot.water.liquidFraction;
+    state.vaporFraction = state.generatorPreview ? 0.0 : snapshot.water.vaporFraction;
+    state.seaIceFraction = state.generatorPreview ? 0.0 : (snapshot.climateFeedback?.seaIceFraction ?? snapshot.climateFeedback?.cryosphereFraction ?? state.seaIceFraction);
+    state.landIceFraction = state.generatorPreview ? 0.0 : (snapshot.climateFeedback?.landIceFraction ?? snapshot.climateFeedback?.cryosphereFraction ?? state.landIceFraction);
+    state.snowCoverFraction = state.generatorPreview ? 0.0 : (snapshot.climateFeedback?.snowCoverFraction ?? snapshot.climateFeedback?.cryosphereFraction ?? state.snowCoverFraction);
 
     const geometryKey = `${snapshot.seed}:${snapshot.physicalParameters.radiusMeters}:${snapshot.terrainRevision ?? 0}`;
     if (state.geometryKey !== geometryKey) {
@@ -113,7 +114,7 @@ function createState(canvas, gl, dotNetReference) {
     const globeProgram = createProgram(gl, globeVertexShaderSource, globeFragmentShaderSource);
     const localProgram = createProgram(gl, localVertexShaderSource, localFragmentShaderSource);
     return {
-        canvas, gl, dotNetReference, globeProgram, localProgram, renderMode: 'globe', geometryKey: null,
+        canvas, gl, dotNetReference, globeProgram, localProgram, generatorPreview: false, renderMode: 'globe', geometryKey: null,
         surfaceKey: null, tileBufferCache: new Map(), tiles: [], localSurface: null,
         yaw: -0.65, pitch: 0.24, distance: 3.15, localYaw: -0.65, localPitch: 0.72,
         localCameraAltitudeMeters: null, scaleHud: createLocalScaleHud(canvas),
