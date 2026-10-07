@@ -78,6 +78,7 @@ public sealed class PlanetRunTests
         Assert.IsTrue(result.Run.WaterCycle.ActiveRiverSegments.All(segment => segment.MeanDischargeCubicMetersPerSecond > 0.0));
         Assert.IsTrue(result.Run.Journal.Any(entry => entry.Key == "first-precipitation"));
         Assert.IsTrue(result.Run.Journal.Any(entry => entry.Key == "active-runoff-network"));
+        Assert.IsTrue(result.Run.Journal.Any(entry => entry.Key == "river-incision-observed"));
     }
 
     [TestMethod]
@@ -174,7 +175,9 @@ public sealed class PlanetRunTests
         var hydrologyBuilder = new PlanetHydrologyModelBuilder(elevationSource);
         var runoffModel = new PlanetRunoffModel();
         var hydrologyExtractor = new PlanetHydrologyFeatureExtractor();
-        return new PlanetRun(mission, hydrologyBuilder, runoffModel, hydrologyExtractor);
+        var geomorphologyModel = new PlanetRiverGeomorphologyModel();
+        var deformationStore = new TestTerrainDeformationStore();
+        return new PlanetRun(mission, hydrologyBuilder, runoffModel, hydrologyExtractor, geomorphologyModel, deformationStore);
     }
 
     private static PlanetExperience CreateExperience(IPlanetElevationSource elevationSource)
@@ -190,5 +193,24 @@ public sealed class PlanetRunTests
     private sealed class TestElevationSource : IPlanetElevationSource
     {
         public double SampleElevationMeters(PlanetVector direction, int seed) => (direction.Y * 4_000.0) + (direction.X * 1_000.0);
+    }
+
+    private sealed class TestTerrainDeformationStore : IPlanetTerrainDeformationStore
+    {
+        public double SampleElevationDeltaMeters(PlanetVector direction, int seed) => 0.0;
+
+        public int GetRevision(int seed) => 0;
+
+        public void Apply(int seed, IReadOnlyList<PlanetTerrainDeformation> deformations)
+        {
+        }
+
+        public void Clear(int seed)
+        {
+        }
+
+        public void ClearAll()
+        {
+        }
     }
 }
