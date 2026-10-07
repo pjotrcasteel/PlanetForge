@@ -39,6 +39,14 @@ test('FrozenToWaterCycle_PreservesUnifiedPhysicalSurface', async ({ page }, test
   const southSurface = await measureSurface(page);
   await page.screenshot({ path: testInfo.outputPath('year-50-south.png'), fullPage: true });
 
+  for (const debugView of ['noAtmosphere', 'noCryosphere', 'oceanOnly', 'terrainOnly']) {
+    await page.evaluate(view => window.__planetForgeSurfaceTest.setDebugView(view), debugView);
+    await page.waitForTimeout(50);
+    await page.screenshot({ path: testInfo.outputPath(`year-50-south-${debugView}.png`), fullPage: true });
+  }
+  await page.evaluate(() => window.__planetForgeSurfaceTest.setDebugView('normal'));
+  await page.waitForTimeout(50);
+
   await orientPitch(page, 0.0);
   await page.getByRole('button', { name: 'NEXT' }).click();
   await expect(page.getByText('ACTIVE WATER CYCLE', { exact: true })).toBeVisible({ timeout: 90_000 });
