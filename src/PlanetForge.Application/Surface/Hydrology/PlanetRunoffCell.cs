@@ -6,5 +6,5 @@ public sealed record PlanetRunoffCell(
     PlanetSurfaceGridCellId Cell,
     double LocalAnnualRunoffMillimeters,
     double DrainageAreaSquareMeters,
-    double AnnualRunoffVolumeCubicMeters,
+    double AccumulatedAnnualRunoffVolumeCubicMeters,
     double MeanDischargeCubicMetersPerSecond);
