@@ -74,10 +74,10 @@ export function setPlanet(snapshot) {
         if (enteringLocal) {
             state.localYaw = -0.65;
             state.localPitch = 0.72;
-            state.localCameraAltitudeMeters = snapshot.localSurface.cameraAltitudeMeters;
-            state.distance = 1.0 + (state.localCameraAltitudeMeters / state.planetRadiusMeters);
         }
 
+        state.localCameraAltitudeMeters = snapshot.localSurface.cameraAltitudeMeters;
+        state.distance = 1.0 + (state.localCameraAltitudeMeters / state.planetRadiusMeters);
         state.renderMode = 'local';
         state.localAnchorDirection = [
             snapshot.localSurface.anchorDirection.x,
