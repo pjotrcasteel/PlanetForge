@@ -1014,7 +1014,7 @@ vec4 cryosphereMaterial(vec3 radial, vec3 normal, float elevationAboveSeaLevel) 
     landCoverage = max(landCoverage, polarCoastalBridge);
 
     float coverage = ocean ? smoothstep(0.16, 0.74, seaCoverage) : smoothstep(0.10, 0.80, landCoverage);
-    if (coverage < 0.025) discard;
+    if (coverage < 0.12) discard;
 
     float iceTexture = (macro * 0.68) + (meso * 0.32);
     vec3 seaIce = mix(vec3(0.48, 0.64, 0.70), vec3(0.79, 0.87, 0.89), 0.47 + (iceTexture * 0.22));
@@ -1026,7 +1026,7 @@ vec4 cryosphereMaterial(vec3 radial, vec3 normal, float elevationAboveSeaLevel) 
 
     float direct = max(dot(normalize(normal), normalize(uLightDirection)), 0.0);
     material *= clamp(0.62 + (0.42 * direct), 0.52, 1.08);
-    float alpha = coverage >= 0.98 ? 1.0 : clamp(smoothstep(0.05, 0.90, coverage) * 0.98, 0.0, 0.98);
+    float alpha = coverage >= 0.98 ? 1.0 : clamp(smoothstep(0.12, 0.90, coverage) * 0.98, 0.0, 0.98);
     return vec4(material, alpha);
 }
 
