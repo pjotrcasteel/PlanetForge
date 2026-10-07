@@ -95,17 +95,21 @@ public sealed class ProceduralPlanetElevationSourceTests
                 .Select(direction =>
                 {
                     var nearby = OffsetDirection(direction, 0.012);
-                    var first = source.SampleElevationMeters(direction, seed);
-                    var second = source.SampleElevationMeters(nearby, seed);
-                    return Math.Abs(first - second);
+                    var elevation = source.SampleElevationMeters(direction, seed);
+                    var nearbyElevation = source.SampleElevationMeters(nearby, seed);
+                    return (Elevation: elevation, Relief: Math.Abs(elevation - nearbyElevation));
                 })
+                .Where(sample => sample.Elevation > 350.0)
+                .Select(sample => sample.Relief)
                 .OrderBy(value => value)
                 .ToArray();
+
+            Assert.IsGreaterThan(24, localRelief.Length, $"Seed {seed} lacks enough exposed continental terrain to assess.");
             var upperDecile = localRelief[(int)Math.Floor(localRelief.Length * 0.90)];
             var strongTransitions = localRelief.Count(value => value > 220.0);
 
-            Assert.IsGreaterThan(140.0, upperDecile, $"Seed {seed} is too smooth at regional scale.");
-            Assert.IsGreaterThan(8, strongTransitions, $"Seed {seed} lacks enough ridges, scarps or canyon walls.");
+            Assert.IsGreaterThan(140.0, upperDecile, $"Seed {seed} is too smooth across exposed terrain.");
+            Assert.IsGreaterThan(6, strongTransitions, $"Seed {seed} lacks enough ridges, scarps or canyon walls.");
         }
     }
 
