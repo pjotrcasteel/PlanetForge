@@ -4,6 +4,17 @@ namespace PlanetForge.Infrastructure.Surface;
 
 public sealed class ProceduralPlanetElevationSource : IPlanetElevationSource
 {
+    private readonly IPlanetTerrainDeformationStore? terrainDeformationStore;
+
+    public ProceduralPlanetElevationSource()
+    {
+    }
+
+    public ProceduralPlanetElevationSource(IPlanetTerrainDeformationStore terrainDeformationStore)
+    {
+        this.terrainDeformationStore = terrainDeformationStore;
+    }
+
     private const double MaximumLandElevationMeters = 9_000.0;
     private const double MaximumOceanDepthMeters = 7_000.0;
     private const int MountainBeltCount = 7;
@@ -38,7 +49,10 @@ public sealed class ProceduralPlanetElevationSource : IPlanetElevationSource
             0.055,
             -1.0,
             1.0);
-        return normalizedElevation >= 0.0 ? normalizedElevation * MaximumLandElevationMeters : normalizedElevation * MaximumOceanDepthMeters;
+        var baseElevationMeters = normalizedElevation >= 0.0
+            ? normalizedElevation * MaximumLandElevationMeters
+            : normalizedElevation * MaximumOceanDepthMeters;
+        return baseElevationMeters + (terrainDeformationStore?.SampleElevationDeltaMeters(direction, seed) ?? 0.0);
     }
 
     private static double SampleMountainBelts(PlanetVector direction, int seed, double landMask)
