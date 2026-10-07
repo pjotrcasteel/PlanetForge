@@ -23,6 +23,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<PlanetSurfaceCellAnalyzer>();
         services.AddSingleton<PlanetHydrologyModelBuilder>();
         services.AddSingleton<PlanetRunoffModel>();
+        services.AddSingleton<PlanetCryosphereRunoffModel>();
         services.AddSingleton<PlanetHydrologyFeatureExtractor>();
         services.AddSingleton<PlanetRiverGeomorphologyModel>();
         services.AddSingleton<PlanetSurfaceMeshBuilder>();
