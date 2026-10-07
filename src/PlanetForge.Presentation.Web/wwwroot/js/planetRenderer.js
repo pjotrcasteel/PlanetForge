@@ -28,7 +28,7 @@ export function initialize(canvasId, snapshot, dotNetReference) {
     const gl = canvas?.getContext('webgl2', { antialias: true, alpha: true });
     if (!canvas || !gl) throw new Error('PlanetForge requires WebGL 2.');
 
-    document.title = 'PlanetForge 0.0.17.4 — Unified Surface Foundation';
+    document.title = 'PlanetForge 0.0.17.5 — Cryosphere Seam Fix';
     try {
         state = createState(canvas, gl, dotNetReference);
         installInput(state);
@@ -491,13 +491,6 @@ function installVisualTestApi() {
             renderGlobe(state);
             state.dirty = false;
             return measureSurface(state);
-        },
-        setDebugView(view) {
-            if (!state) return;
-            state.debugView = view ?? 'normal';
-            state.dirty = true;
-            renderGlobe(state);
-            state.dirty = false;
         }
     };
 }
@@ -567,11 +560,6 @@ function renderGlobe(s) {
     const eye = orbitEye(s.yaw, s.pitch, s.distance);
     const view = lookAt(eye, [0, 0, 0], [0, 1, 0]);
     const viewProjection = multiply(projection, view);
-    const debugView = s.debugView ?? 'normal';
-    const drawTerrainPass = debugView !== 'oceanOnly';
-    const drawOceanPass = debugView !== 'terrainOnly';
-    const drawCryospherePass = debugView !== 'noCryosphere' && debugView !== 'oceanOnly' && debugView !== 'terrainOnly';
-    const drawAtmospherePass = debugView !== 'noAtmosphere' && debugView !== 'oceanOnly' && debugView !== 'terrainOnly';
 
     gl.uniformMatrix4fv(s.globeUniforms.model, false, identityMatrix());
     gl.uniformMatrix4fv(s.globeUniforms.viewProjection, false, viewProjection);
@@ -591,47 +579,32 @@ function renderGlobe(s) {
 
     gl.disable(gl.BLEND);
     gl.depthMask(true);
-    if (drawTerrainPass) {
-        gl.uniform1i(s.globeUniforms.mode, isPreBiologicalSurface(s) ? 2 : 0);
-        drawTerrain(s);
-    }
+    gl.uniform1i(s.globeUniforms.mode, isPreBiologicalSurface(s) ? 2 : 0);
+    drawTerrain(s);
 
-    if (drawOceanPass && s.liquidFraction > 0.001) {
+    if (s.liquidFraction > 0.001) {
         gl.uniform1i(s.globeUniforms.mode, 3);
-        gl.depthMask(false);
         drawSurface(s);
-
-        gl.depthMask(true);
-        gl.colorMask(false, false, false, false);
-        drawSurface(s);
-        gl.colorMask(true, true, true, true);
     }
 
-    if (drawCryospherePass) {
-        gl.enable(gl.BLEND);
-        gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
-        gl.depthMask(true);
-        gl.enable(gl.POLYGON_OFFSET_FILL);
-        gl.polygonOffset(-4.0, -8.0);
-        gl.uniform1i(s.globeUniforms.mode, 4);
-        drawSurface(s);
-        gl.disable(gl.POLYGON_OFFSET_FILL);
-        gl.disable(gl.BLEND);
-    }
+    gl.enable(gl.BLEND);
+    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+    gl.depthMask(true);
+    gl.enable(gl.POLYGON_OFFSET_FILL);
+    gl.polygonOffset(-4.0, -8.0);
+    gl.uniform1i(s.globeUniforms.mode, 4);
+    drawSurface(s);
+    gl.disable(gl.POLYGON_OFFSET_FILL);
 
-    if (drawAtmospherePass) {
-        gl.enable(gl.BLEND);
-        gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
-        gl.depthMask(false);
-        gl.disable(gl.CULL_FACE);
-        gl.uniform1i(s.globeUniforms.mode, 1);
-        gl.uniformMatrix4fv(s.globeUniforms.model, false, scaleMatrix(1.065));
-        drawAtmosphere(s);
-        gl.uniformMatrix4fv(s.globeUniforms.model, false, identityMatrix());
-        gl.depthMask(true);
-        gl.enable(gl.CULL_FACE);
-        gl.disable(gl.BLEND);
-    }
+    gl.depthMask(false);
+    gl.disable(gl.CULL_FACE);
+    gl.uniform1i(s.globeUniforms.mode, 1);
+    gl.uniformMatrix4fv(s.globeUniforms.model, false, scaleMatrix(1.065));
+    drawAtmosphere(s);
+    gl.uniformMatrix4fv(s.globeUniforms.model, false, identityMatrix());
+    gl.depthMask(true);
+    gl.enable(gl.CULL_FACE);
+    gl.disable(gl.BLEND);
 }
 
 function renderLocal(s) {
@@ -956,10 +929,9 @@ vec3 terrainMaterial(vec3 radial, vec3 normal, float elevationAboveSeaLevel, boo
 }
 
 vec4 oceanMaterial(vec3 radial, vec3 normal, float elevationAboveSeaLevel) {
-    if (uLiquidFraction <= 0.001) discard;
+    if (elevationAboveSeaLevel >= 0.0 || uLiquidFraction <= 0.001) discard;
 
-    float physicalDepth = max(-elevationAboveSeaLevel, 0.0);
-    float depth = max(physicalDepth, 160.0);
+    float depth = max(-elevationAboveSeaLevel, 0.0);
     float shelf = 1.0 - smoothstep(220.0, 2100.0, depth);
     float coast = 1.0 - smoothstep(0.0, 780.0, depth);
     float deepening = smoothstep(1450.0, 3900.0, depth);
@@ -972,6 +944,11 @@ vec4 oceanMaterial(vec3 radial, vec3 normal, float elevationAboveSeaLevel) {
     vec3 color = mix(midOcean, deepOcean, deepening);
     color = mix(color, shelfOcean, shelf * 0.86);
     color = mix(color, coastalOcean, coast * 0.72);
+
+    float broadVariation = valueNoise((radial * 8.0) + vec3(3.0, -4.0, 8.0)) - 0.5;
+    float fineVariation = valueNoise((radial * 24.0) + vec3(-2.0, 9.0, 5.0)) - 0.5;
+    color += vec3(0.0, broadVariation * 0.008, broadVariation * 0.012);
+    color += vec3(0.0, fineVariation * 0.003, fineVariation * 0.005);
 
     vec3 viewDirection = normalize(uCameraPosition - vWorldPosition);
     vec3 lightDirection = normalize(uLightDirection);
@@ -1037,7 +1014,7 @@ vec4 cryosphereMaterial(vec3 radial, vec3 normal, float elevationAboveSeaLevel) 
     landCoverage = max(landCoverage, polarCoastalBridge);
 
     float coverage = ocean ? smoothstep(0.16, 0.74, seaCoverage) : smoothstep(0.10, 0.80, landCoverage);
-    if (coverage < 0.12) discard;
+    if (coverage < 0.025) discard;
 
     float iceTexture = (macro * 0.68) + (meso * 0.32);
     vec3 seaIce = mix(vec3(0.48, 0.64, 0.70), vec3(0.79, 0.87, 0.89), 0.47 + (iceTexture * 0.22));
@@ -1049,7 +1026,7 @@ vec4 cryosphereMaterial(vec3 radial, vec3 normal, float elevationAboveSeaLevel) 
 
     float direct = max(dot(normalize(normal), normalize(uLightDirection)), 0.0);
     material *= clamp(0.62 + (0.42 * direct), 0.52, 1.08);
-    float alpha = coverage >= 0.98 ? 1.0 : clamp(smoothstep(0.12, 0.90, coverage) * 0.98, 0.0, 0.98);
+    float alpha = coverage >= 0.98 ? 1.0 : clamp(smoothstep(0.05, 0.90, coverage) * 0.98, 0.0, 0.98);
     return vec4(material, alpha);
 }
 
@@ -1079,7 +1056,7 @@ void main() {
     }
 
     bool preBiological = uMode == 2;
-    if (elevationAboveSeaLevel < 60.0 && uLiquidFraction > 0.001) {
+    if (elevationAboveSeaLevel < 0.0 && uLiquidFraction > 0.001) {
         discard;
     }
 
