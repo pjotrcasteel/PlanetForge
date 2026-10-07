@@ -10,4 +10,6 @@ public sealed record PlanetRiverSegment(
     double FromElevationMeters,
     double ToElevationMeters,
     long ContributingLandCellCount,
+    double DrainageAreaSquareMeters,
+    double MeanDischargeCubicMetersPerSecond,
     int StrahlerOrder);

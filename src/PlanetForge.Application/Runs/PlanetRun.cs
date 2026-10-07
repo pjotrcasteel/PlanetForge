@@ -9,12 +9,13 @@ namespace PlanetForge.Application.Runs;
 public sealed class PlanetRun(
     FrozenWorldMission frozenWorldMission,
     PlanetHydrologyModelBuilder hydrologyModelBuilder,
+    PlanetRunoffModel runoffModel,
     PlanetHydrologyFeatureExtractor hydrologyFeatureExtractor)
 {
     public const int SaveSchemaVersion = 3;
 
     private const int WaterSurveyGridLevel = 5;
-    private const long MinimumRiverContributingLandCells = 8;
+    private const double MinimumRiverMeanDischargeCubicMetersPerSecond = 2_500.0;
     private const double ReferenceAnnualPrecipitationMillimeters = 950.0;
     private static readonly int[] WaterCycleFrameYears = [1, 5, 20, 50, 100];
 
@@ -58,7 +59,7 @@ public sealed class PlanetRun(
     private bool researchChoiceAvailable;
     private PlanetWaterSurvey? waterSurvey;
     private PlanetWaterCycleState? waterCycle;
-    private PlanetHydrologyFeatures? waterFeatures;
+    private PlanetHydrologySnapshot? waterHydrology;
 
     public IReadOnlyList<PlanetRunEraDefinition> Eras => EraDefinitions;
 
@@ -72,7 +73,7 @@ public sealed class PlanetRun(
         researchChoiceAvailable = false;
         waterSurvey = null;
         waterCycle = null;
-        waterFeatures = null;
+        waterHydrology = null;
         journal.Clear();
         researchUnlocks.Clear();
         AddJournalEntry(
@@ -121,19 +122,20 @@ public sealed class PlanetRun(
     public PlanetRunSnapshot SurveyWaterWorld(CancellationToken cancellationToken)
     {
         EnsureWaterWorld();
-        EnsureWaterSurvey(cancellationToken);
+        var features = BuildWaterFeatures(cancellationToken);
+        EnsureWaterSurvey(features);
         return CreateSnapshot();
     }
 
     public PlanetWaterWorldSimulationResult SimulateWaterWorld(CancellationToken cancellationToken)
     {
         EnsureWaterWorld();
-        var features = EnsureWaterFeatures(cancellationToken);
-        EnsureWaterSurvey(features);
 
         var planet = CurrentMission.Planet;
         var precipitation = EstimateAnnualPrecipitationMillimeters(planet);
         var runoff = EstimateAnnualRunoffMillimeters(precipitation);
+        var features = BuildWaterFeatures(runoff, cancellationToken);
+        EnsureWaterSurvey(features);
         var startYear = waterCycle?.SimulatedYears ?? 0;
         var frames = WaterCycleFrameYears
             .Select(frameYears => BuildWaterCycleFrame(startYear + frameYears, precipitation, runoff, features))
@@ -217,6 +219,7 @@ public sealed class PlanetRun(
         researchChoiceAvailable = save.ResearchChoiceAvailable;
         waterSurvey = save.WaterSurvey;
         waterCycle = save.WaterCycle;
+        waterHydrology = null;
         journal.Clear();
         journal.AddRange(save.Journal);
         researchUnlocks.Clear();
@@ -224,32 +227,42 @@ public sealed class PlanetRun(
         return CreateSnapshot();
     }
 
-    private PlanetHydrologyFeatures EnsureWaterFeatures(CancellationToken cancellationToken)
-    {
-        waterFeatures ??= BuildWaterFeatures(cancellationToken);
-        return waterFeatures;
-    }
-
     private PlanetHydrologyFeatures BuildWaterFeatures(CancellationToken cancellationToken)
     {
         var planet = CurrentMission.Planet;
-        var hydrology = hydrologyModelBuilder.Build(
+        var precipitation = EstimateAnnualPrecipitationMillimeters(planet);
+        var annualRunoffMillimeters = EstimateAnnualRunoffMillimeters(precipitation);
+        return BuildWaterFeatures(annualRunoffMillimeters, cancellationToken);
+    }
+
+    private PlanetHydrologyFeatures BuildWaterFeatures(double annualRunoffMillimeters, CancellationToken cancellationToken)
+    {
+        var planet = CurrentMission.Planet;
+        var hydrology = EnsureWaterHydrology(cancellationToken);
+        var runoff = runoffModel.Build(
+            hydrology,
+            planet.PhysicalParameters.RadiusMeters,
+            planet.SeaLevelMeters,
+            annualRunoffMillimeters,
+            cancellationToken);
+        return hydrologyFeatureExtractor.Extract(hydrology, runoff, MinimumRiverMeanDischargeCubicMetersPerSecond, cancellationToken);
+    }
+
+    private PlanetHydrologySnapshot EnsureWaterHydrology(CancellationToken cancellationToken)
+    {
+        if (waterHydrology is not null)
+        {
+            return waterHydrology;
+        }
+
+        var planet = CurrentMission.Planet;
+        waterHydrology = hydrologyModelBuilder.Build(
             WaterSurveyGridLevel,
             planet.Seed,
             planet.PhysicalParameters.RadiusMeters,
             planet.SeaLevelMeters,
             cancellationToken);
-        return hydrologyFeatureExtractor.Extract(hydrology, MinimumRiverContributingLandCells, cancellationToken);
-    }
-
-    private void EnsureWaterSurvey(CancellationToken cancellationToken)
-    {
-        if (waterSurvey is not null)
-        {
-            return;
-        }
-
-        EnsureWaterSurvey(EnsureWaterFeatures(cancellationToken));
+        return waterHydrology;
     }
 
     private void EnsureWaterSurvey(PlanetHydrologyFeatures features)
@@ -284,9 +297,9 @@ public sealed class PlanetRun(
         var lakeFill = Math.Clamp(lakeFillResponse * Math.Clamp(annualPrecipitationMillimeters / 700.0, 0.0, 1.0), 0.0, 1.0);
         var activeRiverCount = features.RiverSegments.Count == 0 ? 0 : Math.Clamp((int)Math.Round(features.RiverSegments.Count * riverActivation), 1, features.RiverSegments.Count);
         var activeLakeCount = features.Lakes.Count == 0 ? 0 : Math.Clamp((int)Math.Round(features.Lakes.Count * lakeFill), 1, features.Lakes.Count);
-        var maximumContribution = features.RiverSegments.Count == 0 ? 1L : features.RiverSegments.Max(segment => segment.ContributingLandCellCount);
+        var maximumDischarge = features.RiverSegments.Count == 0 ? 1.0 : features.RiverSegments.Max(segment => segment.MeanDischargeCubicMetersPerSecond);
         var activeSegments = features.RiverSegments
-            .OrderByDescending(segment => segment.ContributingLandCellCount)
+            .OrderByDescending(segment => segment.MeanDischargeCubicMetersPerSecond)
             .ThenByDescending(segment => segment.StrahlerOrder)
             .Take(activeRiverCount)
             .Select(segment => new PlanetWaterPathSegment(
@@ -296,8 +309,9 @@ public sealed class PlanetRun(
                 segment.ToDirection.X,
                 segment.ToDirection.Y,
                 segment.ToDirection.Z,
-                Math.Clamp(Math.Sqrt(segment.ContributingLandCellCount / (double)maximumContribution), 0.08, 1.0),
-                segment.StrahlerOrder))
+                Math.Clamp(Math.Sqrt(segment.MeanDischargeCubicMetersPerSecond / maximumDischarge), 0.08, 1.0),
+                segment.StrahlerOrder,
+                segment.MeanDischargeCubicMetersPerSecond))
             .ToArray();
         var state = new PlanetWaterCycleState(
             year,
