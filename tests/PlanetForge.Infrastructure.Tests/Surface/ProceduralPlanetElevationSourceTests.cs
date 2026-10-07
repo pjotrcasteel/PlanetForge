@@ -135,6 +135,22 @@ public sealed class ProceduralPlanetElevationSourceTests
         Assert.IsGreaterThan(3_000.0, elevations.Max());
     }
 
+
+    [TestMethod]
+    public void SampleElevationMeters_ContinentalLand_HasRegionalReliefHierarchy()
+    {
+        var source = new ProceduralPlanetElevationSource();
+        var elevations = FibonacciDirections(8_192).Select(direction => source.SampleElevationMeters(direction, PlanetSeedCatalog.ShowcaseSeed)).Where(elevation => elevation > 100.0).ToArray();
+        var lowlands = elevations.Count(elevation => elevation < 1_000.0);
+        var uplands = elevations.Count(elevation => elevation >= 1_000.0 && elevation < 2_500.0);
+        var mountains = elevations.Count(elevation => elevation >= 2_500.0);
+
+        Assert.IsGreaterThan(50, lowlands);
+        Assert.IsGreaterThan(20, uplands);
+        Assert.IsGreaterThan(0, mountains);
+        Assert.IsGreaterThan(2_000.0, elevations.Max() - elevations.Min());
+    }
+
     private static IEnumerable<PlanetVector> FibonacciDirections(int count)
     {
         var goldenRatio = (1.0 + Math.Sqrt(5.0)) / 2.0;
