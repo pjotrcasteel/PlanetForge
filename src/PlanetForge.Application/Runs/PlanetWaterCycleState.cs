@@ -26,6 +26,7 @@ public sealed record PlanetWaterCycleState
         SimulatedYears = simulatedYears;
         AnnualPrecipitationMillimeters = annualPrecipitationMillimeters;
         AnnualRunoffMillimeters = annualRunoffMillimeters;
+        AnnualPrecipitationRunoffMillimeters = annualRunoffMillimeters;
 
         var riverMaturity = MaturationResponse(simulatedYears, RiverNetworkMaturationYears);
         var lakeMaturity = MaturationResponse(simulatedYears, LakeMaturationYears);
@@ -52,6 +53,10 @@ public sealed record PlanetWaterCycleState
     public double AnnualPrecipitationMillimeters { get; init; }
 
     public double AnnualRunoffMillimeters { get; init; }
+
+    public double AnnualPrecipitationRunoffMillimeters { get; init; }
+
+    public double AnnualMeltwaterRunoffMillimeters { get; init; }
 
     public double LakeFillFraction { get; init; }
 
