@@ -33,8 +33,17 @@ public sealed class FrozenWorldMission(PlanetExperience planetExperience)
 
     public IReadOnlyList<MissionInterventionDefinition> Interventions => InterventionDefinitions;
 
-    public MissionSnapshot Start()
+    public MissionSnapshot Start() => StartCore(null);
+
+    public MissionSnapshot Start(int seed) => StartCore(seed);
+
+    private MissionSnapshot StartCore(int? seed)
     {
+        if (seed is not null)
+        {
+            planetExperience.SetSeed(seed.Value);
+        }
+
         planetExperience.ResetEarthReference();
         planetExperience.MoveOrbitOutward();
         planetExperience.AdvanceClimate(50.0);
