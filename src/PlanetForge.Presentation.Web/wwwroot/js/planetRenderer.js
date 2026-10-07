@@ -11,6 +11,9 @@ const minimumCameraAltitudeMeters = 3.0;
 const maximumCameraAltitudeRatio = 4.2;
 const localTransitionAltitudeMeters = 20_000.0;
 const localExitAltitudeMeters = 25_000.0;
+const minimumLocalMoveStepMeters = 2.0;
+const maximumLocalMoveStepMeters = 5_000.0;
+const localMoveAltitudeFactor = 0.35;
 const treeVisibilityAltitudeMeters = 3_000.0;
 const maximumPlaceholderTrees = 36;
 const placeholderTreeHeightMeters = 15.0;
@@ -28,7 +31,7 @@ export function initialize(canvasId, snapshot, dotNetReference) {
     const gl = canvas?.getContext('webgl2', { antialias: true, alpha: true });
     if (!canvas || !gl) throw new Error('PlanetForge requires WebGL 2.');
 
-    document.title = 'PlanetForge 0.0.22 — Cryosphere Seam Fix';
+    document.title = 'PlanetForge 0.0.23 — Orbital-to-Local Surface';
     try {
         state = createState(canvas, gl, dotNetReference);
         installInput(state);
@@ -71,13 +74,19 @@ export function setPlanet(snapshot) {
         if (enteringLocal) {
             state.localYaw = -0.65;
             state.localPitch = 0.72;
-            state.localCameraAltitudeMeters = snapshot.localSurface.cameraAltitudeMeters;
-            state.distance = 1.0 + (state.localCameraAltitudeMeters / state.planetRadiusMeters);
         }
 
+        state.localCameraAltitudeMeters = snapshot.localSurface.cameraAltitudeMeters;
+        state.distance = 1.0 + (state.localCameraAltitudeMeters / state.planetRadiusMeters);
         state.renderMode = 'local';
+        state.localAnchorDirection = [
+            snapshot.localSurface.anchorDirection.x,
+            snapshot.localSurface.anchorDirection.y,
+            snapshot.localSurface.anchorDirection.z
+        ];
         activateLocalSurface(state, snapshot.localSurface);
         updateLocalScaleHud(state);
+        dispatchPlanetSnapshot(snapshot);
         return;
     }
 
@@ -89,6 +98,7 @@ export function setPlanet(snapshot) {
         state.surfaceKey = surfaceKey;
         activateSurfaceTiles(state, snapshot.surfaceTiles);
     }
+    dispatchPlanetSnapshot(snapshot);
 }
 
 export function dispose() {
@@ -99,7 +109,9 @@ export function dispose() {
     state.dotNetReference = null;
     clearSurfaceBufferCache(state);
     clearLocalSurfaceBuffer(state);
+    if (state.keyDownHandler) window.removeEventListener('keydown', state.keyDownHandler);
     state.scaleHud?.remove();
+    state.navigationHud?.remove();
     state.gl.deleteProgram(state.globeProgram);
     state.gl.deleteProgram(state.localProgram);
     clearRetainedSurfaceGeometry();
@@ -115,7 +127,9 @@ function createState(canvas, gl, dotNetReference) {
         canvas, gl, dotNetReference, globeProgram, localProgram, renderMode: 'globe', geometryKey: null,
         surfaceKey: null, tileBufferCache: new Map(), tiles: [], localSurface: null,
         yaw: -0.65, pitch: 0.24, distance: 3.15, localYaw: -0.65, localPitch: 0.72,
-        localCameraAltitudeMeters: null, scaleHud: createLocalScaleHud(canvas),
+        localCameraAltitudeMeters: null, localAnchorDirection: null,
+        scaleHud: createLocalScaleHud(canvas), navigationHud: createLocalNavigationHud(canvas),
+        localMoveInFlight: false, keyDownHandler: null,
         dragging: false, lastX: 0, lastY: 0,
         lodTimer: null, lodSequence: 0, lastSurfaceRequestSignature: null,
         surfaceRequestInFlight: false, surfaceRequestPending: false, dirty: true,
@@ -173,10 +187,33 @@ function createLocalScaleHud(canvas) {
     return hud;
 }
 
+function createLocalNavigationHud(canvas) {
+    const stage = canvas.closest('.planet-stage');
+    if (!stage) return null;
+
+    const hud = document.createElement('div');
+    hud.className = 'local-navigation-hud';
+    hud.hidden = true;
+    hud.setAttribute('aria-label', 'Local surface movement');
+    hud.innerHTML = [
+        '<button type="button" data-local-move="forward" aria-label="Move forward">↑</button>',
+        '<button type="button" data-local-move="left" aria-label="Move left">←</button>',
+        '<button type="button" data-local-move="back" aria-label="Move backward">↓</button>',
+        '<button type="button" data-local-move="right" aria-label="Move right">→</button>'
+    ].join('');
+    stage.appendChild(hud);
+    return hud;
+}
+
+function dispatchPlanetSnapshot(snapshot) {
+    window.dispatchEvent(new CustomEvent('planetforge:planet-snapshot', { detail: snapshot }));
+}
+
 function updateLocalScaleHud(s) {
     if (!s.scaleHud) return;
     if (s.renderMode !== 'local' || s.localCameraAltitudeMeters === null) {
         s.scaleHud.hidden = true;
+        if (s.navigationHud) s.navigationHud.hidden = true;
         return;
     }
 
@@ -189,6 +226,7 @@ function updateLocalScaleHud(s) {
     if (trees) trees.style.fontSize = `${treeSizePixels.toFixed(0)}px`;
     if (copy) copy.textContent = `ALT ${altitudeText} · WORLD TREES ≈ 15 m`;
     s.scaleHud.hidden = false;
+    if (s.navigationHud) s.navigationHud.hidden = false;
 }
 
 function activateSurfaceTiles(s, surfaceTiles) {
@@ -393,6 +431,10 @@ function installInput(s) {
             s.distance = 1.0 + (nextAltitude / Math.max(s.planetRadiusMeters, 1.0));
 
             if (nextAltitude >= localExitAltitudeMeters) {
+                if (s.localAnchorDirection) {
+                    s.yaw = Math.atan2(s.localAnchorDirection[0], s.localAnchorDirection[2]);
+                    s.pitch = Math.asin(clamp(s.localAnchorDirection[1], -1.0, 1.0));
+                }
                 s.renderMode = 'globe';
                 s.localCameraAltitudeMeters = null;
                 updateLocalScaleHud(s);
@@ -410,6 +452,75 @@ function installInput(s) {
         s.distance = 1.0 + clamp(altitudeRatio * zoomFactor, minimumCameraAltitudeRatio, maximumCameraAltitudeRatio);
         if (shouldRequestSurfaceUpdate(s)) scheduleSurfaceUpdate(s, surfaceUpdateDebounceMilliseconds);
     }, { passive: false });
+
+    s.keyDownHandler = event => {
+        if (state !== s || s.renderMode !== 'local' || event.metaKey || event.ctrlKey || event.altKey) return;
+        const movement = localMovementForKey(event.key);
+        if (!movement) return;
+        event.preventDefault();
+        void moveLocalSurface(s, movement.forward, movement.right);
+    };
+    window.addEventListener('keydown', s.keyDownHandler);
+
+    for (const button of s.navigationHud?.querySelectorAll('[data-local-move]') ?? []) {
+        button.addEventListener('click', () => {
+            const movement = localMovementForAction(button.dataset.localMove);
+            if (movement) void moveLocalSurface(s, movement.forward, movement.right);
+        });
+    }
+}
+
+function localMovementForKey(key) {
+    return switchLocalMovement(key.toLowerCase());
+}
+
+function localMovementForAction(action) {
+    return switchLocalMovement(action);
+}
+
+function switchLocalMovement(value) {
+    switch (value) {
+        case 'w':
+        case 'arrowup':
+        case 'forward':
+            return { forward: 1.0, right: 0.0 };
+        case 's':
+        case 'arrowdown':
+        case 'back':
+            return { forward: -1.0, right: 0.0 };
+        case 'a':
+        case 'arrowleft':
+        case 'left':
+            return { forward: 0.0, right: -1.0 };
+        case 'd':
+        case 'arrowright':
+        case 'right':
+            return { forward: 0.0, right: 1.0 };
+        default:
+            return null;
+    }
+}
+
+async function moveLocalSurface(s, forwardScale, rightScale) {
+    if (state !== s || s.renderMode !== 'local' || !s.dotNetReference || s.localMoveInFlight) return;
+    const stepMeters = clamp(
+        (s.localCameraAltitudeMeters ?? minimumCameraAltitudeMeters) * localMoveAltitudeFactor,
+        minimumLocalMoveStepMeters,
+        maximumLocalMoveStepMeters);
+    const forwardMeters = forwardScale * stepMeters;
+    const rightMeters = rightScale * stepMeters;
+    const eastMeters = (-Math.sin(s.localYaw) * forwardMeters) + (Math.cos(s.localYaw) * rightMeters);
+    const northMeters = (Math.cos(s.localYaw) * forwardMeters) + (Math.sin(s.localYaw) * rightMeters);
+
+    s.localMoveInFlight = true;
+    try {
+        const snapshot = await s.dotNetReference.invokeMethodAsync('MoveLocalSurfaceAnchor', eastMeters, northMeters);
+        if (state === s) setPlanet(snapshot);
+    } catch (error) {
+        if (state === s) console.error('PlanetForge local surface movement failed.', error);
+    } finally {
+        s.localMoveInFlight = false;
+    }
 }
 
 function shouldRequestSurfaceUpdate(s) {
@@ -486,9 +597,43 @@ function installVisualTestApi() {
             state.dirty = false;
         },
         getYaw() { return state?.yaw ?? 0.0; },
+        async enterLocalAtDirection(direction, altitudeMeters = 10_000.0) {
+            if (!state || !Array.isArray(direction) || direction.length !== 3) return null;
+            const normalizedDirection = normalize(direction);
+            state.yaw = Math.atan2(normalizedDirection[0], normalizedDirection[2]);
+            state.pitch = Math.asin(clamp(normalizedDirection[1], -1.0, 1.0));
+            state.distance = 1.0 + (Math.max(altitudeMeters, minimumCameraAltitudeMeters) / state.planetRadiusMeters);
+            state.dirty = true;
+            const sequence = ++state.lodSequence;
+            await requestSurfaceUpdate(state, sequence);
+            return {
+                renderMode: state.renderMode,
+                anchorDirection: state.localAnchorDirection,
+                altitudeMeters: state.localCameraAltitudeMeters
+            };
+        },
+        async moveLocal(eastMeters, northMeters) {
+            if (!state || state.renderMode !== 'local' || !state.dotNetReference) return null;
+            const snapshot = await state.dotNetReference.invokeMethodAsync('MoveLocalSurfaceAnchor', eastMeters, northMeters);
+            if (state) setPlanet(snapshot);
+            return {
+                renderMode: state?.renderMode ?? 'disposed',
+                anchorDirection: state?.localAnchorDirection ?? null
+            };
+        },
+        getLocalState() {
+            if (!state) return null;
+            return {
+                renderMode: state.renderMode,
+                anchorDirection: state.localAnchorDirection,
+                altitudeMeters: state.localCameraAltitudeMeters,
+                localSurfaceSizeMeters: state.localSurface?.sizeMeters ?? 0.0
+            };
+        },
         measure() {
             if (!state) return null;
-            renderGlobe(state);
+            if (state.renderMode === 'local' && state.localSurface) renderLocal(state);
+            else renderGlobe(state);
             state.dirty = false;
             return measureSurface(state);
         }

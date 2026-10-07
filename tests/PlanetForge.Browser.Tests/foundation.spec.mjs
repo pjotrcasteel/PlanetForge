@@ -57,7 +57,37 @@ test('FrozenToWaterCycle_PreservesUnifiedPhysicalSurface', async ({ page }, test
     if (overlay) overlay.style.visibility = '';
   });
 
-  const metrics = { frozenSurface, meltedSurface, oppositeSurface, northSurface, southSurface, activeSurface, frozenWater, activeWater };
+  const riverDirection = await page.evaluate(() => window.__planetForgeWaterTest.getFirstRiverDirection());
+  expect(riverDirection).not.toBeNull();
+
+  const localEntry = await page.evaluate(
+    direction => window.__planetForgeSurfaceTest.enterLocalAtDirection(direction, 10_000),
+    riverDirection);
+  expect(localEntry.renderMode).toBe('local');
+  await page.waitForFunction(() => window.__planetForgeWaterTest.getRenderMode() === 'local', null, { timeout: 10_000 });
+
+  const closeLocalEntry = await page.evaluate(
+    direction => window.__planetForgeSurfaceTest.enterLocalAtDirection(direction, 750),
+    riverDirection);
+  expect(closeLocalEntry.renderMode).toBe('local');
+  await page.waitForTimeout(150);
+
+  const localSurface = await measureSurface(page);
+  const localWater = await measureWater(page);
+  await page.screenshot({ path: testInfo.outputPath('active-water-cycle-local.png'), fullPage: true });
+
+  const beforeMove = await page.evaluate(() => window.__planetForgeSurfaceTest.getLocalState());
+  expect(beforeMove.renderMode).toBe('local');
+  expect(beforeMove.localSurfaceSizeMeters).toBeGreaterThan(0.0);
+
+  const moved = await page.evaluate(() => window.__planetForgeSurfaceTest.moveLocal(250.0, 0.0));
+  expect(moved.renderMode).toBe('local');
+  await page.waitForTimeout(150);
+  const afterMove = await page.evaluate(() => window.__planetForgeSurfaceTest.getLocalState());
+  const anchorTravel = vectorDistance(beforeMove.anchorDirection, afterMove.anchorDirection);
+  await page.screenshot({ path: testInfo.outputPath('active-water-cycle-local-moved.png'), fullPage: true });
+
+  const metrics = { frozenSurface, meltedSurface, oppositeSurface, northSurface, southSurface, activeSurface, localSurface, frozenWater, activeWater, localWater, anchorTravel };
   console.log(`Foundation metrics: ${JSON.stringify(metrics)}`);
   await testInfo.attach('foundation-metrics', { body: JSON.stringify(metrics, null, 2), contentType: 'application/json' });
 
@@ -93,6 +123,12 @@ test('FrozenToWaterCycle_PreservesUnifiedPhysicalSurface', async ({ page }, test
   expect(activeWater.minimumRiverElevationMeters).not.toBeNull();
   expect(activeWater.maximumRiverElevationMeters).not.toBeNull();
   expect(activeWater.maximumRiverElevationMeters).toBeGreaterThan(activeWater.minimumRiverElevationMeters);
+
+  expect(localSurface.glError).toBe(0);
+  expect(localWater.renderMode).toBe('local');
+  expect(localWater.visiblePixels).toBeGreaterThan(20);
+  expect(localWater.maximumAlpha).toBeGreaterThan(0.30);
+  expect(anchorTravel).toBeGreaterThan(0.000001);
 });
 
 async function orientPitch(page, targetPitch) {
@@ -124,4 +160,10 @@ async function measureSurface(page) {
 
 async function measureWater(page) {
   return page.evaluate(() => window.__planetForgeWaterTest.measure());
+}
+
+
+function vectorDistance(first, second) {
+  if (!first || !second || first.length !== 3 || second.length !== 3) return 0.0;
+  return Math.hypot(first[0] - second[0], first[1] - second[1], first[2] - second[2]);
 }
