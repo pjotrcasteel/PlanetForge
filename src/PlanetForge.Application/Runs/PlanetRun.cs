@@ -10,7 +10,9 @@ public sealed class PlanetRun(
     FrozenWorldMission frozenWorldMission,
     PlanetHydrologyModelBuilder hydrologyModelBuilder,
     PlanetRunoffModel runoffModel,
-    PlanetHydrologyFeatureExtractor hydrologyFeatureExtractor)
+    PlanetHydrologyFeatureExtractor hydrologyFeatureExtractor,
+    PlanetRiverGeomorphologyModel riverGeomorphologyModel,
+    IPlanetTerrainDeformationStore terrainDeformationStore)
 {
     public const int SaveSchemaVersion = 3;
 
@@ -67,6 +69,7 @@ public sealed class PlanetRun(
 
     public PlanetRunSnapshot StartNew()
     {
+        terrainDeformationStore.ClearAll();
         mission = frozenWorldMission.Start();
         era = PlanetRunEra.DeadRock;
         insight = 0;
@@ -142,6 +145,8 @@ public sealed class PlanetRun(
             .ToArray();
 
         waterCycle = frames[^1].State;
+        ApplyRiverGeomorphology(features, cancellationToken);
+
         if (!HasJournalEntry("first-precipitation"))
         {
             AddJournalEntryAt(
@@ -213,6 +218,7 @@ public sealed class PlanetRun(
             throw new NotSupportedException($"Planet Run save schema {save.SchemaVersion} is not supported by schema {SaveSchemaVersion}.");
         }
 
+        terrainDeformationStore.ClearAll();
         mission = frozenWorldMission.RestoreState(save.Mission);
         era = save.Era;
         insight = save.Insight;
@@ -225,6 +231,44 @@ public sealed class PlanetRun(
         researchUnlocks.Clear();
         researchUnlocks.AddRange(save.ResearchUnlocks);
         return CreateSnapshot();
+    }
+
+    private void ApplyRiverGeomorphology(PlanetHydrologyFeatures features, CancellationToken cancellationToken)
+    {
+        if (waterCycle is null || waterCycle.ActiveRiverSegmentCount == 0)
+        {
+            return;
+        }
+
+        var activeSegments = features.RiverSegments
+            .OrderByDescending(segment => segment.MeanDischargeCubicMetersPerSecond)
+            .ThenByDescending(segment => segment.StrahlerOrder)
+            .Take(waterCycle.ActiveRiverSegmentCount)
+            .ToArray();
+        var planet = CurrentMission.Planet;
+        var deformations = riverGeomorphologyModel.Build(
+            activeSegments,
+            waterCycle.SimulatedYears,
+            planet.PhysicalParameters.RadiusMeters,
+            cancellationToken);
+        if (deformations.Count == 0)
+        {
+            return;
+        }
+
+        terrainDeformationStore.Apply(planet.Seed, deformations);
+        waterHydrology = null;
+        mission = frozenWorldMission.RefreshTerrain();
+
+        if (!HasJournalEntry("river-incision-observed"))
+        {
+            AddJournalEntryAt(
+                CurrentMission.MissionYearsElapsed + waterCycle.SimulatedYears,
+                "river-incision-observed",
+                "Persistent rivers begin reshaping the terrain",
+                "Discharge and slope now feed a geomorphic terrain layer: major channels incise into the surface while broader valleys emerge around persistent high-flow routes.",
+                4);
+        }
     }
 
     private PlanetHydrologyFeatures BuildWaterFeatures(CancellationToken cancellationToken)
