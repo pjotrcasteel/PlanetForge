@@ -1,12 +1,16 @@
 import { getRetainedSurfaceGeometry } from './surfaceGeometryStore.js';
 
 let state;
+let surfaceSnapshotHandler;
 
 const verticalFieldOfViewRadians = Math.PI / 4.2;
 const minimumCameraAltitudeMeters = 3.0;
 const maximumCameraAltitudeRatio = 4.2;
 const localTransitionAltitudeMeters = 20_000.0;
 const localExitAltitudeMeters = 25_000.0;
+const minimumLocalViewPitchRadians = 0.24;
+const maximumLocalViewPitchRadians = 1.48;
+const localWaterClearanceMeters = 0.45;
 const landReliefExaggeration = 28.0;
 const visualWaterClearanceMeters = 180.0;
 const terrainLatitudeBins = 60;
@@ -27,6 +31,11 @@ export function initialize(overlayCanvasId, inputCanvasId, planetRadiusMeters) {
         yaw: -0.65,
         pitch: 0.24,
         distance: 3.15,
+        renderMode: 'globe',
+        localYaw: -0.65,
+        localPitch: 0.72,
+        localCameraAltitudeMeters: null,
+        localSurface: null,
         dragging: false,
         lastX: 0,
         lastY: 0,
@@ -39,6 +48,8 @@ export function initialize(overlayCanvasId, inputCanvasId, planetRadiusMeters) {
         metrics: createMetrics()
     };
 
+    surfaceSnapshotHandler = event => setPlanet(event.detail);
+    window.addEventListener('planetforge:planet-snapshot', surfaceSnapshotHandler);
     installInput(state);
     installVisualTestApi();
     requestAnimationFrame(render);
@@ -49,6 +60,70 @@ export function setPlanetRadius(planetRadiusMeters) {
     state.planetRadiusMeters = planetRadiusMeters;
     state.terrainIndex = null;
     rebuildWaterGeometry(state);
+}
+
+export function setPlanet(snapshot) {
+    if (!state || !snapshot) return;
+
+    const radiusMeters = snapshot.physicalParameters?.radiusMeters;
+    if (Number.isFinite(radiusMeters) && radiusMeters > 0.0) {
+        state.planetRadiusMeters = radiusMeters;
+    }
+
+    const localSurface = snapshot.localSurface;
+    if (localSurface) {
+        const enteringLocal = state.renderMode !== 'local';
+        if (enteringLocal) {
+            state.localYaw = -0.65;
+            state.localPitch = 0.72;
+        }
+
+        state.renderMode = 'local';
+        state.localCameraAltitudeMeters = localSurface.cameraAltitudeMeters;
+        state.distance = 1.0 + (state.localCameraAltitudeMeters / Math.max(state.planetRadiusMeters, 1.0));
+        state.localSurface = createLocalSurfaceState(state.localSurface, localSurface);
+        return;
+    }
+
+    state.renderMode = 'globe';
+    state.localCameraAltitudeMeters = null;
+    state.localSurface = null;
+}
+
+function createLocalSurfaceState(previous, localSurface) {
+    const anchorDirection = unitPoint(
+        localSurface.anchorDirection.x,
+        localSurface.anchorDirection.y,
+        localSurface.anchorDirection.z);
+    const hasGeometry = (localSurface.positionsMeters?.length ?? 0) > 0
+        && (localSurface.elevationsMeters?.length ?? 0) > 0;
+    const anchorElevationMeters = hasGeometry
+        ? findAnchorElevation(localSurface.positionsMeters, localSurface.elevationsMeters)
+        : previous?.key === localSurface.key
+            ? previous.anchorElevationMeters
+            : 0.0;
+
+    return {
+        key: localSurface.key,
+        anchorDirection,
+        anchorElevationMeters,
+        sizeMeters: localSurface.sizeMeters,
+        cameraAltitudeMeters: localSurface.cameraAltitudeMeters
+    };
+}
+
+function findAnchorElevation(positions, elevations) {
+    let bestDistanceSquared = Number.POSITIVE_INFINITY;
+    let bestElevation = 0.0;
+    const count = Math.min(elevations.length, Math.floor(positions.length / 3));
+    for (let index = 0; index < count; index++) {
+        const offset = index * 3;
+        const distanceSquared = (positions[offset] * positions[offset]) + (positions[offset + 2] * positions[offset + 2]);
+        if (distanceSquared >= bestDistanceSquared) continue;
+        bestDistanceSquared = distanceSquared;
+        bestElevation = elevations[index];
+    }
+    return Number.isFinite(bestElevation) ? bestElevation : 0.0;
 }
 
 export function setWaterCycle(waterCycle) {
@@ -66,6 +141,8 @@ export function clearWaterCycle() {
 }
 
 export function dispose() {
+    if (surfaceSnapshotHandler) window.removeEventListener('planetforge:planet-snapshot', surfaceSnapshotHandler);
+    surfaceSnapshotHandler = null;
     if (window.__planetForgeWaterTest) delete window.__planetForgeWaterTest;
     state = null;
 }
