@@ -28,11 +28,17 @@ export function initialize(canvasId, snapshot, dotNetReference) {
     if (!canvas || !gl) throw new Error('PlanetForge requires WebGL 2.');
 
     document.title = 'PlanetForge 0.0.17.4 — Unified Surface Foundation';
-    state = createState(canvas, gl, dotNetReference);
-    installInput(state);
-    setPlanet(snapshot);
-    installVisualTestApi();
-    requestAnimationFrame(render);
+    try {
+        state = createState(canvas, gl, dotNetReference);
+        installInput(state);
+        setPlanet(snapshot);
+        installVisualTestApi();
+        requestAnimationFrame(render);
+    } catch (error) {
+        window.__planetForgeSurfaceError = error instanceof Error ? error.message : String(error);
+        console.error('PlanetForge unified surface initialization failed.', error);
+        throw error;
+    }
 }
 
 export function setPlanet(snapshot) {
@@ -96,6 +102,7 @@ export function dispose() {
     state.gl.deleteProgram(state.localProgram);
     clearRetainedSurfaceGeometry();
     if (window.__planetForgeSurfaceTest) delete window.__planetForgeSurfaceTest;
+    if (window.__planetForgeSurfaceError) delete window.__planetForgeSurfaceError;
     state = null;
 }
 
