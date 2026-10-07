@@ -320,6 +320,7 @@ function buildRiverSegments(s, paths) {
             points,
             samples,
             discharge: Math.max(...riverPath.map(path => clamp(path.relativeDischarge ?? 0.2, 0.08, 1.0))),
+            meanDischargeCubicMetersPerSecond: Math.max(...riverPath.map(path => Math.max(0.0, path.meanDischargeCubicMetersPerSecond ?? 0.0))),
             streamOrder: Math.max(...riverPath.map(path => Math.max(1, path.streamOrder ?? 1)))
         });
         s.metrics.riverPointCount += points.length;
@@ -703,10 +704,19 @@ function drawLocalRiver(context, river, frame, s, viewProjection, width, height)
         .filter(Boolean);
     if (projected.length < 2) return;
 
-    const orderScale = clamp((river.streamOrder - 1) * 0.22, 0.0, 0.9);
-    const coreWidth = 1.15 + (river.discharge * 2.35) + orderScale;
-    drawSmoothPolyline(context, projected, `rgba(5, 25, 31, ${0.42 + river.discharge * 0.12})`, coreWidth + 1.0);
-    drawSmoothPolyline(context, projected, `rgba(32, 111, 132, ${0.58 + river.discharge * 0.18})`, coreWidth);
+    const coreWidth = localRiverWidthPixels(river, s, height);
+    drawSmoothPolyline(context, projected, `rgba(5, 25, 31, ${0.42 + river.discharge * 0.12})`, coreWidth + 1.25);
+    drawSmoothPolyline(context, projected, `rgba(32, 111, 132, ${0.60 + river.discharge * 0.18})`, coreWidth);
+}
+
+function localRiverWidthPixels(river, s, viewportHeightPixels) {
+    const discharge = Math.max(river.meanDischargeCubicMetersPerSecond ?? 0.0, 1.0);
+    const physicalWidthMeters = clamp(4.5 * Math.sqrt(discharge), 18.0, 280.0);
+    const cameraHeightMeters = Math.max(s.localCameraAltitudeMeters ?? localTransitionAltitudeMeters, minimumCameraAltitudeMeters);
+    const visibleHeightMeters = 2.0 * cameraHeightMeters * Math.tan(verticalFieldOfViewRadians * 0.5);
+    const metersPerPixel = visibleHeightMeters / Math.max(viewportHeightPixels, 1);
+    const orderScale = 1.0 + clamp((river.streamOrder - 1) * 0.08, 0.0, 0.32);
+    return clamp((physicalWidthMeters / Math.max(metersPerPixel, 0.01)) * orderScale, 1.25, 18.0);
 }
 
 function densifyLocalRiverSamples(samples, patchSizeMeters, planetRadiusMeters) {
