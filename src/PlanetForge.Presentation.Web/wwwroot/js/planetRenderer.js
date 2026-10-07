@@ -28,7 +28,7 @@ export function initialize(canvasId, snapshot, dotNetReference) {
     const gl = canvas?.getContext('webgl2', { antialias: true, alpha: true });
     if (!canvas || !gl) throw new Error('PlanetForge requires WebGL 2.');
 
-    document.title = 'PlanetForge 0.0.24 — Continental Geology';
+    document.title = 'PlanetForge 0.0.25 — Terrain Shaping';
     try {
         state = createState(canvas, gl, dotNetReference);
         installInput(state);
