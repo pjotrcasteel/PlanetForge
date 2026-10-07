@@ -31,7 +31,7 @@ export function initialize(canvasId, snapshot, dotNetReference) {
     const gl = canvas?.getContext('webgl2', { antialias: true, alpha: true });
     if (!canvas || !gl) throw new Error('PlanetForge requires WebGL 2.');
 
-    document.title = 'PlanetForge 0.0.22 — Cryosphere Seam Fix';
+    document.title = 'PlanetForge 0.0.23 — Orbital-to-Local Surface';
     try {
         state = createState(canvas, gl, dotNetReference);
         installInput(state);
