@@ -73,3 +73,8 @@ dotnet run --project src/PlanetForge.Presentation.Web/PlanetForge.Presentation.W
 ```bash
 dotnet test PlanetForge.slnx
 ```
+
+
+## PF 0.0.27 Generator Lab
+
+Step 2 is deliberately frozen to static procedural planet generation until generated geography passes the visual quality gate. Climate, hydrology, erosion, life and game progression remain in the codebase but are not part of the generator acceptance loop.
