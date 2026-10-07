@@ -292,6 +292,7 @@ function buildRiverSegments(s, paths) {
 
     for (const riverPath of riverPaths) {
         const points = [];
+        const samples = [];
         let reachedOcean = false;
         for (let pathIndex = 0; pathIndex < riverPath.length && !reachedOcean; pathIndex++) {
             const path = riverPath[pathIndex];
@@ -309,6 +310,7 @@ function buildRiverSegments(s, paths) {
                     reachedOcean = true;
                     break;
                 }
+                samples.push({ direction, elevationMeters: terrainElevation });
                 points.push(surfacePoint(direction, terrainElevation, s.planetRadiusMeters));
             }
         }
@@ -316,6 +318,7 @@ function buildRiverSegments(s, paths) {
         if (points.length < 2) continue;
         segments.push({
             points,
+            samples,
             discharge: Math.max(...riverPath.map(path => clamp(path.relativeDischarge ?? 0.2, 0.08, 1.0))),
             streamOrder: Math.max(...riverPath.map(path => Math.max(1, path.streamOrder ?? 1)))
         });
@@ -417,6 +420,7 @@ function buildLakeGroup(s, cells, fillScale) {
     const elevations = cells.map(cell => sampleTerrainElevation(s, unitPoint(cell.x, cell.y, cell.z)));
     const surfaceElevationMeters = elevations.length > 0 ? Math.max(...elevations) : 0.0;
     const boundary = [];
+    const boundarySamples = [];
 
     for (const cell of cells) {
         const direction = unitPoint(cell.x, cell.y, cell.z);
@@ -435,11 +439,12 @@ function buildLakeGroup(s, cells, fillScale) {
                 direction[1] * Math.cos(radiusRadians) + radial[1] * Math.sin(radiusRadians),
                 direction[2] * Math.cos(radiusRadians) + radial[2] * Math.sin(radiusRadians)
             ]);
+            boundarySamples.push({ direction: edgeDirection, elevationMeters: surfaceElevationMeters });
             boundary.push(surfacePoint(edgeDirection, surfaceElevationMeters, s.planetRadiusMeters));
         }
     }
 
-    return { boundary, fillFraction };
+    return { boundary, boundarySamples, fillFraction };
 }
 
 function surfacePoint(direction, elevationMeters, planetRadiusMeters) {
