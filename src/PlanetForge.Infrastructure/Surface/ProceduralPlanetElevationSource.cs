@@ -15,6 +15,10 @@ public sealed class ProceduralPlanetElevationSource : IPlanetElevationSource
     private const int DetailSeedSalt = 0x6D2B79F5;
     private const int MotionSeedSalt = 0x51ED270B;
     private const int BoundarySeedSalt = 0x4F1BBCDC;
+    private const int ProvinceSeedSalt = 0x61C88647;
+    private const int UplandSeedSalt = 0x1B873593;
+    private const int BasinSeedSalt = 0x7F4A7C15;
+    private const int CoastSeedSalt = 0x3C6EF372;
 
     private readonly IPlanetTerrainDeformationStore? terrainDeformationStore;
 
@@ -52,8 +56,9 @@ public sealed class ProceduralPlanetElevationSource : IPlanetElevationSource
         var regional = FractalNoise(direction, seed ^ RegionalSeedSalt, 2.0, 5, 2.03, 0.51);
         var detail = FractalNoise(direction, seed ^ DetailSeedSalt, 10.0, 4, 2.13, 0.46);
         var continentalWeight = primaryContinental ? SmoothStep(0.02, 0.20, normalized + 0.08) : 0.0;
-        normalized += regional * Lerp(0.045, 0.145, continentalWeight);
-        normalized += detail * Lerp(0.012, 0.034, continentalWeight);
+        normalized += regional * Lerp(0.035, 0.105, continentalWeight);
+        normalized += detail * Lerp(0.010, 0.028, continentalWeight);
+        normalized += SampleNaturalTerrain(direction, seed, normalized, continentalWeight, boundaryInfluence);
 
         var tectonics = SampleTectonicRelief(direction, seed, nearest, primaryContinental, secondaryContinental, boundaryInfluence, boundaryNoise);
         normalized += tectonics;
@@ -64,6 +69,34 @@ public sealed class ProceduralPlanetElevationSource : IPlanetElevationSource
         }
 
         return Math.Clamp(normalized, -1.0, 1.0);
+    }
+
+    private static double SampleNaturalTerrain(PlanetVector direction, int seed, double elevation, double continentalWeight, double boundaryInfluence)
+    {
+        if (continentalWeight <= 0.001)
+        {
+            var abyssal = FractalNoise(direction, seed ^ BasinSeedSalt, 3.4, 3, 2.05, 0.48);
+            return abyssal * 0.022;
+        }
+
+        var provinceDirection = WarpDirection(direction, seed ^ ProvinceSeedSalt, 0.11, 2.4);
+        var province = FractalNoise(provinceDirection, seed ^ ProvinceSeedSalt, 1.35, 4, 2.01, 0.54);
+        var uplands = RidgedNoise(provinceDirection, seed ^ UplandSeedSalt, 3.8, 4, 2.07, 0.49);
+        var basinField = FractalNoise(provinceDirection, seed ^ BasinSeedSalt, 2.7, 4, 2.09, 0.50);
+        var oldHighlands = Math.Max(0.0, uplands) * SmoothStep(0.02, 0.55, province);
+        var basins = Math.Max(0.0, -basinField) * SmoothStep(-0.45, 0.25, province);
+        var plains = 1.0 - Math.Clamp(Math.Abs(province) * 1.7, 0.0, 1.0);
+        var coastDistance = Math.Abs(elevation);
+        var coastalEnvelope = 1.0 - SmoothStep(0.015, 0.18, coastDistance);
+        var coastDetail = FractalNoise(direction, seed ^ CoastSeedSalt, 7.0, 4, 2.17, 0.48);
+
+        var relief = province * 0.075;
+        relief += oldHighlands * 0.105;
+        relief -= basins * 0.085;
+        relief += plains * basinField * 0.018;
+        relief += coastDetail * coastalEnvelope * 0.045;
+        relief *= Lerp(0.82, 1.0, 1.0 - boundaryInfluence);
+        return relief * continentalWeight;
     }
 
     private static double SampleTectonicRelief(
