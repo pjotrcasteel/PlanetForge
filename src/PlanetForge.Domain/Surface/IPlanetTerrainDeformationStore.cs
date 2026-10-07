@@ -10,6 +10,10 @@ public interface IPlanetTerrainDeformationStore
 
     void ApplyDeposition(int seed, IReadOnlyList<PlanetTerrainDeposition> depositions);
 
+    PlanetTerrainEvolutionState Export(int seed);
+
+    void Restore(int seed, PlanetTerrainEvolutionState state);
+
     void Clear(int seed);
 
     void ClearAll();
