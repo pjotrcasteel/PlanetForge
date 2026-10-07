@@ -105,6 +105,36 @@ public sealed class ProceduralPlanetElevationSourceTests
         Assert.IsGreaterThan(700.0, highlands.Max() - highlands.Min());
     }
 
+
+    [TestMethod]
+    public void SampleElevationMeters_IntegritySeedGallery_AvoidsSingleFlatHemisphere()
+    {
+        var source = new ProceduralPlanetElevationSource();
+        var directions = FibonacciDirections(2_048).ToArray();
+
+        foreach (var seed in PlanetSeedCatalog.IntegritySeeds)
+        {
+            var elevations = directions.Select(direction => source.SampleElevationMeters(direction, seed)).ToArray();
+            var landFraction = elevations.Count(elevation => elevation > 0.0) / (double)elevations.Length;
+            var roundedBands = elevations.Select(elevation => (int)Math.Round(elevation / 250.0)).Distinct().Count();
+
+            Assert.IsGreaterThan(0.10, landFraction, $"Seed {seed} generated almost no land.");
+            Assert.IsLessThan(0.65, landFraction, $"Seed {seed} generated almost no ocean.");
+            Assert.IsGreaterThanOrEqualTo(12, roundedBands, $"Seed {seed} has insufficient terrain variation.");
+        }
+    }
+
+    [TestMethod]
+    public void SampleElevationMeters_GlobalSample_HasTectonicMountainRelief()
+    {
+        var source = new ProceduralPlanetElevationSource();
+        var elevations = FibonacciDirections(4_096).Select(direction => source.SampleElevationMeters(direction, 42)).ToArray();
+        var highMountains = elevations.Count(elevation => elevation > 2_500.0);
+
+        Assert.IsGreaterThan(0, highMountains);
+        Assert.IsGreaterThan(3_000.0, elevations.Max());
+    }
+
     private static IEnumerable<PlanetVector> FibonacciDirections(int count)
     {
         var goldenRatio = (1.0 + Math.Sqrt(5.0)) / 2.0;
