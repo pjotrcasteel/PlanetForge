@@ -42,6 +42,9 @@ public sealed class ProceduralPlanetElevationSource : IPlanetElevationSource
     private const int CanyonSeedSalt = 0x4C6F21B7;
     private const int CanyonWarpSeedSalt = 0x5D2B83E9;
     private const int ScarpSeedSalt = 0x68A14F2D;
+    private const int CoastRuggedSeedSalt = 0x71C39A4B;
+    private const int CoastDetailSeedSalt = 0x2A6D58F1;
+    private const int CoastFractureSeedSalt = 0x3D17B6C9;
     private const int CanyonSystemCount = 4;
 
     public double SampleElevationMeters(PlanetVector direction, int seed)
@@ -60,6 +63,7 @@ public sealed class ProceduralPlanetElevationSource : IPlanetElevationSource
         var escarpmentShape = SampleEscarpments(warpedDirection, seed, plateaus);
         var valleyIncision = SampleAncientValleys(warpedDirection, seed, continental, landMask);
         var canyonIncision = SampleCanyonSystems(warpedDirection, seed, continental, landMask);
+        var coastalMarginDetail = SampleCoastalMarginDetail(warpedDirection, seed, continental);
 
         var rawElevation =
             (continental * 0.72) +
@@ -73,10 +77,11 @@ public sealed class ProceduralPlanetElevationSource : IPlanetElevationSource
             (basins * 0.18) -
             (valleyIncision * 0.15) -
             (canyonIncision * 0.23) +
+            (coastalMarginDetail * 0.055) +
             (detail * 0.025) -
             0.01;
 
-        var normalizedElevation = Math.Tanh(rawElevation * 1.05);
+        var normalizedElevation = ShapeCoastalProfile(warpedDirection, seed, Math.Tanh(rawElevation * 1.05));
         var baseElevationMeters = normalizedElevation >= 0.0
             ? normalizedElevation * MaximumLandElevationMeters
             : normalizedElevation * MaximumOceanDepthMeters;
@@ -334,6 +339,40 @@ public sealed class ProceduralPlanetElevationSource : IPlanetElevationSource
         }
 
         return strongest * highlandSupport;
+    }
+
+    private static double SampleCoastalMarginDetail(PlanetVector direction, int seed, double continental)
+    {
+        var marginSupport = 1.0 - SmoothStep(0.025, 0.30, Math.Abs(continental));
+        if (marginSupport <= 0.0)
+        {
+            return 0.0;
+        }
+
+        var broad = FractalNoise(direction, seed ^ CoastDetailSeedSalt, 5.4, 3, 2.08, 0.50);
+        var fractured = RidgedNoise(direction, seed ^ CoastFractureSeedSalt, 9.2, 3, 2.11, 0.47);
+        return ((broad * 0.72) + (fractured * 0.28)) * marginSupport;
+    }
+
+    private static double ShapeCoastalProfile(PlanetVector direction, int seed, double elevation)
+    {
+        const double coastalRadius = 0.26;
+        var magnitude = Math.Abs(elevation);
+        if (magnitude <= double.Epsilon || magnitude >= coastalRadius)
+        {
+            return elevation;
+        }
+
+        var ruggedSignal = ToUnitRange(FractalNoise(direction, seed ^ CoastRuggedSeedSalt, 3.6, 3, 2.07, 0.50));
+        var ruggedness = SmoothStep(0.30, 0.74, ruggedSignal);
+        var normalizedDistance = magnitude / coastalRadius;
+        var exponent = elevation >= 0.0
+            ? Lerp(1.52, 0.70, ruggedness)
+            : Lerp(1.82, 0.64, ruggedness);
+        var profiledMagnitude = coastalRadius * Math.Pow(normalizedDistance, exponent);
+        var coastalInfluence = 1.0 - SmoothStep(0.72, 1.0, normalizedDistance);
+        var shapedMagnitude = Lerp(magnitude, profiledMagnitude, coastalInfluence);
+        return Math.CopySign(shapedMagnitude, elevation);
     }
 
     private static double SampleSphericalRegions(
