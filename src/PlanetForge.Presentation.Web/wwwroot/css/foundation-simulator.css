@@ -55,7 +55,7 @@
     background: rgba(3, 12, 10, 0.82);
     color: #dcebe2;
     font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-    pointer-events: none;
+    pointer-events: auto;
 }
 
 .foundation-clock strong {
@@ -69,6 +69,38 @@
     font-weight: 700;
     letter-spacing: 0.12em;
     text-align: center;
+}
+
+.foundation-seed {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    width: 100%;
+    margin-top: 3px;
+    padding-top: 6px;
+    border-top: 1px solid rgba(141, 190, 163, 0.14);
+}
+
+.foundation-seed small {
+    color: rgba(177, 205, 188, 0.66);
+    font: 700 0.52rem ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    letter-spacing: 0.08em;
+    white-space: nowrap;
+}
+
+.foundation-generate {
+    padding: 3px 7px;
+    border: 1px solid rgba(122, 213, 158, 0.42);
+    border-radius: 999px;
+    background: rgba(15, 58, 39, 0.72);
+    color: #bde4ca;
+    font: 800 0.48rem ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    letter-spacing: 0.09em;
+}
+
+.foundation-generate:disabled {
+    opacity: 0.45;
 }
 
 .foundation-controls {
