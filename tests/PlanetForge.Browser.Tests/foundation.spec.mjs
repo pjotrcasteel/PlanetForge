@@ -5,8 +5,10 @@ test.setTimeout(240_000);
 test('FrozenToWaterCycle_PreservesUnifiedPhysicalSurface', async ({ page }, testInfo) => {
   await page.goto('/?visualTest=1');
   await expect(page.getByText('FROZEN WORLD')).toBeVisible({ timeout: 20_000 });
-  await page.waitForFunction(() => Boolean(window.__planetForgeSurfaceTest));
-  await page.waitForFunction(() => Boolean(window.__planetForgeWaterTest));
+  await page.waitForFunction(() => Boolean(window.__planetForgeSurfaceTest) || Boolean(window.__planetForgeSurfaceError), null, { timeout: 15_000 });
+  const surfaceError = await page.evaluate(() => window.__planetForgeSurfaceError ?? null);
+  expect(surfaceError, `Unified surface renderer failed to initialize: ${surfaceError}`).toBeNull();
+  await page.waitForFunction(() => Boolean(window.__planetForgeWaterTest), null, { timeout: 15_000 });
 
   await orientPitch(page, 0.0);
   const frozenSurface = await measureSurface(page);
