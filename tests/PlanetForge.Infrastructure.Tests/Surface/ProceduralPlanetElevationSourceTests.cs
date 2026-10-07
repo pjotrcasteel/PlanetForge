@@ -84,6 +84,52 @@ public sealed class ProceduralPlanetElevationSourceTests
     }
 
     [TestMethod]
+    public void SampleElevationMeters_IntegritySeedGallery_ContainsLocalTerrainRelief()
+    {
+        var source = new ProceduralPlanetElevationSource();
+        var directions = FibonacciDirections(384).ToArray();
+
+        foreach (var seed in PlanetSeedCatalog.IntegritySeeds)
+        {
+            var localRelief = directions
+                .Select(direction =>
+                {
+                    var nearby = OffsetDirection(direction, 0.012);
+                    var first = source.SampleElevationMeters(direction, seed);
+                    var second = source.SampleElevationMeters(nearby, seed);
+                    return Math.Abs(first - second);
+                })
+                .OrderBy(value => value)
+                .ToArray();
+            var upperDecile = localRelief[(int)Math.Floor(localRelief.Length * 0.90)];
+            var strongTransitions = localRelief.Count(value => value > 220.0);
+
+            Assert.IsGreaterThan(140.0, upperDecile, $"Seed {seed} is too smooth at regional scale.");
+            Assert.IsGreaterThan(8, strongTransitions, $"Seed {seed} lacks enough ridges, scarps or canyon walls.");
+        }
+    }
+
+    [TestMethod]
+    public void SampleElevationMeters_ShowcaseSeed_HasSharpHighlandTransitions()
+    {
+        var source = new ProceduralPlanetElevationSource();
+        var samples = FibonacciDirections(1_024)
+            .Select(direction =>
+            {
+                var elevation = source.SampleElevationMeters(direction, PlanetSeedCatalog.ShowcaseSeed);
+                var nearby = OffsetDirection(direction, 0.006);
+                var nearbyElevation = source.SampleElevationMeters(nearby, PlanetSeedCatalog.ShowcaseSeed);
+                return (Elevation: elevation, Relief: Math.Abs(elevation - nearbyElevation));
+            })
+            .Where(sample => sample.Elevation > 900.0)
+            .ToArray();
+
+        Assert.IsGreaterThan(20, samples.Length);
+        Assert.IsGreaterThan(400.0, samples.Max(sample => sample.Relief));
+        Assert.IsGreaterThan(5, samples.Count(sample => sample.Relief > 180.0));
+    }
+
+    [TestMethod]
     public void SampleElevationMeters_NearbyDirections_RemainContinuous()
     {
         var source = new ProceduralPlanetElevationSource();
