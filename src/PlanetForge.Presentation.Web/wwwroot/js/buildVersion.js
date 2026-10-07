@@ -1,4 +1,4 @@
-const buildVersion = '0.0.23';
+const buildVersion = '0.0.24';
 const pageTitle = `PlanetForge ${buildVersion} — Terraforming Foundation`;
 
 document.title = pageTitle;
