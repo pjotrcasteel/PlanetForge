@@ -57,7 +57,7 @@ export function setPlanet(snapshot) {
     state.landIceFraction = snapshot.climateFeedback?.landIceFraction ?? snapshot.climateFeedback?.cryosphereFraction ?? state.landIceFraction;
     state.snowCoverFraction = snapshot.climateFeedback?.snowCoverFraction ?? snapshot.climateFeedback?.cryosphereFraction ?? state.snowCoverFraction;
 
-    const geometryKey = `${snapshot.seed}:${snapshot.physicalParameters.radiusMeters}`;
+    const geometryKey = `${snapshot.seed}:${snapshot.physicalParameters.radiusMeters}:${snapshot.terrainRevision ?? 0}`;
     if (state.geometryKey !== geometryKey) {
         clearRetainedSurfaceGeometry();
         clearSurfaceBufferCache(state);
