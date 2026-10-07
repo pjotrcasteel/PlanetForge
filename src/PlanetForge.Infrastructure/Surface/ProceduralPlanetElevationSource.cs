@@ -53,7 +53,7 @@ public sealed class ProceduralPlanetElevationSource : IPlanetElevationSource
         var macroNoise = FractalNoise(direction, seed ^ RegionalSeedSalt, 1.25, 5, 2.01, 0.53);
         var coastNoise = FractalNoise(direction, seed ^ CoastSeedSalt, 4.8, 4, 2.13, 0.49);
         var coastlineField = continentalPotential + (macroNoise * 0.18) + (coastNoise * 0.055);
-        var normalized = (coastlineField * 0.38) - 0.235;
+        var normalized = (coastlineField * 0.30) - 0.34;
 
         var continentalWeight = SmoothStep(-0.08, 0.16, normalized);
         var regional = FractalNoise(direction, seed ^ ProvinceSeedSalt, 2.2, 5, 2.03, 0.51);
