@@ -1,4 +1,4 @@
-import { getRetainedSurfaceGeometry } from './cryosphereSurfaceAdapter.js';
+import { getRetainedSurfaceGeometry } from './surfaceGeometryStore.js';
 
 let state;
 
