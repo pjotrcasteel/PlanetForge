@@ -91,6 +91,14 @@ public sealed class PlanetExperience(
         return CreateSnapshot();
     }
 
+    public PlanetRenderSnapshot InvalidateTerrain()
+    {
+        surfaceMeshCache.Clear();
+        cachedLocalSurfaceKey = null;
+        cachedLocalSurface = null;
+        return CreateSnapshot();
+    }
+
     public PlanetRenderSnapshot AdvanceClimate(double years)
     {
         var basePhysics = PlanetPhysicsCalculator.Calculate(state.PhysicalParameters);
