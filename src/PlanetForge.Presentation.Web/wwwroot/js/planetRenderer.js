@@ -28,7 +28,7 @@ export function initialize(canvasId, snapshot, dotNetReference) {
     const gl = canvas?.getContext('webgl2', { antialias: true, alpha: true });
     if (!canvas || !gl) throw new Error('PlanetForge requires WebGL 2.');
 
-    document.title = 'PlanetForge 0.0.22 — Cryosphere Seam Fix';
+    document.title = 'PlanetForge 0.0.23 — Generation Integrity';
     try {
         state = createState(canvas, gl, dotNetReference);
         installInput(state);
@@ -45,6 +45,7 @@ export function initialize(canvasId, snapshot, dotNetReference) {
 export function setPlanet(snapshot) {
     if (!state) return;
     state.dirty = true;
+    state.seed = snapshot.seed;
     state.seaLevelMeters = snapshot.seaLevelMeters;
     state.planetRadiusMeters = snapshot.physicalParameters.radiusMeters;
     state.atmosphereDensity = snapshot.atmosphereDensity;
@@ -486,6 +487,7 @@ function installVisualTestApi() {
             state.dirty = false;
         },
         getYaw() { return state?.yaw ?? 0.0; },
+        getSeed() { return state?.seed ?? null; },
         measure() {
             if (!state) return null;
             renderGlobe(state);
