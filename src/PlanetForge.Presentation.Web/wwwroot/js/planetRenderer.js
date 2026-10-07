@@ -910,15 +910,22 @@ vec3 terrainMaterial(vec3 radial, vec3 normal, float elevationAboveSeaLevel, boo
     material = mix(material, highland, smoothstep(1500.0, 3600.0, elevation));
     material = mix(material, ridge, steep * smoothstep(900.0, 3000.0, elevation) * 0.72);
 
-    float coastalBand = 1.0 - smoothstep(25.0, 780.0, elevation);
-    float beachStrength = coastalBand * (1.0 - smoothstep(0.002, 0.020, vPhysicalSlope));
-    float rockStrength = coastalBand * slope * (1.0 - cliff * 0.55);
-    float cliffStrength = coastalBand * cliff;
-    material = mix(material, beach, beachStrength * 0.92);
-    material = mix(material, coastalRock, rockStrength * 0.72);
-    material = mix(material, cliffRock, cliffStrength * 0.94);
-    float wetEdge = (1.0 - smoothstep(0.0, 180.0, elevation)) * (1.0 - smoothstep(0.002, 0.020, vPhysicalSlope));
-    material = mix(material, vec3(0.30, 0.27, 0.21), wetEdge * 0.24);
+    float coastTexture = fbm((radial * 5.5) + vec3(7.0, -3.0, 2.0));
+    float coastalBand = 1.0 - smoothstep(18.0, 520.0, elevation);
+    float beachLimitMeters = mix(70.0, 220.0, coastTexture);
+    float beachBand = 1.0 - smoothstep(10.0, beachLimitMeters, elevation);
+    float gentleCoast = 1.0 - smoothstep(0.0015, 0.015, vPhysicalSlope);
+    float rockyCoast = smoothstep(0.004, 0.045, vPhysicalSlope);
+    float coastalCliff = smoothstep(0.045, 0.150, vPhysicalSlope);
+    float beachStrength = beachBand * gentleCoast;
+    float rockStrength = coastalBand * rockyCoast * (1.0 - (coastalCliff * 0.45));
+    float cliffStrength = coastalBand * coastalCliff;
+    vec3 localBeach = mix(vec3(0.66, 0.56, 0.39), beach, 0.58 + (coastTexture * 0.30));
+    material = mix(material, localBeach, beachStrength * 0.92);
+    material = mix(material, coastalRock, rockStrength * 0.78);
+    material = mix(material, cliffRock, cliffStrength * 0.96);
+    float wetEdge = (1.0 - smoothstep(0.0, 90.0, elevation)) * gentleCoast;
+    material = mix(material, vec3(0.29, 0.255, 0.205), wetEdge * 0.28);
     material *= 1.0 + subtleVariation;
 
     vec3 lightDirection = normalize(uLightDirection);
@@ -934,18 +941,24 @@ vec4 oceanMaterial(vec3 radial, vec3 normal, float elevationAboveSeaLevel) {
     if (elevationAboveSeaLevel >= 0.0 || uLiquidFraction <= 0.001) discard;
 
     float depth = max(-elevationAboveSeaLevel, 0.0);
-    float shelf = 1.0 - smoothstep(220.0, 2100.0, depth);
-    float coast = 1.0 - smoothstep(0.0, 780.0, depth);
-    float deepening = smoothstep(1450.0, 3900.0, depth);
+    float seafloorSlope = smoothstep(0.003, 0.060, vPhysicalSlope);
+    float shelf = (1.0 - smoothstep(180.0, 1650.0, depth)) * (1.0 - (seafloorSlope * 0.62));
+    float coast = (1.0 - smoothstep(0.0, 280.0, depth)) * (1.0 - smoothstep(0.004, 0.040, vPhysicalSlope));
+    float dropoff = smoothstep(0.018, 0.105, vPhysicalSlope)
+        * smoothstep(140.0, 1050.0, depth)
+        * (1.0 - smoothstep(2600.0, 4800.0, depth));
+    float deepening = smoothstep(1350.0, 3900.0, depth);
 
     vec3 deepOcean = vec3(0.006, 0.052, 0.115);
     vec3 midOcean = vec3(0.012, 0.125, 0.190);
-    vec3 shelfOcean = vec3(0.028, 0.255, 0.315);
-    vec3 coastalOcean = vec3(0.070, 0.390, 0.405);
+    vec3 shelfOcean = vec3(0.026, 0.245, 0.305);
+    vec3 coastalOcean = vec3(0.066, 0.365, 0.385);
+    vec3 dropoffOcean = vec3(0.008, 0.082, 0.145);
 
     vec3 color = mix(midOcean, deepOcean, deepening);
-    color = mix(color, shelfOcean, shelf * 0.86);
-    color = mix(color, coastalOcean, coast * 0.72);
+    color = mix(color, shelfOcean, shelf * 0.90);
+    color = mix(color, coastalOcean, coast * 0.76);
+    color = mix(color, dropoffOcean, dropoff * 0.72);
 
     float broadVariation = valueNoise((radial * 8.0) + vec3(3.0, -4.0, 8.0)) - 0.5;
     float fineVariation = valueNoise((radial * 24.0) + vec3(-2.0, 9.0, 5.0)) - 0.5;
@@ -1104,16 +1117,32 @@ void main() {
     }
 
     bool preBiological = uObjectMode == 2;
-    vec3 deepOcean = vec3(0.035, 0.16, 0.23);
-    vec3 shallowOcean = vec3(0.06, 0.31, 0.36);
+    float elevationAboveSeaLevel = vElevationMeters - uSeaLevelMeters;
+    float depth = max(-elevationAboveSeaLevel, 0.0);
+    float physicalSlope = 1.0 - clamp(normalize(vNormal).y, 0.0, 1.0);
+    vec3 deepOcean = vec3(0.025, 0.11, 0.20);
+    vec3 shelfOcean = vec3(0.045, 0.24, 0.31);
+    vec3 coastalOcean = vec3(0.075, 0.34, 0.37);
     vec3 lowland = preBiological ? vec3(0.34, 0.30, 0.24) : vec3(0.18, 0.38, 0.22);
     vec3 highland = preBiological ? vec3(0.42, 0.36, 0.29) : vec3(0.39, 0.36, 0.22);
     vec3 peak = preBiological ? vec3(0.48, 0.43, 0.37) : vec3(0.62, 0.65, 0.59);
+    vec3 beach = vec3(0.70, 0.61, 0.44);
+    vec3 coastalRock = vec3(0.29, 0.28, 0.26);
+    vec3 cliffRock = vec3(0.15, 0.16, 0.16);
     vec3 baseColor;
 
-    if (uLiquidFraction > 0.001 && vElevationMeters < uSeaLevelMeters - 1500.0) baseColor = deepOcean;
-    else if (uLiquidFraction > 0.001 && vElevationMeters < uSeaLevelMeters) baseColor = shallowOcean;
-    else if (vElevationMeters < 1200.0) baseColor = lowland;
+    if (uLiquidFraction > 0.001 && elevationAboveSeaLevel < 0.0) {
+        float coast = 1.0 - smoothstep(0.0, 240.0, depth);
+        float shelf = 1.0 - smoothstep(180.0, 1600.0, depth);
+        baseColor = mix(deepOcean, shelfOcean, shelf);
+        baseColor = mix(baseColor, coastalOcean, coast * (1.0 - smoothstep(0.015, 0.10, physicalSlope)));
+    } else if (elevationAboveSeaLevel < 180.0 && physicalSlope < 0.018) {
+        baseColor = beach;
+    } else if (elevationAboveSeaLevel < 520.0 && physicalSlope > 0.075) {
+        baseColor = cliffRock;
+    } else if (elevationAboveSeaLevel < 520.0 && physicalSlope > 0.018) {
+        baseColor = coastalRock;
+    } else if (vElevationMeters < 1200.0) baseColor = lowland;
     else if (vElevationMeters < 3500.0) baseColor = highland;
     else baseColor = peak;
 
