@@ -35,6 +35,7 @@ export function initialize(overlayCanvasId, inputCanvasId, planetRadiusMeters) {
         lakeGroups: [],
         terrainIndex: null,
         terrainVertexCount: 0,
+        terrainRevision: -1,
         metrics: createMetrics()
     };
 
@@ -101,16 +102,22 @@ function ensureTerrainIndex(s) {
     const geometry = getRetainedSurfaceGeometry();
     const tiles = geometry?.surfaceTiles ?? [];
     const radiusMeters = geometry?.physicalParameters?.radiusMeters ?? s.planetRadiusMeters;
+    const terrainRevision = geometry?.terrainRevision ?? 0;
     let vertexCount = 0;
     for (const tile of tiles) vertexCount += Math.min(tile?.surfaceVertexCount ?? 0, Math.floor((tile?.positions?.length ?? 0) / 3));
 
-    if (s.terrainIndex && s.terrainVertexCount === vertexCount && vertexCount > 0 && Math.abs(s.planetRadiusMeters - radiusMeters) < 0.5) {
+    if (s.terrainIndex
+        && s.terrainVertexCount === vertexCount
+        && s.terrainRevision === terrainRevision
+        && vertexCount > 0
+        && Math.abs(s.planetRadiusMeters - radiusMeters) < 0.5) {
         s.metrics.terrainVertexCount = vertexCount;
         return;
     }
 
     s.planetRadiusMeters = radiusMeters;
     s.terrainVertexCount = vertexCount;
+    s.terrainRevision = terrainRevision;
     const bins = new Map();
     for (const tile of tiles) {
         const positions = tile?.positions ?? [];

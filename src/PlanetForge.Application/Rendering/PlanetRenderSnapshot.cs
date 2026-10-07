@@ -18,4 +18,5 @@ public sealed record PlanetRenderSnapshot(
     ClimateFeedbackSnapshot ClimateFeedback,
     WaterParameters WaterParameters,
     WaterPhaseSnapshot Water,
-    PlanetLocalSurfaceMesh? LocalSurface = null);
+    PlanetLocalSurfaceMesh? LocalSurface = null,
+    int TerrainRevision = 0);

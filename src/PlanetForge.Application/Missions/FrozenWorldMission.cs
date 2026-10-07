@@ -144,6 +144,12 @@ public sealed class FrozenWorldMission(PlanetExperience planetExperience)
         return new MissionCommitResult(CreateSnapshot(), frames);
     }
 
+    public MissionSnapshot RefreshTerrain()
+    {
+        currentPlanet = planetExperience.InvalidateTerrain();
+        return CreateSnapshot();
+    }
+
     public bool CanAfford(MissionInterventionType type) => budgetRemaining >= GetDefinition(type).Cost;
 
     public MissionInterventionDefinition GetDefinition(MissionInterventionType type) => InterventionDefinitions.Single(definition => definition.Type == type);
