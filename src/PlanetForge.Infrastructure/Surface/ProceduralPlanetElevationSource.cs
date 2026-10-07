@@ -64,15 +64,15 @@ public sealed class ProceduralPlanetElevationSource : IPlanetElevationSource
         var rawElevation =
             (continental * 0.72) +
             (regional * 0.10 * landMask) +
-            (plateBoundaryUplift * 0.73) +
-            (mountainShape * 0.31) +
+            (plateBoundaryUplift * 0.71) +
+            (mountainShape * 0.38) +
             (uplandRelief * 0.08) +
             (plateaus * 0.14) +
-            (escarpmentShape * 0.15) +
+            (escarpmentShape * 0.19) +
             (continentalInterior * 0.16) -
             (basins * 0.18) -
-            (valleyIncision * 0.11) -
-            (canyonIncision * 0.17) +
+            (valleyIncision * 0.15) -
+            (canyonIncision * 0.23) +
             (detail * 0.025) -
             0.01;
 
