@@ -1038,7 +1038,8 @@ void main() {
     float elevationAboveSeaLevel = vElevationMeters - uSeaLevelMeters;
 
     if (uMode == 1) {
-        float rim = pow(1.0 - abs(dot(normalize(vNormal), normalize(-vWorldPosition))), 2.2);
+        float viewAlignment = clamp(abs(dot(normalize(vNormal), normalize(-vWorldPosition))), 0.0, 1.0);
+        float rim = pow(max(0.0, 1.0 - viewAlignment), 2.2);
         float fluxGlow = clamp(sqrt(max(uSolarFlux, 1.0) / 1361.0), 0.65, 1.35);
         float steam = clamp(uVaporFraction * 0.7, 0.0, 0.7);
         vec3 atmosphereColor = mix(vec3(0.20, 0.72, 0.72), vec3(0.72, 0.78, 0.72), steam);
