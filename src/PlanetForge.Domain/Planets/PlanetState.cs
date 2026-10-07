@@ -1,13 +1,14 @@
 using PlanetForge.Domain.Atmosphere;
 using PlanetForge.Domain.Hydrology;
 using PlanetForge.Domain.Physics;
+using PlanetForge.Domain.WorldGeneration;
 
 namespace PlanetForge.Domain.Planets;
 
 public sealed class PlanetState
 {
     public PlanetState(
-        int seed = 24061984,
+        int seed = PlanetSeedCatalog.ShowcaseSeed,
         PlanetPhysicalParameters? physicalParameters = null,
         AtmosphereParameters? atmosphereParameters = null,
         WaterParameters? waterParameters = null)

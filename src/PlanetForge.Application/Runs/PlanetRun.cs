@@ -70,10 +70,14 @@ public sealed class PlanetRun(
 
     public IReadOnlyList<MissionInterventionDefinition> Interventions => frozenWorldMission.Interventions;
 
-    public PlanetRunSnapshot StartNew()
+    public PlanetRunSnapshot StartNew() => StartNewCore(null);
+
+    public PlanetRunSnapshot StartNew(int seed) => StartNewCore(seed);
+
+    private PlanetRunSnapshot StartNewCore(int? seed)
     {
         terrainDeformationStore.ClearAll();
-        mission = frozenWorldMission.Start();
+        mission = seed is null ? frozenWorldMission.Start() : frozenWorldMission.Start(seed.Value);
         era = PlanetRunEra.DeadRock;
         insight = 0;
         researchChoiceAvailable = false;

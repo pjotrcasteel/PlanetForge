@@ -2,6 +2,26 @@ import { expect, test } from '@playwright/test';
 
 test.setTimeout(240_000);
 
+test('SeedControls_ReloadUsesShowcaseAndGenerateCreatesNewWorld', async ({ page }) => {
+  await page.goto('/?visualTest=1');
+  const seedLabel = page.getByTestId('planet-seed');
+  await expect(seedLabel).toHaveText('SEED 24061984', { timeout: 20_000 });
+  await page.waitForFunction(() => Boolean(window.__planetForgeSurfaceTest), null, { timeout: 15_000 });
+  expect(await page.evaluate(() => window.__planetForgeSurfaceTest.getSeed())).toBe(24061984);
+
+  await page.getByRole('button', { name: 'Generate new planet' }).click();
+  await expect(seedLabel).not.toHaveText('SEED 24061984', { timeout: 30_000 });
+  await page.waitForFunction(() => window.__planetForgeSurfaceTest.getSeed() !== 24061984, null, { timeout: 30_000 });
+  const generatedSeed = await page.evaluate(() => window.__planetForgeSurfaceTest.getSeed());
+  expect(generatedSeed).toBeGreaterThan(0);
+
+  await page.reload();
+  await expect(seedLabel).toHaveText('SEED 24061984', { timeout: 20_000 });
+  await page.waitForFunction(() => Boolean(window.__planetForgeSurfaceTest), null, { timeout: 15_000 });
+  expect(await page.evaluate(() => window.__planetForgeSurfaceTest.getSeed())).toBe(24061984);
+});
+
+
 test('FrozenToWaterCycle_PreservesUnifiedPhysicalSurface', async ({ page }, testInfo) => {
   await page.goto('/?visualTest=1');
   await expect(page.getByText('FROZEN WORLD')).toBeVisible({ timeout: 20_000 });

@@ -209,8 +209,18 @@ public sealed class PlanetExperience(
 
     public PlanetRenderSnapshot Reseed()
     {
-        state.Reseed(unchecked((state.Seed * 397) ^ 7919));
-        return CreateSnapshot();
+        SetSeed(unchecked((state.Seed * 397) ^ 7919));
+        return CreateInitialRenderSnapshot();
+    }
+
+    public void SetSeed(int seed)
+    {
+        state.Reseed(seed);
+        surfaceView = null;
+        localAnchorDirection = null;
+        cachedLocalSurfaceKey = null;
+        cachedLocalSurface = null;
+        surfaceMeshCache.Clear();
     }
 
     public PlanetRenderSnapshot ResetEarthReference()

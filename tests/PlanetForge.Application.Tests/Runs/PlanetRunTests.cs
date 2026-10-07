@@ -6,6 +6,7 @@ using PlanetForge.Application.Runs;
 using PlanetForge.Application.Surface;
 using PlanetForge.Application.Surface.Hydrology;
 using PlanetForge.Domain.Surface;
+using PlanetForge.Domain.WorldGeneration;
 
 namespace PlanetForge.Application.Tests.Runs;
 
@@ -24,6 +25,37 @@ public sealed class PlanetRunTests
         Assert.HasCount(1, snapshot.Journal);
         Assert.AreEqual("run-start", snapshot.Journal[0].Key);
         Assert.IsFalse(snapshot.ResearchChoiceAvailable);
+    }
+
+    [TestMethod]
+    public void StartNew_DefaultPlanet_UsesShowcaseSeed()
+    {
+        var run = CreateRun();
+
+        var snapshot = run.StartNew();
+
+        Assert.AreEqual(PlanetSeedCatalog.ShowcaseSeed, snapshot.Mission.Planet.Seed);
+    }
+
+    [TestMethod]
+    public void StartNew_ExplicitSeed_UsesRequestedWorldSeed()
+    {
+        var run = CreateRun();
+
+        var snapshot = run.StartNew(31415926);
+
+        Assert.AreEqual(31415926, snapshot.Mission.Planet.Seed);
+    }
+
+    [TestMethod]
+    public void Restart_GeneratedPlanet_PreservesWorldSeed()
+    {
+        var run = CreateRun();
+        run.StartNew(31415926);
+
+        var snapshot = run.Restart();
+
+        Assert.AreEqual(31415926, snapshot.Mission.Planet.Seed);
     }
 
     [TestMethod]
