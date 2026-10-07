@@ -75,6 +75,7 @@ public sealed class PlanetRunTests
         Assert.IsGreaterThan(0.0, result.Run.WaterCycle.AnnualRunoffMillimeters);
         Assert.HasCount(result.Run.WaterCycle.ActiveRiverSegmentCount, result.Run.WaterCycle.ActiveRiverSegments);
         Assert.IsTrue(result.Run.WaterCycle.ActiveRiverSegments.All(segment => segment.RelativeDischarge is >= 0.08 and <= 1.0));
+        Assert.IsTrue(result.Run.WaterCycle.ActiveRiverSegments.All(segment => segment.MeanDischargeCubicMetersPerSecond > 0.0));
         Assert.IsTrue(result.Run.Journal.Any(entry => entry.Key == "first-precipitation"));
         Assert.IsTrue(result.Run.Journal.Any(entry => entry.Key == "active-runoff-network"));
     }
@@ -171,8 +172,9 @@ public sealed class PlanetRunTests
         var experience = CreateExperience(elevationSource);
         var mission = new FrozenWorldMission(experience);
         var hydrologyBuilder = new PlanetHydrologyModelBuilder(elevationSource);
+        var runoffModel = new PlanetRunoffModel();
         var hydrologyExtractor = new PlanetHydrologyFeatureExtractor();
-        return new PlanetRun(mission, hydrologyBuilder, hydrologyExtractor);
+        return new PlanetRun(mission, hydrologyBuilder, runoffModel, hydrologyExtractor);
     }
 
     private static PlanetExperience CreateExperience(IPlanetElevationSource elevationSource)
