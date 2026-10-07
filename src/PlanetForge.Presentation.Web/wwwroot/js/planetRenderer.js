@@ -781,10 +781,10 @@ void main() {
     float visualRadius = physicalRadius;
 
     if (uMode == 0 || uMode == 2) {
-        float exaggeration = elevationAboveSeaLevel >= 0.0 ? 36 : 4;
+        float exaggeration = elevationAboveSeaLevel >= 0.0 ? 36.0 : 4.0;
         visualRadius = 1.0 + ((elevationMeters * exaggeration) / uPlanetRadiusMeters);
     } else if (uMode == 3) {
-        visualRadius = 1.0 + ((uSeaLevelMeters + 18) / uPlanetRadiusMeters);
+        visualRadius = 1.0 + ((uSeaLevelMeters + 18.0) / uPlanetRadiusMeters);
     } else if (uMode == 4) {
         float latitude = abs(radial.y);
         float polarSupport = smoothstep(0.40, 0.95, latitude);
@@ -794,9 +794,9 @@ void main() {
             * max(clamp(uLandIceFraction, 0.0, 1.0), clamp(uSnowCoverFraction, 0.0, 1.0) * 0.55), 0.0, 1.0);
         float landIceThicknessMeters = (90.0 + (760.0 * polarSupport) + (340.0 * highlandSupport)) * landSupport;
         if (elevationAboveSeaLevel < 0.0) {
-            visualRadius = 1.0 + ((uSeaLevelMeters + 18 + (seaIceThicknessMeters * 18)) / uPlanetRadiusMeters);
+            visualRadius = 1.0 + ((uSeaLevelMeters + 18 + (seaIceThicknessMeters * 18.0)) / uPlanetRadiusMeters);
         } else {
-            visualRadius = 1.0 + (((elevationMeters * 36) + (landIceThicknessMeters * 18)) / uPlanetRadiusMeters);
+            visualRadius = 1.0 + (((elevationMeters * 36.0) + (landIceThicknessMeters * 18.0)) / uPlanetRadiusMeters);
         }
     }
 
