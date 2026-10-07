@@ -1,5 +1,6 @@
 let retainedSurfaceTiles = [];
 let retainedPhysicalParameters;
+let retainedTerrainRevision = 0;
 
 export function retainSurfaceGeometry(snapshot) {
     if (!snapshot) return snapshot;
@@ -7,6 +8,7 @@ export function retainSurfaceGeometry(snapshot) {
     const geometryTiles = (snapshot.surfaceTiles ?? []).filter(hasGeometry);
     if (geometryTiles.length > 0) retainedSurfaceTiles = geometryTiles;
     if (snapshot.physicalParameters) retainedPhysicalParameters = snapshot.physicalParameters;
+    if (Number.isFinite(snapshot.terrainRevision)) retainedTerrainRevision = snapshot.terrainRevision;
 
     const hasIncomingGeometry = geometryTiles.length > 0;
     const hasPhysicalParameters = Boolean(snapshot.physicalParameters);
@@ -24,13 +26,15 @@ export function retainSurfaceGeometry(snapshot) {
 export function getRetainedSurfaceGeometry() {
     return {
         surfaceTiles: retainedSurfaceTiles,
-        physicalParameters: retainedPhysicalParameters
+        physicalParameters: retainedPhysicalParameters,
+        terrainRevision: retainedTerrainRevision
     };
 }
 
 export function clearRetainedSurfaceGeometry() {
     retainedSurfaceTiles = [];
     retainedPhysicalParameters = undefined;
+    retainedTerrainRevision = 0;
 }
 
 function hasGeometry(tile) {
