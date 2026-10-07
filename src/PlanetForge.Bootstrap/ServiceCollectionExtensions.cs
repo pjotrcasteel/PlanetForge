@@ -14,6 +14,7 @@ public static class ServiceCollectionExtensions
 {
     public static IServiceCollection AddPlanetForge(this IServiceCollection services)
     {
+        services.AddSingleton<IPlanetTerrainDeformationStore, PlanetTerrainDeformationStore>();
         services.AddSingleton<IPlanetElevationSource, ProceduralPlanetElevationSource>();
         services.AddSingleton(PlanetSurfaceLodOptions.Default);
         services.AddSingleton<PlanetSurfaceTileSampler>();
@@ -23,6 +24,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<PlanetHydrologyModelBuilder>();
         services.AddSingleton<PlanetRunoffModel>();
         services.AddSingleton<PlanetHydrologyFeatureExtractor>();
+        services.AddSingleton<PlanetRiverGeomorphologyModel>();
         services.AddSingleton<PlanetSurfaceMeshBuilder>();
         services.AddSingleton<PlanetSurfaceMeshCache>();
         services.AddSingleton<PlanetLocalSurfaceMeshBuilder>();
