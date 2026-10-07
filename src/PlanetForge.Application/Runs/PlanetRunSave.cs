@@ -1,4 +1,5 @@
 using PlanetForge.Application.Missions;
+using PlanetForge.Domain.Surface;
 
 namespace PlanetForge.Application.Runs;
 
@@ -11,4 +12,5 @@ public sealed record PlanetRunSave(
     IReadOnlyList<PlanetResearchUnlock> ResearchUnlocks,
     bool ResearchChoiceAvailable,
     PlanetWaterSurvey? WaterSurvey,
-    PlanetWaterCycleState? WaterCycle);
+    PlanetWaterCycleState? WaterCycle,
+    PlanetTerrainEvolutionState? TerrainEvolution = null);

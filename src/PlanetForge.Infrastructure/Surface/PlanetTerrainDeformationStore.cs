@@ -48,7 +48,9 @@ public sealed class PlanetTerrainDeformationStore : IPlanetTerrainDeformationSto
             var state = GetOrCreateState(seed);
             foreach (var deformation in deformations)
             {
-                AddErosionToBins(state, ValidateAndNormalize(deformation));
+                var normalized = ValidateAndNormalize(deformation);
+                state.Erosions.Add(normalized);
+                AddErosionToBins(state, normalized);
             }
 
             state.Revision++;
@@ -68,10 +70,63 @@ public sealed class PlanetTerrainDeformationStore : IPlanetTerrainDeformationSto
             var state = GetOrCreateState(seed);
             foreach (var deposition in depositions)
             {
-                AddDepositionToBins(state, ValidateAndNormalize(deposition));
+                var normalized = ValidateAndNormalize(deposition);
+                state.Depositions.Add(normalized);
+                AddDepositionToBins(state, normalized);
             }
 
             state.Revision++;
+        }
+    }
+
+    public PlanetTerrainEvolutionState Export(int seed)
+    {
+        lock (sync)
+        {
+            if (!states.TryGetValue(seed, out var state))
+            {
+                return PlanetTerrainEvolutionState.Empty;
+            }
+
+            return new PlanetTerrainEvolutionState(
+                state.Revision,
+                state.Erosions.ToArray(),
+                state.Depositions.ToArray());
+        }
+    }
+
+    public void Restore(int seed, PlanetTerrainEvolutionState state)
+    {
+        ArgumentNullException.ThrowIfNull(state);
+        if (state.Revision < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(state), state.Revision, "Terrain revision must be non-negative.");
+        }
+
+        lock (sync)
+        {
+            states.Remove(seed);
+            if (state.Erosions.Count == 0 && state.Depositions.Count == 0 && state.Revision == 0)
+            {
+                return;
+            }
+
+            var restored = new TerrainState { Revision = state.Revision };
+            foreach (var deformation in state.Erosions)
+            {
+                var normalized = ValidateAndNormalize(deformation);
+                restored.Erosions.Add(normalized);
+                AddErosionToBins(restored, normalized);
+            }
+
+            foreach (var deposition in state.Depositions)
+            {
+                var normalized = ValidateAndNormalize(deposition);
+                restored.Depositions.Add(normalized);
+                AddDepositionToBins(restored, normalized);
+            }
+
+            states.Add(seed, restored);
         }
     }
 
@@ -304,6 +359,10 @@ public sealed class PlanetTerrainDeformationStore : IPlanetTerrainDeformationSto
 
     private sealed class TerrainState
     {
+        public List<PlanetTerrainDeformation> Erosions { get; } = [];
+
+        public List<PlanetTerrainDeposition> Depositions { get; } = [];
+
         public Dictionary<int, List<PlanetTerrainDeformation>> ErosionBins { get; } = [];
 
         public Dictionary<int, List<PlanetTerrainDeposition>> DepositionBins { get; } = [];
