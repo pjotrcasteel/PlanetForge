@@ -65,6 +65,20 @@ public sealed class PlanetRunoffModelTests
     }
 
     [TestMethod]
+    public void Build_MeltwaterForcing_IncreasesLocalAndDownstreamDischarge()
+    {
+        var hydrology = BuildDryWorld();
+        var meltwater = Enumerable.Repeat(120.0, hydrology.Layout.CellCount).ToArray();
+
+        var baseline = new PlanetRunoffModel().Build(hydrology, EarthRadiusMeters, -20_000.0, AnnualRunoffMillimeters, CancellationToken.None);
+        var combined = new PlanetRunoffModel().Build(hydrology, EarthRadiusMeters, -20_000.0, AnnualRunoffMillimeters, meltwater, CancellationToken.None);
+        var sink = hydrology.Cells.Single(cell => cell.DrainageTarget is null);
+
+        Assert.IsTrue(combined.GetCell(sink.Cell).MeanDischargeCubicMetersPerSecond > baseline.GetCell(sink.Cell).MeanDischargeCubicMetersPerSecond);
+        Assert.AreEqual(120.0, combined.Cells.First(cell => cell.LocalAnnualRunoffMillimeters > 0.0).LocalAnnualMeltwaterRunoffMillimeters, 0.000001);
+    }
+
+    [TestMethod]
     public void Build_PreCancelledToken_Throws()
     {
         var hydrology = BuildDryWorld();

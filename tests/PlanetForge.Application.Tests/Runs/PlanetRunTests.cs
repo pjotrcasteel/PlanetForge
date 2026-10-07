@@ -73,12 +73,15 @@ public sealed class PlanetRunTests
         Assert.IsGreaterThan(0, result.Run.WaterCycle.ActiveRiverSegmentCount);
         Assert.IsGreaterThan(0.0, result.Run.WaterCycle.AnnualPrecipitationMillimeters);
         Assert.IsGreaterThan(0.0, result.Run.WaterCycle.AnnualRunoffMillimeters);
+        Assert.IsGreaterThan(0.0, result.Run.WaterCycle.AnnualMeltwaterRunoffMillimeters);
+        Assert.IsTrue(result.Run.WaterCycle.AnnualRunoffMillimeters > result.Run.WaterCycle.AnnualPrecipitationRunoffMillimeters);
         Assert.HasCount(result.Run.WaterCycle.ActiveRiverSegmentCount, result.Run.WaterCycle.ActiveRiverSegments);
         Assert.IsTrue(result.Run.WaterCycle.ActiveRiverSegments.All(segment => segment.RelativeDischarge is >= 0.08 and <= 1.0));
         Assert.IsTrue(result.Run.WaterCycle.ActiveRiverSegments.All(segment => segment.MeanDischargeCubicMetersPerSecond > 0.0));
         Assert.IsTrue(result.Run.Journal.Any(entry => entry.Key == "first-precipitation"));
         Assert.IsTrue(result.Run.Journal.Any(entry => entry.Key == "active-runoff-network"));
         Assert.IsTrue(result.Run.Journal.Any(entry => entry.Key == "river-incision-observed"));
+        Assert.IsTrue(result.Run.Journal.Any(entry => entry.Key == "cryosphere-meltwater-routing"));
     }
 
     [TestMethod]
@@ -174,10 +177,11 @@ public sealed class PlanetRunTests
         var mission = new FrozenWorldMission(experience);
         var hydrologyBuilder = new PlanetHydrologyModelBuilder(elevationSource);
         var runoffModel = new PlanetRunoffModel();
+        var cryosphereRunoffModel = new PlanetCryosphereRunoffModel();
         var hydrologyExtractor = new PlanetHydrologyFeatureExtractor();
         var geomorphologyModel = new PlanetRiverGeomorphologyModel();
         var deformationStore = new TestTerrainDeformationStore();
-        return new PlanetRun(mission, hydrologyBuilder, runoffModel, hydrologyExtractor, geomorphologyModel, deformationStore);
+        return new PlanetRun(mission, hydrologyBuilder, runoffModel, cryosphereRunoffModel, hydrologyExtractor, geomorphologyModel, deformationStore);
     }
 
     private static PlanetExperience CreateExperience(IPlanetElevationSource elevationSource)

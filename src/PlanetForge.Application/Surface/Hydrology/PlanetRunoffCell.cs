@@ -7,4 +7,9 @@ public sealed record PlanetRunoffCell(
     double LocalAnnualRunoffMillimeters,
     double DrainageAreaSquareMeters,
     double AccumulatedAnnualRunoffVolumeCubicMeters,
-    double MeanDischargeCubicMetersPerSecond);
+    double MeanDischargeCubicMetersPerSecond)
+{
+    public double LocalAnnualPrecipitationRunoffMillimeters { get; init; } = LocalAnnualRunoffMillimeters;
+
+    public double LocalAnnualMeltwaterRunoffMillimeters { get; init; }
+}
