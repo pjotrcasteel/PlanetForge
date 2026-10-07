@@ -945,11 +945,6 @@ vec4 oceanMaterial(vec3 radial, vec3 normal, float elevationAboveSeaLevel) {
     color = mix(color, shelfOcean, shelf * 0.86);
     color = mix(color, coastalOcean, coast * 0.72);
 
-    float broadVariation = valueNoise((radial * 8.0) + vec3(3.0, -4.0, 8.0)) - 0.5;
-    float fineVariation = valueNoise((radial * 24.0) + vec3(-2.0, 9.0, 5.0)) - 0.5;
-    color += vec3(0.0, broadVariation * 0.008, broadVariation * 0.012);
-    color += vec3(0.0, fineVariation * 0.003, fineVariation * 0.005);
-
     vec3 viewDirection = normalize(uCameraPosition - vWorldPosition);
     vec3 lightDirection = normalize(uLightDirection);
     float diffuse = 0.92 + (0.08 * max(dot(radial, lightDirection), 0.0));
