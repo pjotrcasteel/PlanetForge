@@ -24,7 +24,7 @@ test('PlanetStages_ReloadUsesShowcaseAndGenerateCreatesNewWorld', async ({ page 
   await expect(seedLabel).toHaveText('SEED 24061984', { timeout: 20_000 });
 });
 
-test('PlateWorld_RendersShowcaseFromMultipleAngles', async ({ page }, testInfo) => {
+test('NaturalTerrain_RendersShowcaseFromMultipleAngles', async ({ page }, testInfo) => {
   await page.goto('/?visualTest=1');
   await page.waitForFunction(() => Boolean(window.__planetForgeSurfaceTest), null, { timeout: 15_000 });
 
@@ -44,6 +44,6 @@ test('PlateWorld_RendersShowcaseFromMultipleAngles', async ({ page }, testInfo) 
     const metrics = await page.evaluate(() => window.__planetForgeSurfaceTest.measure());
     expect(metrics.planetPixels).toBeGreaterThan(10_000);
     expect(metrics.glError).toBe(0);
-    await page.screenshot({ path: testInfo.outputPath(`plate-world-${name}.png`), fullPage: true });
+    await page.screenshot({ path: testInfo.outputPath(`natural-terrain-${name}.png`), fullPage: true });
   }
 });
