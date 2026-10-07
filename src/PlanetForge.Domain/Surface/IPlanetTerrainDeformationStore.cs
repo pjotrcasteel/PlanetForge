@@ -8,6 +8,8 @@ public interface IPlanetTerrainDeformationStore
 
     void Apply(int seed, IReadOnlyList<PlanetTerrainDeformation> deformations);
 
+    void ApplyDeposition(int seed, IReadOnlyList<PlanetTerrainDeposition> depositions);
+
     void Clear(int seed);
 
     void ClearAll();
