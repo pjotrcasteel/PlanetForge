@@ -10,9 +10,9 @@ const elevationLapseRateKelvinPerMeter = 0.0065;
 const finalSeaIceLatitudeDegrees = 68.0;
 const finalLandIceLatitudeDegrees = 70.0;
 const finalAlpineSnowlineMeters = 4_400.0;
-const landReliefExaggeration = 32.0;
+const landReliefExaggeration = 36.0;
 const oceanReliefExaggeration = 4.0;
-const visualNormalExaggeration = 38.0;
+const visualNormalExaggeration = 44.0;
 
 export function initialize(overlayCanvasId, inputCanvasId, snapshot) {
     const canvas = document.getElementById(overlayCanvasId);
