@@ -560,6 +560,11 @@ function renderGlobe(s) {
     const eye = orbitEye(s.yaw, s.pitch, s.distance);
     const view = lookAt(eye, [0, 0, 0], [0, 1, 0]);
     const viewProjection = multiply(projection, view);
+    const debugView = s.debugView ?? 'normal';
+    const drawTerrainPass = debugView !== 'oceanOnly';
+    const drawOceanPass = debugView !== 'terrainOnly';
+    const drawCryospherePass = debugView !== 'noCryosphere' && debugView !== 'noAtmosphere' && debugView !== 'oceanOnly' && debugView !== 'terrainOnly';
+    const drawAtmospherePass = debugView !== 'noAtmosphere' && debugView !== 'oceanOnly' && debugView !== 'terrainOnly';
 
     gl.uniformMatrix4fv(s.globeUniforms.model, false, identityMatrix());
     gl.uniformMatrix4fv(s.globeUniforms.viewProjection, false, viewProjection);
@@ -579,12 +584,13 @@ function renderGlobe(s) {
 
     gl.disable(gl.BLEND);
     gl.depthMask(true);
-    gl.uniform1i(s.globeUniforms.mode, isPreBiologicalSurface(s) ? 2 : 0);
-    drawTerrain(s);
+    if (drawTerrainPass) {
+        gl.uniform1i(s.globeUniforms.mode, isPreBiologicalSurface(s) ? 2 : 0);
+        drawTerrain(s);
+    }
 
-    if (s.liquidFraction > 0.001) {
+    if (drawOceanPass && s.liquidFraction > 0.001) {
         gl.uniform1i(s.globeUniforms.mode, 3);
-
         gl.depthMask(false);
         drawSurface(s);
 
@@ -594,24 +600,31 @@ function renderGlobe(s) {
         gl.colorMask(true, true, true, true);
     }
 
-    gl.enable(gl.BLEND);
-    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
-    gl.depthMask(true);
-    gl.enable(gl.POLYGON_OFFSET_FILL);
-    gl.polygonOffset(-2.0, -2.0);
-    gl.uniform1i(s.globeUniforms.mode, 4);
-    drawSurface(s);
-    gl.disable(gl.POLYGON_OFFSET_FILL);
+    if (drawCryospherePass) {
+        gl.enable(gl.BLEND);
+        gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+        gl.depthMask(true);
+        gl.enable(gl.POLYGON_OFFSET_FILL);
+        gl.polygonOffset(-2.0, -2.0);
+        gl.uniform1i(s.globeUniforms.mode, 4);
+        drawSurface(s);
+        gl.disable(gl.POLYGON_OFFSET_FILL);
+        gl.disable(gl.BLEND);
+    }
 
-    gl.depthMask(false);
-    gl.disable(gl.CULL_FACE);
-    gl.uniform1i(s.globeUniforms.mode, 1);
-    gl.uniformMatrix4fv(s.globeUniforms.model, false, scaleMatrix(1.065));
-    drawAtmosphere(s);
-    gl.uniformMatrix4fv(s.globeUniforms.model, false, identityMatrix());
-    gl.depthMask(true);
-    gl.enable(gl.CULL_FACE);
-    gl.disable(gl.BLEND);
+    if (drawAtmospherePass) {
+        gl.enable(gl.BLEND);
+        gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+        gl.depthMask(false);
+        gl.disable(gl.CULL_FACE);
+        gl.uniform1i(s.globeUniforms.mode, 1);
+        gl.uniformMatrix4fv(s.globeUniforms.model, false, scaleMatrix(1.065));
+        drawAtmosphere(s);
+        gl.uniformMatrix4fv(s.globeUniforms.model, false, identityMatrix());
+        gl.depthMask(true);
+        gl.enable(gl.CULL_FACE);
+        gl.disable(gl.BLEND);
+    }
 }
 
 function renderLocal(s) {
