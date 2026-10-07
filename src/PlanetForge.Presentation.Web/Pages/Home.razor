@@ -22,7 +22,8 @@
 </main>
 
 @code {
-    private const int ClimateFrameDelayMilliseconds = 280;
+    private const int ClimateFrameDelayMilliseconds = 180;
+    private const int MaximumClimateDisplayFrames = 7;
     private const int ClimateTransitionLeadInMilliseconds = 700;
     private const int HydrologyFrameDelayMilliseconds = 260;
     private const int ScaffoldFrameDelayMilliseconds = 65;
@@ -107,9 +108,17 @@
             var result = Run.SimulateCommit();
 
             await Task.Delay(ClimateTransitionLeadInMilliseconds, disposeCancellationTokenSource.Token);
-            foreach (var frame in result.Frames)
+            var displayStride = Math.Max(1, (int)Math.Ceiling(result.Frames.Count / (double)MaximumClimateDisplayFrames));
+            for (var frameIndex = 0; frameIndex < result.Frames.Count; frameIndex++)
             {
+                var isFinalFrame = frameIndex == result.Frames.Count - 1;
+                if (!isFinalFrame && frameIndex % displayStride != 0)
+                {
+                    continue;
+                }
+
                 disposeCancellationTokenSource.Token.ThrowIfCancellationRequested();
+                var frame = result.Frames[frameIndex];
                 elapsedYears = frame.Year;
                 snapshot = frame.Planet;
                 await SyncPlanetAsync();
