@@ -24,7 +24,7 @@ test('PlanetStages_ReloadUsesShowcaseAndGenerateCreatesNewWorld', async ({ page 
   await expect(seedLabel).toHaveText('SEED 24061984', { timeout: 20_000 });
 });
 
-test('OceansAndCoasts_RendersMeltedShowcaseFromMultipleAngles', async ({ page }, testInfo) => {
+test('GeneratorQualityGate_RendersMeltedShowcaseFromMultipleAngles', async ({ page }, testInfo) => {
   await page.goto('/?visualTest=1');
   await page.waitForFunction(() => Boolean(window.__planetForgeSurfaceTest), null, { timeout: 15_000 });
   await page.getByRole('button', { name: 'NEXT' }).click();
@@ -46,6 +46,6 @@ test('OceansAndCoasts_RendersMeltedShowcaseFromMultipleAngles', async ({ page },
     const metrics = await page.evaluate(() => window.__planetForgeSurfaceTest.measure());
     expect(metrics.planetPixels).toBeGreaterThan(10_000);
     expect(metrics.glError).toBe(0);
-    await page.screenshot({ path: testInfo.outputPath(`oceans-coasts-${name}.png`), fullPage: true });
+    await page.screenshot({ path: testInfo.outputPath(`generator-quality-${name}.png`), fullPage: true });
   }
 });
