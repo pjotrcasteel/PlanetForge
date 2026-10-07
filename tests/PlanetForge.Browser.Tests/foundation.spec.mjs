@@ -65,6 +65,11 @@ test('FrozenToWaterCycle_PreservesUnifiedPhysicalSurface', async ({ page }, test
     riverDirection);
   expect(localEntry.renderMode).toBe('local');
   await page.waitForFunction(() => window.__planetForgeWaterTest.getRenderMode() === 'local', null, { timeout: 10_000 });
+
+  const closeLocalEntry = await page.evaluate(
+    direction => window.__planetForgeSurfaceTest.enterLocalAtDirection(direction, 750),
+    riverDirection);
+  expect(closeLocalEntry.renderMode).toBe('local');
   await page.waitForTimeout(150);
 
   const localSurface = await measureSurface(page);
