@@ -165,7 +165,22 @@ public sealed class PlanetExperienceSurfaceLodTests
         Assert.IsTrue(snapshot.SurfaceTiles.All(tile => tile.Id.Level == 1));
     }
 
-    private static PlanetExperience CreateExperience(IPlanetElevationSource? elevationSource = null)
+    [TestMethod]
+    public void InvalidateTerrain_ChangedTerrainRevision_PropagatesToRenderSnapshot()
+    {
+        var terrainStore = new RevisionTerrainStore();
+        var experience = CreateExperience(terrainDeformationStore: terrainStore);
+        var before = experience.CreateSnapshot();
+        terrainStore.Apply(before.Seed, [new PlanetTerrainDeformation(PlanetVector.UnitX, 0.001, 0.002, 10.0, 5.0)]);
+
+        var after = experience.InvalidateTerrain();
+
+        Assert.AreEqual(0, before.TerrainRevision);
+        Assert.AreEqual(1, after.TerrainRevision);
+        Assert.IsTrue(after.SurfaceTiles.All(tile => tile.IncludesGeometry));
+    }
+
+    private static PlanetExperience CreateExperience(IPlanetElevationSource? elevationSource = null, IPlanetTerrainDeformationStore? terrainDeformationStore = null)
     {
         elevationSource ??= new FlatElevationSource();
         var sampler = new PlanetSurfaceTileSampler(elevationSource);
@@ -173,7 +188,7 @@ public sealed class PlanetExperienceSurfaceLodTests
         var meshCache = new PlanetSurfaceMeshCache(meshBuilder);
         var localSampler = new PlanetLocalSurfacePatchSampler(elevationSource);
         var localMeshBuilder = new PlanetLocalSurfaceMeshBuilder();
-        return new PlanetExperience(meshCache, localSampler, localMeshBuilder);
+        return new PlanetExperience(meshCache, localSampler, localMeshBuilder, terrainDeformationStore);
     }
 
     private sealed class FlatElevationSource : IPlanetElevationSource
@@ -190,5 +205,20 @@ public sealed class PlanetExperienceSurfaceLodTests
             SampleCount++;
             return 0.0;
         }
+    }
+
+    private sealed class RevisionTerrainStore : IPlanetTerrainDeformationStore
+    {
+        private int revision;
+
+        public double SampleElevationDeltaMeters(PlanetVector direction, int seed) => 0.0;
+
+        public int GetRevision(int seed) => revision;
+
+        public void Apply(int seed, IReadOnlyList<PlanetTerrainDeformation> deformations) => revision++;
+
+        public void Clear(int seed) => revision = 0;
+
+        public void ClearAll() => revision = 0;
     }
 }
