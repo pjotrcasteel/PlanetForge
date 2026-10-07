@@ -108,32 +108,84 @@ function finalizeMeshStats(stats) {
 function replaceTile(s, tile) {
     const existing = s.tiles.get(tile.key);
     if (existing) deleteTileBuffers(s.gl, existing);
-    const coastFlags = createCoastWeights(tile.positions, s.planetRadiusMeters, s.seaLevelMeters);
-    for (const flag of coastFlags) if (flag > 0.05) s.meshStats.coastalVertices++;
-    const positionBuffer = createBuffer(s.gl, tile.positions);
-    const normalBuffer = createBuffer(s.gl, tile.normals);
-    const coastBuffer = createBuffer(s.gl, coastFlags);
-    s.tiles.set(tile.key, { positionBuffer, normalBuffer, coastBuffer, vertexCount: tile.surfaceVertexCount });
+
+    const coastMesh = createCoastMesh(tile.positions, tile.normals, tile.surfaceVertexCount, s.planetRadiusMeters, s.seaLevelMeters);
+    s.meshStats.coastalVertices += coastMesh.vertexCount;
+    const positionBuffer = createBuffer(s.gl, coastMesh.positions);
+    const normalBuffer = createBuffer(s.gl, coastMesh.normals);
+    const coastBuffer = createBuffer(s.gl, coastMesh.weights);
+    s.tiles.set(tile.key, { positionBuffer, normalBuffer, coastBuffer, vertexCount: coastMesh.vertexCount });
 }
 
-function createCoastWeights(positions, radiusMeters, seaLevelMeters) {
-    const vertexCount = Math.floor(positions.length / 3);
-    const weights = new Float32Array(vertexCount);
-    for (let vertex = 0; vertex + 2 < vertexCount; vertex += 3) {
-        const elevations = [0, 1, 2].map(offset => {
-            const index = (vertex + offset) * 3;
-            return ((Math.hypot(positions[index], positions[index + 1], positions[index + 2]) - 1.0) * radiusMeters) - seaLevelMeters;
-        });
-        const crossesSeaLevel = Math.min(...elevations) < 0.0 && Math.max(...elevations) >= 0.0;
-        if (!crossesSeaLevel) continue;
+function createCoastMesh(positions, normals, surfaceVertexCount, radiusMeters, seaLevelMeters) {
+    const maximumCoastalElevationMeters = 1_400.0;
+    const meshPositions = [];
+    const meshNormals = [];
+    const meshWeights = [];
 
-        for (let offset = 0; offset < 3; offset++) {
-            const relativeElevation = elevations[offset];
-            const landProximity = relativeElevation >= 0.0 ? 1.0 - clamp(relativeElevation / 1_600.0, 0.0, 1.0) : 0.0;
-            weights[vertex + offset] = Math.max(weights[vertex + offset], landProximity);
+    for (let vertex = 0; vertex + 2 < surfaceVertexCount; vertex += 3) {
+        const triangle = [0, 1, 2].map(offset => readCoastVertex(positions, normals, vertex + offset, radiusMeters, seaLevelMeters));
+        if (triangle.every(point => point.elevationMeters < 0.0) || triangle.every(point => point.elevationMeters > maximumCoastalElevationMeters)) continue;
+
+        let polygon = clipCoastPolygon(triangle, 0.0, true);
+        polygon = clipCoastPolygon(polygon, maximumCoastalElevationMeters, false);
+        if (polygon.length < 3) continue;
+
+        for (let index = 1; index + 1 < polygon.length; index++) {
+            appendCoastVertex(meshPositions, meshNormals, meshWeights, polygon[0], maximumCoastalElevationMeters);
+            appendCoastVertex(meshPositions, meshNormals, meshWeights, polygon[index], maximumCoastalElevationMeters);
+            appendCoastVertex(meshPositions, meshNormals, meshWeights, polygon[index + 1], maximumCoastalElevationMeters);
         }
     }
-    return weights;
+
+    return { positions: meshPositions, normals: meshNormals, weights: meshWeights, vertexCount: meshWeights.length };
+}
+
+function readCoastVertex(positions, normals, vertex, radiusMeters, seaLevelMeters) {
+    const index = vertex * 3;
+    const position = [positions[index], positions[index + 1], positions[index + 2]];
+    const normal = normalize([normals[index], normals[index + 1], normals[index + 2]]);
+    const elevationMeters = ((Math.hypot(position[0], position[1], position[2]) - 1.0) * radiusMeters) - seaLevelMeters;
+    return { position, normal, elevationMeters };
+}
+
+function clipCoastPolygon(points, thresholdMeters, keepAbove) {
+    if (points.length === 0) return points;
+    const result = [];
+    for (let index = 0; index < points.length; index++) {
+        const current = points[index];
+        const previous = points[(index + points.length - 1) % points.length];
+        const currentInside = keepAbove ? current.elevationMeters >= thresholdMeters : current.elevationMeters <= thresholdMeters;
+        const previousInside = keepAbove ? previous.elevationMeters >= thresholdMeters : previous.elevationMeters <= thresholdMeters;
+
+        if (currentInside !== previousInside) result.push(intersectCoastEdge(previous, current, thresholdMeters));
+        if (currentInside) result.push(current);
+    }
+    return result;
+}
+
+function intersectCoastEdge(from, to, thresholdMeters) {
+    const denominator = to.elevationMeters - from.elevationMeters;
+    const amount = Math.abs(denominator) < 0.000001 ? 0.0 : clamp((thresholdMeters - from.elevationMeters) / denominator, 0.0, 1.0);
+    return {
+        position: [
+            from.position[0] + ((to.position[0] - from.position[0]) * amount),
+            from.position[1] + ((to.position[1] - from.position[1]) * amount),
+            from.position[2] + ((to.position[2] - from.position[2]) * amount)
+        ],
+        normal: normalize([
+            from.normal[0] + ((to.normal[0] - from.normal[0]) * amount),
+            from.normal[1] + ((to.normal[1] - from.normal[1]) * amount),
+            from.normal[2] + ((to.normal[2] - from.normal[2]) * amount)
+        ]),
+        elevationMeters: thresholdMeters
+    };
+}
+
+function appendCoastVertex(positions, normals, weights, point, maximumCoastalElevationMeters) {
+    positions.push(point.position[0], point.position[1], point.position[2]);
+    normals.push(point.normal[0], point.normal[1], point.normal[2]);
+    weights.push(1.0 - clamp(point.elevationMeters / maximumCoastalElevationMeters, 0.0, 1.0));
 }
 
 function createBuffer(gl, values) {
