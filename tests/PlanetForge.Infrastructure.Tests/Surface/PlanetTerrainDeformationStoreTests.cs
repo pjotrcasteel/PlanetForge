@@ -33,6 +33,32 @@ public sealed class PlanetTerrainDeformationStoreTests
     }
 
     [TestMethod]
+    public void ApplyDeposition_DeltaStamp_RaisesCenterAndFadesOutsideApron()
+    {
+        var store = new PlanetTerrainDeformationStore();
+        var center = PlanetVector.Normalize(new PlanetVector(0.8, -0.2, 0.4));
+        var deposition = new PlanetTerrainDeposition(center, 0.002, 0.008, 70.0, 20.0);
+
+        store.ApplyDeposition(42, [deposition]);
+
+        Assert.AreEqual(90.0, store.SampleElevationDeltaMeters(center, 42), 0.000001);
+        Assert.AreEqual(0.0, store.SampleElevationDeltaMeters(center * -1.0, 42), 0.000001);
+        Assert.AreEqual(1, store.GetRevision(42));
+    }
+
+    [TestMethod]
+    public void ErosionAndDeposition_Overlap_ComposeIntoCanonicalElevationDelta()
+    {
+        var store = new PlanetTerrainDeformationStore();
+        var center = PlanetVector.UnitX;
+        store.Apply(42, [new PlanetTerrainDeformation(center, 0.002, 0.008, 80.0, 30.0)]);
+        store.ApplyDeposition(42, [new PlanetTerrainDeposition(center, 0.002, 0.008, 40.0, 10.0)]);
+
+        Assert.AreEqual(-60.0, store.SampleElevationDeltaMeters(center, 42), 0.000001);
+        Assert.AreEqual(2, store.GetRevision(42));
+    }
+
+    [TestMethod]
     public void Clear_RemovesSeedTerrainDeformations()
     {
         var store = new PlanetTerrainDeformationStore();
