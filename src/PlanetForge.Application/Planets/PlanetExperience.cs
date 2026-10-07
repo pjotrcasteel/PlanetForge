@@ -12,7 +12,8 @@ namespace PlanetForge.Application.Planets;
 public sealed class PlanetExperience(
     PlanetSurfaceMeshCache surfaceMeshCache,
     PlanetLocalSurfacePatchSampler localSurfacePatchSampler,
-    PlanetLocalSurfaceMeshBuilder localSurfaceMeshBuilder)
+    PlanetLocalSurfaceMeshBuilder localSurfaceMeshBuilder,
+    IPlanetTerrainDeformationStore? terrainDeformationStore = null)
 {
     private const int GlobalSurfaceLevel = 1;
     private const int SurfaceCellsPerAxis = 32;
@@ -276,7 +277,8 @@ public sealed class PlanetExperience(
             climateResult.Feedback,
             state.WaterParameters,
             climateResult.Water,
-            localSurface);
+            localSurface,
+            terrainDeformationStore?.GetRevision(state.Seed) ?? 0);
     }
 
     private PlanetLocalSurfaceMesh? CreateLocalSurface(double radiusMeters)
