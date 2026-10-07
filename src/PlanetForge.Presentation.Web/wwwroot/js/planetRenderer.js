@@ -1037,6 +1037,7 @@ void main() {
 
 const localFragmentShaderSource = `#version 300 es
 precision highp float;
+precision highp int;
 in vec3 vNormal;
 in float vElevationMeters;
 uniform vec3 uLightDirection;
