@@ -126,6 +126,14 @@ function deleteTileBuffers(gl, tile) {
 function installVisualTestApi() {
     if (!new URLSearchParams(window.location.search).has('visualTest')) return;
     window.__planetForgeCryosphereTest = {
+        setYaw(yaw) {
+            if (!state) return;
+            state.yaw = yaw;
+            state.dirty = true;
+            draw(state);
+            state.dirty = false;
+        },
+        getYaw() { return state?.yaw ?? 0.0; },
         setPitch(pitch) {
             if (!state) return;
             state.pitch = clamp(pitch, -1.25, 1.25);
