@@ -491,6 +491,13 @@ function installVisualTestApi() {
             renderGlobe(state);
             state.dirty = false;
             return measureSurface(state);
+        },
+        setDebugView(view) {
+            if (!state) return;
+            state.debugView = view ?? 'normal';
+            state.dirty = true;
+            renderGlobe(state);
+            state.dirty = false;
         }
     };
 }
@@ -563,7 +570,7 @@ function renderGlobe(s) {
     const debugView = s.debugView ?? 'normal';
     const drawTerrainPass = debugView !== 'oceanOnly';
     const drawOceanPass = debugView !== 'terrainOnly';
-    const drawCryospherePass = debugView !== 'noCryosphere' && debugView !== 'noAtmosphere' && debugView !== 'oceanOnly' && debugView !== 'terrainOnly';
+    const drawCryospherePass = debugView !== 'noCryosphere' && debugView !== 'oceanOnly' && debugView !== 'terrainOnly';
     const drawAtmospherePass = debugView !== 'noAtmosphere' && debugView !== 'oceanOnly' && debugView !== 'terrainOnly';
 
     gl.uniformMatrix4fv(s.globeUniforms.model, false, identityMatrix());
