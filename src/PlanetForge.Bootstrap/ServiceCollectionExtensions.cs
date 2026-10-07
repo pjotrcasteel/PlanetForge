@@ -26,6 +26,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<PlanetCryosphereRunoffModel>();
         services.AddSingleton<PlanetHydrologyFeatureExtractor>();
         services.AddSingleton<PlanetRiverGeomorphologyModel>();
+        services.AddSingleton<PlanetRiverSedimentModel>();
         services.AddSingleton<PlanetSurfaceMeshBuilder>();
         services.AddSingleton<PlanetSurfaceMeshCache>();
         services.AddSingleton<PlanetLocalSurfaceMeshBuilder>();
