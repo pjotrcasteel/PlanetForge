@@ -29,6 +29,13 @@ test('FrozenToWaterCycle_PreservesTerrainAndActivatesTerrainBoundHydrology', asy
   const coastMeshStats = await page.evaluate(() => window.__planetForgeCoastMeshStats);
   await page.screenshot({ path: testInfo.outputPath('year-50-equator.png'), fullPage: true });
 
+  const equatorYaw = await page.evaluate(() => window.__planetForgeCryosphereTest.getYaw());
+  await page.evaluate(yaw => window.__planetForgeCryosphereTest.setYaw(yaw + Math.PI), equatorYaw);
+  await page.waitForTimeout(100);
+  await page.screenshot({ path: testInfo.outputPath('year-50-opposite-limb.png'), fullPage: true });
+  await page.evaluate(yaw => window.__planetForgeCryosphereTest.setYaw(yaw), equatorYaw);
+  await page.waitForTimeout(100);
+
   await orientPitch(page, 1.25);
   const northPoleCoverage = await measureCenterCoverage(page);
   const northPolarRegionCoverage = await measurePolarRegionCoverage(page);
