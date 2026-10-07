@@ -1055,7 +1055,7 @@ void main() {
     }
 
     bool preBiological = uMode == 2;
-    if (elevationAboveSeaLevel < 0.0 && uLiquidFraction > 0.001) {
+    if (elevationAboveSeaLevel < 60.0 && uLiquidFraction > 0.001) {
         discard;
     }
 
