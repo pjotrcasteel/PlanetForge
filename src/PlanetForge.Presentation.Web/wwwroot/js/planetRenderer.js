@@ -590,8 +590,11 @@ function renderGlobe(s) {
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
     gl.depthMask(true);
+    gl.enable(gl.POLYGON_OFFSET_FILL);
+    gl.polygonOffset(-2.0, -2.0);
     gl.uniform1i(s.globeUniforms.mode, 4);
     drawSurface(s);
+    gl.disable(gl.POLYGON_OFFSET_FILL);
 
     gl.depthMask(false);
     gl.disable(gl.CULL_FACE);
@@ -1026,10 +1029,7 @@ void main() {
 
     bool preBiological = uMode == 2;
     if (elevationAboveSeaLevel < 0.0 && uLiquidFraction > 0.001) {
-        vec3 seabed = vec3(0.12, 0.13, 0.12);
-        float light = max(dot(normal, normalize(uLightDirection)), 0.0);
-        outColor = vec4(seabed * (0.35 + light * 0.45), 1.0);
-        return;
+        discard;
     }
 
     vec3 baseColor = terrainMaterial(radial, normal, elevationAboveSeaLevel, preBiological);
