@@ -409,7 +409,7 @@ void main(){
     float exposure=smoothstep(0.06,0.72,1.0-clamp(uSeaIceFraction,0.0,1.0));
     if(max(beach,max(rocky*0.92,cliffCoast))*exposure<0.020) discard;
 
-    vec3 beachColor=vec3(0.72,0.62,0.44),wetSand=vec3(0.34,0.33,0.28),rockColor=vec3(0.29,0.28,0.26),cliffColor=vec3(0.12,0.13,0.13),cliffTop=vec3(0.50,0.46,0.38);
+    vec3 beachColor=vec3(0.70,0.60,0.43),wetSand=vec3(0.39,0.36,0.30),rockColor=vec3(0.32,0.31,0.29),cliffColor=vec3(0.20,0.20,0.19),cliffTop=vec3(0.49,0.45,0.38);
     vec3 material=mix(beachColor,rockColor,clamp(rocky,0.0,1.0));
     material=mix(material,cliffColor,clamp(cliffCoast,0.0,1.0));
     vec3 light=normalize(uLightDirection);
@@ -418,7 +418,7 @@ void main(){
     material*=illumination;
     material=mix(material,cliffTop,cliffCoast*smoothstep(0.26,0.80,direct)*smoothstep(0.30,0.70,breakup)*0.42);
     float wetEdge=shoreline*(1.0-steep)*(1.0-smoothstep(0.0,300.0,elevation));
-    material=mix(material,wetSand,wetEdge*0.34);
-    float alpha=clamp(beach*0.68+rocky*0.58+cliffCoast*0.88,0.0,0.88)*exposure;
+    material=mix(material,wetSand,wetEdge*0.22);
+    float alpha=clamp(beach*0.58+rocky*0.48+cliffCoast*0.68,0.0,0.72)*exposure;
     outColor=vec4(material,alpha);
 }`;
