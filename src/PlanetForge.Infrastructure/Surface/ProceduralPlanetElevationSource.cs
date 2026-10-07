@@ -36,6 +36,13 @@ public sealed class ProceduralPlanetElevationSource : IPlanetElevationSource
     private const int DetailSeedSalt = 0x6D2B79F5;
     private const int PlateauSeedSalt = 0x13579BDF;
     private const int BasinSeedSalt = 0x02468ACE;
+    private const int MountainCrestSeedSalt = 0x17C5A3D1;
+    private const int ValleySeedSalt = 0x29D48B63;
+    private const int ValleyBranchSeedSalt = 0x3E1A72C5;
+    private const int CanyonSeedSalt = 0x4C6F21B7;
+    private const int CanyonWarpSeedSalt = 0x5D2B83E9;
+    private const int ScarpSeedSalt = 0x68A14F2D;
+    private const int CanyonSystemCount = 4;
 
     public double SampleElevationMeters(PlanetVector direction, int seed)
     {
@@ -49,15 +56,23 @@ public sealed class ProceduralPlanetElevationSource : IPlanetElevationSource
         var basins = SampleSphericalRegions(warpedDirection, seed, BasinSeedSalt, BasinCount, 0.86, 0.982) * landMask;
         var uplandRelief = Math.Max(0.0, regional) * Lerp(0.42, 1.0, ToUnitRange(detail)) * landMask;
         var continentalInterior = SampleContinentalInterior(warpedDirection, seed, continental);
+        var mountainShape = SampleMountainShape(warpedDirection, seed, plateBoundaryUplift);
+        var escarpmentShape = SampleEscarpments(warpedDirection, seed, plateaus);
+        var valleyIncision = SampleAncientValleys(warpedDirection, seed, continental, landMask);
+        var canyonIncision = SampleCanyonSystems(warpedDirection, seed, continental, landMask);
 
         var rawElevation =
             (continental * 0.72) +
             (regional * 0.10 * landMask) +
-            (plateBoundaryUplift * 0.85) +
+            (plateBoundaryUplift * 0.71) +
+            (mountainShape * 0.38) +
             (uplandRelief * 0.08) +
-            (plateaus * 0.18) +
+            (plateaus * 0.14) +
+            (escarpmentShape * 0.19) +
             (continentalInterior * 0.16) -
-            (basins * 0.18) +
+            (basins * 0.18) -
+            (valleyIncision * 0.15) -
+            (canyonIncision * 0.23) +
             (detail * 0.025) -
             0.01;
 
@@ -220,6 +235,105 @@ public sealed class ProceduralPlanetElevationSource : IPlanetElevationSource
         var core = SmoothStep(0.08, 0.34, continental);
         var stability = ToUnitRange(FractalNoise(direction, seed ^ PlateauSeedSalt, 1.35, 3, 2.05, 0.50));
         return core * Lerp(0.65, 1.0, stability);
+    }
+
+    private static double SampleMountainShape(PlanetVector direction, int seed, double plateBoundaryUplift)
+    {
+        var normalizedBoundary = Math.Clamp(plateBoundaryUplift / 1.35, 0.0, 1.0);
+        if (normalizedBoundary <= 0.0)
+        {
+            return 0.0;
+        }
+
+        var crestNoise = ToUnitRange(RidgedNoise(direction, seed ^ MountainCrestSeedSalt, 18.0, 4, 2.04, 0.48));
+        var crest = Math.Pow(normalizedBoundary, 1.65) * Lerp(0.68, 1.24, crestNoise);
+        var foothills = Math.Sqrt(normalizedBoundary) * (1.0 - (crest * 0.28));
+        return Math.Max(0.0, (crest * 0.86) + (foothills * 0.24));
+    }
+
+    private static double SampleEscarpments(PlanetVector direction, int seed, double plateaus)
+    {
+        if (plateaus <= 0.0)
+        {
+            return 0.0;
+        }
+
+        var plateauTop = SmoothStep(0.30, 0.68, plateaus);
+        var edge = Math.Clamp((plateauTop - plateaus) * 2.4, -1.0, 1.0);
+        var scarpTexture = ToUnitRange(RidgedNoise(direction, seed ^ ScarpSeedSalt, 12.0, 3, 2.08, 0.48));
+        return edge * Lerp(0.74, 1.18, scarpTexture);
+    }
+
+    private static double SampleAncientValleys(PlanetVector direction, int seed, double continental, double landMask)
+    {
+        var interiorSupport = SmoothStep(0.015, 0.34, continental) * landMask;
+        if (interiorSupport <= 0.0)
+        {
+            return 0.0;
+        }
+
+        var trunkNoise = ToUnitRange(RidgedNoise(direction, seed ^ ValleySeedSalt, 5.2, 4, 2.05, 0.51));
+        var branchNoise = ToUnitRange(RidgedNoise(direction, seed ^ ValleyBranchSeedSalt, 10.8, 3, 2.09, 0.48));
+        var trunk = SmoothStep(0.70, 0.94, trunkNoise);
+        var branches = SmoothStep(0.77, 0.965, branchNoise);
+        var regionalGate = SmoothStep(
+            0.22,
+            0.68,
+            ToUnitRange(FractalNoise(direction, seed ^ RegionalSeedSalt ^ ValleySeedSalt, 2.2, 3, 2.10, 0.50)));
+        return ((trunk * 0.78) + (branches * 0.34)) * Lerp(0.48, 1.0, regionalGate) * interiorSupport;
+    }
+
+    private static double SampleCanyonSystems(PlanetVector direction, int seed, double continental, double landMask)
+    {
+        var highlandSupport = SmoothStep(0.02, 0.30, continental) * landMask;
+        if (highlandSupport <= 0.0)
+        {
+            return 0.0;
+        }
+
+        var strongest = 0.0;
+
+        for (var index = 0; index < CanyonSystemCount; index++)
+        {
+            var normal = SeedDirection(seed ^ CanyonSeedSalt, index, 7_913 + (index * 227));
+            var anchor = SeedDirection(seed ^ CanyonWarpSeedSalt, index, 10_831 + (index * 311));
+            var projectedAnchor = anchor - (normal * PlanetVector.Dot(anchor, normal));
+            if (projectedAnchor.Length <= 0.000001)
+            {
+                continue;
+            }
+
+            var arcCenter = PlanetVector.Normalize(projectedAnchor);
+            var tangent = PlanetVector.Normalize(PlanetVector.Cross(normal, arcCenter));
+            var warp = FractalNoise(
+                direction,
+                seed ^ CanyonWarpSeedSalt ^ ((index * 1_193) + 337),
+                3.1,
+                3,
+                2.07,
+                0.50) * 0.018;
+            var distance = Math.Abs(PlanetVector.Dot(direction, normal) + warp);
+            var extent = SmoothStep(-0.12, 0.46, PlanetVector.Dot(direction, arcCenter));
+            var segmentation = SmoothStep(
+                0.24,
+                0.62,
+                ToUnitRange(FractalNoise(direction, seed ^ CanyonSeedSalt ^ ((index * 887) + 191), 4.0, 3, 2.11, 0.50)));
+            var core = 1.0 - SmoothStep(0.004, 0.019, distance);
+            var shoulder = 1.0 - SmoothStep(0.018, 0.060, distance);
+
+            var branchNormal = PlanetVector.Normalize(normal + (tangent * Lerp(
+                -0.24,
+                0.24,
+                UnitHash(index * 13, 37, index * 29, seed ^ CanyonWarpSeedSalt))));
+            var branchDistance = Math.Abs(PlanetVector.Dot(direction, branchNormal) + (warp * 0.72));
+            var branchExtent = SmoothStep(0.02, 0.58, PlanetVector.Dot(direction, arcCenter));
+            var branch = (1.0 - SmoothStep(0.004, 0.022, branchDistance)) * branchExtent;
+
+            var system = ((core * 0.82) + (shoulder * 0.28) + (branch * 0.34)) * extent * Lerp(0.46, 1.0, segmentation);
+            strongest = Math.Max(strongest, system);
+        }
+
+        return strongest * highlandSupport;
     }
 
     private static double SampleSphericalRegions(
