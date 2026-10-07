@@ -8,4 +8,5 @@ public sealed record PlanetWaterPathSegment(
     double ToY,
     double ToZ,
     double RelativeDischarge,
-    int StreamOrder);
+    int StreamOrder,
+    double MeanDischargeCubicMetersPerSecond = 0.0);
