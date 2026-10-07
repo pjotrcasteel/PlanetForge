@@ -217,6 +217,8 @@ public sealed class PlanetExperienceSurfaceLodTests
 
         public void Apply(int seed, IReadOnlyList<PlanetTerrainDeformation> deformations) => revision++;
 
+        public void ApplyDeposition(int seed, IReadOnlyList<PlanetTerrainDeposition> depositions) => revision++;
+
         public void Clear(int seed) => revision = 0;
 
         public void ClearAll() => revision = 0;
