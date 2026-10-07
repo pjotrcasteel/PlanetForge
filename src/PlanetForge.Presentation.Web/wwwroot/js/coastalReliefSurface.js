@@ -5,8 +5,8 @@ const minimumCameraAltitudeMeters = 3.0;
 const maximumCameraAltitudeRatio = 4.2;
 const localTransitionAltitudeMeters = 20_000.0;
 const localExitAltitudeMeters = 25_000.0;
-const landReliefExaggeration = 32.0;
-const visualNormalExaggeration = 38.0;
+const landReliefExaggeration = 36.0;
+const visualNormalExaggeration = 44.0;
 
 export function initialize(inputCanvasId, snapshot) {
     const inputCanvas = document.getElementById(inputCanvasId);
