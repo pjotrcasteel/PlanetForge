@@ -219,6 +219,10 @@ public sealed class PlanetExperienceSurfaceLodTests
 
         public void ApplyDeposition(int seed, IReadOnlyList<PlanetTerrainDeposition> depositions) => revision++;
 
+        public PlanetTerrainEvolutionState Export(int seed) => new(revision, [], []);
+
+        public void Restore(int seed, PlanetTerrainEvolutionState state) => revision = state.Revision;
+
         public void Clear(int seed) => revision = 0;
 
         public void ClearAll() => revision = 0;
