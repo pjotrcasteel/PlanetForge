@@ -22,9 +22,10 @@
 }
 
 .generator-panel {
-    position: absolute;
-    z-index: 4;
+    position: fixed;
+    z-index: 1000;
     top: max(18px, env(safe-area-inset-top));
+    pointer-events: auto;
     left: 50%;
     transform: translateX(-50%);
     display: flex;
@@ -68,6 +69,9 @@
 }
 
 .generator-button {
+    position: relative;
+    z-index: 1001;
+    pointer-events: auto;
     min-height: 30px;
     padding: 0 12px;
     border: 1px solid rgba(122, 213, 158, 0.65);
