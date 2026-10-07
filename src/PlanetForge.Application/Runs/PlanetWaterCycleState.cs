@@ -41,6 +41,7 @@ public sealed record PlanetWaterCycleState
             .Select(segment => segment with
             {
                 RelativeDischarge = Math.Clamp(segment.RelativeDischarge * dischargeScale, 0.08, 1.0),
+                MeanDischargeCubicMetersPerSecond = segment.MeanDischargeCubicMetersPerSecond * dischargeScale,
             })
             .ToArray();
         ActiveRiverSegmentCount = ActiveRiverSegments.Count;
