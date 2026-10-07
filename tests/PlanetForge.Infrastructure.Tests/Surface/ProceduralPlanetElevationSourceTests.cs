@@ -44,6 +44,46 @@ public sealed class ProceduralPlanetElevationSourceTests
     }
 
     [TestMethod]
+    public void SampleElevationMeters_IntegritySeedGallery_PreservesPlanetScaleRelief()
+    {
+        var source = new ProceduralPlanetElevationSource();
+        var directions = FibonacciDirections(384).ToArray();
+
+        foreach (var seed in PlanetSeedCatalog.IntegritySeeds)
+        {
+            var elevations = directions.Select(direction => source.SampleElevationMeters(direction, seed)).ToArray();
+            var landFraction = elevations.Count(elevation => elevation > 0.0) / (double)elevations.Length;
+
+            Assert.IsGreaterThan(0.12, landFraction, $"Seed {seed} has too little exposed land.");
+            Assert.IsLessThan(0.55, landFraction, $"Seed {seed} has too much exposed land.");
+            Assert.IsGreaterThan(3_000.0, elevations.Max(), $"Seed {seed} lacks continental highlands.");
+            Assert.IsLessThan(-1_500.0, elevations.Min(), $"Seed {seed} lacks a meaningful ocean basin.");
+            Assert.IsGreaterThan(5_000.0, elevations.Max() - elevations.Min(), $"Seed {seed} lacks planet-scale relief.");
+        }
+    }
+
+    [TestMethod]
+    public void SampleElevationMeters_ContinentalScale_NearbySamplesAreMoreCorrelatedThanAntipodes()
+    {
+        var source = new ProceduralPlanetElevationSource();
+        var directions = FibonacciDirections(256).ToArray();
+        var nearbyDelta = directions.Average(direction =>
+        {
+            var nearby = OffsetDirection(direction, 0.035);
+            return Math.Abs(source.SampleElevationMeters(direction, PlanetSeedCatalog.ShowcaseSeed) -
+                source.SampleElevationMeters(nearby, PlanetSeedCatalog.ShowcaseSeed));
+        });
+        var antipodalDelta = directions.Average(direction =>
+        {
+            var opposite = direction * -1.0;
+            return Math.Abs(source.SampleElevationMeters(direction, PlanetSeedCatalog.ShowcaseSeed) -
+                source.SampleElevationMeters(opposite, PlanetSeedCatalog.ShowcaseSeed));
+        });
+
+        Assert.IsLessThan(antipodalDelta * 0.40, nearbyDelta);
+    }
+
+    [TestMethod]
     public void SampleElevationMeters_NearbyDirections_RemainContinuous()
     {
         var source = new ProceduralPlanetElevationSource();
@@ -103,6 +143,13 @@ public sealed class ProceduralPlanetElevationSourceTests
         Assert.IsGreaterThan(12, highlands.Length);
         Assert.IsGreaterThanOrEqualTo(6, elevationBands);
         Assert.IsGreaterThan(2_500.0, highlands.Max() - highlands.Min());
+    }
+
+    private static PlanetVector OffsetDirection(PlanetVector direction, double amount)
+    {
+        var reference = Math.Abs(direction.Y) < 0.9 ? PlanetVector.UnitY : PlanetVector.UnitX;
+        var tangent = PlanetVector.Normalize(PlanetVector.Cross(direction, reference));
+        return PlanetVector.Normalize(direction + (tangent * amount));
     }
 
     private static IEnumerable<PlanetVector> FibonacciDirections(int count)
