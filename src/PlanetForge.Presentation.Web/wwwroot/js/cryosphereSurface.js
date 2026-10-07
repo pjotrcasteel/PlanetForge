@@ -48,6 +48,7 @@ export function initialize(overlayCanvasId, inputCanvasId, snapshot) {
         uniforms: {
             viewProjection: gl.getUniformLocation(program, 'uViewProjection'),
             lightDirection: gl.getUniformLocation(program, 'uLightDirection'),
+            cameraPosition: gl.getUniformLocation(program, 'uCameraPosition'),
             planetRadiusMeters: gl.getUniformLocation(program, 'uPlanetRadiusMeters'),
             seaLevelMeters: gl.getUniformLocation(program, 'uSeaLevelMeters'),
             surfaceTemperatureKelvin: gl.getUniformLocation(program, 'uSurfaceTemperatureKelvin'),
@@ -125,6 +126,14 @@ function deleteTileBuffers(gl, tile) {
 function installVisualTestApi() {
     if (!new URLSearchParams(window.location.search).has('visualTest')) return;
     window.__planetForgeCryosphereTest = {
+        setYaw(yaw) {
+            if (!state) return;
+            state.yaw = yaw;
+            state.dirty = true;
+            draw(state);
+            state.dirty = false;
+        },
+        getYaw() { return state?.yaw ?? 0.0; },
         setPitch(pitch) {
             if (!state) return;
             state.pitch = clamp(pitch, -1.25, 1.25);
@@ -294,6 +303,7 @@ function draw(s) {
     gl.useProgram(program);
     gl.uniformMatrix4fv(s.uniforms.viewProjection, false, viewProjection);
     gl.uniform3f(s.uniforms.lightDirection, 0.72, 0.42, 0.55);
+    gl.uniform3f(s.uniforms.cameraPosition, eye[0], eye[1], eye[2]);
     gl.uniform1f(s.uniforms.planetRadiusMeters, s.planetRadiusMeters);
     gl.uniform1f(s.uniforms.seaLevelMeters, s.seaLevelMeters);
     gl.uniform1f(s.uniforms.surfaceTemperatureKelvin, s.surfaceTemperatureKelvin);
@@ -419,6 +429,7 @@ in vec3 vVisualNormal;
 in float vPhysicalSlope;
 in float vElevationMeters;
 uniform vec3 uLightDirection;
+uniform vec3 uCameraPosition;
 uniform float uSurfaceTemperatureKelvin;
 uniform float uSeaLevelMeters;
 uniform float uSeaIceFraction;
@@ -458,6 +469,8 @@ float fbm(vec3 p) {
 
 void main() {
     vec3 radial = normalize(vDirection);
+    float horizonVisibility = dot(radial, uCameraPosition);
+    if (horizonVisibility <= 1.002) discard;
     vec3 normal = normalize(vVisualNormal);
     vec3 light = normalize(uLightDirection);
     float elevationAboveSeaLevel = vElevationMeters - uSeaLevelMeters;
@@ -546,7 +559,7 @@ void main() {
     float upland = smoothstep(380.0, 1450.0, elevation);
     float high = smoothstep(1250.0, 2700.0, elevation);
     float rockyAlpine = smoothstep(2800.0, 4700.0, elevation);
-    float rockNoise = ((macro - 0.5) * 0.14) + ((meso - 0.5) * 0.09) + ((detail - 0.5) * 0.03);
+    float rockNoise = ((macro - 0.5) * 0.060) + ((meso - 0.5) * 0.035) + ((detail - 0.5) * 0.015);
 
     vec3 deepOcean = vec3(0.025, 0.13, 0.19);
     vec3 shallowOcean = vec3(0.045, 0.29, 0.34);
@@ -566,7 +579,7 @@ void main() {
     landMaterial = mix(landMaterial, alpineRock, rockyAlpine);
     landMaterial = mix(landMaterial, summitRock, summit);
     landMaterial = mix(landMaterial, vec3(0.27, 0.27, 0.26), exposedRidge * 0.66);
-    landMaterial = mix(landMaterial, vec3(0.40, 0.30, 0.20), lowland * (1.0 - slope) * smoothstep(0.34, 0.72, macro) * 0.28);
+    landMaterial = mix(landMaterial, vec3(0.40, 0.30, 0.20), lowland * (1.0 - slope) * smoothstep(0.34, 0.72, macro) * 0.10);
     landMaterial *= 1.0 + rockNoise;
     float elevationContrast = 0.92 + (smoothstep(600.0, 4200.0, elevation) * 0.12);
     float ruggedShadow = 1.0 - (steep * 0.10) - (cliff * 0.14);
