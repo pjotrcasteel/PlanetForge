@@ -47,6 +47,15 @@ test('FrozenToWaterCycle_PreservesUnifiedPhysicalSurface', async ({ page }, test
   const activeSurface = await measureSurface(page);
   const activeWater = await measureWater(page);
   await page.screenshot({ path: testInfo.outputPath('active-water-cycle.png'), fullPage: true });
+  await page.evaluate(() => {
+    const overlay = document.getElementById('water-overlay-canvas');
+    if (overlay) overlay.style.visibility = 'hidden';
+  });
+  await page.screenshot({ path: testInfo.outputPath('active-water-cycle-terrain-only.png'), fullPage: true });
+  await page.evaluate(() => {
+    const overlay = document.getElementById('water-overlay-canvas');
+    if (overlay) overlay.style.visibility = '';
+  });
 
   const metrics = { frozenSurface, meltedSurface, oppositeSurface, northSurface, southSurface, activeSurface, frozenWater, activeWater };
   console.log(`Foundation metrics: ${JSON.stringify(metrics)}`);
