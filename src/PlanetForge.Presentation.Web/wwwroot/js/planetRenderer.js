@@ -584,7 +584,14 @@ function renderGlobe(s) {
 
     if (s.liquidFraction > 0.001) {
         gl.uniform1i(s.globeUniforms.mode, 3);
+
+        gl.depthMask(false);
         drawSurface(s);
+
+        gl.depthMask(true);
+        gl.colorMask(false, false, false, false);
+        drawSurface(s);
+        gl.colorMask(true, true, true, true);
     }
 
     gl.enable(gl.BLEND);
