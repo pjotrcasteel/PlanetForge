@@ -17,291 +17,52 @@ public sealed class ProceduralPlanetElevationSource : IPlanetElevationSource
 
     private const double MaximumLandElevationMeters = 9_000.0;
     private const double MaximumOceanDepthMeters = 7_000.0;
-    private const int ContinentalProvinceCount = 5;
-    private const int OceanBasinCount = 4;
-    private const int PlateCount = 11;
-    private const int PlateauCount = 5;
-    private const int BasinCount = 6;
-    private const int ContinentalSeedSalt = 0x18A45D39;
-    private const int OceanBasinSeedSalt = 0x2F6D4C1B;
-    private const int ContinentalNoiseSeedSalt = 0x3B2E19A7;
-    private const int MacroWarpSeedSaltX = 0x145A21C3;
-    private const int MacroWarpSeedSaltY = 0x265C3D17;
-    private const int MacroWarpSeedSaltZ = 0x31B74A29;
-    private const int PlateSeedSalt = 0x46C21D35;
-    private const int PlateWarpSeedSalt = 0x5A137C49;
-    private const int PlateBoundarySeedSalt = 0x63D24B15;
+    private const int MountainBeltCount = 7;
+    private const int PlateauCount = 4;
+    private const int BasinCount = 5;
     private const int RegionalSeedSalt = 0x2C1B3C6D;
     private const int RidgeSeedSalt = 0x51ED270B;
     private const int DetailSeedSalt = 0x6D2B79F5;
     private const int PlateauSeedSalt = 0x13579BDF;
     private const int BasinSeedSalt = 0x02468ACE;
-    private const int MountainCrestSeedSalt = 0x17C5A3D1;
-    private const int ValleySeedSalt = 0x29D48B63;
-    private const int ValleyBranchSeedSalt = 0x3E1A72C5;
-    private const int CanyonSeedSalt = 0x4C6F21B7;
-    private const int CanyonWarpSeedSalt = 0x5D2B83E9;
-    private const int ScarpSeedSalt = 0x68A14F2D;
-    private const int CoastRuggedSeedSalt = 0x71C39A4B;
-    private const int CoastDetailSeedSalt = 0x2A6D58F1;
-    private const int CoastFractureSeedSalt = 0x3D17B6C9;
-    private const int CanyonSystemCount = 4;
+    private const int MountainBreakSeedSalt = 0x4F1BBCDC;
+    private const int MountainWarpSeedSalt = 0x37A4F91D;
 
     public double SampleElevationMeters(PlanetVector direction, int seed)
     {
-        var warpedDirection = WarpDirection(direction, seed);
-        var continental = SampleContinentalField(warpedDirection, seed);
-        var landMask = SmoothStep(-0.08, 0.18, continental);
-        var regional = FractalNoise(warpedDirection, seed ^ RegionalSeedSalt, 2.1, 4, 2.11, 0.48);
-        var detail = FractalNoise(warpedDirection, seed ^ DetailSeedSalt, 13.0, 3, 2.17, 0.44);
-        var plateBoundaryUplift = SamplePlateBoundaryUplift(warpedDirection, seed, landMask);
-        var plateaus = SampleSphericalRegions(warpedDirection, seed, PlateauSeedSalt, PlateauCount, 0.84, 0.965) * landMask;
-        var basins = SampleSphericalRegions(warpedDirection, seed, BasinSeedSalt, BasinCount, 0.86, 0.982) * landMask;
-        var uplandRelief = Math.Max(0.0, regional) * Lerp(0.42, 1.0, ToUnitRange(detail)) * landMask;
-        var continentalInterior = SampleContinentalInterior(warpedDirection, seed, continental);
-        var mountainShape = SampleMountainShape(warpedDirection, seed, plateBoundaryUplift);
-        var escarpmentShape = SampleEscarpments(warpedDirection, seed, plateaus);
-        var valleyIncision = SampleAncientValleys(warpedDirection, seed, continental, landMask);
-        var canyonIncision = SampleCanyonSystems(warpedDirection, seed, continental, landMask);
-        var coastalMarginDetail = SampleCoastalMarginDetail(warpedDirection, seed, continental);
-
-        var rawElevation =
-            (continental * 0.72) +
-            (regional * 0.10 * landMask) +
-            (plateBoundaryUplift * 0.71) +
-            (mountainShape * 0.38) +
-            (uplandRelief * 0.08) +
-            (plateaus * 0.14) +
-            (escarpmentShape * 0.19) +
-            (continentalInterior * 0.16) -
-            (basins * 0.18) -
-            (valleyIncision * 0.15) -
-            (canyonIncision * 0.23) +
-            (coastalMarginDetail * 0.055) +
-            (detail * 0.025) -
-            0.01;
-
-        var normalizedElevation = ShapeCoastalProfile(warpedDirection, seed, Math.Tanh(rawElevation * 1.05));
+        var continental = FractalNoise(direction, seed, 0.72, 5, 2.03, 0.52);
+        var regional = FractalNoise(direction, seed ^ RegionalSeedSalt, 2.4, 4, 2.11, 0.48);
+        var detail = FractalNoise(direction, seed ^ DetailSeedSalt, 14.0, 3, 2.17, 0.44);
+        var landMask = SmoothStep(-0.30, 0.30, continental);
+        var mountainBelts = SampleMountainBelts(direction, seed, landMask);
+        var plateaus = SampleSphericalRegions(direction, seed, PlateauSeedSalt, PlateauCount, 0.82, 0.965) * landMask;
+        var basins = SampleSphericalRegions(direction, seed, BasinSeedSalt, BasinCount, 0.88, 0.985) * landMask;
+        var uplandRelief = Math.Max(0.0, regional) * Lerp(0.45, 1.0, ToUnitRange(detail)) * landMask;
+        var normalizedElevation = Math.Clamp(
+            (continental * 0.60) +
+            (regional * 0.12) +
+            (mountainBelts * 0.60) +
+            (uplandRelief * 0.07) +
+            (plateaus * 0.10) -
+            (basins * 0.15) +
+            (detail * 0.032) -
+            0.055,
+            -1.0,
+            1.0);
         var baseElevationMeters = normalizedElevation >= 0.0
             ? normalizedElevation * MaximumLandElevationMeters
             : normalizedElevation * MaximumOceanDepthMeters;
         return baseElevationMeters + (terrainDeformationStore?.SampleElevationDeltaMeters(direction, seed) ?? 0.0);
     }
 
-    private static PlanetVector WarpDirection(PlanetVector direction, int seed)
+    private static double SampleMountainBelts(PlanetVector direction, int seed, double landMask)
     {
-        var warp = new PlanetVector(
-            FractalNoise(direction, seed ^ MacroWarpSeedSaltX, 0.72, 3, 2.03, 0.50),
-            FractalNoise(direction, seed ^ MacroWarpSeedSaltY, 0.72, 3, 2.03, 0.50),
-            FractalNoise(direction, seed ^ MacroWarpSeedSaltZ, 0.72, 3, 2.03, 0.50));
-        var warped = direction + (warp * 0.14);
-        return warped.Length <= 0.000001 ? direction : PlanetVector.Normalize(warped);
-    }
+        var strongestBelt = 0.0;
 
-    private static double SampleContinentalField(PlanetVector direction, int seed)
-    {
-        var macroNoise = FractalNoise(direction, seed ^ ContinentalNoiseSeedSalt, 0.48, 4, 2.02, 0.53);
-        var provinces = SampleContinentalProvinces(direction, seed);
-        var oceanBasins = SampleOceanBasins(direction, seed);
-        return (macroNoise * 0.52) + (provinces * 0.58) - (oceanBasins * 0.38) - 0.20;
-    }
-
-    private static double SampleContinentalProvinces(PlanetVector direction, int seed)
-    {
-        var strongestProvince = 0.0;
-
-        for (var index = 0; index < ContinentalProvinceCount; index++)
+        for (var index = 0; index < MountainBeltCount; index++)
         {
-            var center = SeedDirection(seed ^ ContinentalSeedSalt, index, 5_279 + (index * 181));
-            var orientation = SeedDirection(seed ^ RegionalSeedSalt, index, 8_171 + (index * 239));
-            var tangent = orientation - (center * PlanetVector.Dot(orientation, center));
-            if (tangent.Length <= 0.000001)
-            {
-                var reference = Math.Abs(center.Y) < 0.9 ? PlanetVector.UnitY : PlanetVector.UnitX;
-                tangent = PlanetVector.Cross(center, reference);
-            }
-
-            tangent = PlanetVector.Normalize(tangent);
-            var edgeDot = Lerp(0.80, 0.88, UnitHash((index * 17) + 3, (index * 29) + 7, 11, seed ^ ContinentalSeedSalt));
-            var coreDot = Math.Min(
-                0.975,
-                edgeDot + Lerp(0.075, 0.12, UnitHash((index * 13) + 5, 23, (index * 31) + 9, seed ^ RegionalSeedSalt)));
-            var boundaryWarp = FractalNoise(
-                direction,
-                seed ^ ContinentalSeedSalt ^ ((index * 1_571) + 313),
-                2.1,
-                3,
-                2.07,
-                0.50) * 0.055;
-            var firstOffset = Lerp(0.30, 0.52, UnitHash(index, 41, 17, seed ^ DetailSeedSalt));
-            var secondOffset = Lerp(0.20, 0.38, UnitHash(index, 59, 29, seed ^ PlateauSeedSalt));
-            var firstLobe = PlanetVector.Normalize(center + (tangent * firstOffset));
-            var secondLobe = PlanetVector.Normalize(center - (tangent * secondOffset));
-
-            var primary = SmoothStep(edgeDot, coreDot, PlanetVector.Dot(direction, center) + boundaryWarp);
-            var secondary = SmoothStep(edgeDot - 0.015, coreDot, PlanetVector.Dot(direction, firstLobe) + (boundaryWarp * 0.80)) * 0.92;
-            var tertiary = SmoothStep(
-                edgeDot + 0.01,
-                Math.Min(0.985, coreDot + 0.01),
-                PlanetVector.Dot(direction, secondLobe) + (boundaryWarp * 0.70)) * 0.78;
-            strongestProvince = Math.Max(strongestProvince, Math.Max(primary, Math.Max(secondary, tertiary)));
-        }
-
-        return strongestProvince;
-    }
-
-    private static double SampleOceanBasins(PlanetVector direction, int seed)
-    {
-        var strongestBasin = 0.0;
-
-        for (var index = 0; index < OceanBasinCount; index++)
-        {
-            var center = SeedDirection(seed ^ OceanBasinSeedSalt, index, 1_103 + (index * 193));
-            var edgeDot = Lerp(0.78, 0.88, UnitHash((index * 19) + 1, 7, (index * 37) + 3, seed ^ OceanBasinSeedSalt));
-            var coreDot = Math.Min(0.975, edgeDot + 0.10);
-            var boundaryWarp = FractalNoise(
-                direction,
-                seed ^ OceanBasinSeedSalt ^ ((index * 1_877) + 521),
-                1.7,
-                3,
-                2.09,
-                0.51) * 0.045;
-            var basin = SmoothStep(edgeDot, coreDot, PlanetVector.Dot(direction, center) + boundaryWarp);
-            strongestBasin = Math.Max(strongestBasin, basin);
-        }
-
-        return strongestBasin;
-    }
-
-    private static double SamplePlateBoundaryUplift(PlanetVector direction, int seed, double landMask)
-    {
-        var plateWarp = FractalNoise(direction, seed ^ PlateWarpSeedSalt, 1.8, 3, 2.07, 0.50);
-        var strongestScore = double.NegativeInfinity;
-        var secondScore = double.NegativeInfinity;
-        var strongestIndex = -1;
-        var secondIndex = -1;
-
-        for (var index = 0; index < PlateCount; index++)
-        {
-            var center = SeedDirection(seed ^ PlateSeedSalt, index, 3_343 + (index * 149));
-            var bias = Lerp(-0.035, 0.035, UnitHash((index * 7) + 3, 19, (index * 23) + 5, seed ^ PlateSeedSalt));
-            var warpScale = Lerp(-0.055, 0.055, UnitHash((index * 11) + 7, 31, (index * 29) + 13, seed ^ PlateWarpSeedSalt));
-            var score = PlanetVector.Dot(direction, center) + bias + (plateWarp * warpScale);
-
-            if (score > strongestScore)
-            {
-                secondScore = strongestScore;
-                secondIndex = strongestIndex;
-                strongestScore = score;
-                strongestIndex = index;
-            }
-            else if (score > secondScore)
-            {
-                secondScore = score;
-                secondIndex = index;
-            }
-        }
-
-        if (secondIndex < 0)
-        {
-            return 0.0;
-        }
-
-        var boundaryStrength = 1.0 - SmoothStep(0.014, 0.155, strongestScore - secondScore);
-        var lowerIndex = Math.Min(strongestIndex, secondIndex);
-        var upperIndex = Math.Max(strongestIndex, secondIndex);
-        var activity = UnitHash(
-            (lowerIndex * 31) + (upperIndex * 17) + 3,
-            (upperIndex * 43) + (lowerIndex * 11) + 5,
-            (lowerIndex * upperIndex) + 7,
-            seed ^ PlateBoundarySeedSalt);
-        var convergence = SmoothStep(0.30, 0.82, activity);
-        var pairSeed = unchecked(
-            seed ^
-            PlateBoundarySeedSalt ^
-            ((lowerIndex + 1) * 73_856_093) ^
-            ((upperIndex + 1) * 19_349_663));
-        var ridgeNoise = ToUnitRange(RidgedNoise(direction, pairSeed, 8.5, 4, 2.05, 0.50));
-        var segmentation = SmoothStep(
-            0.12,
-            0.58,
-            ToUnitRange(FractalNoise(direction, pairSeed ^ DetailSeedSalt, 2.6, 3, 2.11, 0.51)));
-
-        return boundaryStrength *
-            boundaryStrength *
-            convergence *
-            (0.42 + (ridgeNoise * 0.90)) *
-            (0.42 + (segmentation * 0.58)) *
-            landMask;
-    }
-
-    private static double SampleContinentalInterior(PlanetVector direction, int seed, double continental)
-    {
-        var core = SmoothStep(0.08, 0.34, continental);
-        var stability = ToUnitRange(FractalNoise(direction, seed ^ PlateauSeedSalt, 1.35, 3, 2.05, 0.50));
-        return core * Lerp(0.65, 1.0, stability);
-    }
-
-    private static double SampleMountainShape(PlanetVector direction, int seed, double plateBoundaryUplift)
-    {
-        var normalizedBoundary = Math.Clamp(plateBoundaryUplift / 1.35, 0.0, 1.0);
-        if (normalizedBoundary <= 0.0)
-        {
-            return 0.0;
-        }
-
-        var crestNoise = ToUnitRange(RidgedNoise(direction, seed ^ MountainCrestSeedSalt, 18.0, 4, 2.04, 0.48));
-        var crest = Math.Pow(normalizedBoundary, 1.65) * Lerp(0.68, 1.24, crestNoise);
-        var foothills = Math.Sqrt(normalizedBoundary) * (1.0 - (crest * 0.28));
-        return Math.Max(0.0, (crest * 0.86) + (foothills * 0.24));
-    }
-
-    private static double SampleEscarpments(PlanetVector direction, int seed, double plateaus)
-    {
-        if (plateaus <= 0.0)
-        {
-            return 0.0;
-        }
-
-        var plateauTop = SmoothStep(0.30, 0.68, plateaus);
-        var edge = Math.Clamp((plateauTop - plateaus) * 2.4, -1.0, 1.0);
-        var scarpTexture = ToUnitRange(RidgedNoise(direction, seed ^ ScarpSeedSalt, 12.0, 3, 2.08, 0.48));
-        return edge * Lerp(0.74, 1.18, scarpTexture);
-    }
-
-    private static double SampleAncientValleys(PlanetVector direction, int seed, double continental, double landMask)
-    {
-        var interiorSupport = SmoothStep(0.015, 0.34, continental) * landMask;
-        if (interiorSupport <= 0.0)
-        {
-            return 0.0;
-        }
-
-        var trunkNoise = ToUnitRange(RidgedNoise(direction, seed ^ ValleySeedSalt, 5.2, 4, 2.05, 0.51));
-        var branchNoise = ToUnitRange(RidgedNoise(direction, seed ^ ValleyBranchSeedSalt, 10.8, 3, 2.09, 0.48));
-        var trunk = SmoothStep(0.70, 0.94, trunkNoise);
-        var branches = SmoothStep(0.77, 0.965, branchNoise);
-        var regionalGate = SmoothStep(
-            0.22,
-            0.68,
-            ToUnitRange(FractalNoise(direction, seed ^ RegionalSeedSalt ^ ValleySeedSalt, 2.2, 3, 2.10, 0.50)));
-        return ((trunk * 0.78) + (branches * 0.34)) * Lerp(0.48, 1.0, regionalGate) * interiorSupport;
-    }
-
-    private static double SampleCanyonSystems(PlanetVector direction, int seed, double continental, double landMask)
-    {
-        var highlandSupport = SmoothStep(0.02, 0.30, continental) * landMask;
-        if (highlandSupport <= 0.0)
-        {
-            return 0.0;
-        }
-
-        var strongest = 0.0;
-
-        for (var index = 0; index < CanyonSystemCount; index++)
-        {
-            var normal = SeedDirection(seed ^ CanyonSeedSalt, index, 7_913 + (index * 227));
-            var anchor = SeedDirection(seed ^ CanyonWarpSeedSalt, index, 10_831 + (index * 311));
+            var normal = SeedDirection(seed ^ RegionalSeedSalt, index, 4_517 + (index * 73));
+            var anchor = SeedDirection(seed ^ DetailSeedSalt, index, 9_277 + (index * 97));
             var projectedAnchor = anchor - (normal * PlanetVector.Dot(anchor, normal));
             if (projectedAnchor.Length <= 0.000001)
             {
@@ -309,90 +70,49 @@ public sealed class ProceduralPlanetElevationSource : IPlanetElevationSource
             }
 
             var arcCenter = PlanetVector.Normalize(projectedAnchor);
-            var tangent = PlanetVector.Normalize(PlanetVector.Cross(normal, arcCenter));
-            var warp = FractalNoise(
-                direction,
-                seed ^ CanyonWarpSeedSalt ^ ((index * 1_193) + 337),
-                3.1,
-                3,
-                2.07,
-                0.50) * 0.018;
-            var distance = Math.Abs(PlanetVector.Dot(direction, normal) + warp);
-            var extent = SmoothStep(-0.12, 0.46, PlanetVector.Dot(direction, arcCenter));
-            var segmentation = SmoothStep(
-                0.24,
-                0.62,
-                ToUnitRange(FractalNoise(direction, seed ^ CanyonSeedSalt ^ ((index * 887) + 191), 4.0, 3, 2.11, 0.50)));
-            var core = 1.0 - SmoothStep(0.004, 0.019, distance);
-            var shoulder = 1.0 - SmoothStep(0.018, 0.060, distance);
-
-            var branchNormal = PlanetVector.Normalize(normal + (tangent * Lerp(
-                -0.24,
-                0.24,
-                UnitHash(index * 13, 37, index * 29, seed ^ CanyonWarpSeedSalt))));
-            var branchDistance = Math.Abs(PlanetVector.Dot(direction, branchNormal) + (warp * 0.72));
-            var branchExtent = SmoothStep(0.02, 0.58, PlanetVector.Dot(direction, arcCenter));
-            var branch = (1.0 - SmoothStep(0.004, 0.022, branchDistance)) * branchExtent;
-
-            var system = ((core * 0.82) + (shoulder * 0.28) + (branch * 0.34)) * extent * Lerp(0.46, 1.0, segmentation);
-            strongest = Math.Max(strongest, system);
+            var signedDistance = PlanetVector.Dot(direction, normal);
+            var warp = FractalNoise(direction, seed ^ MountainWarpSeedSalt ^ (index * 761), 3.4, 3, 2.07, 0.50) * 0.032;
+            var warpedSignedDistance = signedDistance + warp;
+            var distanceFromRange = Math.Abs(warpedSignedDistance);
+            var arcExtent = SmoothStep(-0.18, 0.78, PlanetVector.Dot(direction, arcCenter));
+            var foothills = 1.0 - SmoothStep(0.040, 0.165, distanceFromRange);
+            var ridgeNoise = ToUnitRange(RidgedNoise(direction, seed ^ RidgeSeedSalt ^ (index * 1_297), 11.0, 4, 2.06, 0.50));
+            var breakNoise = ToUnitRange(FractalNoise(direction, seed ^ MountainBreakSeedSalt ^ (index * 977), 4.6, 3, 2.13, 0.52));
+            var continuity = SmoothStep(0.20, 0.68, breakNoise);
+            var splitOffset = Lerp(0.008, 0.018, ridgeNoise);
+            var splitCrest = Math.Max(
+                RidgeProfile(Math.Abs(warpedSignedDistance - splitOffset), 0.004, 0.034),
+                RidgeProfile(Math.Abs(warpedSignedDistance + splitOffset), 0.004, 0.034));
+            var innerRidges = SampleParallelRidges(warpedSignedDistance, Lerp(0.045, 0.068, ridgeNoise), 0.008, 0.030);
+            var outerRidges = SampleParallelRidges(warpedSignedDistance, Lerp(0.082, 0.110, breakNoise), 0.012, 0.035);
+            var valleySignal = Math.Abs(ridgeNoise - breakNoise);
+            var valleyCut = SmoothStep(0.28, 0.58, valleySignal) * foothills;
+            var crestHeight = splitCrest * (0.56 + (ridgeNoise * 0.54));
+            var innerHeight = innerRidges * (0.18 + (ridgeNoise * 0.20));
+            var outerHeight = outerRidges * (0.08 + (breakNoise * 0.13));
+            var shoulderHeight = foothills * (0.14 + (ridgeNoise * 0.12));
+            var range = (crestHeight + innerHeight + outerHeight + shoulderHeight) * Lerp(0.44, 1.0, continuity);
+            range = Math.Max(0.0, range - (valleyCut * (0.08 + (splitCrest * 0.12))));
+            strongestBelt = Math.Max(strongestBelt, range * arcExtent);
         }
 
-        return strongest * highlandSupport;
+        return strongestBelt * landMask * landMask;
     }
 
-    private static double SampleCoastalMarginDetail(PlanetVector direction, int seed, double continental)
+    private static double RidgeProfile(double distance, double coreWidth, double shoulderWidth)
     {
-        var marginSupport = 1.0 - SmoothStep(0.025, 0.30, Math.Abs(continental));
-        if (marginSupport <= 0.0)
-        {
-            return 0.0;
-        }
-
-        var broad = FractalNoise(direction, seed ^ CoastDetailSeedSalt, 5.4, 3, 2.08, 0.50);
-        var fractured = RidgedNoise(direction, seed ^ CoastFractureSeedSalt, 9.2, 3, 2.11, 0.47);
-        return ((broad * 0.72) + (fractured * 0.28)) * marginSupport;
+        var core = 1.0 - SmoothStep(coreWidth, shoulderWidth, distance);
+        return core * core;
     }
 
-    private static double ShapeCoastalProfile(PlanetVector direction, int seed, double elevation)
+    private static double SampleParallelRidges(double signedDistance, double separation, double coreWidth, double shoulderWidth)
     {
-        const double coastalRadius = 0.26;
-        var magnitude = Math.Abs(elevation);
-        if (magnitude <= double.Epsilon)
-        {
-            return elevation;
-        }
-
-        if (elevation < -coastalRadius)
-        {
-            var deepenedMagnitude = coastalRadius + ((magnitude - coastalRadius) * 1.14);
-            return -Math.Min(1.0, deepenedMagnitude);
-        }
-
-        if (magnitude >= coastalRadius)
-        {
-            return elevation;
-        }
-
-        var ruggedSignal = ToUnitRange(FractalNoise(direction, seed ^ CoastRuggedSeedSalt, 3.6, 3, 2.07, 0.50));
-        var ruggedness = SmoothStep(0.25, 0.70, ruggedSignal);
-        var normalizedDistance = magnitude / coastalRadius;
-        var exponent = elevation >= 0.0
-            ? Lerp(1.54, 0.58, ruggedness)
-            : Lerp(1.86, 0.50, ruggedness);
-        var profiledMagnitude = coastalRadius * Math.Pow(normalizedDistance, exponent);
-        var coastalInfluence = 1.0 - SmoothStep(0.72, 1.0, normalizedDistance);
-        var shapedMagnitude = Lerp(magnitude, profiledMagnitude, coastalInfluence);
-        return Math.CopySign(shapedMagnitude, elevation);
+        var first = RidgeProfile(Math.Abs(signedDistance - separation), coreWidth, shoulderWidth);
+        var second = RidgeProfile(Math.Abs(signedDistance + separation), coreWidth, shoulderWidth);
+        return Math.Max(first, second);
     }
 
-    private static double SampleSphericalRegions(
-        PlanetVector direction,
-        int seed,
-        int seedSalt,
-        int count,
-        double edgeDot,
-        double coreDot)
+    private static double SampleSphericalRegions(PlanetVector direction, int seed, int seedSalt, int count, double edgeDot, double coreDot)
     {
         var strongestRegion = 0.0;
 
@@ -414,13 +134,7 @@ public sealed class ProceduralPlanetElevationSource : IPlanetElevationSource
         return vector.Length <= 0.000001 ? PlanetVector.UnitX : PlanetVector.Normalize(vector);
     }
 
-    private static double FractalNoise(
-        PlanetVector direction,
-        int seed,
-        double frequency,
-        int octaves,
-        double lacunarity,
-        double persistence)
+    private static double FractalNoise(PlanetVector direction, int seed, double frequency, int octaves, double lacunarity, double persistence)
     {
         var amplitude = 1.0;
         var sum = 0.0;
@@ -428,11 +142,7 @@ public sealed class ProceduralPlanetElevationSource : IPlanetElevationSource
 
         for (var octave = 0; octave < octaves; octave++)
         {
-            sum += ValueNoise(
-                direction.X * frequency,
-                direction.Y * frequency,
-                direction.Z * frequency,
-                seed + (octave * 1_013)) * amplitude;
+            sum += ValueNoise(direction.X * frequency, direction.Y * frequency, direction.Z * frequency, seed + (octave * 1013)) * amplitude;
             normalization += amplitude;
             frequency *= lacunarity;
             amplitude *= persistence;
@@ -441,13 +151,7 @@ public sealed class ProceduralPlanetElevationSource : IPlanetElevationSource
         return sum / normalization;
     }
 
-    private static double RidgedNoise(
-        PlanetVector direction,
-        int seed,
-        double frequency,
-        int octaves,
-        double lacunarity,
-        double persistence)
+    private static double RidgedNoise(PlanetVector direction, int seed, double frequency, int octaves, double lacunarity, double persistence)
     {
         var amplitude = 1.0;
         var sum = 0.0;
@@ -455,11 +159,7 @@ public sealed class ProceduralPlanetElevationSource : IPlanetElevationSource
 
         for (var octave = 0; octave < octaves; octave++)
         {
-            var noise = ValueNoise(
-                direction.X * frequency,
-                direction.Y * frequency,
-                direction.Z * frequency,
-                seed + (octave * 1_297));
+            var noise = ValueNoise(direction.X * frequency, direction.Y * frequency, direction.Z * frequency, seed + (octave * 1297));
             var ridge = 1.0 - Math.Abs(noise);
             ridge = (ridge * ridge * 2.0) - 1.0;
             sum += ridge * amplitude;
@@ -470,8 +170,6 @@ public sealed class ProceduralPlanetElevationSource : IPlanetElevationSource
 
         return sum / normalization;
     }
-
-    private static double UnitHash(int x, int y, int z, int seed) => (HashValue(x, y, z, seed) + 1.0) * 0.5;
 
     private static double ValueNoise(double x, double y, double z, int seed)
     {
