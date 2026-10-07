@@ -9,23 +9,30 @@ public sealed class PlanetHydrologyFeatureExtractor
 
     public PlanetHydrologyFeatures Extract(
         PlanetHydrologySnapshot hydrology,
-        long minimumRiverContributingLandCells,
+        PlanetRunoffSnapshot runoff,
+        double minimumRiverDischargeCubicMetersPerSecond,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(hydrology);
+        ArgumentNullException.ThrowIfNull(runoff);
 
-        if (minimumRiverContributingLandCells < 1)
+        if (!ReferenceEquals(hydrology, runoff.Hydrology))
+        {
+            throw new ArgumentException("Runoff must belong to the supplied hydrology snapshot.", nameof(runoff));
+        }
+
+        if (!double.IsFinite(minimumRiverDischargeCubicMetersPerSecond) || minimumRiverDischargeCubicMetersPerSecond < 0.0)
         {
             throw new ArgumentOutOfRangeException(
-                nameof(minimumRiverContributingLandCells),
-                minimumRiverContributingLandCells,
-                "Minimum river contribution must be at least one land cell.");
+                nameof(minimumRiverDischargeCubicMetersPerSecond),
+                minimumRiverDischargeCubicMetersPerSecond,
+                "Minimum river discharge must be finite and non-negative.");
         }
 
         cancellationToken.ThrowIfCancellationRequested();
         var watersheds = ExtractWatersheds(hydrology, cancellationToken);
         var lakes = ExtractLakes(hydrology, cancellationToken);
-        var riverSegments = ExtractRiverSegments(hydrology, minimumRiverContributingLandCells, cancellationToken);
+        var riverSegments = ExtractRiverSegments(hydrology, runoff, minimumRiverDischargeCubicMetersPerSecond, cancellationToken);
         return new PlanetHydrologyFeatures(watersheds, lakes, riverSegments);
     }
 
@@ -168,15 +175,18 @@ public sealed class PlanetHydrologyFeatureExtractor
 
     private static IReadOnlyList<PlanetRiverSegment> ExtractRiverSegments(
         PlanetHydrologySnapshot hydrology,
-        long minimumRiverContributingLandCells,
+        PlanetRunoffSnapshot runoff,
+        double minimumRiverDischargeCubicMetersPerSecond,
         CancellationToken cancellationToken)
     {
         var layout = hydrology.Layout;
         var riverIndices = hydrology.Cells
             .Select((cell, index) => (cell, index))
-            .Where(item => !item.cell.IsOcean && item.cell.DrainageTarget is not null && item.cell.ContributingLandCellCount >= minimumRiverContributingLandCells)
+            .Where(item => !item.cell.IsOcean
+                && item.cell.DrainageTarget is not null
+                && runoff.Cells[item.index].MeanDischargeCubicMetersPerSecond >= minimumRiverDischargeCubicMetersPerSecond)
             .Select(item => item.index)
-            .OrderBy(index => hydrology.Cells[index].ContributingLandCellCount)
+            .OrderBy(index => runoff.Cells[index].MeanDischargeCubicMetersPerSecond)
             .ThenBy(index => index)
             .ToArray();
         var riverSet = riverIndices.ToHashSet();
@@ -207,6 +217,7 @@ public sealed class PlanetHydrologyFeatureExtractor
             CheckCancellation(resultIndex, cancellationToken);
             var riverIndex = riverIndices[resultIndex];
             var cell = hydrology.Cells[riverIndex];
+            var runoffCell = runoff.Cells[riverIndex];
             var order = CalculateStrahlerOrder(riverIndex, upstreamByIndex, streamOrderByIndex);
             streamOrderByIndex[riverIndex] = order;
             var target = cell.DrainageTarget!.Value;
@@ -219,6 +230,8 @@ public sealed class PlanetHydrologyFeatureExtractor
                 cell.FilledElevationMeters,
                 targetCell.FilledElevationMeters,
                 cell.ContributingLandCellCount,
+                runoffCell.DrainageAreaSquareMeters,
+                runoffCell.MeanDischargeCubicMetersPerSecond,
                 order);
         }
 
