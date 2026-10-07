@@ -954,8 +954,13 @@ vec4 oceanMaterial(vec3 radial, vec3 normal, float elevationAboveSeaLevel) {
     vec3 lightDirection = normalize(uLightDirection);
     float diffuse = 0.92 + (0.08 * max(dot(radial, lightDirection), 0.0));
     float fresnel = pow(1.0 - max(dot(radial, viewDirection), 0.0), 3.6);
-    vec3 halfVector = normalize(lightDirection + viewDirection);
-    float specular = pow(max(dot(radial, halfVector), 0.0), 104.0) * 0.045;
+    vec3 halfVectorInput = lightDirection + viewDirection;
+    float halfVectorLength = length(halfVectorInput);
+    float specular = 0.0;
+    if (halfVectorLength > 0.0001) {
+        vec3 halfVector = halfVectorInput / halfVectorLength;
+        specular = pow(max(dot(radial, halfVector), 0.0), 104.0) * 0.045;
+    }
 
     color *= diffuse;
     color = mix(color, vec3(0.025, 0.085, 0.135), fresnel * 0.08);
