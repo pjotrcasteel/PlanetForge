@@ -929,7 +929,7 @@ vec3 terrainMaterial(vec3 radial, vec3 normal, float elevationAboveSeaLevel, boo
 }
 
 vec4 oceanMaterial(vec3 radial, vec3 normal, float elevationAboveSeaLevel) {
-    if (elevationAboveSeaLevel >= 0.0 || uLiquidFraction <= 0.001) discard;
+    if (uLiquidFraction <= 0.001) discard;
 
     float depth = max(-elevationAboveSeaLevel, 0.0);
     float shelf = 1.0 - smoothstep(220.0, 2100.0, depth);
