@@ -816,6 +816,8 @@ void main() {
         float landIceThicknessMeters = (90.0 + (760.0 * polarSupport) + (340.0 * highlandSupport)) * landSupport;
         float seaIceVisualElevationMeters = uSeaLevelMeters + 18.0 + (seaIceThicknessMeters * 18.0);
         float landIceVisualElevationMeters = (elevationMeters * 36.0) + (landIceThicknessMeters * 18.0);
+        bool snowballGeometry = uSeaIceFraction >= 0.999 && uLandIceFraction >= 0.999 && uSnowCoverFraction >= 0.999;
+        if (snowballGeometry) landIceVisualElevationMeters = max(landIceVisualElevationMeters, seaIceVisualElevationMeters + 8.0);
         float shorelineBlend = smoothstep(-900.0, 900.0, elevationAboveSeaLevel);
         float iceVisualElevationMeters = mix(seaIceVisualElevationMeters, landIceVisualElevationMeters, shorelineBlend);
         visualRadius = 1.0 + (iceVisualElevationMeters / uPlanetRadiusMeters);
@@ -1002,6 +1004,9 @@ vec4 cryosphereMaterial(vec3 radial, vec3 normal, float elevationAboveSeaLevel) 
     float landCoverage = (uLandIceFraction >= 0.999 && uSnowCoverFraction >= 0.999)
         ? 1.0
         : mix(frozenWorldLand, finalLandSurvival, smoothstep(0.08, 0.52, landRetreat));
+    float lowCoastalLand = 1.0 - smoothstep(120.0, 700.0, elevation);
+    float polarCoastalBridge = smoothstep(54.0, 76.0, warpedLatitude) * lowCoastalLand * smoothstep(0.28, 0.72, seaCoverage);
+    landCoverage = max(landCoverage, polarCoastalBridge);
 
     float coverage = ocean ? smoothstep(0.16, 0.74, seaCoverage) : smoothstep(0.10, 0.80, landCoverage);
     if (coverage < 0.025) discard;
