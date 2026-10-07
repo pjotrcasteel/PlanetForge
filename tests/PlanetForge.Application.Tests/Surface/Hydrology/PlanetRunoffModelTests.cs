@@ -61,7 +61,7 @@ public sealed class PlanetRunoffModelTests
         var sink = hydrology.Cells.Single(cell => cell.DrainageTarget is null);
         var expectedAnnualVolume = AnnualRunoffMillimeters / 1_000.0 * runoff.CellAreaSquareMeters * hydrology.Cells.LongCount(cell => !cell.IsOcean);
 
-        Assert.AreEqual(expectedAnnualVolume, runoff.GetCell(sink.Cell).AnnualRunoffVolumeCubicMeters, expectedAnnualVolume * 1e-10);
+        Assert.AreEqual(expectedAnnualVolume, runoff.GetCell(sink.Cell).AccumulatedAnnualRunoffVolumeCubicMeters, expectedAnnualVolume * 1e-10);
     }
 
     [TestMethod]
