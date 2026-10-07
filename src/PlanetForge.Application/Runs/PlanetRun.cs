@@ -219,6 +219,7 @@ public sealed class PlanetRun(
         researchChoiceAvailable = save.ResearchChoiceAvailable;
         waterSurvey = save.WaterSurvey;
         waterCycle = save.WaterCycle;
+        waterHydrology = null;
         journal.Clear();
         journal.AddRange(save.Journal);
         researchUnlocks.Clear();
