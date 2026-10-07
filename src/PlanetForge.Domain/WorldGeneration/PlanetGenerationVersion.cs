@@ -2,7 +2,7 @@ namespace PlanetForge.Domain.WorldGeneration;
 
 public readonly record struct PlanetGenerationVersion
 {
-    public static PlanetGenerationVersion Current { get; } = new(8);
+    public static PlanetGenerationVersion Current { get; } = new(9);
 
     public PlanetGenerationVersion(int value)
     {
