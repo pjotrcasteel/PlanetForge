@@ -1,4 +1,5 @@
 using PlanetForge.Domain.Surface;
+using PlanetForge.Domain.WorldGeneration;
 using PlanetForge.Infrastructure.Surface;
 
 namespace PlanetForge.Infrastructure.Tests.Surface;
@@ -28,6 +29,18 @@ public sealed class ProceduralPlanetElevationSourceTests
         var second = source.SampleElevationMeters(direction, 43);
 
         Assert.AreNotEqual(first, second);
+    }
+
+    [TestMethod]
+    public void SampleElevationMeters_IntegritySeedGallery_ProducesDistinctWorldFingerprints()
+    {
+        var source = new ProceduralPlanetElevationSource();
+        var directions = FibonacciDirections(512).ToArray();
+        var fingerprints = PlanetSeedCatalog.IntegritySeeds
+            .Select(seed => string.Join(",", directions.Select(direction => (int)Math.Round(source.SampleElevationMeters(direction, seed) / 25.0))))
+            .ToArray();
+
+        Assert.AreEqual(PlanetSeedCatalog.IntegritySeeds.Count, fingerprints.Distinct().Count());
     }
 
     [TestMethod]
