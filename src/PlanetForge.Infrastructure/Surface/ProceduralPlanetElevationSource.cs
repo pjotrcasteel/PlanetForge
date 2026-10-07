@@ -40,37 +40,53 @@ public sealed class ProceduralPlanetElevationSource : IPlanetElevationSource
 
     private static double SamplePlateWorld(PlanetVector direction, int seed)
     {
-        var macroDirection = WarpDirection(direction, seed, 0.22, 0.95);
+        // World-Machine-style staged synthesis: broad form first, geology second, then terrain character.
+        // Plate ownership is deliberately never used as the visible surface.
+        var macroDirection = WarpDirection(direction, seed, 0.18, 0.72);
+        var continentalPotential = SampleContinentalPotential(macroDirection, seed);
+        var continentalWarp = FractalNoise(macroDirection, seed ^ RegionalSeedSalt, 0.72, 4, 2.01, 0.52);
+        var continentalDetail = FractalNoise(WarpDirection(direction, seed ^ CoastSeedSalt, 0.055, 2.2), seed ^ CoastSeedSalt, 2.8, 4, 2.08, 0.49);
+        var crustField = continentalPotential + (continentalWarp * 0.23) + (continentalDetail * 0.07);
+        var normalized = (crustField * 0.34) - 0.37;
+
+        var continentalWeight = SmoothStep(-0.06, 0.14, normalized);
+        var provinceDirection = WarpDirection(direction, seed ^ ProvinceSeedSalt, 0.10, 1.55);
+        var province = FractalNoise(provinceDirection, seed ^ ProvinceSeedSalt, 1.45, 4, 2.02, 0.52);
+        var rollingRelief = FractalNoise(provinceDirection, seed ^ DetailSeedSalt, 4.6, 4, 2.10, 0.47);
+        var basin = FractalNoise(provinceDirection, seed ^ BasinSeedSalt, 2.4, 4, 2.07, 0.50);
+        normalized += continentalWeight * ((province * 0.050) + (rollingRelief * 0.020) - (Math.Max(0.0, -basin) * 0.025));
+
+        // Tectonics provide narrow uplift/rift masks. They influence geology but never define continent silhouettes.
         var nearest = FindNearestPlates(macroDirection, seed);
         var primaryContinental = IsContinentalPlate(seed, nearest.PrimaryIndex);
         var secondaryContinental = IsContinentalPlate(seed, nearest.SecondaryIndex);
+        var boundaryNoise = FractalNoise(direction, seed ^ BoundarySeedSalt, 3.9, 4, 2.07, 0.50);
         var boundaryDistance = Math.Max(0.0, nearest.PrimaryDot - nearest.SecondaryDot);
-        var boundaryNoise = FractalNoise(direction, seed ^ BoundarySeedSalt, 4.6, 4, 2.07, 0.50);
-        var warpedBoundaryDistance = Math.Max(0.0, boundaryDistance + (boundaryNoise * 0.026));
-        var boundaryInfluence = 1.0 - SmoothStep(0.012, 0.135, warpedBoundaryDistance);
-
-        var continentalPotential = SampleContinentalPotential(macroDirection, seed);
-        var macroNoise = FractalNoise(direction, seed ^ RegionalSeedSalt, 1.25, 5, 2.01, 0.53);
-        var coastNoise = FractalNoise(WarpDirection(direction, seed ^ CoastSeedSalt, 0.075, 3.2), seed ^ CoastSeedSalt, 5.8, 5, 2.11, 0.49);
-        var coastlineField = continentalPotential + (macroNoise * 0.19) + (coastNoise * 0.075);
-        var normalized = (coastlineField * 0.31) - 0.34;
-
-        var continentalWeight = SmoothStep(-0.08, 0.16, normalized);
-        var regional = FractalNoise(direction, seed ^ ProvinceSeedSalt, 2.2, 5, 2.03, 0.51);
-        var detail = FractalNoise(direction, seed ^ DetailSeedSalt, 11.0, 4, 2.13, 0.46);
-        normalized += regional * Lerp(0.020, 0.095, continentalWeight);
-        normalized += detail * Lerp(0.008, 0.026, continentalWeight);
-        normalized += SampleNaturalTerrain(direction, seed, normalized, continentalWeight, boundaryInfluence);
-
+        var boundaryInfluence = 1.0 - SmoothStep(0.006, 0.060, Math.Max(0.0, boundaryDistance + (boundaryNoise * 0.012)));
         var tectonics = SampleTectonicRelief(direction, seed, nearest, primaryContinental, secondaryContinental, boundaryInfluence, boundaryNoise);
-        normalized += tectonics * SmoothStep(0.05, 0.75, continentalWeight + (primaryContinental ? 0.20 : 0.0));
+        normalized += tectonics * continentalWeight * 0.72;
 
-        var shelfNoise = FractalNoise(direction, seed ^ ShelfSeedSalt, 6.2, 3, 2.09, 0.48);
+        // Geomorphic hierarchy: ranges are broad envelopes cut by finer ridges/valleys instead of plate-sized slabs.
+        var rangeEnvelope = Math.Max(0.0, RidgedNoise(provinceDirection, seed ^ UplandSeedSalt, 2.1, 3, 2.03, 0.50));
+        var ridgeSystem = RidgedNoise(WarpDirection(direction, seed ^ UplandSeedSalt, 0.045, 5.0), seed ^ UplandSeedSalt, 7.5, 4, 2.08, 0.48);
+        var drainage = FractalNoise(WarpDirection(direction, seed ^ BasinSeedSalt, 0.035, 8.0), seed ^ BasinSeedSalt, 13.0, 3, 2.05, 0.48);
+        var mountainMask = continentalWeight * SmoothStep(0.18, 0.72, rangeEnvelope + (boundaryInfluence * 0.65));
+        var ridges = Math.Max(0.0, ridgeSystem) * mountainMask;
+        var valleys = Math.Max(0.0, -drainage) * mountainMask;
+        normalized += ridges * 0.095;
+        normalized -= valleys * 0.040;
+
+        // Sea level intersects the already-built terrain. Near-shore variation is subtle and cannot create stair-step coasts.
+        var coastEnvelope = 1.0 - SmoothStep(0.0, 0.10, Math.Abs(normalized));
+        var coastDetail = FractalNoise(WarpDirection(direction, seed ^ CoastSeedSalt, 0.035, 5.5), seed ^ CoastSeedSalt, 9.0, 3, 2.13, 0.47);
+        normalized += coastDetail * coastEnvelope * 0.018;
+
         if (normalized < 0.0)
         {
-            var shelf = 1.0 - SmoothStep(0.0, 0.20, -normalized);
-            normalized += shelfNoise * shelf * 0.018;
-            normalized -= (1.0 - shelf) * Math.Max(0.0, -regional) * 0.032;
+            var shelf = 1.0 - SmoothStep(0.0, 0.18, -normalized);
+            var abyssal = FractalNoise(direction, seed ^ ShelfSeedSalt, 3.1, 3, 2.09, 0.48);
+            normalized += abyssal * Lerp(0.018, 0.006, shelf);
+            normalized -= (1.0 - shelf) * 0.035;
         }
 
         return Math.Clamp(normalized, -1.0, 1.0);
