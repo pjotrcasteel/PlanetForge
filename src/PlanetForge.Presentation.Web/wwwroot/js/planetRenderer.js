@@ -753,6 +753,7 @@ function clamp(value,min,max) { return Math.max(min, Math.min(max, value)); }
 
 const globeVertexShaderSource = `#version 300 es
 precision highp float;
+precision highp int;
 in vec3 aPosition;
 in vec3 aNormal;
 uniform mat4 uModel;
@@ -812,6 +813,7 @@ void main() {
 
 const globeFragmentShaderSource = `#version 300 es
 precision highp float;
+precision highp int;
 in vec3 vNormal;
 in vec3 vPhysicalNormal;
 in vec3 vDirection;
