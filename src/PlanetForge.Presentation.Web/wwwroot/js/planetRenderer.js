@@ -894,26 +894,26 @@ vec3 terrainMaterial(vec3 radial, vec3 normal, float elevationAboveSeaLevel, boo
     float macro = valueNoise((radial * 6.0) + vec3(4.0, -2.0, 7.0));
     float subtleVariation = (macro - 0.5) * 0.045;
 
-    vec3 lowland = preBiological ? vec3(0.32, 0.25, 0.18) : vec3(0.18, 0.38, 0.22);
-    vec3 upland = preBiological ? vec3(0.43, 0.34, 0.23) : vec3(0.39, 0.36, 0.22);
-    vec3 highland = preBiological ? vec3(0.48, 0.42, 0.34) : vec3(0.62, 0.65, 0.59);
-    vec3 ridge = preBiological ? vec3(0.29, 0.29, 0.28) : vec3(0.48, 0.48, 0.43);
-    vec3 beach = vec3(0.66, 0.57, 0.40);
+    vec3 lowland = preBiological ? vec3(0.36, 0.285, 0.195) : vec3(0.18, 0.38, 0.22);
+    vec3 upland = preBiological ? vec3(0.36, 0.31, 0.255) : vec3(0.39, 0.36, 0.22);
+    vec3 highland = preBiological ? vec3(0.46, 0.42, 0.36) : vec3(0.62, 0.65, 0.59);
+    vec3 ridge = preBiological ? vec3(0.255, 0.255, 0.245) : vec3(0.48, 0.48, 0.43);
+    vec3 beach = vec3(0.73, 0.64, 0.46);
     vec3 coastalRock = vec3(0.30, 0.29, 0.27);
-    vec3 cliffRock = vec3(0.18, 0.18, 0.17);
+    vec3 cliffRock = vec3(0.16, 0.17, 0.17);
 
     vec3 material = mix(lowland, upland, smoothstep(500.0, 1650.0, elevation));
     material = mix(material, highland, smoothstep(1500.0, 3600.0, elevation));
     material = mix(material, ridge, steep * smoothstep(900.0, 3000.0, elevation) * 0.72);
 
-    float coastalBand = 1.0 - smoothstep(35.0, 720.0, elevation);
-    float beachStrength = coastalBand * (1.0 - smoothstep(0.0, 0.72, steep));
+    float coastalBand = 1.0 - smoothstep(25.0, 780.0, elevation);
+    float beachStrength = coastalBand * (1.0 - smoothstep(0.002, 0.020, vPhysicalSlope));
     float rockStrength = coastalBand * slope * (1.0 - cliff * 0.55);
     float cliffStrength = coastalBand * cliff;
-    material = mix(material, beach, beachStrength * 0.88);
+    material = mix(material, beach, beachStrength * 0.92);
     material = mix(material, coastalRock, rockStrength * 0.72);
     material = mix(material, cliffRock, cliffStrength * 0.94);
-    float wetEdge = (1.0 - smoothstep(0.0, 140.0, elevation)) * (1.0 - steep);
+    float wetEdge = (1.0 - smoothstep(0.0, 180.0, elevation)) * (1.0 - smoothstep(0.002, 0.020, vPhysicalSlope));
     material = mix(material, vec3(0.30, 0.27, 0.21), wetEdge * 0.24);
     material *= 1.0 + subtleVariation;
 
@@ -922,7 +922,7 @@ vec3 terrainMaterial(vec3 radial, vec3 normal, float elevationAboveSeaLevel, boo
     float radialDirect = max(dot(radial, lightDirection), 0.0);
     float faceDelta = clamp(direct - radialDirect, -0.45, 0.45);
     float illumination = clamp(0.34 + (0.72 * smoothstep(0.0, 0.94, direct)) + (faceDelta * 0.24), 0.28, 1.10);
-    illumination *= 1.0 - (cliff * 0.10);
+    illumination *= 1.0 - (steep * 0.08) - (cliff * 0.14);
     return material * illumination;
 }
 
@@ -930,18 +930,18 @@ vec4 oceanMaterial(vec3 radial, vec3 normal, float elevationAboveSeaLevel) {
     if (elevationAboveSeaLevel >= 0.0 || uLiquidFraction <= 0.001) discard;
 
     float depth = max(-elevationAboveSeaLevel, 0.0);
-    float shelf = 1.0 - smoothstep(180.0, 1250.0, depth);
-    float coast = 1.0 - smoothstep(0.0, 520.0, depth);
-    float deepening = smoothstep(900.0, 2600.0, depth);
+    float shelf = 1.0 - smoothstep(220.0, 2100.0, depth);
+    float coast = 1.0 - smoothstep(0.0, 780.0, depth);
+    float deepening = smoothstep(1450.0, 3900.0, depth);
 
-    vec3 deepOcean = vec3(0.008, 0.078, 0.135);
+    vec3 deepOcean = vec3(0.006, 0.052, 0.115);
     vec3 midOcean = vec3(0.012, 0.125, 0.190);
-    vec3 shelfOcean = vec3(0.030, 0.235, 0.285);
-    vec3 coastalOcean = vec3(0.060, 0.315, 0.330);
+    vec3 shelfOcean = vec3(0.028, 0.255, 0.315);
+    vec3 coastalOcean = vec3(0.070, 0.390, 0.405);
 
     vec3 color = mix(midOcean, deepOcean, deepening);
-    color = mix(color, shelfOcean, shelf * 0.78);
-    color = mix(color, coastalOcean, coast * 0.58);
+    color = mix(color, shelfOcean, shelf * 0.86);
+    color = mix(color, coastalOcean, coast * 0.72);
 
     float broadVariation = valueNoise((radial * 8.0) + vec3(3.0, -4.0, 8.0)) - 0.5;
     float fineVariation = valueNoise((radial * 24.0) + vec3(-2.0, 9.0, 5.0)) - 0.5;
