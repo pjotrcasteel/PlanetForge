@@ -10,6 +10,7 @@ public sealed class PlanetRun(
     FrozenWorldMission frozenWorldMission,
     PlanetHydrologyModelBuilder hydrologyModelBuilder,
     PlanetRunoffModel runoffModel,
+    PlanetCryosphereRunoffModel cryosphereRunoffModel,
     PlanetHydrologyFeatureExtractor hydrologyFeatureExtractor,
     PlanetRiverGeomorphologyModel riverGeomorphologyModel,
     IPlanetTerrainDeformationStore terrainDeformationStore)
@@ -136,12 +137,14 @@ public sealed class PlanetRun(
 
         var planet = CurrentMission.Planet;
         var precipitation = EstimateAnnualPrecipitationMillimeters(planet);
-        var runoff = EstimateAnnualRunoffMillimeters(precipitation);
-        var features = BuildWaterFeatures(runoff, cancellationToken);
+        var precipitationRunoff = EstimateAnnualRunoffMillimeters(precipitation);
+        var hydrologyResult = BuildWaterHydrology(precipitationRunoff, cancellationToken);
+        var features = hydrologyResult.Features;
+        var meltwaterRunoff = hydrologyResult.CryosphereRunoff.MeanAnnualMeltwaterRunoffMillimeters;
         EnsureWaterSurvey(features);
         var startYear = waterCycle?.SimulatedYears ?? 0;
         var frames = WaterCycleFrameYears
-            .Select(frameYears => BuildWaterCycleFrame(startYear + frameYears, precipitation, runoff, features))
+            .Select(frameYears => BuildWaterCycleFrame(startYear + frameYears, precipitation, precipitationRunoff, meltwaterRunoff, features))
             .ToArray();
 
         waterCycle = frames[^1].State;
@@ -154,6 +157,16 @@ public sealed class PlanetRun(
                 "first-precipitation",
                 "The first persistent precipitation cycle begins",
                 "Liquid surface water now participates in a reduced global water-cycle model: evaporation supplies atmospheric moisture, precipitation returns it to the surface, and topography routes the runoff.",
+                4);
+        }
+
+        if (waterCycle.AnnualMeltwaterRunoffMillimeters > 1.0 && !HasJournalEntry("cryosphere-meltwater-routing"))
+        {
+            AddJournalEntryAt(
+                CurrentMission.MissionYearsElapsed + waterCycle.SimulatedYears,
+                "cryosphere-meltwater-routing",
+                "Cryosphere meltwater joins the drainage network",
+                $"Retreating snow and land ice now contribute about {waterCycle.AnnualMeltwaterRunoffMillimeters:0} mm/year of mean land runoff, strengthening downstream discharge and basin filling.",
                 4);
         }
 
@@ -276,20 +289,29 @@ public sealed class PlanetRun(
         var planet = CurrentMission.Planet;
         var precipitation = EstimateAnnualPrecipitationMillimeters(planet);
         var annualRunoffMillimeters = EstimateAnnualRunoffMillimeters(precipitation);
-        return BuildWaterFeatures(annualRunoffMillimeters, cancellationToken);
+        return BuildWaterHydrology(annualRunoffMillimeters, cancellationToken).Features;
     }
 
-    private PlanetHydrologyFeatures BuildWaterFeatures(double annualRunoffMillimeters, CancellationToken cancellationToken)
+    private WaterHydrologyResult BuildWaterHydrology(double annualPrecipitationRunoffMillimeters, CancellationToken cancellationToken)
     {
         var planet = CurrentMission.Planet;
         var hydrology = EnsureWaterHydrology(cancellationToken);
+        var cryosphereRunoff = cryosphereRunoffModel.Build(
+            hydrology,
+            planet.SeaLevelMeters,
+            planet.Climate.SurfaceTemperatureKelvin,
+            planet.ClimateFeedback.LandIceFraction,
+            planet.ClimateFeedback.SnowCoverFraction,
+            cancellationToken);
         var runoff = runoffModel.Build(
             hydrology,
             planet.PhysicalParameters.RadiusMeters,
             planet.SeaLevelMeters,
-            annualRunoffMillimeters,
+            annualPrecipitationRunoffMillimeters,
+            cryosphereRunoff.LocalAnnualMeltwaterRunoffMillimeters,
             cancellationToken);
-        return hydrologyFeatureExtractor.Extract(hydrology, runoff, MinimumRiverMeanDischargeCubicMetersPerSecond, cancellationToken);
+        var features = hydrologyFeatureExtractor.Extract(hydrology, runoff, MinimumRiverMeanDischargeCubicMetersPerSecond, cancellationToken);
+        return new WaterHydrologyResult(features, runoff, cryosphereRunoff);
     }
 
     private PlanetHydrologySnapshot EnsureWaterHydrology(CancellationToken cancellationToken)
@@ -331,14 +353,17 @@ public sealed class PlanetRun(
     private static PlanetWaterCycleFrame BuildWaterCycleFrame(
         int year,
         double annualPrecipitationMillimeters,
-        double annualRunoffMillimeters,
+        double annualPrecipitationRunoffMillimeters,
+        double annualMeltwaterRunoffMillimeters,
         PlanetHydrologyFeatures features)
     {
+        var annualRunoffMillimeters = annualPrecipitationRunoffMillimeters + annualMeltwaterRunoffMillimeters;
         var wettingResponse = 1.0 - Math.Exp(-year / 18.0);
         var runoffPotential = Math.Clamp(annualRunoffMillimeters / 350.0, 0.0, 1.0);
         var riverActivation = Math.Clamp(wettingResponse * runoffPotential, 0.0, 1.0);
         var lakeFillResponse = 1.0 - Math.Exp(-year / 30.0);
-        var lakeFill = Math.Clamp(lakeFillResponse * Math.Clamp(annualPrecipitationMillimeters / 700.0, 0.0, 1.0), 0.0, 1.0);
+        var lakeWaterSupplyMillimeters = annualPrecipitationMillimeters + annualMeltwaterRunoffMillimeters;
+        var lakeFill = Math.Clamp(lakeFillResponse * Math.Clamp(lakeWaterSupplyMillimeters / 700.0, 0.0, 1.0), 0.0, 1.0);
         var activeRiverCount = features.RiverSegments.Count == 0 ? 0 : Math.Clamp((int)Math.Round(features.RiverSegments.Count * riverActivation), 1, features.RiverSegments.Count);
         var activeLakeCount = features.Lakes.Count == 0 ? 0 : Math.Clamp((int)Math.Round(features.Lakes.Count * lakeFill), 1, features.Lakes.Count);
         var maximumDischarge = features.RiverSegments.Count == 0 ? 1.0 : features.RiverSegments.Max(segment => segment.MeanDischargeCubicMetersPerSecond);
@@ -365,7 +390,11 @@ public sealed class PlanetRun(
             riverActivation,
             activeLakeCount,
             activeRiverCount,
-            activeSegments);
+            activeSegments)
+        {
+            AnnualPrecipitationRunoffMillimeters = annualPrecipitationRunoffMillimeters,
+            AnnualMeltwaterRunoffMillimeters = annualMeltwaterRunoffMillimeters,
+        };
         return new PlanetWaterCycleFrame(year, state with { ActiveLakeCells = BuildActiveLakeCells(features, state) });
     }
 
@@ -464,6 +493,11 @@ public sealed class PlanetRun(
             throw new InvalidOperationException("The water-cycle simulation requires the Water World era.");
         }
     }
+
+    private sealed record WaterHydrologyResult(
+        PlanetHydrologyFeatures Features,
+        PlanetRunoffSnapshot Runoff,
+        PlanetCryosphereRunoffSnapshot CryosphereRunoff);
 
     private PlanetRunSnapshot CreateSnapshot()
     {
