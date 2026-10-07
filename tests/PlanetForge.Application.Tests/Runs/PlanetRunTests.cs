@@ -141,7 +141,11 @@ public sealed class PlanetRunTests
         var completed = CompleteFrozenWorld(source);
         var simulated = source.SimulateWaterWorld(CancellationToken.None).Run;
         source.SelectResearch(PlanetResearchUnlock.SurfaceRadiometry);
-        var json = JsonSerializer.Serialize(source.ExportSave());
+        var exportedSave = source.ExportSave();
+        Assert.AreEqual(PlanetRun.SaveSchemaVersion, exportedSave.SchemaVersion);
+        Assert.IsNotNull(exportedSave.TerrainEvolution);
+        Assert.IsTrue(exportedSave.TerrainEvolution.Erosions.Count > 0);
+        var json = JsonSerializer.Serialize(exportedSave);
         var restoredSave = JsonSerializer.Deserialize<PlanetRunSave>(json);
         Assert.IsNotNull(restoredSave);
 
@@ -159,6 +163,31 @@ public sealed class PlanetRunTests
         Assert.AreEqual(simulated.WaterCycle!.ActiveRiverSegmentCount, restored.WaterCycle.ActiveRiverSegmentCount);
         Assert.HasCount(simulated.WaterCycle.ActiveRiverSegments.Count, restored.WaterCycle.ActiveRiverSegments);
         Assert.IsTrue(restored.Mission.Planet.SurfaceTiles.All(tile => tile.IncludesGeometry));
+        var restoredTerrain = restoredRun.ExportSave().TerrainEvolution;
+        Assert.IsNotNull(restoredTerrain);
+        Assert.AreEqual(exportedSave.TerrainEvolution.Erosions.Count, restoredTerrain.Erosions.Count);
+        Assert.AreEqual(exportedSave.TerrainEvolution.Depositions.Count, restoredTerrain.Depositions.Count);
+        Assert.AreEqual(exportedSave.TerrainEvolution.Revision, restoredTerrain.Revision);
+    }
+
+    [TestMethod]
+    public void Restore_Schema3WithoutTerrainEvolution_MigratesToEmptyTerrainState()
+    {
+        var source = CreateRun();
+        source.StartNew();
+        CompleteFrozenWorld(source);
+        var current = source.ExportSave();
+        var legacy = current with { SchemaVersion = 3, TerrainEvolution = null };
+
+        var restoredRun = CreateRun();
+        var restored = restoredRun.Restore(legacy);
+        var migrated = restoredRun.ExportSave();
+
+        Assert.AreEqual(PlanetRunEra.WaterWorld, restored.Era);
+        Assert.AreEqual(PlanetRun.SaveSchemaVersion, migrated.SchemaVersion);
+        Assert.IsNotNull(migrated.TerrainEvolution);
+        Assert.HasCount(0, migrated.TerrainEvolution.Erosions);
+        Assert.HasCount(0, migrated.TerrainEvolution.Depositions);
     }
 
     private static PlanetRunSnapshot CompleteFrozenWorld(PlanetRun run)
@@ -202,24 +231,44 @@ public sealed class PlanetRunTests
 
     private sealed class TestTerrainDeformationStore : IPlanetTerrainDeformationStore
     {
+        private readonly List<PlanetTerrainDeformation> erosions = [];
+        private readonly List<PlanetTerrainDeposition> depositions = [];
+        private int revision;
+
         public double SampleElevationDeltaMeters(PlanetVector direction, int seed) => 0.0;
 
-        public int GetRevision(int seed) => 0;
+        public int GetRevision(int seed) => revision;
 
         public void Apply(int seed, IReadOnlyList<PlanetTerrainDeformation> deformations)
         {
+            erosions.AddRange(deformations);
+            revision++;
         }
 
-        public void ApplyDeposition(int seed, IReadOnlyList<PlanetTerrainDeposition> depositions)
+        public void ApplyDeposition(int seed, IReadOnlyList<PlanetTerrainDeposition> values)
         {
+            depositions.AddRange(values);
+            revision++;
         }
 
-        public void Clear(int seed)
+        public PlanetTerrainEvolutionState Export(int seed) => new(revision, erosions.ToArray(), depositions.ToArray());
+
+        public void Restore(int seed, PlanetTerrainEvolutionState state)
         {
+            erosions.Clear();
+            erosions.AddRange(state.Erosions);
+            depositions.Clear();
+            depositions.AddRange(state.Depositions);
+            revision = state.Revision;
         }
+
+        public void Clear(int seed) => ClearAll();
 
         public void ClearAll()
         {
+            erosions.Clear();
+            depositions.Clear();
+            revision = 0;
         }
     }
 }
