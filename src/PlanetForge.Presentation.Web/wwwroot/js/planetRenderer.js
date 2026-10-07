@@ -611,11 +611,8 @@ function renderGlobe(s) {
         gl.enable(gl.BLEND);
         gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
         gl.depthMask(true);
-        gl.enable(gl.POLYGON_OFFSET_FILL);
-        gl.polygonOffset(-2.0, -2.0);
         gl.uniform1i(s.globeUniforms.mode, 4);
         drawSurface(s);
-        gl.disable(gl.POLYGON_OFFSET_FILL);
         gl.disable(gl.BLEND);
     }
 
