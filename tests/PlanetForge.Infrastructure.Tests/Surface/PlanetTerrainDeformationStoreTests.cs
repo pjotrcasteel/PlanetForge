@@ -16,7 +16,7 @@ public sealed class PlanetTerrainDeformationStoreTests
         store.Apply(42, [deformation]);
 
         Assert.AreEqual(-110.0, store.SampleElevationDeltaMeters(center, 42), 0.000001);
-        Assert.AreEqual(0.0, store.SampleElevationDeltaMeters(-center, 42), 0.000001);
+        Assert.AreEqual(0.0, store.SampleElevationDeltaMeters(center * -1.0, 42), 0.000001);
         Assert.AreEqual(1, store.GetRevision(42));
     }
 
