@@ -28,7 +28,7 @@ export function initialize(canvasId, snapshot, dotNetReference) {
     const gl = canvas?.getContext('webgl2', { antialias: true, alpha: true });
     if (!canvas || !gl) throw new Error('PlanetForge requires WebGL 2.');
 
-    document.title = 'PlanetForge 0.0.17.4 — Unified Surface Foundation';
+    document.title = 'PlanetForge 0.0.17.5 — Cryosphere Seam Fix';
     try {
         state = createState(canvas, gl, dotNetReference);
         installInput(state);
@@ -591,7 +591,7 @@ function renderGlobe(s) {
     gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
     gl.depthMask(true);
     gl.enable(gl.POLYGON_OFFSET_FILL);
-    gl.polygonOffset(-2.0, -2.0);
+    gl.polygonOffset(-4.0, -8.0);
     gl.uniform1i(s.globeUniforms.mode, 4);
     drawSurface(s);
     gl.disable(gl.POLYGON_OFFSET_FILL);
@@ -814,11 +814,13 @@ void main() {
         float landSupport = clamp((0.14 + (0.66 * polarSupport) + (0.36 * highlandSupport))
             * max(clamp(uLandIceFraction, 0.0, 1.0), clamp(uSnowCoverFraction, 0.0, 1.0) * 0.55), 0.0, 1.0);
         float landIceThicknessMeters = (90.0 + (760.0 * polarSupport) + (340.0 * highlandSupport)) * landSupport;
-        if (elevationAboveSeaLevel < 0.0) {
-            visualRadius = 1.0 + ((uSeaLevelMeters + 18.0 + (seaIceThicknessMeters * 18.0)) / uPlanetRadiusMeters);
-        } else {
-            visualRadius = 1.0 + (((elevationMeters * 36.0) + (landIceThicknessMeters * 18.0)) / uPlanetRadiusMeters);
-        }
+        float seaIceVisualElevationMeters = uSeaLevelMeters + 18.0 + (seaIceThicknessMeters * 18.0);
+        float landIceVisualElevationMeters = (elevationMeters * 36.0) + (landIceThicknessMeters * 18.0);
+        bool snowballGeometry = uSeaIceFraction >= 0.999 && uLandIceFraction >= 0.999 && uSnowCoverFraction >= 0.999;
+        if (snowballGeometry) landIceVisualElevationMeters = max(landIceVisualElevationMeters, seaIceVisualElevationMeters + 8.0);
+        float shorelineBlend = smoothstep(-900.0, 900.0, elevationAboveSeaLevel);
+        float iceVisualElevationMeters = mix(seaIceVisualElevationMeters, landIceVisualElevationMeters, shorelineBlend);
+        visualRadius = 1.0 + (iceVisualElevationMeters / uPlanetRadiusMeters);
     }
 
     vec4 world = uModel * vec4(radial * visualRadius, 1.0);
@@ -952,8 +954,13 @@ vec4 oceanMaterial(vec3 radial, vec3 normal, float elevationAboveSeaLevel) {
     vec3 lightDirection = normalize(uLightDirection);
     float diffuse = 0.92 + (0.08 * max(dot(radial, lightDirection), 0.0));
     float fresnel = pow(1.0 - max(dot(radial, viewDirection), 0.0), 3.6);
-    vec3 halfVector = normalize(lightDirection + viewDirection);
-    float specular = pow(max(dot(radial, halfVector), 0.0), 104.0) * 0.045;
+    vec3 halfVectorInput = lightDirection + viewDirection;
+    float halfVectorLength = length(halfVectorInput);
+    float specular = 0.0;
+    if (halfVectorLength > 0.0001) {
+        vec3 halfVector = halfVectorInput / halfVectorLength;
+        specular = pow(max(dot(radial, halfVector), 0.0), 104.0) * 0.045;
+    }
 
     color *= diffuse;
     color = mix(color, vec3(0.025, 0.085, 0.135), fresnel * 0.08);
@@ -1002,6 +1009,9 @@ vec4 cryosphereMaterial(vec3 radial, vec3 normal, float elevationAboveSeaLevel) 
     float landCoverage = (uLandIceFraction >= 0.999 && uSnowCoverFraction >= 0.999)
         ? 1.0
         : mix(frozenWorldLand, finalLandSurvival, smoothstep(0.08, 0.52, landRetreat));
+    float lowCoastalLand = 1.0 - smoothstep(120.0, 700.0, elevation);
+    float polarCoastalBridge = smoothstep(54.0, 76.0, warpedLatitude) * lowCoastalLand * smoothstep(0.28, 0.72, seaCoverage);
+    landCoverage = max(landCoverage, polarCoastalBridge);
 
     float coverage = ocean ? smoothstep(0.16, 0.74, seaCoverage) : smoothstep(0.10, 0.80, landCoverage);
     if (coverage < 0.025) discard;
@@ -1010,7 +1020,9 @@ vec4 cryosphereMaterial(vec3 radial, vec3 normal, float elevationAboveSeaLevel) 
     vec3 seaIce = mix(vec3(0.48, 0.64, 0.70), vec3(0.79, 0.87, 0.89), 0.47 + (iceTexture * 0.22));
     vec3 landIce = mix(vec3(0.65, 0.69, 0.69), vec3(0.91, 0.92, 0.89), 0.44 + (iceTexture * 0.24));
     vec3 snow = mix(vec3(0.81, 0.83, 0.81), vec3(0.98, 0.97, 0.93), 0.52 + (iceTexture * 0.17));
-    vec3 material = ocean ? seaIce : mix(landIce, snow, clamp(crestSnow * 0.82, 0.0, 0.94));
+    bool snowballWorld = uSeaIceFraction >= 0.999 && uLandIceFraction >= 0.999 && uSnowCoverFraction >= 0.999;
+    vec3 snowballIce = mix(vec3(0.69, 0.73, 0.73), vec3(0.94, 0.95, 0.92), 0.54 + (iceTexture * 0.18));
+    vec3 material = snowballWorld ? snowballIce : (ocean ? seaIce : mix(landIce, snow, clamp(crestSnow * 0.82, 0.0, 0.94)));
 
     float direct = max(dot(normalize(normal), normalize(uLightDirection)), 0.0);
     material *= clamp(0.62 + (0.42 * direct), 0.52, 1.08);
@@ -1024,7 +1036,8 @@ void main() {
     float elevationAboveSeaLevel = vElevationMeters - uSeaLevelMeters;
 
     if (uMode == 1) {
-        float rim = pow(1.0 - abs(dot(normalize(vNormal), normalize(-vWorldPosition))), 2.2);
+        float viewAlignment = clamp(abs(dot(normalize(vNormal), normalize(-vWorldPosition))), 0.0, 1.0);
+        float rim = pow(max(0.0, 1.0 - viewAlignment), 2.2);
         float fluxGlow = clamp(sqrt(max(uSolarFlux, 1.0) / 1361.0), 0.65, 1.35);
         float steam = clamp(uVaporFraction * 0.7, 0.0, 0.7);
         vec3 atmosphereColor = mix(vec3(0.20, 0.72, 0.72), vec3(0.72, 0.78, 0.72), steam);
