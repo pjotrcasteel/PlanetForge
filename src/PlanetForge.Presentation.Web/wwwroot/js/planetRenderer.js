@@ -906,13 +906,15 @@ vec3 terrainMaterial(vec3 radial, vec3 normal, float elevationAboveSeaLevel, boo
     material = mix(material, highland, smoothstep(1500.0, 3600.0, elevation));
     material = mix(material, ridge, steep * smoothstep(900.0, 3000.0, elevation) * 0.72);
 
-    float coastalBand = 1.0 - smoothstep(50.0, 900.0, elevation);
-    float beachStrength = coastalBand * (1.0 - steep);
-    float rockStrength = coastalBand * slope;
+    float coastalBand = 1.0 - smoothstep(35.0, 720.0, elevation);
+    float beachStrength = coastalBand * (1.0 - smoothstep(0.0, 0.72, steep));
+    float rockStrength = coastalBand * slope * (1.0 - cliff * 0.55);
     float cliffStrength = coastalBand * cliff;
-    material = mix(material, beach, beachStrength * 0.72);
-    material = mix(material, coastalRock, rockStrength * 0.62);
-    material = mix(material, cliffRock, cliffStrength * 0.86);
+    material = mix(material, beach, beachStrength * 0.88);
+    material = mix(material, coastalRock, rockStrength * 0.72);
+    material = mix(material, cliffRock, cliffStrength * 0.94);
+    float wetEdge = (1.0 - smoothstep(0.0, 140.0, elevation)) * (1.0 - steep);
+    material = mix(material, vec3(0.30, 0.27, 0.21), wetEdge * 0.24);
     material *= 1.0 + subtleVariation;
 
     vec3 lightDirection = normalize(uLightDirection);
@@ -926,23 +928,36 @@ vec3 terrainMaterial(vec3 radial, vec3 normal, float elevationAboveSeaLevel, boo
 
 vec4 oceanMaterial(vec3 radial, vec3 normal, float elevationAboveSeaLevel) {
     if (elevationAboveSeaLevel >= 0.0 || uLiquidFraction <= 0.001) discard;
-    float depth = max(-elevationAboveSeaLevel, 0.0);
-    float shelf = 1.0 - smoothstep(120.0, 2200.0, depth);
-    float abyss = smoothstep(1800.0, 6500.0, depth);
-    vec3 shallow = vec3(0.025, 0.37, 0.43);
-    vec3 shelfColor = vec3(0.018, 0.25, 0.34);
-    vec3 deep = vec3(0.012, 0.075, 0.15);
-    vec3 color = mix(shelfColor, shallow, shelf * 0.78);
-    color = mix(color, deep, abyss);
 
-    float macro = valueNoise((radial * 7.0) + vec3(3.0, -5.0, 9.0));
-    color *= 0.94 + ((macro - 0.5) * 0.07);
+    float depth = max(-elevationAboveSeaLevel, 0.0);
+    float shelf = 1.0 - smoothstep(180.0, 1250.0, depth);
+    float coast = 1.0 - smoothstep(0.0, 520.0, depth);
+    float deepening = smoothstep(900.0, 2600.0, depth);
+
+    vec3 deepOcean = vec3(0.008, 0.078, 0.135);
+    vec3 midOcean = vec3(0.012, 0.125, 0.190);
+    vec3 shelfOcean = vec3(0.030, 0.235, 0.285);
+    vec3 coastalOcean = vec3(0.060, 0.315, 0.330);
+
+    vec3 color = mix(midOcean, deepOcean, deepening);
+    color = mix(color, shelfOcean, shelf * 0.78);
+    color = mix(color, coastalOcean, coast * 0.58);
+
+    float broadVariation = valueNoise((radial * 8.0) + vec3(3.0, -4.0, 8.0)) - 0.5;
+    float fineVariation = valueNoise((radial * 24.0) + vec3(-2.0, 9.0, 5.0)) - 0.5;
+    color += vec3(0.0, broadVariation * 0.008, broadVariation * 0.012);
+    color += vec3(0.0, fineVariation * 0.003, fineVariation * 0.005);
 
     vec3 viewDirection = normalize(uCameraPosition - vWorldPosition);
-    float fresnel = pow(1.0 - max(dot(radial, viewDirection), 0.0), 3.0);
-    float light = max(dot(normalize(normal), normalize(uLightDirection)), 0.0);
-    color += vec3(0.02, 0.07, 0.08) * fresnel;
-    color *= 0.82 + (light * 0.18);
+    vec3 lightDirection = normalize(uLightDirection);
+    float diffuse = 0.92 + (0.08 * max(dot(radial, lightDirection), 0.0));
+    float fresnel = pow(1.0 - max(dot(radial, viewDirection), 0.0), 3.6);
+    vec3 halfVector = normalize(lightDirection + viewDirection);
+    float specular = pow(max(dot(radial, halfVector), 0.0), 104.0) * 0.045;
+
+    color *= diffuse;
+    color = mix(color, vec3(0.025, 0.085, 0.135), fresnel * 0.08);
+    color += vec3(specular * 0.60, specular * 0.76, specular);
     return vec4(clamp(color, 0.0, 1.0), 1.0);
 }
 
