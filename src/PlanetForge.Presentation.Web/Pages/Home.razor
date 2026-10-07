@@ -1,5 +1,6 @@
 @using PlanetForge.Application.Missions
 @using PlanetForge.Application.Runs
+@using PlanetForge.Domain.WorldGeneration
 @implements IAsyncDisposable
 @inject PlanetExperience Experience
 @inject PlanetRun Run
@@ -13,6 +14,10 @@
         <div class="foundation-clock" aria-live="polite">
             <strong>@FormatElapsedTime()</strong>
             <span>@FormatStageLabel()</span>
+            <div class="foundation-seed">
+                <small data-testid="planet-seed">SEED @CurrentSeed</small>
+                <button class="foundation-generate" disabled="@isTransitioning" aria-label="Generate new planet" @onclick="GeneratePlanetAsync">GENERATE</button>
+            </div>
         </div>
 
         <div class="foundation-controls">
@@ -39,6 +44,8 @@
     private bool isTransitioning;
     private double elapsedYears;
 
+    private int CurrentSeed => run?.Mission.Planet.Seed ?? PlanetSeedCatalog.ShowcaseSeed;
+
     protected override void OnInitialized()
     {
         ApplyRun(Run.StartNew());
@@ -59,6 +66,47 @@
         waterRendererModule = await JsRuntime.InvokeAsync<IJSObjectReference>("import", disposeCancellationTokenSource.Token, "./js/waterOverlay.js");
         await waterRendererModule.InvokeVoidAsync("initialize", disposeCancellationTokenSource.Token, "water-overlay-canvas", "planet-canvas", snapshot.PhysicalParameters.RadiusMeters);
         await waterRendererModule.InvokeVoidAsync("clearWaterCycle", disposeCancellationTokenSource.Token);
+    }
+
+    private async Task GeneratePlanetAsync()
+    {
+        if (isTransitioning)
+        {
+            return;
+        }
+
+        BeginTransition(FoundationStage.FrozenWorld);
+        await Task.Yield();
+
+        try
+        {
+            var seed = CreateRandomSeed(CurrentSeed);
+            ApplyRun(Run.StartNew(seed));
+            currentStage = FoundationStage.FrozenWorld;
+            elapsedYears = 0.0;
+            await SyncPlanetAsync();
+
+            if (waterRendererModule is not null)
+            {
+                await waterRendererModule.InvokeVoidAsync("clearWaterCycle", disposeCancellationTokenSource.Token);
+            }
+        }
+        finally
+        {
+            EndTransition();
+        }
+    }
+
+    private static int CreateRandomSeed(int currentSeed)
+    {
+        int seed;
+        do
+        {
+            seed = Random.Shared.Next(1, int.MaxValue);
+        }
+        while (seed == currentSeed);
+
+        return seed;
     }
 
     private async Task AdvanceAsync()
