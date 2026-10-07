@@ -358,17 +358,28 @@ public sealed class ProceduralPlanetElevationSource : IPlanetElevationSource
     {
         const double coastalRadius = 0.26;
         var magnitude = Math.Abs(elevation);
-        if (magnitude <= double.Epsilon || magnitude >= coastalRadius)
+        if (magnitude <= double.Epsilon)
+        {
+            return elevation;
+        }
+
+        if (elevation < -coastalRadius)
+        {
+            var deepenedMagnitude = coastalRadius + ((magnitude - coastalRadius) * 1.14);
+            return -Math.Min(1.0, deepenedMagnitude);
+        }
+
+        if (magnitude >= coastalRadius)
         {
             return elevation;
         }
 
         var ruggedSignal = ToUnitRange(FractalNoise(direction, seed ^ CoastRuggedSeedSalt, 3.6, 3, 2.07, 0.50));
-        var ruggedness = SmoothStep(0.30, 0.74, ruggedSignal);
+        var ruggedness = SmoothStep(0.25, 0.70, ruggedSignal);
         var normalizedDistance = magnitude / coastalRadius;
         var exponent = elevation >= 0.0
-            ? Lerp(1.52, 0.70, ruggedness)
-            : Lerp(1.82, 0.64, ruggedness);
+            ? Lerp(1.54, 0.58, ruggedness)
+            : Lerp(1.86, 0.50, ruggedness);
         var profiledMagnitude = coastalRadius * Math.Pow(normalizedDistance, exponent);
         var coastalInfluence = 1.0 - SmoothStep(0.72, 1.0, normalizedDistance);
         var shapedMagnitude = Lerp(magnitude, profiledMagnitude, coastalInfluence);
