@@ -19,6 +19,7 @@ public sealed class ProceduralPlanetElevationSource : IPlanetElevationSource
     private const int UplandSeedSalt = 0x1B873593;
     private const int BasinSeedSalt = 0x7F4A7C15;
     private const int CoastSeedSalt = 0x3C6EF372;
+    private const int ShelfSeedSalt = 0x5A827999;
 
     private readonly IPlanetTerrainDeformationStore? terrainDeformationStore;
 
@@ -39,36 +40,72 @@ public sealed class ProceduralPlanetElevationSource : IPlanetElevationSource
 
     private static double SamplePlateWorld(PlanetVector direction, int seed)
     {
-        var macroDirection = WarpDirection(direction, seed, 0.16, 1.20);
+        var macroDirection = WarpDirection(direction, seed, 0.22, 0.95);
         var nearest = FindNearestPlates(macroDirection, seed);
         var primaryContinental = IsContinentalPlate(seed, nearest.PrimaryIndex);
         var secondaryContinental = IsContinentalPlate(seed, nearest.SecondaryIndex);
         var boundaryDistance = Math.Max(0.0, nearest.PrimaryDot - nearest.SecondaryDot);
-        var boundaryNoise = FractalNoise(direction, seed ^ BoundarySeedSalt, 5.2, 3, 2.11, 0.48);
-        var warpedBoundaryDistance = Math.Max(0.0, boundaryDistance + (boundaryNoise * 0.020));
-        var boundaryInfluence = 1.0 - SmoothStep(0.015, 0.150, warpedBoundaryDistance);
-        var crustBlend = SmoothStep(-0.055, 0.145, warpedBoundaryDistance);
+        var boundaryNoise = FractalNoise(direction, seed ^ BoundarySeedSalt, 4.6, 4, 2.07, 0.50);
+        var warpedBoundaryDistance = Math.Max(0.0, boundaryDistance + (boundaryNoise * 0.026));
+        var boundaryInfluence = 1.0 - SmoothStep(0.012, 0.135, warpedBoundaryDistance);
 
-        var primaryBase = primaryContinental ? ContinentalBase(seed, nearest.PrimaryIndex) : OceanicBase(seed, nearest.PrimaryIndex);
-        var secondaryBase = secondaryContinental ? ContinentalBase(seed, nearest.SecondaryIndex) : OceanicBase(seed, nearest.SecondaryIndex);
-        var normalized = Lerp((primaryBase + secondaryBase) * 0.5, primaryBase, crustBlend);
+        var continentalPotential = SampleContinentalPotential(macroDirection, seed);
+        var macroNoise = FractalNoise(direction, seed ^ RegionalSeedSalt, 1.25, 5, 2.01, 0.53);
+        var coastNoise = FractalNoise(direction, seed ^ CoastSeedSalt, 4.8, 4, 2.13, 0.49);
+        var coastlineField = continentalPotential + (macroNoise * 0.18) + (coastNoise * 0.055);
+        var normalized = (coastlineField * 0.56) - 0.045;
 
-        var regional = FractalNoise(direction, seed ^ RegionalSeedSalt, 2.0, 5, 2.03, 0.51);
-        var detail = FractalNoise(direction, seed ^ DetailSeedSalt, 10.0, 4, 2.13, 0.46);
-        var continentalWeight = primaryContinental ? SmoothStep(0.02, 0.20, normalized + 0.08) : 0.0;
-        normalized += regional * Lerp(0.035, 0.105, continentalWeight);
-        normalized += detail * Lerp(0.010, 0.028, continentalWeight);
+        var continentalWeight = SmoothStep(-0.08, 0.16, normalized);
+        var regional = FractalNoise(direction, seed ^ ProvinceSeedSalt, 2.2, 5, 2.03, 0.51);
+        var detail = FractalNoise(direction, seed ^ DetailSeedSalt, 11.0, 4, 2.13, 0.46);
+        normalized += regional * Lerp(0.020, 0.095, continentalWeight);
+        normalized += detail * Lerp(0.008, 0.026, continentalWeight);
         normalized += SampleNaturalTerrain(direction, seed, normalized, continentalWeight, boundaryInfluence);
 
         var tectonics = SampleTectonicRelief(direction, seed, nearest, primaryContinental, secondaryContinental, boundaryInfluence, boundaryNoise);
-        normalized += tectonics;
+        normalized += tectonics * SmoothStep(0.05, 0.75, continentalWeight + (primaryContinental ? 0.20 : 0.0));
 
-        if (!primaryContinental)
+        var shelfNoise = FractalNoise(direction, seed ^ ShelfSeedSalt, 6.2, 3, 2.09, 0.48);
+        if (normalized < 0.0)
         {
-            normalized -= Math.Max(0.0, -regional) * 0.045;
+            var shelf = 1.0 - SmoothStep(0.0, 0.20, -normalized);
+            normalized += shelfNoise * shelf * 0.018;
+            normalized -= (1.0 - shelf) * Math.Max(0.0, -regional) * 0.032;
         }
 
         return Math.Clamp(normalized, -1.0, 1.0);
+    }
+
+    private static double SampleContinentalPotential(PlanetVector direction, int seed)
+    {
+        var strongest = -1.0;
+        var second = -1.0;
+
+        for (var index = 0; index < PlateCount; index++)
+        {
+            if (!IsContinentalPlate(seed, index))
+            {
+                continue;
+            }
+
+            var center = PlateCenter(seed, index);
+            var dot = PlanetVector.Dot(direction, center);
+            var size = Lerp(0.28, 0.54, ToUnitRange(HashValue(index, seed ^ CrustSeedSalt, PlateSeedSalt, seed)));
+            var edge = Lerp(0.82, 0.46, size);
+            var influence = SmoothStep(edge - 0.18, edge + 0.12, dot);
+            if (influence > strongest)
+            {
+                second = strongest;
+                strongest = influence;
+            }
+            else if (influence > second)
+            {
+                second = influence;
+            }
+        }
+
+        var merged = strongest + (Math.Max(0.0, second) * 0.42);
+        return (merged * 2.0) - 1.0;
     }
 
     private static double SampleNaturalTerrain(PlanetVector direction, int seed, double elevation, double continentalWeight, double boundaryInfluence)
