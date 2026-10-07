@@ -43,6 +43,7 @@ export function initialize(canvasId, snapshot, dotNetReference) {
 
 export function setPlanet(snapshot) {
     if (!state) return;
+    state.dirty = true;
     state.seaLevelMeters = snapshot.seaLevelMeters;
     state.planetRadiusMeters = snapshot.physicalParameters.radiusMeters;
     state.atmosphereDensity = snapshot.atmosphereDensity;
@@ -116,7 +117,7 @@ function createState(canvas, gl, dotNetReference) {
         localCameraAltitudeMeters: null, scaleHud: createLocalScaleHud(canvas),
         dragging: false, lastX: 0, lastY: 0,
         lodTimer: null, lodSequence: 0, lastSurfaceRequestSignature: null,
-        surfaceRequestInFlight: false, surfaceRequestPending: false,
+        surfaceRequestInFlight: false, surfaceRequestPending: false, dirty: true,
         seaLevelMeters: 0, planetRadiusMeters: 6371000, atmosphereDensity: 0.6,
         equilibriumTemperature: 255, surfaceTemperature: 288, solarFlux: 1361,
         liquidFraction: 1, vaporFraction: 0, seaIceFraction: 1, landIceFraction: 1, snowCoverFraction: 1,
@@ -350,6 +351,7 @@ function installInput(s) {
     const canvas = s.canvas;
     canvas.addEventListener('pointerdown', event => {
         s.dragging = true;
+        s.dirty = true;
         s.lastX = event.clientX;
         s.lastY = event.clientY;
         canvas.setPointerCapture(event.pointerId);
@@ -363,6 +365,7 @@ function installInput(s) {
     });
     canvas.addEventListener('pointermove', event => {
         if (!s.dragging) return;
+        s.dirty = true;
         const deltaX = event.clientX - s.lastX;
         const deltaY = event.clientY - s.lastY;
         s.lastX = event.clientX;
@@ -379,6 +382,7 @@ function installInput(s) {
     });
     canvas.addEventListener('wheel', event => {
         event.preventDefault();
+        s.dirty = true;
         const zoomFactor = Math.exp(event.deltaY * 0.0015);
 
         if (s.renderMode === 'local' && s.localSurface) {
@@ -468,18 +472,23 @@ function installVisualTestApi() {
         setPitch(pitch) {
             if (!state) return;
             state.pitch = clamp(pitch, -1.25, 1.25);
+            state.dirty = true;
             renderGlobe(state);
+            state.dirty = false;
         },
         getPitch() { return state?.pitch ?? 0.0; },
         setYaw(yaw) {
             if (!state) return;
             state.yaw = yaw;
+            state.dirty = true;
             renderGlobe(state);
+            state.dirty = false;
         },
         getYaw() { return state?.yaw ?? 0.0; },
         measure() {
             if (!state) return null;
             renderGlobe(state);
+            state.dirty = false;
             return measureSurface(state);
         }
     };
@@ -528,8 +537,11 @@ function measureSurface(s) {
 function render() {
     if (!state) return;
     resize(state);
-    if (state.renderMode === 'local' && state.localSurface) renderLocal(state);
-    else renderGlobe(state);
+    if (state.dirty) {
+        if (state.renderMode === 'local' && state.localSurface) renderLocal(state);
+        else renderGlobe(state);
+        state.dirty = false;
+    }
     requestAnimationFrame(render);
 }
 
@@ -699,6 +711,7 @@ function resize(s) {
 
     s.canvas.width = width;
     s.canvas.height = height;
+    s.dirty = true;
     if (s.renderMode === 'local') scheduleSurfaceUpdate(s, localSurfaceUpdateDebounceMilliseconds);
 }
 
