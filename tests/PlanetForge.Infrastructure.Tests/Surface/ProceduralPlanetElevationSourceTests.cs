@@ -134,6 +134,46 @@ public sealed class ProceduralPlanetElevationSourceTests
     }
 
     [TestMethod]
+    public void SampleElevationMeters_IntegritySeedGallery_ContainsShelvesCoastalLandAndDeepOcean()
+    {
+        var source = new ProceduralPlanetElevationSource();
+        var directions = FibonacciDirections(768).ToArray();
+
+        foreach (var seed in PlanetSeedCatalog.IntegritySeeds)
+        {
+            var elevations = directions.Select(direction => source.SampleElevationMeters(direction, seed)).ToArray();
+            var shallowShelf = elevations.Count(elevation => elevation is > -1_500.0 and < -25.0);
+            var coastalLand = elevations.Count(elevation => elevation is > 25.0 and < 650.0);
+            var deepOcean = elevations.Count(elevation => elevation < -2_500.0);
+
+            Assert.IsGreaterThan(4, shallowShelf, $"Seed {seed} lacks a meaningful continental shelf.");
+            Assert.IsGreaterThan(4, coastalLand, $"Seed {seed} lacks low coastal terrain.");
+            Assert.IsGreaterThan(10, deepOcean, $"Seed {seed} lacks deep-ocean bathymetry.");
+        }
+    }
+
+    [TestMethod]
+    public void SampleElevationMeters_ShowcaseSeed_CoastalMarginsIncludeGentleAndRuggedTransitions()
+    {
+        var source = new ProceduralPlanetElevationSource();
+        var transitions = FibonacciDirections(2_048)
+            .Select(direction =>
+            {
+                var elevation = source.SampleElevationMeters(direction, PlanetSeedCatalog.ShowcaseSeed);
+                var nearby = OffsetDirection(direction, 0.006);
+                var nearbyElevation = source.SampleElevationMeters(nearby, PlanetSeedCatalog.ShowcaseSeed);
+                return (Elevation: elevation, Relief: Math.Abs(elevation - nearbyElevation));
+            })
+            .Where(sample => Math.Abs(sample.Elevation) < 900.0)
+            .Select(sample => sample.Relief)
+            .ToArray();
+
+        Assert.IsGreaterThan(20, transitions.Length);
+        Assert.IsGreaterThan(4, transitions.Count(relief => relief < 220.0));
+        Assert.IsGreaterThan(2, transitions.Count(relief => relief > 300.0));
+    }
+
+    [TestMethod]
     public void SampleElevationMeters_NearbyDirections_RemainContinuous()
     {
         var source = new ProceduralPlanetElevationSource();
