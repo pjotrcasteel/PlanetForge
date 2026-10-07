@@ -719,7 +719,6 @@ function densifyLocalRiverSamples(samples, patchSizeMeters, planetRadiusMeters) 
         const second = samples[index + 1];
         const angle = Math.acos(clamp(dot(first.direction, second.direction), -1.0, 1.0));
         const lengthMeters = angle * planetRadiusMeters;
-        const subdivisions = Math.clamp ? 1 : 1;
         const steps = clamp(Math.ceil(lengthMeters / targetSpacingMeters), 1, 48);
         for (let step = 0; step < steps; step++) {
             if (index > 0 && step === 0) continue;
