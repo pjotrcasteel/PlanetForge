@@ -1,3 +1,4 @@
+@using PlanetForge.Application.Missions
 @using PlanetForge.Application.Runs
 @using PlanetForge.Domain.WorldGeneration
 @implements IAsyncDisposable
@@ -6,34 +7,51 @@
 @inject IJSRuntime JsRuntime
 
 <main class="foundation-shell">
-    <section class="planet-stage foundation-stage">
-        <canvas id="planet-canvas" aria-label="Interactive generated planet"></canvas>
+    <section class="planet-stage foundation-stage @PlanetVisualClass()">
+        <canvas id="planet-canvas" aria-label="Interactive simulated planet"></canvas>
+        <canvas id="water-overlay-canvas" aria-hidden="true"></canvas>
 
-        <div class="generator-panel" aria-live="polite">
-            <strong>PLANETFORGE</strong>
-            <span>GENERATOR LAB</span>
-            <div class="generator-seed">
+        <div class="foundation-clock" aria-live="polite">
+            <strong>@FormatElapsedTime()</strong>
+            <span>@FormatStageLabel()</span>
+            <div class="foundation-seed">
                 <small data-testid="planet-seed">SEED @CurrentSeed</small>
-                <button class="generator-button" disabled="@isGenerating" aria-label="Generate new planet" @onclick="GeneratePlanetAsync">
-                    @(isGenerating ? "FORGING…" : "GENERATE")
-                </button>
+                <button class="foundation-generate" disabled="@isTransitioning" aria-label="Generate new planet" @onclick="GeneratePlanetAsync">GENERATE</button>
             </div>
         </div>
 
-        <div class="generator-hint">DRAG TO ROTATE · SCROLL TO EXPLORE</div>
+        <div class="foundation-controls">
+            <button class="foundation-next" disabled="@isTransitioning" @onclick="AdvanceAsync">@FormatButtonLabel()</button>
+        </div>
     </section>
 </main>
 
 @code {
+    private const int ClimateFrameDelayMilliseconds = 180;
+    private const int MaximumClimateDisplayFrames = 7;
+    private const int ClimateTransitionLeadInMilliseconds = 700;
+    private const int HydrologyFrameDelayMilliseconds = 260;
+    private const int ScaffoldFrameDelayMilliseconds = 65;
+    private const int ScaffoldFrameCount = 36;
+
     private readonly CancellationTokenSource disposeCancellationTokenSource = new();
     private IJSObjectReference? rendererModule;
+    private IJSObjectReference? waterRendererModule;
     private PlanetRenderSnapshot? snapshot;
     private PlanetRunSnapshot? run;
-    private bool isGenerating;
+    private FoundationStage currentStage = FoundationStage.FrozenWorld;
+    private FoundationStage? transitionStage;
+    private bool isTransitioning;
+    private double elapsedYears;
 
     private int CurrentSeed => run?.Mission.Planet.Seed ?? PlanetSeedCatalog.ShowcaseSeed;
 
-    protected override void OnInitialized() => ApplyRun(Run.StartNew());
+    protected override void OnInitialized()
+    {
+        ApplyRun(Run.StartNew());
+        currentStage = FoundationStage.FrozenWorld;
+        elapsedYears = 0.0;
+    }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -43,32 +61,39 @@
         }
 
         rendererModule = await JsRuntime.InvokeAsync<IJSObjectReference>("import", disposeCancellationTokenSource.Token, "./js/planetRenderer.js");
-        await rendererModule.InvokeVoidAsync("initialize", disposeCancellationTokenSource.Token, "planet-canvas", snapshot, GetOrCreateSurfaceLodReference(), true);
+        await rendererModule.InvokeVoidAsync("initialize", disposeCancellationTokenSource.Token, "planet-canvas", snapshot, GetOrCreateSurfaceLodReference());
+
+        waterRendererModule = await JsRuntime.InvokeAsync<IJSObjectReference>("import", disposeCancellationTokenSource.Token, "./js/waterOverlay.js");
+        await waterRendererModule.InvokeVoidAsync("initialize", disposeCancellationTokenSource.Token, "water-overlay-canvas", "planet-canvas", snapshot.PhysicalParameters.RadiusMeters);
+        await waterRendererModule.InvokeVoidAsync("clearWaterCycle", disposeCancellationTokenSource.Token);
     }
 
     private async Task GeneratePlanetAsync()
     {
-        if (isGenerating)
+        if (isTransitioning)
         {
             return;
         }
 
-        isGenerating = true;
-        StateHasChanged();
+        BeginTransition(FoundationStage.FrozenWorld);
         await Task.Yield();
 
         try
         {
-            ApplyRun(Run.StartNew(CreateRandomSeed(CurrentSeed)));
-            if (rendererModule is not null && snapshot is not null)
+            var seed = CreateRandomSeed(CurrentSeed);
+            ApplyRun(Run.StartNew(seed));
+            currentStage = FoundationStage.FrozenWorld;
+            elapsedYears = 0.0;
+            await SyncPlanetAsync();
+
+            if (waterRendererModule is not null)
             {
-                await rendererModule.InvokeVoidAsync("setPlanet", disposeCancellationTokenSource.Token, snapshot);
+                await waterRendererModule.InvokeVoidAsync("clearWaterCycle", disposeCancellationTokenSource.Token);
             }
         }
         finally
         {
-            isGenerating = false;
-            StateHasChanged();
+            EndTransition();
         }
     }
 
@@ -84,15 +109,249 @@
         return seed;
     }
 
+    private async Task AdvanceAsync()
+    {
+        if (isTransitioning)
+        {
+            return;
+        }
+
+        switch (currentStage)
+        {
+            case FoundationStage.FrozenWorld:
+                await SimulateMeltingAsync();
+                break;
+            case FoundationStage.MeltingWorld:
+                await SimulateWaterCycleAsync();
+                break;
+            case FoundationStage.ActiveWaterCycle:
+                await SimulateScaffoldStageAsync(FoundationStage.FirstLife, 5_000_000.0);
+                break;
+            case FoundationStage.FirstLife:
+                await SimulateScaffoldStageAsync(FoundationStage.MarineAnimals, 50_000_000.0);
+                break;
+            case FoundationStage.MarineAnimals:
+                await SimulateScaffoldStageAsync(FoundationStage.LandVegetation, 100_000_000.0);
+                break;
+            case FoundationStage.LandVegetation:
+                await SimulateScaffoldStageAsync(FoundationStage.LandAnimals, 50_000_000.0);
+                break;
+            case FoundationStage.LandAnimals:
+                await ResetAsync();
+                break;
+            default:
+                throw new ArgumentOutOfRangeException();
+        }
+    }
+
+    private async Task SimulateMeltingAsync()
+    {
+        BeginTransition(FoundationStage.MeltingWorld);
+        try
+        {
+            Run.QueueIntervention(MissionInterventionType.ReleaseCapturedCarbon);
+            Run.QueueIntervention(MissionInterventionType.ReleaseCapturedCarbon);
+            Run.QueueIntervention(MissionInterventionType.DarkenSurface);
+            Run.QueueIntervention(MissionInterventionType.DarkenSurface);
+            var result = Run.SimulateCommit();
+
+            await Task.Delay(ClimateTransitionLeadInMilliseconds, disposeCancellationTokenSource.Token);
+            var displayStride = Math.Max(1, (int)Math.Ceiling(result.Frames.Count / (double)MaximumClimateDisplayFrames));
+            for (var frameIndex = 0; frameIndex < result.Frames.Count; frameIndex++)
+            {
+                var isFinalFrame = frameIndex == result.Frames.Count - 1;
+                if (!isFinalFrame && frameIndex % displayStride != 0)
+                {
+                    continue;
+                }
+
+                disposeCancellationTokenSource.Token.ThrowIfCancellationRequested();
+                var frame = result.Frames[frameIndex];
+                elapsedYears = frame.Year;
+                snapshot = frame.Planet;
+                await SyncPlanetAsync();
+                StateHasChanged();
+                await Task.Delay(ClimateFrameDelayMilliseconds, disposeCancellationTokenSource.Token);
+            }
+
+            ApplyRun(result.Run);
+            currentStage = FoundationStage.MeltingWorld;
+            elapsedYears = result.Run.Mission.MissionYearsElapsed;
+        }
+        finally
+        {
+            EndTransition();
+        }
+    }
+
+    private async Task SimulateWaterCycleAsync()
+    {
+        if (run?.Era != PlanetRunEra.WaterWorld)
+        {
+            throw new InvalidOperationException("The deterministic melting transition did not reach Water World.");
+        }
+
+        BeginTransition(FoundationStage.ActiveWaterCycle);
+        var startYear = elapsedYears;
+        try
+        {
+            var result = Run.SimulateWaterWorld(disposeCancellationTokenSource.Token);
+            foreach (var frame in result.Frames)
+            {
+                disposeCancellationTokenSource.Token.ThrowIfCancellationRequested();
+                elapsedYears = startYear + frame.Year;
+                StateHasChanged();
+                await Task.Delay(HydrologyFrameDelayMilliseconds, disposeCancellationTokenSource.Token);
+            }
+
+            ApplyRun(result.Run);
+            currentStage = FoundationStage.ActiveWaterCycle;
+            await SyncPlanetAsync();
+            if (waterRendererModule is not null && result.Frames.Count > 0)
+            {
+                await waterRendererModule.InvokeVoidAsync("setWaterCycle", disposeCancellationTokenSource.Token, result.Frames[^1].State);
+            }
+        }
+        finally
+        {
+            EndTransition();
+        }
+    }
+
+    private async Task SimulateScaffoldStageAsync(FoundationStage nextStage, double transitionYears)
+    {
+        BeginTransition(nextStage);
+        var startYear = elapsedYears;
+        try
+        {
+            for (var frame = 1; frame <= ScaffoldFrameCount; frame++)
+            {
+                disposeCancellationTokenSource.Token.ThrowIfCancellationRequested();
+                elapsedYears = startYear + (transitionYears * frame / ScaffoldFrameCount);
+                StateHasChanged();
+                await Task.Delay(ScaffoldFrameDelayMilliseconds, disposeCancellationTokenSource.Token);
+            }
+
+            currentStage = nextStage;
+        }
+        finally
+        {
+            EndTransition();
+        }
+    }
+
+    private async Task ResetAsync()
+    {
+        BeginTransition(FoundationStage.FrozenWorld);
+        try
+        {
+            ApplyRun(Run.Restart());
+            currentStage = FoundationStage.FrozenWorld;
+            elapsedYears = 0.0;
+            await SyncPlanetAsync();
+            if (waterRendererModule is not null)
+            {
+                await waterRendererModule.InvokeVoidAsync("clearWaterCycle", disposeCancellationTokenSource.Token);
+            }
+        }
+        finally
+        {
+            EndTransition();
+        }
+    }
+
+    private void BeginTransition(FoundationStage targetStage)
+    {
+        isTransitioning = true;
+        transitionStage = targetStage;
+        StateHasChanged();
+    }
+
+    private void EndTransition()
+    {
+        transitionStage = null;
+        isTransitioning = false;
+        StateHasChanged();
+    }
+
     private void ApplyRun(PlanetRunSnapshot nextRun)
     {
         run = nextRun;
         snapshot = nextRun.Mission.Planet;
     }
 
+    private async Task SyncPlanetAsync()
+    {
+        if (snapshot is null)
+        {
+            return;
+        }
+
+        if (rendererModule is not null)
+        {
+            await rendererModule.InvokeVoidAsync("setPlanet", disposeCancellationTokenSource.Token, snapshot);
+        }
+
+    }
+
+    private string PlanetVisualClass()
+        => currentStage is FoundationStage.FrozenWorld or FoundationStage.MeltingWorld or FoundationStage.ActiveWaterCycle or FoundationStage.FirstLife or FoundationStage.MarineAnimals
+            ? "pre-vegetation-world"
+            : string.Empty;
+
+    private string FormatStageLabel()
+    {
+        var displayedStage = transitionStage ?? currentStage;
+        return isTransitioning && transitionStage is not null
+            ? $"{StageName(currentStage)} → {StageName(displayedStage)}"
+            : StageName(displayedStage);
+    }
+
+    private string FormatButtonLabel() => isTransitioning ? "SIMULATING…" : currentStage == FoundationStage.LandAnimals ? "RESET" : "NEXT";
+
+    private string FormatElapsedTime()
+    {
+        if (elapsedYears < 1_000.0)
+        {
+            return $"YEAR {elapsedYears:0}";
+        }
+
+        if (elapsedYears < 1_000_000.0)
+        {
+            return $"{elapsedYears / 1_000.0:0.0} kyr";
+        }
+
+        return $"{elapsedYears / 1_000_000.0:0.0} Myr";
+    }
+
+    private static string StageName(FoundationStage stage)
+        => stage switch
+        {
+            FoundationStage.FrozenWorld => "FROZEN WORLD",
+            FoundationStage.MeltingWorld => "MELTING WORLD",
+            FoundationStage.ActiveWaterCycle => "ACTIVE WATER CYCLE",
+            FoundationStage.FirstLife => "FIRST LIFE",
+            FoundationStage.MarineAnimals => "MARINE ANIMALS",
+            FoundationStage.LandVegetation => "LAND VEGETATION",
+            FoundationStage.LandAnimals => "LAND ANIMALS",
+            _ => throw new ArgumentOutOfRangeException(nameof(stage), stage, null),
+        };
+
     public async ValueTask DisposeAsync()
     {
         disposeCancellationTokenSource.Cancel();
+        if (waterRendererModule is not null)
+        {
+            try
+            {
+                await waterRendererModule.InvokeVoidAsync("dispose", CancellationToken.None);
+                await waterRendererModule.DisposeAsync();
+            }
+            catch (JSDisconnectedException)
+            {
+            }
+        }
+
         if (rendererModule is not null)
         {
             try
@@ -107,5 +366,16 @@
 
         DisposeSurfaceLodReference();
         disposeCancellationTokenSource.Dispose();
+    }
+
+    private enum FoundationStage
+    {
+        FrozenWorld,
+        MeltingWorld,
+        ActiveWaterCycle,
+        FirstLife,
+        MarineAnimals,
+        LandVegetation,
+        LandAnimals,
     }
 }
