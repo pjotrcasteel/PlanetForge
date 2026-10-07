@@ -174,10 +174,11 @@ public sealed class PlanetRunTests
         var mission = new FrozenWorldMission(experience);
         var hydrologyBuilder = new PlanetHydrologyModelBuilder(elevationSource);
         var runoffModel = new PlanetRunoffModel();
+        var cryosphereRunoffModel = new PlanetCryosphereRunoffModel();
         var hydrologyExtractor = new PlanetHydrologyFeatureExtractor();
         var geomorphologyModel = new PlanetRiverGeomorphologyModel();
         var deformationStore = new TestTerrainDeformationStore();
-        return new PlanetRun(mission, hydrologyBuilder, runoffModel, hydrologyExtractor, geomorphologyModel, deformationStore);
+        return new PlanetRun(mission, hydrologyBuilder, runoffModel, cryosphereRunoffModel, hydrologyExtractor, geomorphologyModel, deformationStore);
     }
 
     private static PlanetExperience CreateExperience(IPlanetElevationSource elevationSource)
