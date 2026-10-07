@@ -59,6 +59,28 @@ public sealed class PlanetTerrainDeformationStoreTests
     }
 
     [TestMethod]
+    public void ExportAndRestore_PreservesTerrainEvolutionAndRevision()
+    {
+        var source = new PlanetTerrainDeformationStore();
+        var erosionCenter = PlanetVector.Normalize(new PlanetVector(0.7, 0.2, -0.4));
+        var depositionCenter = PlanetVector.Normalize(new PlanetVector(-0.3, 0.4, 0.8));
+        source.Apply(42, [new PlanetTerrainDeformation(erosionCenter, 0.002, 0.008, 80.0, 30.0)]);
+        source.ApplyDeposition(42, [new PlanetTerrainDeposition(depositionCenter, 0.003, 0.010, 60.0, 20.0)]);
+        var expectedErosionDelta = source.SampleElevationDeltaMeters(erosionCenter, 42);
+        var expectedDepositionDelta = source.SampleElevationDeltaMeters(depositionCenter, 42);
+        var state = source.Export(42);
+
+        var restored = new PlanetTerrainDeformationStore();
+        restored.Restore(42, state);
+
+        Assert.AreEqual(source.GetRevision(42), restored.GetRevision(42));
+        Assert.AreEqual(expectedErosionDelta, restored.SampleElevationDeltaMeters(erosionCenter, 42), 0.000001);
+        Assert.AreEqual(expectedDepositionDelta, restored.SampleElevationDeltaMeters(depositionCenter, 42), 0.000001);
+        Assert.HasCount(1, state.Erosions);
+        Assert.HasCount(1, state.Depositions);
+    }
+
+    [TestMethod]
     public void Clear_RemovesSeedTerrainDeformations()
     {
         var store = new PlanetTerrainDeformationStore();
