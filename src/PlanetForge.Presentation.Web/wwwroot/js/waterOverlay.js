@@ -543,12 +543,33 @@ function installInput(s) {
         const deltaY = event.clientY - s.lastY;
         s.lastX = event.clientX;
         s.lastY = event.clientY;
-        if ((s.distance - 1.0) * s.planetRadiusMeters <= localExitAltitudeMeters) return;
+
+        if (s.renderMode === 'local') {
+            s.localYaw += deltaX * 0.008;
+            s.localPitch = clamp(s.localPitch - deltaY * 0.008, minimumLocalViewPitchRadians, maximumLocalViewPitchRadians);
+            return;
+        }
+
         s.yaw += deltaX * 0.008;
         s.pitch = clamp(s.pitch + deltaY * 0.008, -1.25, 1.25);
     });
     canvas.addEventListener('wheel', event => {
         const zoomFactor = Math.exp(event.deltaY * 0.0015);
+        if (s.renderMode === 'local' && s.localSurface) {
+            const currentAltitude = s.localCameraAltitudeMeters ?? localTransitionAltitudeMeters;
+            const nextAltitude = clamp(currentAltitude * zoomFactor, minimumCameraAltitudeMeters, localExitAltitudeMeters);
+            s.localCameraAltitudeMeters = nextAltitude;
+            s.distance = 1.0 + (nextAltitude / Math.max(s.planetRadiusMeters, 1.0));
+            if (nextAltitude >= localExitAltitudeMeters) {
+                const anchor = s.localSurface.anchorDirection;
+                s.yaw = Math.atan2(anchor[0], anchor[2]);
+                s.pitch = Math.asin(clamp(anchor[1], -1.0, 1.0));
+                s.renderMode = 'globe';
+                s.localSurface = null;
+            }
+            return;
+        }
+
         const minimumAltitudeRatio = minimumCameraAltitudeMeters / Math.max(s.planetRadiusMeters, 1.0);
         const altitudeRatio = clamp(s.distance - 1.0, minimumAltitudeRatio, maximumCameraAltitudeRatio);
         s.distance = 1.0 + clamp(altitudeRatio * zoomFactor, minimumAltitudeRatio, maximumCameraAltitudeRatio);
@@ -558,6 +579,13 @@ function installInput(s) {
 function installVisualTestApi() {
     if (!new URLSearchParams(window.location.search).has('visualTest')) return;
     window.__planetForgeWaterTest = {
+        getFirstRiverDirection() {
+            const sample = state?.riverSegments?.find(segment => segment.samples?.length > 0)?.samples?.[0];
+            return sample?.direction?.slice() ?? null;
+        },
+        getRenderMode() {
+            return state?.renderMode ?? 'disposed';
+        },
         measure() {
             if (!state) return createMetrics();
             draw(state);
@@ -586,18 +614,129 @@ function draw(s) {
     const { context, canvas } = s;
     context.clearRect(0, 0, canvas.width, canvas.height);
     if (s.riverSegments.length === 0 && s.lakeGroups.length === 0) return;
-    if ((s.distance - 1.0) * s.planetRadiusMeters <= localTransitionAltitudeMeters) return;
 
+    context.globalCompositeOperation = 'source-over';
+    context.lineCap = 'round';
+    context.lineJoin = 'round';
+
+    if (s.renderMode === 'local' && s.localSurface) {
+        drawLocalWater(s);
+        return;
+    }
+
+    if ((s.distance - 1.0) * s.planetRadiusMeters <= localTransitionAltitudeMeters) return;
     const aspect = canvas.width / Math.max(canvas.height, 1);
     const projection = perspective(verticalFieldOfViewRadians, aspect, 0.002, 20.0);
     const eye = orbitEye(s.yaw, s.pitch, s.distance);
     const viewProjection = multiply(projection, lookAt(eye, [0, 0, 0], [0, 1, 0]));
 
-    context.globalCompositeOperation = 'source-over';
-    context.lineCap = 'round';
-    context.lineJoin = 'round';
     for (const lake of s.lakeGroups) drawLake(context, lake, eye, viewProjection, canvas.width, canvas.height);
     for (const river of s.riverSegments) drawRiver(context, river, eye, viewProjection, canvas.width, canvas.height);
+}
+
+function drawLocalWater(s) {
+    const { context, canvas, localSurface } = s;
+    const frame = createLocalFrame(localSurface, s.planetRadiusMeters);
+    const cameraHeightMeters = Math.max(s.localCameraAltitudeMeters ?? localTransitionAltitudeMeters, minimumCameraAltitudeMeters);
+    const horizontalDistanceMeters = cameraHeightMeters / Math.tan(s.localPitch);
+    const eye = [
+        Math.sin(s.localYaw) * horizontalDistanceMeters,
+        cameraHeightMeters,
+        Math.cos(s.localYaw) * horizontalDistanceMeters
+    ];
+    const nearMeters = Math.max(0.02, Math.min(1.0, cameraHeightMeters * 0.001));
+    const farMeters = Math.max(localSurface.sizeMeters * 3.0, Math.hypot(horizontalDistanceMeters, cameraHeightMeters) * 4.0);
+    const aspect = canvas.width / Math.max(canvas.height, 1);
+    const viewProjection = multiply(
+        perspective(verticalFieldOfViewRadians, aspect, nearMeters, farMeters),
+        lookAt(eye, [0, 0, 0], [0, 1, 0]));
+
+    for (const lake of s.lakeGroups) drawLocalLake(context, lake, frame, s, viewProjection, canvas.width, canvas.height);
+    for (const river of s.riverSegments) drawLocalRiver(context, river, frame, s, viewProjection, canvas.width, canvas.height);
+}
+
+function createLocalFrame(localSurface, planetRadiusMeters) {
+    const up = localSurface.anchorDirection;
+    const reference = Math.abs(dot(up, [0, 1, 0])) < 0.99 ? [0, 1, 0] : [1, 0, 0];
+    const east = normalize(cross(reference, up));
+    const north = normalize(cross(up, east));
+    const origin = scale(up, planetRadiusMeters + localSurface.anchorElevationMeters);
+    return { origin, east, north, up };
+}
+
+function toLocalWaterPoint(sample, frame, planetRadiusMeters) {
+    const world = scale(sample.direction, planetRadiusMeters + sample.elevationMeters);
+    const delta = subtract(world, frame.origin);
+    return [
+        dot(delta, frame.east),
+        dot(delta, frame.up) + localWaterClearanceMeters,
+        -dot(delta, frame.north)
+    ];
+}
+
+function drawLocalLake(context, lake, frame, s, viewProjection, width, height) {
+    const projected = (lake.boundarySamples ?? [])
+        .map(sample => toLocalWaterPoint(sample, frame, s.planetRadiusMeters))
+        .filter(point => isWithinLocalRange(point, s.localSurface.sizeMeters))
+        .map(point => project(viewProjection, point, width, height))
+        .filter(Boolean);
+    const hull = convexHull(projected);
+    if (hull.length < 3) return;
+
+    context.beginPath();
+    context.moveTo(hull[0][0], hull[0][1]);
+    for (let index = 1; index < hull.length; index++) context.lineTo(hull[index][0], hull[index][1]);
+    context.closePath();
+    context.fillStyle = `rgba(18, 82, 101, ${0.68 + lake.fillFraction * 0.18})`;
+    context.fill();
+    context.strokeStyle = `rgba(72, 151, 166, ${0.48 + lake.fillFraction * 0.20})`;
+    context.lineWidth = 1.15;
+    context.stroke();
+}
+
+function drawLocalRiver(context, river, frame, s, viewProjection, width, height) {
+    const samples = densifyLocalRiverSamples(river.samples ?? [], s.localSurface.sizeMeters, s.planetRadiusMeters);
+    const projected = samples
+        .map(sample => toLocalWaterPoint(sample, frame, s.planetRadiusMeters))
+        .filter(point => isWithinLocalRange(point, s.localSurface.sizeMeters * 1.6))
+        .map(point => project(viewProjection, point, width, height))
+        .filter(Boolean);
+    if (projected.length < 2) return;
+
+    const orderScale = clamp((river.streamOrder - 1) * 0.22, 0.0, 0.9);
+    const coreWidth = 1.15 + (river.discharge * 2.35) + orderScale;
+    drawSmoothPolyline(context, projected, `rgba(5, 25, 31, ${0.42 + river.discharge * 0.12})`, coreWidth + 1.0);
+    drawSmoothPolyline(context, projected, `rgba(32, 111, 132, ${0.58 + river.discharge * 0.18})`, coreWidth);
+}
+
+function densifyLocalRiverSamples(samples, patchSizeMeters, planetRadiusMeters) {
+    if (samples.length < 2) return samples;
+    const targetSpacingMeters = Math.max(40.0, patchSizeMeters / 12.0);
+    const result = [];
+
+    for (let index = 0; index < samples.length - 1; index++) {
+        const first = samples[index];
+        const second = samples[index + 1];
+        const angle = Math.acos(clamp(dot(first.direction, second.direction), -1.0, 1.0));
+        const lengthMeters = angle * planetRadiusMeters;
+        const subdivisions = Math.clamp ? 1 : 1;
+        const steps = clamp(Math.ceil(lengthMeters / targetSpacingMeters), 1, 48);
+        for (let step = 0; step < steps; step++) {
+            if (index > 0 && step === 0) continue;
+            const amount = step / steps;
+            result.push({
+                direction: sphericalInterpolate(first.direction, second.direction, amount),
+                elevationMeters: first.elevationMeters + ((second.elevationMeters - first.elevationMeters) * amount)
+            });
+        }
+    }
+
+    result.push(samples[samples.length - 1]);
+    return result;
+}
+
+function isWithinLocalRange(point, sizeMeters) {
+    return Math.hypot(point[0], point[2]) <= sizeMeters;
 }
 
 function drawLake(context, lake, eye, viewProjection, width, height) {
@@ -666,7 +805,7 @@ function drawSmoothPolyline(context, points, strokeStyle, lineWidth) {
 }
 
 function measureVisibleWater(s) {
-    const metrics = { ...s.metrics };
+    const metrics = { ...s.metrics, renderMode: s.renderMode };
     if (s.canvas.width === 0 || s.canvas.height === 0) return metrics;
     const pixels = s.context.getImageData(0, 0, s.canvas.width, s.canvas.height).data;
     let visiblePixels = 0;
@@ -771,4 +910,5 @@ function safeNormalize(v, fallback) { const magnitude=Math.hypot(v[0],v[1],v[2])
 function cross(a,b) { return [a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]]; }
 function dot(a,b) { return a[0]*b[0]+a[1]*b[1]+a[2]*b[2]; }
 function scale(v,s) { return [v[0]*s,v[1]*s,v[2]*s]; }
+function subtract(a,b) { return [a[0]-b[0],a[1]-b[1],a[2]-b[2]]; }
 function clamp(value,min,max) { return Math.max(min,Math.min(max,value)); }
