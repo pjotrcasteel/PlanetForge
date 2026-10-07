@@ -16,7 +16,8 @@ public sealed class PlanetRun(
     PlanetRiverSedimentModel riverSedimentModel,
     IPlanetTerrainDeformationStore terrainDeformationStore)
 {
-    public const int SaveSchemaVersion = 3;
+    public const int SaveSchemaVersion = 4;
+    private const int LegacySaveSchemaVersion = 3;
 
     private const int WaterSurveyGridLevel = 5;
     private const double MinimumRiverMeanDischargeCubicMetersPerSecond = 2_500.0;
@@ -222,17 +223,23 @@ public sealed class PlanetRun(
             researchUnlocks.ToArray(),
             researchChoiceAvailable,
             waterSurvey,
-            waterCycle);
+            waterCycle,
+            terrainDeformationStore.Export(CurrentMission.Planet.Seed));
 
     public PlanetRunSnapshot Restore(PlanetRunSave save)
     {
         ArgumentNullException.ThrowIfNull(save);
-        if (save.SchemaVersion != SaveSchemaVersion)
+        if (save.SchemaVersion is not LegacySaveSchemaVersion and not SaveSchemaVersion)
         {
             throw new NotSupportedException($"Planet Run save schema {save.SchemaVersion} is not supported by schema {SaveSchemaVersion}.");
         }
 
         terrainDeformationStore.ClearAll();
+        if (save.SchemaVersion >= SaveSchemaVersion && save.TerrainEvolution is not null)
+        {
+            terrainDeformationStore.Restore(save.Mission.Planet.Seed, save.TerrainEvolution);
+        }
+
         mission = frozenWorldMission.RestoreState(save.Mission);
         era = save.Era;
         insight = save.Insight;
