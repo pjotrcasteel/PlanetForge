@@ -137,8 +137,18 @@ test('OrbitalZoom_RequestsHigherLodAndRestoresCoarseGlobe', async ({ page }, tes
   expect(closePixels.glError).toBe(0);
   await page.screenshot({ path: testInfo.outputPath('adaptive-orbital-lod-close.png'), fullPage: true });
 
+  // Crossing the 20 km boundary must switch from orbit tiles to the local metre-based mesh.
+  await page.evaluate(() => window.__planetForgeSurfaceTest.setDistance(1.001));
+  await page.waitForFunction(() => window.__planetForgeSurfaceTest.getLodStats().mode === 'local', null, { timeout: 75_000 });
+  const local = await page.evaluate(() => window.__planetForgeSurfaceTest.getLodStats());
+  expect(local.tileCount).toBe(0);
+  await page.screenshot({ path: testInfo.outputPath('local-surface-transition.png'), fullPage: true });
+
   await page.evaluate(() => window.__planetForgeSurfaceTest.setDistance(3.2));
-  await page.waitForFunction(() => window.__planetForgeSurfaceTest.getLodStats().maximumLevel === 1, null, { timeout: 75_000 });
+  await page.waitForFunction(() => {
+    const stats = window.__planetForgeSurfaceTest.getLodStats();
+    return stats.mode === 'globe' && stats.maximumLevel === 1;
+  }, null, { timeout: 75_000 });
   const restored = await page.evaluate(() => window.__planetForgeSurfaceTest.getLodStats());
   expect(restored.tileCount).toBe(24);
 });
