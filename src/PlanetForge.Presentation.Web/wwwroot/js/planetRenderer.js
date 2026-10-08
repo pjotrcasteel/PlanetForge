@@ -75,7 +75,7 @@ export function setPlanet(snapshot) {
         const enteringLocal = state.renderMode !== 'local';
         if (enteringLocal) {
             state.localYaw = -0.65;
-            state.localPitch = 0.72;
+            state.localPitch = geologicalPreviewMode ? 1.30 : 0.72;
             state.localCameraAltitudeMeters = snapshot.localSurface.cameraAltitudeMeters;
             state.distance = 1.0 + (state.localCameraAltitudeMeters / state.planetRadiusMeters);
         }
@@ -128,7 +128,7 @@ function createState(canvas, gl, dotNetReference) {
     return {
         canvas, gl, dotNetReference, globeProgram, localProgram, generatorPreview: false, renderMode: 'globe', geometryKey: null,
         surfaceKey: null, tileBufferCache: new Map(), tiles: [], localSurface: null,
-        yaw: -0.65, pitch: 0.24, distance: initialOrbitDistance(canvas), localYaw: -0.65, localPitch: 0.72,
+        yaw: -0.65, pitch: 0.24, distance: initialOrbitDistance(canvas), localYaw: -0.65, localPitch: geologicalPreviewMode ? 1.30 : 0.72,
         localCameraAltitudeMeters: null, scaleHud: createLocalScaleHud(canvas),
         activePointers: new Map(), pinchDistance: null,
         lodTimer: null, lodSequence: 0, lastSurfaceRequestSignature: null,
@@ -460,7 +460,7 @@ function installInput(s) {
 
         if (s.renderMode === 'local') {
             s.localYaw += deltaX * 0.008;
-            s.localPitch = clamp(s.localPitch - deltaY * 0.008, minimumLocalViewPitchRadians, maximumLocalViewPitchRadians);
+            s.localPitch = clamp(s.localPitch - deltaY * 0.008, geologicalPreviewMode ? 1.12 : minimumLocalViewPitchRadians, maximumLocalViewPitchRadians);
             return;
         }
 
