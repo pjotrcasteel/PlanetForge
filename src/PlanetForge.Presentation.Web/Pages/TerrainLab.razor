@@ -267,9 +267,12 @@
 
         try
         {
-            var state = baselineRegion;
+            // Advance the existing state when moving forward; restore the baseline only
+            // when scrubbing backward. Both paths produce the same deterministic result.
+            var state = evolvedRegion is not null && evolvedRegion.Iteration <= selectedIterations
+                ? evolvedRegion : baselineRegion;
             var lastInput = state.ElevationMeters;
-            for (var iteration = 0; iteration < selectedIterations; iteration++)
+            for (var iteration = state.Iteration; iteration < selectedIterations; iteration++)
             {
                 cancellation.Token.ThrowIfCancellationRequested();
                 lastInput = state.ElevationMeters;
