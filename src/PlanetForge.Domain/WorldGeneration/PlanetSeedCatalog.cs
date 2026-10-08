@@ -22,5 +22,7 @@ public static class PlanetSeedCatalog
         1454046749,
         119596931,
         1934383252,
+        346147916,
+        579460630,
     ];
 }
