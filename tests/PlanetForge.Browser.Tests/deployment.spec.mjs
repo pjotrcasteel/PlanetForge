@@ -7,7 +7,8 @@ test('DeployedPlanetForge_BootsAndRendersPlanet', async ({ page }) => {
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
 
-  await page.goto('/?visualTest=1', { waitUntil: 'domcontentloaded' });
+  const deployedUrl = process.env.PLANETFORGE_BASE_URL.replace(/\\/+$/, '') + '/?visualTest=1';
+  await page.goto(deployedUrl, { waitUntil: 'domcontentloaded' });
   await expect(page.getByTestId('planet-seed')).toBeVisible({ timeout: 90_000 });
   await expect(page.getByRole('button', { name: 'NEXT' })).toBeVisible();
   await page.waitForFunction(() => Boolean(window.__planetForgeSurfaceTest) || Boolean(window.__planetForgeSurfaceError), null, { timeout: 60_000 });
