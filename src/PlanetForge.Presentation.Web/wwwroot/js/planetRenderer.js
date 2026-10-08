@@ -523,6 +523,7 @@ function measureSurface(s) {
     const pixels = new Uint8Array(canvas.width * canvas.height * 4);
     gl.readPixels(0, 0, canvas.width, canvas.height, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
     let planetPixels = 0;
+    let edgePlanetPixels = 0;
     let oceanPixels = 0;
     let icePixels = 0;
     let minimumOceanLuminance = Number.POSITIVE_INFINITY;
@@ -536,6 +537,9 @@ function measureSurface(s) {
         const blue = pixels[offset + 2] / 255.0;
         const luminance = (red * 0.2126) + (green * 0.7152) + (blue * 0.0722);
         planetPixels++;
+        const pixelIndex = offset / 4;
+        const column = pixelIndex % canvas.width;
+        if (column < 2 || column >= canvas.width - 2) edgePlanetPixels++;
 
         const isIce = luminance > 0.46 && green >= red * 0.82 && blue >= red * 0.82;
         if (isIce) icePixels++;
@@ -549,6 +553,7 @@ function measureSurface(s) {
 
     return {
         planetPixels,
+        edgePlanetPixels,
         oceanPixels,
         icePixels,
         iceFraction: planetPixels > 0 ? icePixels / planetPixels : 0.0,
