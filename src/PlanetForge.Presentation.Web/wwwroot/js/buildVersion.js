@@ -1,5 +1,5 @@
-const buildVersion = '0.0.26.1';
-const pageTitle = `PlanetForge ${buildVersion} — Terraforming Foundation`;
+const buildVersion = '0.0.35.4';
+const pageTitle = `PlanetForge ${buildVersion} — Mobile Terrain Scheduling`;
 
 document.title = pageTitle;
 window.setTimeout(() => document.title = pageTitle, 500);
