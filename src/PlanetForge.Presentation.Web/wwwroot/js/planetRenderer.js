@@ -880,6 +880,7 @@ in vec3 aNormal;
 uniform mat4 uModel;
 uniform mat4 uViewProjection;
 uniform float uPlanetRadiusMeters;
+uniform vec3 uCameraPosition;
 uniform float uSeaLevelMeters;
 uniform float uSeaIceFraction;
 uniform float uLandIceFraction;
@@ -903,9 +904,11 @@ void main() {
     float visualRadius = physicalRadius;
 
     if (uMode == 5) {
-        // At orbital scales height is negligible relative to planetary radius.
-        // Use canonical elevation for colour and shading, not exaggerated polygon displacement.
-        visualRadius = 1.0;
+        // Preserve a perfectly smooth silhouette from far orbit, then reveal the REAL
+        // canonical elevation smoothly during regional approach. No synthetic height exaggeration.
+        float cameraAltitudeRatio = max(length(uCameraPosition) - 1.0, 0.0);
+        float reliefBlend = 1.0 - smoothstep(0.012, 0.080, cameraAltitudeRatio);
+        visualRadius = mix(1.0, physicalRadius, reliefBlend);
     } else if (uMode == 0 || uMode == 2) {
         float exaggeration = elevationAboveSeaLevel >= 0.0 ? 8.0 : 2.0;
         visualRadius = 1.0 + ((elevationMeters * exaggeration) / uPlanetRadiusMeters);
