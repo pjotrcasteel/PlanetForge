@@ -23,6 +23,7 @@ test('PlanetStages_ReloadUsesShowcaseAndGenerateCreatesNewWorld', async ({ page 
   expect(surfaceError, `Planet renderer failed to initialize: ${surfaceError}`).toBeNull();
   const showcase = await page.evaluate(() => window.__planetForgeSurfaceTest.measure());
   expect(showcase.planetPixels).toBeGreaterThan(10_000);
+  expect(showcase.edgePlanetPixels).toBe(0);
   expect(showcase.glError).toBe(0);
 
   await page.getByRole('button', { name: 'Generate new planet' }).click();
@@ -99,8 +100,14 @@ for (const seed of [24061984, 346147916, 579460630]) {
       }, { yaw, pitch });
       const metrics = await page.evaluate(() => window.__planetForgeSurfaceTest.measure());
       expect(metrics.planetPixels).toBeGreaterThan(10_000);
+      expect(metrics.edgePlanetPixels).toBe(0);
       expect(metrics.glError).toBe(0);
       await page.screenshot({ path: testInfo.outputPath(`terrain-seed-${seed}-${name}.png`), fullPage: true });
     }
+    await page.evaluate(() => window.__planetForgeSurfaceTest.setDistance(3.8));
+    const closeMetrics = await page.evaluate(() => window.__planetForgeSurfaceTest.measure());
+    expect(closeMetrics.planetPixels).toBeGreaterThan(10_000);
+    expect(closeMetrics.glError).toBe(0);
+    await page.screenshot({ path: testInfo.outputPath(`terrain-seed-${seed}-regional.png`), fullPage: true });
   });
 }
