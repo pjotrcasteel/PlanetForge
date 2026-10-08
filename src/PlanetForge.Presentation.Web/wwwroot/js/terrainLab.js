@@ -32,10 +32,17 @@ function drawLayer(id, width, height, values, kind, elevations) {
                 color = blend([29, 38, 49], [234, 151, 79], clamp(value * 7.0 + 0.05, 0, 1));
             } else if (kind === 'mountains') {
                 color = blend([40, 50, 49], [226, 215, 177], clamp(value, 0, 1));
+            } else if (kind === 'flow') {
+                const drainage = clamp(Math.log1p(Math.max(0, value)) / 8.0, 0, 1);
+                color = blend([24, 39, 39], [104, 230, 228], Math.pow(drainage, 1.5));
+            } else if (kind === 'incision') {
+                color = blend([34, 38, 41], [237, 150, 80], Math.sqrt(clamp(value / 180.0, 0, 1)));
+            } else if (kind === 'sediment') {
+                color = blend([37, 42, 44], [239, 201, 126], Math.sqrt(clamp(value / 80.0, 0, 1)));
             } else {
                 color = colorForElevation(value);
-                const west = elevations[y * width + (x + width - 1) % width];
-                const east = elevations[y * width + (x + 1) % width];
+                const west = elevations[y * width + (kind === 'regional-elevation' ? Math.max(0, x - 1) : (x + width - 1) % width)];
+                const east = elevations[y * width + (kind === 'regional-elevation' ? Math.min(width - 1, x + 1) : (x + 1) % width)];
                 const north = elevations[Math.max(0, y - 1) * width + x];
                 const south = elevations[Math.min(height - 1, y + 1) * width + x];
                 const slopeX = clamp((east - west) / 4000, -1, 1);
@@ -60,5 +67,16 @@ export function drawTerrainLab(width, height, crust, tectonic, mountains, elevat
     drawLayer('lab-tectonic', width, height, tectonic, 'tectonic', elevation);
     drawLayer('lab-mountains', width, height, mountains, 'mountains', elevation);
     drawLayer('lab-elevation', width, height, elevation, 'elevation', elevation);
+    window.__planetForgeRegionalWatershedReady = false;
     window.__planetForgeTerrainLabReady = true;
+}
+
+
+export function drawRegionalWatershed(width, height, bedrock, accumulation, incision, sediment, evolved) {
+    drawLayer('lab-regional-bedrock', width, height, bedrock, 'regional-elevation', bedrock);
+    drawLayer('lab-regional-flow', width, height, accumulation, 'flow', bedrock);
+    drawLayer('lab-regional-incision', width, height, incision, 'incision', bedrock);
+    drawLayer('lab-regional-sediment', width, height, sediment, 'sediment', bedrock);
+    drawLayer('lab-regional-evolved', width, height, evolved, 'regional-elevation', evolved);
+    window.__planetForgeRegionalWatershedReady = true;
 }
