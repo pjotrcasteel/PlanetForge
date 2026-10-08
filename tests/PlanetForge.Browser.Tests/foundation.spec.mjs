@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { PNG } from 'pngjs';
 
 test.setTimeout(120_000);
 
@@ -112,6 +113,42 @@ for (const seed of [24061984, 346147916, 579460630]) {
     await page.screenshot({ path: testInfo.outputPath(`terrain-seed-${seed}-regional.png`), fullPage: true });
   });
 }
+
+test('GeologyQualityGate_LocalRockRelief_HasVisibleContrastAcrossSeeds', async ({ page }, testInfo) => {
+  test.setTimeout(360_000);
+
+  for (const seed of [24061984, 346147916, 579460630]) {
+    await page.goto('/?visualTest=1&seed=' + seed);
+    await page.waitForFunction(() => Boolean(window.__planetForgeSurfaceTest), null, { timeout: 45_000 });
+    await page.evaluate(() => window.__planetForgeSurfaceTest.setDistance(1.008));
+    await page.waitForFunction(() => !window.__planetForgeSurfaceTest.getLodStats().refining, null, { timeout: 90_000 });
+    await page.screenshot({ path: testInfo.outputPath('relief-' + seed + '-regional.png'), fullPage: true });
+
+    await page.evaluate(() => window.__planetForgeSurfaceTest.setDistance(1.001));
+    await page.waitForFunction(() => window.__planetForgeSurfaceTest.getLodStats().mode === 'local' &&
+      !window.__planetForgeSurfaceTest.getLodStats().refining, null, { timeout: 90_000 });
+    await page.waitForTimeout(150);
+    const stats = await page.evaluate(() => window.__planetForgeSurfaceTest.getLodStats());
+    expect(stats.localElevationRangeMeters).toBeGreaterThan(25);
+    expect(stats.localCellSpacingMeters).toBeGreaterThan(0);
+    const image = PNG.sync.read(await page.locator('#planet-canvas').screenshot());
+    let count = 0;
+    let sum = 0;
+    let sumSquares = 0;
+    for (let y = Math.floor(image.height * 0.37); y < Math.floor(image.height * 0.63); y++) {
+      for (let x = Math.floor(image.width * 0.25); x < Math.floor(image.width * 0.75); x++) {
+        const i = (y * image.width + x) * 4;
+        const luma = (image.data[i] * 0.213) + (image.data[i + 1] * 0.715) + (image.data[i + 2] * 0.072);
+        sum += luma;
+        sumSquares += luma * luma;
+        count++;
+      }
+    }
+    const standardDeviation = Math.sqrt(Math.max(0, (sumSquares / count) - (sum / count) ** 2));
+    expect(standardDeviation, 'Seed ' + seed + ' local view is a featureless brown surface').toBeGreaterThan(2.5);
+    await page.screenshot({ path: testInfo.outputPath('relief-' + seed + '-local.png'), fullPage: true });
+  }
+});
 
 test('OrbitalZoom_RequestsHigherLodAndRestoresCoarseGlobe', async ({ page }, testInfo) => {
   await page.goto('/?visualTest=1');
