@@ -115,6 +115,35 @@ public sealed class PlanetHeroRegionBuilderTests
     }
 
     [TestMethod]
+    public void CreateParentOverlay_ThreeScaleSampling_PreservesCumulativeParentAndChildCuts()
+    {
+        const int seed = 24061984;
+        static PlanetHeroRegion Region(int seed, int width, double spacing, float original, float cut)
+        {
+            var before = Enumerable.Repeat(original, width * width).ToArray();
+            var after = (float[])before.Clone();
+            var middle = width / 2 * width + width / 2;
+            after[middle] -= cut;
+            var cuts = new float[before.Length];
+            cuts[middle] = cut;
+            var sediment = cut * spacing * spacing;
+            return new PlanetHeroRegion(seed, width, spacing, before, after, cuts,
+                new float[before.Length], 1, 0, sediment, 0, sediment);
+        }
+
+        var parent = PlanetHeroRegionBuilder.CreateParentOverlay(
+            Region(seed, 17, 1_000, 1_000, 80), PlanetVector.UnitZ);
+        var nested = PlanetHeroRegionBuilder.CreateParentOverlay(
+            Region(seed, 17, 250, 920, 30), PlanetVector.UnitZ);
+        IPlanetElevationSource source = new FlatRockElevationSource();
+        source = new PlanetRegionalEvolvedElevationSource(source, parent);
+        source = new PlanetRegionalEvolvedElevationSource(source, nested);
+
+        Assert.AreEqual(890.0, source.SampleElevationMeters(PlanetVector.UnitZ, seed), 0.001);
+        Assert.AreEqual(1000.0, source.SampleElevationMeters(PlanetVector.UnitZ, seed + 1), 0.001);
+    }
+
+    [TestMethod]
     public void Build_CancelledBeforeSampling_DoesNotStartGeologicalWork()
     {
         var builder = new PlanetHeroRegionBuilder(new FlatRockElevationSource());
