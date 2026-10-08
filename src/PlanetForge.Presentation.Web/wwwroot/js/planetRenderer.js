@@ -182,7 +182,12 @@ function createState(canvas, gl, dotNetReference) {
             surfaceTemperature: gl.getUniformLocation(localProgram, 'uSurfaceTemperature'),
             liquidFraction: gl.getUniformLocation(localProgram, 'uLiquidFraction'),
             vaporFraction: gl.getUniformLocation(localProgram, 'uVaporFraction'),
-            objectMode: gl.getUniformLocation(localProgram, 'uObjectMode')
+            objectMode: gl.getUniformLocation(localProgram, 'uObjectMode'),
+            rockEast: gl.getUniformLocation(localProgram, 'uRockEast'),
+            rockNorth: gl.getUniformLocation(localProgram, 'uRockNorth'),
+            rockUp: gl.getUniformLocation(localProgram, 'uRockUp'),
+            rockCenterKm: gl.getUniformLocation(localProgram, 'uRockCenterKm'),
+            seedPhase: gl.getUniformLocation(localProgram, 'uSeedPhase')
         }
     };
 }
@@ -299,9 +304,19 @@ function activateLocalSurface(s, localSurface) {
     s.localElevationRangeMeters = elevationRange.maximum - elevationRange.minimum;
     s.localCellSpacingMeters = localSurface.sizeMeters / Math.sqrt(localSurface.vertexCount / 6);
     const trees = createPlaceholderTrees(localSurface, s.seaLevelMeters);
+    const radial = localSurface.anchorDirection;
+    const rockUp = normalize([radial.x, radial.y, radial.z]);
+    const reference = Math.abs(rockUp[1]) < 0.99 ? [0, 1, 0] : [1, 0, 0];
+    const rockEast = normalize(cross(reference, rockUp));
+    const rockNorth = normalize(cross(rockUp, rockEast));
+    const cells = Math.round(Math.sqrt(localSurface.vertexCount / 6));
+    const mid = Math.floor(cells / 2);
+    const anchorElevationMeters = localSurface.elevationsMeters[6 * (mid * cells + mid)] ?? 0;
+    const rockCenterKm = rockUp.map(component => component * (s.planetRadiusMeters + anchorElevationMeters) / 1000);
 
     s.localSurface = {
         key: localSurface.key,
+        rockUp, rockEast, rockNorth, rockCenterKm,
         positionBuffer,
         normalBuffer,
         elevationBuffer,
@@ -864,6 +879,11 @@ function renderLocal(s) {
     gl.uniform1f(s.localUniforms.surfaceTemperature, s.surfaceTemperature);
     gl.uniform1f(s.localUniforms.liquidFraction, s.liquidFraction);
     gl.uniform1f(s.localUniforms.vaporFraction, s.vaporFraction);
+    gl.uniform3fv(s.localUniforms.rockEast, localSurface.rockEast);
+    gl.uniform3fv(s.localUniforms.rockNorth, localSurface.rockNorth);
+    gl.uniform3fv(s.localUniforms.rockUp, localSurface.rockUp);
+    gl.uniform3fv(s.localUniforms.rockCenterKm, localSurface.rockCenterKm);
+    gl.uniform1f(s.localUniforms.seedPhase, (((s.seed % 10007) + 10007) % 10007) / 10007);
 
     gl.uniform1i(s.localUniforms.objectMode, geologicalPreviewMode ? 3 : (preBiological ? 2 : 0));
     bindLocalAttributes(s, localSurface.positionBuffer, localSurface.normalBuffer, localSurface.elevationBuffer);
