@@ -537,6 +537,9 @@ function scheduleSurfaceUpdate(s, delayMilliseconds) {
 // Buffer completed-but-obsolete requests so the next delta-only response can safely
 // refer to tiles already uploaded to the GPU. The previous camera view is not activated.
 function preserveStaleSurfaceGeometry(s, snapshot) {
+    // Keep overlay terrain geometry in sync with the GPU cache even when an old
+    // camera response is superseded before it can become the active view.
+    retainSurfaceGeometry(snapshot);
     if (snapshot.localSurface) {
         activateLocalSurface(s, snapshot.localSurface);
         return;
