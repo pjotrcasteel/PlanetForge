@@ -20,6 +20,7 @@ public sealed class PlanetHeroRegionBuilderTests
             Assert.AreEqual(33 * 33, result.OriginalElevationMeters.Length);
             Assert.AreEqual(33 * 33, result.EvolvedElevationMeters.Length);
             Assert.AreEqual(3, result.ErosionIterations);
+            Assert.AreEqual(8, result.LateralRelaxationPasses);
             Assert.IsGreaterThan(0.0, result.OriginalElevationMeters.Max() - result.OriginalElevationMeters.Min());
             Assert.IsTrue(result.EvolvedElevationMeters.All(float.IsFinite));
             Assert.AreEqual(result.OriginalElevationMeters.Length, result.AccumulatedRunoffCells.Length);
@@ -33,6 +34,10 @@ public sealed class PlanetHeroRegionBuilderTests
             var sedimentBalance = result.ErodedVolumeCubicMeters -
                 result.DepositedVolumeCubicMeters - result.ExportedVolumeCubicMeters;
             Assert.IsLessThan(Math.Max(1.0, result.ErodedVolumeCubicMeters * 1e-5), Math.Abs(sedimentBalance));
+            var totalHeightLossVolume = result.CumulativeCutMeters.Sum(delta => (double)delta) *
+                result.CellSpacingMeters * result.CellSpacingMeters;
+            Assert.IsLessThan(Math.Max(20_000.0, result.ExportedVolumeCubicMeters * 1e-4),
+                Math.Abs(totalHeightLossVolume - result.ExportedVolumeCubicMeters));
         }
     }
 
