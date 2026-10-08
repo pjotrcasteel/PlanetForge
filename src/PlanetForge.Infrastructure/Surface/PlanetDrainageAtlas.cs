@@ -1,5 +1,3 @@
-using PlanetForge.Domain.Surface;
-
 namespace PlanetForge.Infrastructure.Surface;
 
 /// <summary>
