@@ -104,11 +104,23 @@ test('TerrainLab_ErosionIterations_AdvanceRewindReplayDeterministically', async 
     return hash;
   });
 
+  const contrastOfDifference = () => page.locator('#lab-regional-difference').evaluate(element => {
+    const pixels = element.getContext('2d').getImageData(0, 0, element.width, element.height).data;
+    let minimum = 255;
+    let maximum = 0;
+    for (let i = 0; i < pixels.length; i += 4) {
+      minimum = Math.min(minimum, pixels[i]);
+      maximum = Math.max(maximum, pixels[i]);
+    }
+    return maximum - minimum;
+  });
   const original = await checksum();
+  expect(await contrastOfDifference()).toBe(0);
   await select.selectOption('5');
   await expect(page.getByRole('status')).toContainText('5 erosion iterations', { timeout: 120_000 });
   const fivePasses = await checksum();
   expect(fivePasses, 'Five physical erosion passes did not change the rendered canonical height map').not.toBe(original);
+  expect(await contrastOfDifference(), 'Erosion-height difference must show actual nonzero cuts or deposits').toBeGreaterThan(18);
   await page.screenshot({ path: testInfo.outputPath('evolution-five-passes.png'), fullPage: true });
 
   await select.selectOption('1');
