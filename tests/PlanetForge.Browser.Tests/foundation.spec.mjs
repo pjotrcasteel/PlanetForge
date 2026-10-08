@@ -100,6 +100,12 @@ test('TerrainLab_RegionalWatersheds_ThreeSeeds_ShowConnectedRealDrainage', async
     }
 
     await expect(page.getByRole('status')).toContainText('Seed ' + seed, { timeout: 15_000 });
+    const displayedAspectRatio = await page.locator('#lab-regional-bedrock').evaluate(canvas => {
+      const bounds = canvas.getBoundingClientRect();
+      return bounds.width / bounds.height;
+    });
+    expect(displayedAspectRatio).toBeGreaterThan(0.98);
+    expect(displayedAspectRatio).toBeLessThan(1.02);
     for (const name of ['lab-regional-bedrock', 'lab-regional-flow', 'lab-regional-incision',
       'lab-regional-sediment', 'lab-regional-evolved']) {
       const stats = await page.locator('#' + name).evaluate(canvas => {
