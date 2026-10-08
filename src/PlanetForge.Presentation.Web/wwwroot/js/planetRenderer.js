@@ -576,7 +576,10 @@ async function requestSurfaceUpdate(s, sequence) {
             direction[0], direction[1], direction[2], s.distance,
             viewportWidth, viewportHeight, verticalFieldOfViewRadians);
 
-        if (state === s) {
+        // A seed, radius or terrain-revision change can supersede an in-flight zoom.
+        // Never cache old-world geometry under the new world's tile identities.
+        const snapshotGeometryKey = `${snapshot.seed}:${snapshot.physicalParameters.radiusMeters}:${snapshot.terrainRevision ?? 0}`;
+        if (state === s && snapshotGeometryKey === s.geometryKey) {
             s.lastTerrainUpdateMs = Math.round(performance.now() - startedAt);
             s.lastGeometryPayloadCount = (snapshot.surfaceTiles ?? []).filter(tile => tile.positions?.length > 0).length;
             s.lastSurfaceRequestSignature = signature;
