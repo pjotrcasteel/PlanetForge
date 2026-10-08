@@ -1197,6 +1197,16 @@ vec3 barrenRockMaterial(vec3 radial, vec3 terrainNormal, float elevationMeters) 
     material = mix(material, vec3(0.36, 0.290, 0.255), physicalCliff * 0.38);
 
     float mineralVariation = (minerals - 0.5) * 0.16 + (grains - 0.5) * 0.095;
+    // Rock material has kilometre-scale fractures and weathering as the camera approaches.
+    // Keep these as subtle albedo changes, never synthetic displacement or terrain normals.
+    float altitudeRatio = max(length(uCameraPosition) - 1.0, 0.0);
+    float nearDetail = 1.0 - smoothstep(0.006, 0.11, altitudeRatio);
+    if (nearDetail > 0.025) {
+        float fracturedLithology = valueNoise(radial * 540.0 + offset * 0.81);
+        float fineMinerals = valueNoise(radial * 4200.0 + offset * 1.61);
+        mineralVariation += nearDetail * ((fracturedLithology - 0.5) * 0.16 +
+            (fineMinerals - 0.5) * 0.055);
+    }
     material *= 1.0 + mineralVariation;
 
     float light = max(dot(normalize(terrainNormal), normalize(uLightDirection)), 0.0);
