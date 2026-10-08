@@ -11,19 +11,51 @@ public sealed class PlanetExperienceSurfaceLodTests
     private const double EarthRadiusMeters = 6_371_000.0;
 
     [TestMethod]
-    public void UpdateSurfaceView_AboveLocalTransition_UsesStableGlobalFallback()
+    public void UpdateSurfaceView_ZoomingTowardSurface_RefinesGlobalTilesBeforeLocalTransition()
     {
         var experience = CreateExperience();
-        var far = experience.UpdateSurfaceView(new PlanetSurfaceView(PlanetVector.UnitZ, 5.0, 1080, Math.PI / 4.2));
-        var cameraDistance = 1.0 + (25_000.0 / EarthRadiusMeters);
-        var nearGlobe = experience.UpdateSurfaceView(new PlanetSurfaceView(PlanetVector.UnitZ, cameraDistance, 1080, Math.PI / 4.2));
+        var far = experience.UpdateSurfaceView(new PlanetSurfaceView(PlanetVector.UnitZ, 5.0, 844, Math.PI / 4.2));
+        var middle = experience.UpdateSurfaceView(new PlanetSurfaceView(PlanetVector.UnitZ, 1.20, 844, Math.PI / 4.2));
+        var nearDistance = 1.0 + (25_000.0 / EarthRadiusMeters);
+        var near = experience.UpdateSurfaceView(new PlanetSurfaceView(PlanetVector.UnitZ, nearDistance, 844, Math.PI / 4.2));
 
         Assert.IsNull(far.LocalSurface);
-        Assert.IsNull(nearGlobe.LocalSurface);
+        Assert.IsNull(middle.LocalSurface);
+        Assert.IsNull(near.LocalSurface);
         Assert.AreEqual(24, far.SurfaceTiles.Count);
-        Assert.AreEqual(24, nearGlobe.SurfaceTiles.Count);
         Assert.IsTrue(far.SurfaceTiles.All(tile => tile.Id.Level == 1));
-        Assert.IsTrue(nearGlobe.SurfaceTiles.All(tile => tile.Id.Level == 1));
+        Assert.IsGreaterThan(1, middle.SurfaceTiles.Max(tile => tile.Id.Level));
+        Assert.IsGreaterThan(middle.SurfaceTiles.Max(tile => tile.Id.Level), near.SurfaceTiles.Max(tile => tile.Id.Level));
+        Assert.IsLessThanOrEqualTo(56, middle.SurfaceTiles.Count);
+        Assert.IsLessThanOrEqualTo(56, near.SurfaceTiles.Count);
+    }
+
+    [TestMethod]
+    public void UpdateSurfaceView_RotatingAtCloseOrbit_RefinesAroundNewViewDirection()
+    {
+        var experience = CreateExperience();
+        var distance = 1.0 + (120_000.0 / EarthRadiusMeters);
+        var first = experience.UpdateSurfaceView(new PlanetSurfaceView(PlanetVector.UnitZ, distance, 844, Math.PI / 4.2));
+        var second = experience.UpdateSurfaceView(new PlanetSurfaceView(PlanetVector.UnitX, distance, 844, Math.PI / 4.2));
+
+        Assert.IsNull(first.LocalSurface);
+        Assert.IsNull(second.LocalSurface);
+        Assert.IsTrue(first.SurfaceTiles.Any(tile => tile.Id.Level >= 3));
+        CollectionAssert.AreNotEqual(first.SurfaceTiles.Select(tile => tile.Id).ToArray(), second.SurfaceTiles.Select(tile => tile.Id).ToArray());
+    }
+
+    [TestMethod]
+    public void UpdateSurfaceView_ZoomingBackOut_RestoresCompleteCoarseOrbit()
+    {
+        var experience = CreateExperience();
+        _ = experience.UpdateSurfaceView(new PlanetSurfaceView(PlanetVector.UnitZ, 1.03, 844, Math.PI / 4.2));
+
+        var far = experience.UpdateSurfaceView(new PlanetSurfaceView(PlanetVector.UnitZ, 3.0, 844, Math.PI / 4.2));
+
+        Assert.IsNull(far.LocalSurface);
+        Assert.AreEqual(24, far.SurfaceTiles.Count);
+        Assert.IsTrue(far.SurfaceTiles.All(tile => tile.Id.Level == 1));
+        Assert.IsTrue(far.SurfaceTiles.All(tile => tile.IncludesGeometry));
     }
 
     [TestMethod]
