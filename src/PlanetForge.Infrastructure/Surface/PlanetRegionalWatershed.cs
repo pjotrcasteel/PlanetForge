@@ -46,7 +46,7 @@ public sealed class PlanetRegionalWatershed
 
     public static PlanetRegionalWatershed Build(
         int width, int height, double cellSpacingMeters, IReadOnlyList<float> bedrockElevationMeters,
-        IReadOnlyList<float>? rainfallCellWeights = null)
+        IReadOnlyList<float>? rainfallCellWeights = null, IReadOnlyList<float>? erodibilityCellWeights = null)
     {
         ArgumentNullException.ThrowIfNull(bedrockElevationMeters);
         if (width is < 8 or > 512 || height is < 8 or > 512 || (long)width * height != bedrockElevationMeters.Count)
@@ -63,6 +63,17 @@ public sealed class PlanetRegionalWatershed
         if (rainfallCellWeights is not null && rainfallCellWeights.Count != count)
         {
             throw new ArgumentException("Rainfall weights must match the sampled region grid.", nameof(rainfallCellWeights));
+        }
+
+        if (erodibilityCellWeights is not null && erodibilityCellWeights.Count != count)
+        {
+            throw new ArgumentException("Rock erodibility weights must match the elevation grid.", nameof(erodibilityCellWeights));
+        }
+
+        if (erodibilityCellWeights is not null &&
+            erodibilityCellWeights.Any(value => !float.IsFinite(value) || value < 0.0f || value > 3.0f))
+        {
+            throw new ArgumentException("Rock erodibility must be finite and within 0 to 3.", nameof(erodibilityCellWeights));
         }
 
         var filled = new float[count];
@@ -220,7 +231,8 @@ public sealed class PlanetRegionalWatershed
             if (downstream >= 0 && runoff >= 6.0 && slope > 0.00001)
             {
                 var streamPower = Math.Pow((runoff - 5.0) / 8.0, 0.43) * Math.Pow(slope / 0.06, 0.42);
-                incision[index] = (float)Math.Min(180.0, 24.0 * streamPower);
+                var erodibility = erodibilityCellWeights is null ? 1.0f : erodibilityCellWeights[index];
+                incision[index] = (float)Math.Min(180.0, 24.0 * streamPower * erodibility);
             }
 
             var removedVolume = incision[index] * cellArea;
