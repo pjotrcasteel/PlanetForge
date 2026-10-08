@@ -20,6 +20,23 @@ public sealed class ProceduralPlanetElevationSourceTests
     }
 
     [TestMethod]
+    public void SampleTerrainFields_GeneratedElevation_MatchesCanonicalElevationSource()
+    {
+        var source = new ProceduralPlanetElevationSource();
+        foreach (var seed in new[] { PlanetSeedCatalog.ShowcaseSeed, 346147916, 579460630 })
+        {
+            foreach (var direction in FibonacciDirections(64))
+            {
+                var fields = source.SampleTerrainFields(direction, seed);
+                Assert.AreEqual(fields.ElevationMeters, source.SampleElevationMeters(direction, seed));
+                Assert.IsTrue(double.IsFinite(fields.ContinentalPotential));
+                Assert.IsTrue(double.IsFinite(fields.TectonicUplift));
+                Assert.IsTrue(double.IsFinite(fields.MountainBelt));
+            }
+        }
+    }
+
+    [TestMethod]
     public void SampleElevationMeters_DifferentSeed_ProducesDifferentElevation()
     {
         var source = new ProceduralPlanetElevationSource();
