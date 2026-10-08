@@ -8,7 +8,7 @@ const localSurfaceUpdateDebounceMilliseconds = 650;
 const maximumCachedSurfaceTiles = 512;
 const maximumRenderPixelRatio = 1.5;
 const minimumCameraAltitudeMeters = 3.0;
-const maximumCameraAltitudeRatio = 4.2;
+const maximumCameraAltitudeRatio = 10.0;
 const localTransitionAltitudeMeters = 20_000.0;
 const localExitAltitudeMeters = 25_000.0;
 const treeVisibilityAltitudeMeters = 3_000.0;
@@ -112,13 +112,22 @@ export function dispose() {
     state = null;
 }
 
+function initialOrbitDistance(canvas) {
+    // Portrait layouts are limited by the horizontal field of view, not the vertical one.
+    // Keep the atmosphere and enough empty space visible to recognize a complete planet.
+    const aspect = Math.max(canvas.clientWidth, 1) / Math.max(canvas.clientHeight, 1);
+    const halfHorizontalFov = Math.atan(Math.tan(verticalFieldOfViewRadians * 0.5) * aspect);
+    const distanceToFit = 1.0 / Math.sin(Math.max(0.045, halfHorizontalFov * 0.79));
+    return Math.max(3.15, Math.min(distanceToFit, 10.5));
+}
+
 function createState(canvas, gl, dotNetReference) {
     const globeProgram = createProgram(gl, globeVertexShaderSource, globeFragmentShaderSource);
     const localProgram = createProgram(gl, localVertexShaderSource, localFragmentShaderSource);
     return {
         canvas, gl, dotNetReference, globeProgram, localProgram, generatorPreview: false, renderMode: 'globe', geometryKey: null,
         surfaceKey: null, tileBufferCache: new Map(), tiles: [], localSurface: null,
-        yaw: -0.65, pitch: 0.24, distance: 3.15, localYaw: -0.65, localPitch: 0.72,
+        yaw: -0.65, pitch: 0.24, distance: initialOrbitDistance(canvas), localYaw: -0.65, localPitch: 0.72,
         localCameraAltitudeMeters: null, scaleHud: createLocalScaleHud(canvas),
         dragging: false, lastX: 0, lastY: 0,
         lodTimer: null, lodSequence: 0, lastSurfaceRequestSignature: null,
@@ -491,6 +500,14 @@ function installVisualTestApi() {
             state.dirty = false;
         },
         getYaw() { return state?.yaw ?? 0.0; },
+        setDistance(distance) {
+            if (!state) return;
+            state.distance = clamp(distance, 1.1, 11.0);
+            state.dirty = true;
+            renderGlobe(state);
+            state.dirty = false;
+        },
+        getDistance() { return state?.distance ?? 0.0; },
         getSeed() { return state?.seed ?? null; },
         measure() {
             if (!state) return null;
