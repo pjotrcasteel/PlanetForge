@@ -16,6 +16,7 @@ public sealed record PlanetHeroRegion(
     float[] CumulativeCutMeters,
     float[] AccumulatedRunoffCells,
     int ErosionIterations,
+    int LateralRelaxationPasses,
     double ErodedVolumeCubicMeters,
     double DepositedVolumeCubicMeters,
     double ExportedVolumeCubicMeters);
@@ -83,7 +84,8 @@ public sealed class PlanetHeroRegionBuilder(IPlanetElevationSource elevationSour
         }
 
         return new PlanetHeroRegion(seed, gridWidth, spacing, original, relaxedElevation, cut,
-            finalWatershed.AccumulatedRunoffCells, erosionIterations, evolved.CumulativeErodedVolumeCubicMeters,
+            finalWatershed.AccumulatedRunoffCells, erosionIterations, PlanetLateralErosionRelaxation.DefaultPasses,
+            evolved.CumulativeErodedVolumeCubicMeters,
             evolved.CumulativeDepositedVolumeCubicMeters, evolved.CumulativeExportedVolumeCubicMeters);
     }
 }
