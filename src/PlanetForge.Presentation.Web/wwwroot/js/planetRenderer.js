@@ -17,9 +17,9 @@ const placeholderTreeHeightMeters = 15.0;
 const placeholderTreeHalfWidthMeters = 3.0;
 const minimumLocalViewPitchRadians = 0.24;
 const maximumLocalViewPitchRadians = 1.48;
-const landReliefExaggeration = 36.0;
+const landReliefExaggeration = 8.0;
 const oceanReliefExaggeration = 4.0;
-const iceVisualExaggeration = 18.0;
+const iceVisualExaggeration = 4.0;
 const waterSurfaceClearanceMeters = 18.0;
 const globeSkirtVisibilityAltitudeMeters = 500_000.0;
 
@@ -805,7 +805,7 @@ void main() {
     float visualRadius = physicalRadius;
 
     if (uMode == 0 || uMode == 2) {
-        float exaggeration = elevationAboveSeaLevel >= 0.0 ? 36.0 : 4.0;
+        float exaggeration = elevationAboveSeaLevel >= 0.0 ? 8.0 : 2.0;
         visualRadius = 1.0 + ((elevationMeters * exaggeration) / uPlanetRadiusMeters);
     } else if (uMode == 3) {
         visualRadius = 1.0 + ((uSeaLevelMeters + 18.0) / uPlanetRadiusMeters);
@@ -817,8 +817,8 @@ void main() {
         float landSupport = clamp((0.14 + (0.66 * polarSupport) + (0.36 * highlandSupport))
             * max(clamp(uLandIceFraction, 0.0, 1.0), clamp(uSnowCoverFraction, 0.0, 1.0) * 0.55), 0.0, 1.0);
         float landIceThicknessMeters = (90.0 + (760.0 * polarSupport) + (340.0 * highlandSupport)) * landSupport;
-        float seaIceVisualElevationMeters = uSeaLevelMeters + 18.0 + (seaIceThicknessMeters * 18.0);
-        float landIceVisualElevationMeters = (elevationMeters * 36.0) + (landIceThicknessMeters * 18.0);
+        float seaIceVisualElevationMeters = uSeaLevelMeters + 18.0 + (seaIceThicknessMeters * 4.0);
+        float landIceVisualElevationMeters = (elevationMeters * 8.0) + (landIceThicknessMeters * 4.0);
         bool snowballGeometry = uSeaIceFraction >= 0.999 && uLandIceFraction >= 0.999 && uSnowCoverFraction >= 0.999;
         if (snowballGeometry) landIceVisualElevationMeters = max(landIceVisualElevationMeters, seaIceVisualElevationMeters + 8.0);
         float shorelineBlend = smoothstep(-900.0, 900.0, elevationAboveSeaLevel);
@@ -829,7 +829,7 @@ void main() {
     vec4 world = uModel * vec4(radial * visualRadius, 1.0);
     vDirection = radial;
     vPhysicalNormal = physicalNormal;
-    vNormal = normalize(radial + (tangentNormal * 44.0));
+    vNormal = normalize(radial + (tangentNormal * 12.0));
     vPhysicalSlope = clamp(1.0 - dot(physicalNormal, radial), 0.0, 0.5);
     vElevationMeters = elevationMeters;
     vWorldPosition = world.xyz;
