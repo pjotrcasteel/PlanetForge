@@ -87,6 +87,34 @@ public sealed class PlanetHeroRegionBuilderTests
     }
 
     [TestMethod]
+    public void CreateParentOverlay_NestedRegionInheritsPhysicalParentIncision()
+    {
+        const int width = 17;
+        const int seed = 24061984;
+        var bedrock = Enumerable.Repeat(1000f, width * width).ToArray();
+        var evolved = (float[])bedrock.Clone();
+        var centerIndex = width * (width / 2) + width / 2;
+        evolved[centerIndex] = 920f;
+        var cuts = new float[bedrock.Length];
+        cuts[centerIndex] = 80f;
+        var parent = new PlanetHeroRegion(seed, width, 1000.0, bedrock, evolved, cuts,
+            new float[bedrock.Length], 1, 0, 80_000_000.0, 0.0, 80_000_000.0);
+
+        var overlay = PlanetHeroRegionBuilder.CreateParentOverlay(parent, PlanetVector.UnitZ);
+        var source = new PlanetRegionalEvolvedElevationSource(new FlatRockElevationSource(), overlay);
+        // Parent data must be present in the child's *original* height field,
+        // before that child begins its finer hydrological evolution.
+        var local = new PlanetHeroRegionBuilder(source).Build(PlanetVector.UnitZ, seed, 9, 2_000, 1);
+
+        Assert.AreEqual(920f, local.OriginalElevationMeters[4 * 9 + 4]);
+        Assert.AreEqual(1000f, bedrock[centerIndex]);
+        Assert.AreEqual(920f, evolved[centerIndex]);
+        Assert.AreEqual(1000.0, source.SampleElevationMeters(PlanetVector.UnitZ, seed + 1), 0.0001);
+        Assert.AreEqual(920.0, source.SampleElevationMeters(PlanetVector.UnitZ, seed), 0.0001);
+        Assert.IsTrue(local.EvolvedElevationMeters.All(float.IsFinite));
+    }
+
+    [TestMethod]
     public void Build_CancelledBeforeSampling_DoesNotStartGeologicalWork()
     {
         var builder = new PlanetHeroRegionBuilder(new FlatRockElevationSource());
