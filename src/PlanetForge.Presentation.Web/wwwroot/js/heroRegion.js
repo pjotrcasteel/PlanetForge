@@ -107,7 +107,8 @@ function render() {
     gl.bindVertexArray(scene.vao);gl.drawElements(gl.TRIANGLES,scene.indices,gl.UNSIGNED_SHORT,0);gl.bindVertexArray(null);
     const error=gl.getError();
     window.__planetForgeHeroRegionStats={seed:region.seed,mode:scene.mode,gridWidth:region.width,
-        triangles:scene.indices/3,minElevationMeters:scene.min,maxElevationMeters:scene.max,
+        triangles:scene.indices/3,regionSpanKilometers:(region.width-1)*region.cellSpacingMeters/1000,
+        minElevationMeters:scene.min,maxElevationMeters:scene.max,
         erosionIterations:region.erosionIterations,glError:error};
     window.__planetForgeHeroRegionReady=error===gl.NO_ERROR;
 }
