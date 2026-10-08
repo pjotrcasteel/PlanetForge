@@ -172,6 +172,49 @@ test('TerrainLab_HeroRegion_RendersPhysical3DLandscapeAndComparesErosion', async
     if (rgbDifference > 2) physicalChanges++;
   }
   expect(physicalChanges, 'Nested elevation geometry did not change after erosion').toBeGreaterThan(100);
+
+  // Third scale: 8 km at 62.5 m per physical sample, with both earlier
+  // geological erosion histories inherited. Capture mobile and large views.
+  await page.locator('#lab-hero-scale').selectOption('8');
+  await page.locator('#lab-hero-generate').click();
+  await page.waitForFunction(() => window.__planetForgeHeroRegionReady === true &&
+    window.__planetForgeHeroRegionStats?.regionSpanKilometers === 8, null, { timeout: 180_000 });
+  const micro = await page.evaluate(() => window.__planetForgeHeroRegionStats);
+  expect(micro.gridWidth).toBe(129);
+  expect(micro.glError).toBe(0);
+  expect(micro.triangles).toBe(128 * 128 * 2);
+  await page.locator('#lab-hero-render').screenshot({
+    path: testInfo.outputPath('hero-nested-8km-eroded-mobile.png')
+  });
+  await page.setViewportSize({ width: 1280, height: 900 });
+  const microCanvas = page.locator('#lab-hero-render');
+  const microBefore = PNG.sync.read(await microCanvas.screenshot({
+    path: testInfo.outputPath('hero-nested-8km-eroded-desktop.png')
+  }));
+  const visibleRock = new Set();
+  let rockPixels = 0;
+  for (let i = 0; i < microBefore.data.length; i += 16) {
+    const r = microBefore.data[i], g = microBefore.data[i + 1], b = microBefore.data[i + 2];
+    if (r > g * 1.13 && r > b * 1.18) {
+      rockPixels++;
+      visibleRock.add((r >> 3) + '-' + (g >> 3) + '-' + (b >> 3));
+    }
+  }
+  expect(rockPixels).toBeGreaterThan(6000);
+  expect(visibleRock.size, '8km terrain still has no resolved material or slope structure').toBeGreaterThan(35);
+  await page.locator('#lab-hero-mode').selectOption('before');
+  await page.waitForFunction(() => window.__planetForgeHeroRegionStats?.mode === 'before');
+  const microOriginal = PNG.sync.read(await microCanvas.screenshot({
+    path: testInfo.outputPath('hero-nested-8km-original-desktop.png')
+  }));
+  let changedGeometryPixels = 0;
+  for (let i = 0; i < microBefore.data.length; i += 4) {
+    const delta = Math.abs(microBefore.data[i] - microOriginal.data[i]) +
+      Math.abs(microBefore.data[i + 1] - microOriginal.data[i + 1]) +
+      Math.abs(microBefore.data[i + 2] - microOriginal.data[i + 2]);
+    if (delta > 2) changedGeometryPixels++;
+  }
+  expect(changedGeometryPixels).toBeGreaterThan(100);
 });
 
 test('TerrainLab_ErosionIterations_AdvanceRewindReplayDeterministically', async ({ page }, testInfo) => {
