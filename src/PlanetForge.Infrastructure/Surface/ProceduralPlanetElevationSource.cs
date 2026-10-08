@@ -62,17 +62,21 @@ public sealed class ProceduralPlanetElevationSource : IPlanetElevationSource
         // Finer ridges modulate those envelopes but cannot define the continents.
         var rangeEnvelope = RidgedNoise(macroDirection, seed ^ UplandSeedSalt, 2.85, 3, 2.09, 0.50);
         var oldRange = SmoothStep(0.06, 0.56, rangeEnvelope) * SmoothStep(-0.12, 0.38, province);
-        var mountainBelt = Math.Max(oldRange * 0.62, belt * 0.90);
-        var narrowRidges = RidgedNoise(direction, seed ^ DetailSeedSalt, 10.0, 3, 2.12, 0.47);
-        var ridgedStrength = Math.Max(0.0, narrowRidges);
-        var uplift = landMask * ((plateUplift * 0.62) + (mountainBelt * (0.15 + ridgedStrength * 0.24)));
+        // Spatially connected, curved orogenic belts span thousands of kilometres.
+        // Unlike isolated noise peaks, these arcs have longitudinal continuity and finite widths.
+        var orogeny = SampleOrogenicSystems(macroDirection, seed, boundaryNoise);
+        var mountainBelt = Math.Max(orogeny, Math.Max(oldRange * 0.43, belt * 0.48));
+        var narrowRidges = RidgedNoise(direction, seed ^ DetailSeedSalt, 13.0, 4, 2.09, 0.47);
+        var ridgeStrength = Math.Max(0.0, narrowRidges);
+        var summitStructure = ridgeStrength * ridgeStrength;
+        var uplift = landMask * ((plateUplift * 0.52) + (mountainBelt * (0.12 + summitStructure * 0.37)));
         var rolling = FractalNoise(direction, seed ^ DetailSeedSalt, 5.2, 3, 2.1, 0.48);
         var terrain = landMask * ((province * 0.083) + (rolling * 0.036) - (Math.Max(0.0, -basin) * 0.055));
 
-        // Connected drainage and transported sediment belong to the later erosion stage.
-        // These subdued valley incisions are pre-erosion bedrock shape, not simulated rivers.
-        var valleyField = RidgedNoise(direction, seed ^ BasinSeedSalt, 14.0, 3, 2.05, 0.49);
-        var incisions = Math.Pow(Math.Max(0.0, valleyField), 2.0) * mountainBelt * landMask * 0.049;
+        // Branching bedrock gullies break up long ridges. Flow accumulation, hydraulic erosion and
+        // sediment transport are intentionally reserved for the geological evolution pipeline.
+        var valleyField = RidgedNoise(direction, seed ^ BasinSeedSalt, 18.0, 3, 2.05, 0.49);
+        var incisions = Math.Pow(Math.Max(0.0, valleyField), 3.0) * mountainBelt * landMask * 0.075;
         var impacts = SampleImpactRelief(direction, seed);
         var coastFine = FractalNoise(direction, seed ^ CoastSeedSalt, 13.0, 2, 2.11, 0.48);
         var shoreMask = 1.0 - SmoothStep(0.015, 0.10, Math.Abs(crust));
@@ -89,6 +93,40 @@ public sealed class ProceduralPlanetElevationSource : IPlanetElevationSource
         normalized = Math.Clamp(normalized, -1.0, 1.0);
         var elevation = normalized >= 0.0 ? normalized * MaximumLandElevationMeters : normalized * MaximumOceanDepthMeters;
         return new PlanetTerrainFieldSample(continental, plateUplift * belt, mountainBelt, elevation);
+    }
+
+    private static double SampleOrogenicSystems(PlanetVector direction, int seed, double distortion)
+    {
+        // A deterministic catalogue of geodesic arcs defines old mountain belts independently
+        // from the plate assignment. Plate stresses still influence the separate uplift field.
+        var strongest = 0.0;
+
+        for (var index = 0; index < 11; index++)
+        {
+            var start = SeedDirection(seed ^ UplandSeedSalt, index, 70_117 + (index * 193));
+            var pole = SeedDirection(seed ^ ProvinceSeedSalt, index, 230_019 + (index * 317));
+            var tangent = PlanetVector.Cross(pole, start);
+
+            if (tangent.Length < 0.000001)
+            {
+                tangent = PlanetVector.Cross(Math.Abs(start.Y) < 0.9 ? PlanetVector.UnitY : PlanetVector.UnitX, start);
+            }
+
+            tangent = PlanetVector.Normalize(tangent);
+            var arcNormal = PlanetVector.Normalize(PlanetVector.Cross(start, tangent));
+            var halfSpan = Lerp(0.28, 0.71, ToUnitRange(HashValue(index, seed, UplandSeedSalt, ProvinceSeedSalt)));
+            var center = PlanetVector.Normalize((start * Math.Cos(halfSpan * 0.5)) + (tangent * Math.Sin(halfSpan * 0.5)));
+            var breadth = Lerp(0.035, 0.085, ToUnitRange(HashValue(index, BasinSeedSalt, seed, DetailSeedSalt)));
+            var arcDistance = Math.Asin(Math.Clamp(Math.Abs(PlanetVector.Dot(direction, arcNormal)), 0.0, 1.0));
+            var warpedDistance = Math.Max(0.0, arcDistance + (distortion * breadth * 0.35));
+            var crossSection = 1.0 - SmoothStep(breadth * 0.10, breadth, warpedDistance);
+            var along = PlanetVector.Dot(direction, center);
+            var lengthMask = SmoothStep(Math.Cos(halfSpan), Math.Cos(halfSpan * 0.70), along);
+            var influence = crossSection * lengthMask;
+            strongest = Math.Max(strongest, influence);
+        }
+
+        return strongest;
     }
 
     private static double SampleImpactRelief(PlanetVector direction, int seed)
