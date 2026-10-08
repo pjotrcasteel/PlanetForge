@@ -64,6 +64,11 @@ export function setPlanet(snapshot) {
 
     const geometryKey = `${snapshot.seed}:${snapshot.physicalParameters.radiusMeters}:${snapshot.terrainRevision ?? 0}`;
     if (state.geometryKey !== geometryKey) {
+        if (state.lodTimer !== null) clearTimeout(state.lodTimer);
+        state.lodTimer = null;
+        state.lodSequence++;
+        state.surfaceRequestPending = false;
+        state.lastSurfaceRequestSignature = null;
         clearRetainedSurfaceGeometry();
         clearSurfaceBufferCache(state);
         clearLocalSurfaceBuffer(state);
