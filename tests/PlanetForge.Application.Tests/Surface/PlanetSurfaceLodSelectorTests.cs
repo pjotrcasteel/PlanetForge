@@ -67,6 +67,21 @@ public sealed class PlanetSurfaceLodSelectorTests
     }
 
     [TestMethod]
+    public void Select_CloseOrbitalDescent_RefinesBeyondLevelSixWithinMobileTileBudget()
+    {
+        var selector = new PlanetSurfaceLodSelector(PlanetSurfaceLodOptions.Default);
+        foreach (var direction in new[] { PlanetVector.UnitX, PlanetVector.UnitY, PlanetVector.UnitZ })
+        {
+            var view = new PlanetSurfaceView(direction, 1.0039, 844, Math.PI / 4.2);
+            var tiles = selector.Select(view);
+
+            Assert.IsLessThanOrEqualTo(56, tiles.Count);
+            Assert.IsGreaterThanOrEqualTo(7, tiles.Max(tile => tile.Level));
+            Assert.IsTrue(tiles.All(tile => tile.Level <= 8));
+        }
+    }
+
+    [TestMethod]
     public void Select_CameraInsidePlanet_Throws()
     {
         var selector = new PlanetSurfaceLodSelector(PlanetSurfaceLodOptions.Default);
