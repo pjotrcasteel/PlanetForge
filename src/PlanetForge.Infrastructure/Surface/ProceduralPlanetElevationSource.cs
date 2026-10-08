@@ -107,13 +107,11 @@ public sealed class ProceduralPlanetElevationSource : IPlanetElevationSource
     {
         // Mesoscale faults and rock massifs are distinct from valleys: avoid inventing
         // decorative "rivers" here. The upcoming drainage state will incise this bedrock.
-        var exposedBedrock = SmoothStep(-0.055, 0.135, crust);
-        var reliefStrength = (0.30 + (Math.Max(0.0, mountainBelt) * 0.65) +
+        // Below-datum terrain still has bedrock. The geology-only preview deliberately
+        // hides oceans, so masking out all sub-sea-floor relief would create blank brown views.
+        var exposedBedrock = 0.65 + (0.35 * SmoothStep(-0.055, 0.135, crust));
+        var reliefStrength = (0.65 + (Math.Max(0.0, mountainBelt) * 0.65) +
             (Math.Max(0.0, province) * 0.20)) * exposedBedrock;
-        if (reliefStrength <= 0.00001)
-        {
-            return 0.0;
-        }
 
         // The same rotated 3D coordinates work on every cube face, including the poles.
         // Frequency is cycles around the unit sphere; amplitudes are physical metres.
