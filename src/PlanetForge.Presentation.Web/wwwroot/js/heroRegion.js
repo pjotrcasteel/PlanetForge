@@ -88,7 +88,7 @@ function buildIndices(size){
 }
 let scene=null;
 function render() {
-    if(!scene)return;
+    if(!scene || !scene.region)return;
     const {gl,canvas,program:p,region}=scene;
     const rect=canvas.getBoundingClientRect(),scale=Math.min(window.devicePixelRatio||1,1.35);
     const width=Math.min(1024,Math.max(1,Math.round(rect.width*scale)));
@@ -170,6 +170,11 @@ export function drawHeroRegion(region,mode='after'){
     const base=(Math.min(...region.originalElevationMeters)+Math.max(...region.originalElevationMeters))*0.5;
     const km=region.cellSpacingMeters/1000;
     scene.focus=[(fx-middle)*km,(region.evolvedElevationMeters[focusIndex]-base)/1000,-(fy-middle)*km];
+    // Frame actual valleys close enough to resolve physical slopes on mobile.
+    // Previously nested terrain inherited the overview camera framing.
+    const regionSpanKm = (region.width - 1) * region.cellSpacingMeters / 1000;
+    scene.pitch = regionSpanKm <= 32 ? 0.34 : 0.25;
+    scene.zoom = regionSpanKm <= 32 ? 0.33 : 0.64;
     scene.region=region;scene.indices=indices.length;useMode(mode);
 }
 export function setHeroRegionMode(mode){
