@@ -25,6 +25,11 @@
 .lab-grid h2 { color: #deeade; font-size: 1rem; letter-spacing: .03em; margin: 0 0 7px; }
 .lab-grid p { color: #a4bab0; font-size: .85rem; line-height: 1.5; min-height: 2.4em; margin: 0 0 11px; }
 .lab-grid canvas { width: 100%; height: auto; aspect-ratio: 2/1; display: block; border-radius: 7px; background: #273638; }
+.lab-regional { max-width: 1400px; margin: 26px auto 0; }
+.lab-regional > h2 { font-size: 1.45rem; margin: 0 0 8px; color: #dce6db; }
+.lab-regional > p { max-width: 950px; line-height: 1.5; color: #a8bcb2; margin: 0 0 16px; }
+.lab-regional .lab-grid canvas { aspect-ratio: 1 / 1; }
+.lab-regional .lab-grid canvas + canvas { margin-top: 12px; }
 .lab-footer { max-width: 1400px; margin: 20px auto; color: #9db4ab; font-size: .8rem; line-height: 1.5; }
 @media (max-width: 700px) {
     .lab-top { flex-direction: column; }
