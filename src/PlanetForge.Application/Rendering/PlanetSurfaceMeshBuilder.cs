@@ -8,8 +8,6 @@ public sealed class PlanetSurfaceMeshBuilder(PlanetSurfaceTileSampler tileSample
 {
     private const double MinimumSkirtDepthMeters = 5.0;
     private const double MaximumSkirtDepthMeters = 500.0;
-    private const double MinimumNormalSampleAngleRadians = 0.00005;
-    private const double MaximumNormalSampleAngleRadians = 0.004;
 
     public PlanetSurfaceMeshBuilder(PlanetSurfaceTileSampler tileSampler) : this(tileSampler, tileSampler.ElevationSource)
     {
@@ -76,7 +74,9 @@ public sealed class PlanetSurfaceMeshBuilder(PlanetSurfaceTileSampler tileSample
     private Vector3[] BuildVertexNormals(PlanetSurfaceTile tile, int cellsPerAxis, int seed, double planetRadiusMeters)
     {
         var bounds = PlanetTileGeometry.CalculateBounds(tile.Id);
-        var sampleAngle = Math.Clamp(bounds.AngularRadiusRadians * 0.7 / cellsPerAxis, MinimumNormalSampleAngleRadians, MaximumNormalSampleAngleRadians);
+        // Normals must resolve relief smaller than the geometric triangles. In particular, sampling
+        // coarse mesh neighbors hides narrow mountain ridges at orbit scale.
+        var sampleAngle = Math.Clamp(bounds.AngularRadiusRadians * 0.25 / cellsPerAxis, 0.00005, 0.0020);
         var pointCount = (cellsPerAxis + 1) * (cellsPerAxis + 1);
         var result = new Vector3[pointCount];
 
@@ -84,36 +84,25 @@ public sealed class PlanetSurfaceMeshBuilder(PlanetSurfaceTileSampler tileSample
         {
             for (var x = 0; x <= cellsPerAxis; x++)
             {
-                result[ToPointIndex(x, y, cellsPerAxis)] = IsTileBoundary(x, y, cellsPerAxis)
-                    ? CalculateTerrainNormal(tile.GetPoint(x, y).Direction, seed, planetRadiusMeters, sampleAngle)
-                    : CalculateTerrainNormalFromTile(tile, x, y, planetRadiusMeters);
+                var point = tile.GetPoint(x, y);
+                result[ToPointIndex(x, y, cellsPerAxis)] =
+                    CalculateTerrainNormal(point, seed, planetRadiusMeters, sampleAngle);
             }
         }
 
         return result;
     }
 
-    private static Vector3 CalculateTerrainNormalFromTile(PlanetSurfaceTile tile, int x, int y, double planetRadiusMeters)
+    private Vector3 CalculateTerrainNormal(PlanetSurfacePoint point, int seed, double planetRadiusMeters, double sampleAngle)
     {
-        var west = ToRenderVector(tile.GetPoint(x - 1, y), planetRadiusMeters);
-        var east = ToRenderVector(tile.GetPoint(x + 1, y), planetRadiusMeters);
-        var north = ToRenderVector(tile.GetPoint(x, y - 1), planetRadiusMeters);
-        var south = ToRenderVector(tile.GetPoint(x, y + 1), planetRadiusMeters);
-        var center = ToRenderVector(tile.GetPoint(x, y), planetRadiusMeters);
-        var normal = Vector3.Normalize(Vector3.Cross(east - west, south - north));
-        return Vector3.Dot(normal, center) < 0f ? -normal : normal;
-    }
-
-    private Vector3 CalculateTerrainNormal(PlanetVector direction, int seed, double planetRadiusMeters, double sampleAngle)
-    {
+        var direction = point.Direction;
         var reference = Math.Abs(direction.Y) < 0.9 ? PlanetVector.UnitY : PlanetVector.UnitX;
         var east = PlanetVector.Normalize(PlanetVector.Cross(reference, direction));
         var north = PlanetVector.Normalize(PlanetVector.Cross(direction, east));
+        var center = ToRenderVector(point, planetRadiusMeters);
         var eastPlus = SampleRenderPosition(OffsetDirection(direction, east, sampleAngle), seed, planetRadiusMeters);
-        var eastMinus = SampleRenderPosition(OffsetDirection(direction, east, -sampleAngle), seed, planetRadiusMeters);
         var northPlus = SampleRenderPosition(OffsetDirection(direction, north, sampleAngle), seed, planetRadiusMeters);
-        var northMinus = SampleRenderPosition(OffsetDirection(direction, north, -sampleAngle), seed, planetRadiusMeters);
-        var normal = Vector3.Normalize(Vector3.Cross(eastPlus - eastMinus, northPlus - northMinus));
+        var normal = Vector3.Normalize(Vector3.Cross(eastPlus - center, northPlus - center));
         var radial = new Vector3((float)direction.X, (float)direction.Y, (float)direction.Z);
         return Vector3.Dot(normal, radial) < 0f ? -normal : normal;
     }

@@ -64,14 +64,16 @@ public sealed class PlanetSurfaceMeshBuilderTests
     }
 
     [TestMethod]
-    public void BuildTile_GlobalResolution_ReusesSampledInteriorForNormals()
+    public void BuildTile_GlobalResolution_SamplesCanonicalFineScaleNormals()
     {
         var source = new CountingElevationSource();
         var builder = CreateBuilder(source);
 
         _ = builder.BuildTile(new PlanetTileId(CubeFace.PositiveZ, 1, 0, 0), 24, 42, EarthRadiusMeters);
 
-        Assert.IsLessThan(1_100, source.SampleCount);
+        // One elevation sample plus two finite-difference probes per vertex. This provides
+        // geological detail independent of coarse triangles without paying for four extra probes.
+        Assert.AreEqual(3 * 25 * 25, source.SampleCount);
     }
 
     [TestMethod]

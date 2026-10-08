@@ -154,6 +154,22 @@ public sealed class ProceduralPlanetElevationSourceTests
 
 
     [TestMethod]
+    public void SampleTerrainFields_OrogenicBelts_FormRegionalMountainSystems()
+    {
+        var source = new ProceduralPlanetElevationSource();
+        var directions = FibonacciDirections(4_096).ToArray();
+
+        foreach (var seed in new[] { PlanetSeedCatalog.ShowcaseSeed, 346147916, 579460630 })
+        {
+            var samples = directions.Select(direction => source.SampleTerrainFields(direction, seed)).ToArray();
+            var mountainSamples = samples.Where(sample => sample.MountainBelt > 0.60 && sample.ElevationMeters > 0.0).ToArray();
+            Assert.IsGreaterThan(10, mountainSamples.Length, $"Seed {seed} lacks sufficiently broad orogenic mountain systems.");
+            Assert.IsGreaterThan(1_200.0, mountainSamples.Max(sample => sample.ElevationMeters) -
+                mountainSamples.Min(sample => sample.ElevationMeters), $"Seed {seed} lacks regional mountain relief.");
+        }
+    }
+
+    [TestMethod]
     public void SampleElevationMeters_ContinentalLand_HasRegionalReliefHierarchy()
     {
         var source = new ProceduralPlanetElevationSource();

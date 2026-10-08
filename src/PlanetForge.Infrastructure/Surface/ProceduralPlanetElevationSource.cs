@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using PlanetForge.Domain.Surface;
 
 namespace PlanetForge.Infrastructure.Surface;
@@ -22,6 +23,7 @@ public sealed class ProceduralPlanetElevationSource : IPlanetElevationSource
     private const int ShelfSeedSalt = 0x5A827999;
 
     private readonly IPlanetTerrainDeformationStore? terrainDeformationStore;
+    private readonly ConcurrentDictionary<int, OrogenicArc[]> orogenicArcs = new();
 
     public ProceduralPlanetElevationSource()
     {
@@ -62,17 +64,21 @@ public sealed class ProceduralPlanetElevationSource : IPlanetElevationSource
         // Finer ridges modulate those envelopes but cannot define the continents.
         var rangeEnvelope = RidgedNoise(macroDirection, seed ^ UplandSeedSalt, 2.85, 3, 2.09, 0.50);
         var oldRange = SmoothStep(0.06, 0.56, rangeEnvelope) * SmoothStep(-0.12, 0.38, province);
-        var mountainBelt = Math.Max(oldRange * 0.62, belt * 0.90);
-        var narrowRidges = RidgedNoise(direction, seed ^ DetailSeedSalt, 10.0, 3, 2.12, 0.47);
-        var ridgedStrength = Math.Max(0.0, narrowRidges);
-        var uplift = landMask * ((plateUplift * 0.62) + (mountainBelt * (0.15 + ridgedStrength * 0.24)));
+        // Spatially connected, curved orogenic belts span thousands of kilometres.
+        // Unlike isolated noise peaks, these arcs have longitudinal continuity and finite widths.
+        var orogeny = SampleOrogenicSystems(macroDirection, seed, boundaryNoise);
+        var mountainBelt = Math.Max(orogeny, Math.Max(oldRange * 0.68, belt * 0.78));
+        var narrowRidges = RidgedNoise(direction, seed ^ DetailSeedSalt, 13.0, 4, 2.09, 0.47);
+        var ridgeStrength = Math.Max(0.0, narrowRidges);
+        var summitStructure = ridgeStrength * ridgeStrength;
+        var uplift = landMask * ((plateUplift * 0.62) + (mountainBelt * (0.16 + ridgeStrength * 0.33)) + (orogeny * summitStructure * 0.16));
         var rolling = FractalNoise(direction, seed ^ DetailSeedSalt, 5.2, 3, 2.1, 0.48);
         var terrain = landMask * ((province * 0.083) + (rolling * 0.036) - (Math.Max(0.0, -basin) * 0.055));
 
-        // Connected drainage and transported sediment belong to the later erosion stage.
-        // These subdued valley incisions are pre-erosion bedrock shape, not simulated rivers.
-        var valleyField = RidgedNoise(direction, seed ^ BasinSeedSalt, 14.0, 3, 2.05, 0.49);
-        var incisions = Math.Pow(Math.Max(0.0, valleyField), 2.0) * mountainBelt * landMask * 0.049;
+        // Branching bedrock gullies break up long ridges. Flow accumulation, hydraulic erosion and
+        // sediment transport are intentionally reserved for the geological evolution pipeline.
+        var valleyField = RidgedNoise(direction, seed ^ BasinSeedSalt, 18.0, 3, 2.05, 0.49);
+        var incisions = Math.Pow(Math.Max(0.0, valleyField), 3.0) * mountainBelt * landMask * 0.075;
         var impacts = SampleImpactRelief(direction, seed);
         var coastFine = FractalNoise(direction, seed ^ CoastSeedSalt, 13.0, 2, 2.11, 0.48);
         var shoreMask = 1.0 - SmoothStep(0.015, 0.10, Math.Abs(crust));
@@ -89,6 +95,62 @@ public sealed class ProceduralPlanetElevationSource : IPlanetElevationSource
         normalized = Math.Clamp(normalized, -1.0, 1.0);
         var elevation = normalized >= 0.0 ? normalized * MaximumLandElevationMeters : normalized * MaximumOceanDepthMeters;
         return new PlanetTerrainFieldSample(continental, plateUplift * belt, mountainBelt, elevation);
+    }
+
+    private double SampleOrogenicSystems(PlanetVector direction, int seed, double distortion)
+    {
+        // The arc geometry is immutable for a seed; calculating it once avoids hundreds of
+        // thousands of repeated SeedDirection and trigonometric operations per planet.
+        if (orogenicArcs.Count > 32)
+        {
+            orogenicArcs.Clear();
+        }
+
+        var arcs = orogenicArcs.GetOrAdd(seed, BuildOrogenicArcs);
+        var strongest = 0.0;
+
+        foreach (var arc in arcs)
+        {
+            var arcDistance = Math.Asin(Math.Clamp(Math.Abs(PlanetVector.Dot(direction, arc.Normal)), 0.0, 1.0));
+            var warpedDistance = Math.Max(0.0, arcDistance + (distortion * arc.Breadth * 0.35));
+            var crossSection = 1.0 - SmoothStep(arc.Breadth * 0.10, arc.Breadth, warpedDistance);
+            if (crossSection <= 0.0)
+            {
+                continue;
+            }
+
+            var along = PlanetVector.Dot(direction, arc.Center);
+            var lengthMask = SmoothStep(arc.StartAlong, arc.FullAlong, along);
+            strongest = Math.Max(strongest, crossSection * lengthMask);
+        }
+
+        return strongest;
+    }
+
+    private static OrogenicArc[] BuildOrogenicArcs(int seed)
+    {
+        var arcs = new OrogenicArc[11];
+
+        for (var index = 0; index < arcs.Length; index++)
+        {
+            var start = SeedDirection(seed ^ UplandSeedSalt, index, 70_117 + (index * 193));
+            var pole = SeedDirection(seed ^ ProvinceSeedSalt, index, 230_019 + (index * 317));
+            var tangent = PlanetVector.Cross(pole, start);
+
+            if (tangent.Length < 0.000001)
+            {
+                tangent = PlanetVector.Cross(Math.Abs(start.Y) < 0.9 ? PlanetVector.UnitY : PlanetVector.UnitX, start);
+            }
+
+            tangent = PlanetVector.Normalize(tangent);
+            var normal = PlanetVector.Normalize(PlanetVector.Cross(start, tangent));
+            var halfSpan = Lerp(0.28, 0.71, ToUnitRange(HashValue(index, seed, UplandSeedSalt, ProvinceSeedSalt)));
+            var center = PlanetVector.Normalize((start * Math.Cos(halfSpan * 0.5)) + (tangent * Math.Sin(halfSpan * 0.5)));
+            var breadth = Lerp(0.035, 0.085, ToUnitRange(HashValue(index, BasinSeedSalt, seed, DetailSeedSalt)));
+            arcs[index] = new OrogenicArc(normal, center, breadth, Math.Cos(halfSpan), Math.Cos(halfSpan * 0.70));
+        }
+
+        return arcs;
     }
 
     private static double SampleImpactRelief(PlanetVector direction, int seed)
@@ -322,6 +384,8 @@ public sealed class ProceduralPlanetElevationSource : IPlanetElevationSource
         var t = Math.Clamp((value - edge0) / (edge1 - edge0), 0.0, 1.0);
         return t * t * (3.0 - (2.0 * t));
     }
+
+    private readonly record struct OrogenicArc(PlanetVector Normal, PlanetVector Center, double Breadth, double StartAlong, double FullAlong);
 
     private readonly record struct NearestPlatePair(int PrimaryIndex, int SecondaryIndex, double PrimaryDot, double SecondaryDot);
 }

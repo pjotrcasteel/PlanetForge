@@ -64,6 +64,7 @@ test('GeneratorQualityGate_RendersMeltedShowcaseFromMultipleAngles', async ({ pa
 test('TerrainLab_DisplaysCanonicalGeologicalLayers', async ({ page }, testInfo) => {
   await page.goto('/?terrainLab=1');
   await expect(page.getByRole('heading', { name: /Terrain Lab/ })).toBeVisible({ timeout: 20_000 });
+  await expect(page.locator('#planetforge-build-badge')).toBeHidden();
   await page.waitForFunction(() => window.__planetForgeTerrainLabReady === true, null, { timeout: 90_000 });
   await expect(page.getByRole('status')).toContainText('Seed 24061984', { timeout: 10_000 });
   for (const name of ['lab-crust', 'lab-tectonic', 'lab-mountains', 'lab-elevation']) {
