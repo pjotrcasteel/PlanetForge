@@ -10,6 +10,7 @@ const maximumRenderPixelRatio = 1.5;
 const minimumCameraAltitudeMeters = 3.0;
 const maximumCameraAltitudeRatio = 10.0;
 const localTransitionAltitudeMeters = 20_000.0;
+const adaptiveOrbitStartDistance = 1.35;
 const localExitAltitudeMeters = 25_000.0;
 const treeVisibilityAltitudeMeters = 3_000.0;
 const maximumPlaceholderTrees = 36;
@@ -392,9 +393,13 @@ function applyZoomFactor(s, zoomFactor) {
     const nextDistance = 1.0 + clamp(altitudeRatio * zoomFactor, minimumCameraAltitudeRatio, maximumCameraAltitudeRatio);
     if (Math.abs(nextDistance - s.distance) < 0.000000001) return;
 
+    const previousDistance = s.distance;
     s.dirty = true;
     s.distance = nextDistance;
-    if (shouldRequestSurfaceUpdate(s)) scheduleSurfaceUpdate(s, surfaceUpdateDebounceMilliseconds);
+    // Crossing outward through the LOD boundary must restore the full coarse globe.
+    if (shouldRequestSurfaceUpdate(s) || previousDistance < adaptiveOrbitStartDistance) {
+        scheduleSurfaceUpdate(s, surfaceUpdateDebounceMilliseconds);
+    }
 }
 
 function pointerSeparation(pointers) {
@@ -461,6 +466,7 @@ function installInput(s) {
 
         s.yaw += deltaX * 0.008;
         s.pitch = clamp(s.pitch + deltaY * 0.008, -1.25, 1.25);
+        if (shouldRequestSurfaceUpdate(s)) scheduleSurfaceUpdate(s, surfaceUpdateDebounceMilliseconds);
     });
 
     canvas.addEventListener('wheel', event => {
@@ -472,7 +478,7 @@ function installInput(s) {
 function shouldRequestSurfaceUpdate(s) {
     if (s.renderMode === 'local') return true;
     const altitudeMeters = Math.max(0.0, (s.distance - 1.0) * s.planetRadiusMeters);
-    return altitudeMeters <= localTransitionAltitudeMeters;
+    return s.distance < adaptiveOrbitStartDistance;
 }
 
 function scheduleSurfaceUpdate(s, delayMilliseconds) {
@@ -551,6 +557,16 @@ function installVisualTestApi() {
             state.dirty = false;
         },
         getDistance() { return state?.distance ?? 0.0; },
+        getLodStats() {
+            if (!state) return null;
+            const levels = state.tiles.map(tile => Number(tile.key.split(':')[1]));
+            return {
+                mode: state.renderMode,
+                tileCount: state.tiles.length,
+                maximumLevel: levels.length > 0 ? Math.max(...levels) : -1,
+                altitudeMeters: (state.distance - 1.0) * state.planetRadiusMeters
+            };
+        },
         getSeed() { return state?.seed ?? null; },
         measure() {
             if (!state) return null;
