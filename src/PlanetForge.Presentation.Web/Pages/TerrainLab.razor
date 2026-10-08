@@ -10,7 +10,7 @@
         <div>
             <small>PLANETFORGE / RESEARCH TOOLING</small>
             <h1>Terrain Lab</h1>
-            <p>One canonical spherical generator, four observable geological layers. No ice, atmosphere, oceans or orbital exaggeration hiding the terrain.</p>
+            <p>Canonical spherical bedrock plus routed drainage, stream power and sediment accounting. No ice, atmosphere, oceans or orbital exaggeration hiding the terrain.</p>
         </div>
         <a class="lab-back" href="./">← Return to planet</a>
     </header>
@@ -46,8 +46,28 @@
             <p>Elevation plus terrain-aware hillshading. Blue marks elevation below datum, not simulated water.</p>
             <canvas id="lab-elevation" width="256" height="128" aria-label="Canonical planetary elevation global map"></canvas>
         </article>
+        <article>
+            <h2>05 / Flow accumulation</h2>
+            <p>Priority-flood drainage networks from actual downhill receivers. Bright channels collect runoff.</p>
+            <canvas id="lab-flow" width="256" height="128" aria-label="Global routed drainage accumulation map"></canvas>
+        </article>
+        <article>
+            <h2>06 / Channel incision</h2>
+            <p>Potential bedrock incision from drainage area and stream gradient, capped per geological iteration.</p>
+            <canvas id="lab-incision" width="256" height="128" aria-label="Global stream power erosion depth map"></canvas>
+        </article>
+        <article>
+            <h2>07 / Sediment deposition</h2>
+            <p>Downstream sediment redistribution, with remaining exported material accounted for at outlets.</p>
+            <canvas id="lab-sediment" width="256" height="128" aria-label="Global sediment deposition map"></canvas>
+        </article>
+        <article>
+            <h2>08 / Eroded preview</h2>
+            <p>Bedrock after a bounded drainage pass. This is a diagnostic prototype, not yet the runtime mesh.</p>
+            <canvas id="lab-eroded" width="256" height="128" aria-label="Global after-erosion terrain map"></canvas>
+        </article>
     </section>
-    <footer class="lab-footer">Equirectangular projections are diagnostic maps only. Gameplay and local terrain sample these exact same elevation fields. The current generator does not yet simulate hydraulic erosion.</footer>
+    <footer class="lab-footer">Equirectangular projections are diagnostic maps only. The first four layers are canonical gameplay bedrock. Drainage is built once from the sampled spherical field; the final four are experimental geological diagnostics and do not yet modify gameplay geometry.</footer>
 </div>
 
 @code {
@@ -129,8 +149,14 @@
                 }
             }
 
-            await module.InvokeVoidAsync("drawTerrainLab", cancellation.Token, MapWidth, MapHeight, crust, tectonic, mountains, elevations);
-            status = $"Seed {selectedSeed} • above datum {land * 100.0 / elevations.Length:0.0}% • range {minimum:0} to {maximum:0} m";
+            status = $"Routing drainage for seed {selectedSeed}…";
+            await InvokeAsync(StateHasChanged);
+            await Task.Yield();
+            var drainage = PlanetDrainageAtlas.Build(MapWidth, MapHeight, elevations);
+            await module.InvokeVoidAsync("drawTerrainLab", cancellation.Token, MapWidth, MapHeight, crust, tectonic, mountains,
+                elevations, drainage.FlowAccumulation, drainage.ChannelIncisionMeters,
+                drainage.SedimentDepositionMeters, drainage.ErodedElevationMeters);
+            status = $"Seed {selectedSeed} • above datum {land * 100.0 / elevations.Length:0.0}% • range {minimum:0} to {maximum:0} m • sediment exported {drainage.ExportedSedimentVolume:0} cell·m";
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
