@@ -32,6 +32,36 @@ public sealed class PlanetDrainageAtlasTests
     }
 
     [TestMethod]
+    public void Build_NorthPolarCap_RoutesAcrossOppositeMeridian()
+    {
+        var heights = Enumerable.Repeat(1_000f, 8 * 5).ToArray();
+        heights[4] = -100.0f;
+        heights[0] = 10.0f;
+        var drainage = PlanetDrainageAtlas.Build(8, 5, heights);
+
+        Assert.AreEqual(4, drainage.DownstreamIndices[0]);
+    }
+
+    [TestMethod]
+    public void Build_FlatBasin_FollowsShortestFloodPathInsteadOfIndexOrder()
+    {
+        var heights = Enumerable.Repeat(100.0f, 16 * 9).ToArray();
+        heights[4 * 16] = -1.0f;
+        var drainage = PlanetDrainageAtlas.Build(16, 9, heights);
+        var index = (4 * 16) + 6;
+        var pathLength = 0;
+
+        while (drainage.DownstreamIndices[index] >= 0)
+        {
+            index = drainage.DownstreamIndices[index];
+            pathLength++;
+        }
+
+        Assert.AreEqual(4 * 16, index);
+        Assert.IsLessThanOrEqualTo(6, pathLength);
+    }
+
+    [TestMethod]
     public void Build_ClosedDepressions_FillsRoutingSurfaceWithoutModifyingBedrock()
     {
         var heights = Enumerable.Repeat(1_000f, 9 * 7).ToArray();
