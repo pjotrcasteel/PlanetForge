@@ -6,6 +6,7 @@ public sealed class PlanetSurfaceLodSelector(PlanetSurfaceLodOptions options)
 {
     private const int FarOrbitLevel = 1;
     private const double FarOrbitDistanceFromCenter = 1.35;
+    private const int MaximumAdaptiveTiles = 56;
 
     public IReadOnlyList<PlanetTileId> Select(PlanetSurfaceView view)
     {
@@ -17,17 +18,42 @@ public sealed class PlanetSurfaceLodSelector(PlanetSurfaceLodOptions options)
 
         var normalizedDirection = PlanetVector.Normalize(view.CameraDirection);
         var normalizedView = view with { CameraDirection = normalizedDirection };
-        var result = new List<PlanetTileId>();
 
-        foreach (var face in Enum.GetValues<CubeFace>())
+        // The LOD cap grows with proximity, but only the visible area is refined.
+        // A strict tile budget keeps synchronous Blazor WebAssembly mesh generation viable on phones.
+        var permittedLevel = Math.Min(options.MaxLevel, view.CameraDistanceFromCenter switch
         {
-            SelectRecursive(new PlanetTileId(face, 0, 0, 0), normalizedView, result);
+            >= 1.14 => 3,
+            >= 1.045 => 4,
+            >= 1.012 => 5,
+            _ => 6,
+        });
+
+        for (var level = permittedLevel; level >= 0; level--)
+        {
+            var targetDiameter = options.TargetTileDiameterPixels;
+            for (var attempt = 0; attempt < 8; attempt++)
+            {
+                var result = new List<PlanetTileId>();
+
+                foreach (var face in Enum.GetValues<CubeFace>())
+                {
+                    SelectRecursive(new PlanetTileId(face, 0, 0, 0), normalizedView, result, level, targetDiameter);
+                }
+
+                if (result.Count <= MaximumAdaptiveTiles)
+                {
+                    return result;
+                }
+
+                targetDiameter *= 1.5;
+            }
         }
 
-        return result;
+        return Enum.GetValues<CubeFace>().Select(face => new PlanetTileId(face, 0, 0, 0)).ToArray();
     }
 
-    private void SelectRecursive(PlanetTileId id, PlanetSurfaceView view, List<PlanetTileId> result)
+    private void SelectRecursive(PlanetTileId id, PlanetSurfaceView view, List<PlanetTileId> result, int maximumLevel, double targetDiameterPixels)
     {
         var bounds = PlanetTileGeometry.CalculateBounds(id);
         if (!IsVisible(bounds, view))
@@ -37,11 +63,11 @@ public sealed class PlanetSurfaceLodSelector(PlanetSurfaceLodOptions options)
         }
 
         var projectedDiameter = CalculateProjectedDiameterPixels(bounds, view);
-        if (id.Level < options.MaxLevel && projectedDiameter > options.TargetTileDiameterPixels)
+        if (id.Level < maximumLevel && projectedDiameter > targetDiameterPixels)
         {
             foreach (var child in id.Children())
             {
-                SelectRecursive(child, view, result);
+                SelectRecursive(child, view, result, maximumLevel, targetDiameterPixels);
             }
 
             return;
