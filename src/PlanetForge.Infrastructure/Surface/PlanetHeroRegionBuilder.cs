@@ -28,6 +28,42 @@ public sealed class PlanetHeroRegionBuilder(IPlanetElevationSource elevationSour
     public const int DefaultErosionIterations = 6;
     public const double ReferencePlanetRadiusMeters = 6_371_000.0;
 
+    /// <summary>
+    /// Chooses a fixed geographic focus for a finer nested erosion grid from real
+    /// interior channel incision. The calculation is independent of camera and LOD.
+    /// </summary>
+    public static PlanetVector FindIncisedChannelFocus(PlanetHeroRegion region, PlanetVector regionCenter)
+    {
+        ArgumentNullException.ThrowIfNull(region);
+        var center = PlanetVector.Normalize(regionCenter);
+        var width = region.Width;
+        var margin = Math.Max(1, width / 5);
+        var selected = (width / 2) * width + (width / 2);
+        var best = double.NegativeInfinity;
+
+        for (var y = margin; y < width - margin; y++)
+        {
+            for (var x = margin; x < width - margin; x++)
+            {
+                var index = y * width + x;
+                var cut = region.CumulativeCutMeters[index];
+                if (cut <= best)
+                {
+                    continue;
+                }
+
+                best = cut;
+                selected = index;
+            }
+        }
+
+        var frame = PlanetLocalFrame.Create(center, ReferencePlanetRadiusMeters, 0.0);
+        var offsetX = ((selected % width) - (width - 1) * 0.5) * region.CellSpacingMeters;
+        var offsetY = ((selected / width) - (width - 1) * 0.5) * region.CellSpacingMeters;
+        return PlanetVector.Normalize((center * ReferencePlanetRadiusMeters) +
+            (frame.East * offsetX) + (frame.North * offsetY));
+    }
+
     public PlanetHeroRegion Build(
         PlanetVector centerDirection, int seed, int gridWidth = DefaultGridWidth,
         double regionSpanMeters = DefaultRegionSpanMeters, int erosionIterations = DefaultErosionIterations,
