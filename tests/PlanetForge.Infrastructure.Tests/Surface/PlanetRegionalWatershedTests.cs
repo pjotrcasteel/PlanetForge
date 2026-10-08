@@ -13,6 +13,8 @@ public sealed class PlanetRegionalWatershedTests
         var b = PlanetRegionalWatershed.Build(32, 24, 2000, elevations);
 
         CollectionAssert.AreEqual(a.DownstreamIndices, b.DownstreamIndices);
+        CollectionAssert.AreEqual(a.SecondaryDownstreamIndices, b.SecondaryDownstreamIndices);
+        CollectionAssert.AreEqual(a.SecondaryFlowFractions, b.SecondaryFlowFractions);
         CollectionAssert.AreEqual(a.FilledRoutingElevationMeters, b.FilledRoutingElevationMeters);
         CollectionAssert.AreEqual(a.AccumulatedRunoffCells, b.AccumulatedRunoffCells);
         CollectionAssert.AreEqual(a.IncisionMeters, b.IncisionMeters);
@@ -35,6 +37,42 @@ public sealed class PlanetRegionalWatershedTests
         Assert.IsGreaterThanOrEqualTo(heights[pit], basin.FilledRoutingElevationMeters[pit]);
         Assert.AreEqual(1100f, heights[pit]);
         Assert.IsTrue(basin.DownstreamIndices[12 * 24 + 12] >= 0);
+    }
+
+    [TestMethod]
+    public void Build_ObliqueHillslope_DistributesFlowBetweenAdjacentDownhillDirections()
+    {
+        const int width = 28;
+        const int height = 24;
+        var bedrock = new float[width * height];
+        for (var y = 0; y < height; y++)
+        {
+            for (var x = 0; x < width; x++)
+            {
+                bedrock[y * width + x] = 2000f + (width - x) * 35f + (height - y) * 15f;
+            }
+        }
+
+        var watershed = PlanetRegionalWatershed.Build(width, height, 1500, bedrock);
+        var splitCells = 0;
+        var outletRunoff = 0.0;
+        for (var index = 0; index < bedrock.Length; index++)
+        {
+            if (watershed.DownstreamIndices[index] < 0)
+            {
+                outletRunoff += watershed.AccumulatedRunoffCells[index];
+            }
+
+            if (watershed.SecondaryDownstreamIndices[index] >= 0)
+            {
+                splitCells++;
+                Assert.IsGreaterThan(0.0f, watershed.SecondaryFlowFractions[index]);
+                Assert.IsLessThanOrEqualTo(0.5f, watershed.SecondaryFlowFractions[index]);
+            }
+        }
+
+        Assert.IsGreaterThan(0, splitCells, "The solver fell back to grid-locked D8 routing everywhere.");
+        Assert.AreEqual(width * height, outletRunoff, 0.005);
     }
 
     [TestMethod]
