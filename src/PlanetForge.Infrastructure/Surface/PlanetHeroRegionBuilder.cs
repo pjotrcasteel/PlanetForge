@@ -64,6 +64,30 @@ public sealed class PlanetHeroRegionBuilder(IPlanetElevationSource elevationSour
             (frame.East * offsetX) + (frame.North * offsetY));
     }
 
+    /// <summary>
+    /// Provides the nested geological solve with the parent's already-evolved terrain.
+    /// The child first samples this shared physical height, then develops finer drainage;
+    /// it must not independently regenerate a different geological world.
+    /// </summary>
+    public static PlanetRegionalGeologyOverlay CreateParentOverlay(PlanetHeroRegion parent, PlanetVector centerDirection)
+    {
+        ArgumentNullException.ThrowIfNull(parent);
+        var center = PlanetVector.Normalize(centerDirection);
+        var key = $"hero-parent/{parent.Seed}/{center.X:R}/{center.Y:R}/{center.Z:R}/{parent.Width}/{parent.CellSpacingMeters:R}";
+        var baseline = PlanetRegionalGeologyEvolution.Initialize(parent.Seed, key, parent.Width, parent.Width,
+            parent.CellSpacingMeters, parent.OriginalElevationMeters);
+        var evolved = baseline with
+        {
+            Iteration = parent.ErosionIterations,
+            ElevationMeters = (float[])parent.EvolvedElevationMeters.Clone(),
+            CumulativeErodedVolumeCubicMeters = parent.ErodedVolumeCubicMeters,
+            CumulativeDepositedVolumeCubicMeters = parent.DepositedVolumeCubicMeters,
+            CumulativeExportedVolumeCubicMeters = parent.ExportedVolumeCubicMeters
+        };
+
+        return PlanetRegionalGeologyOverlay.Create(baseline, evolved, center, ReferencePlanetRadiusMeters);
+    }
+
     public PlanetHeroRegion Build(
         PlanetVector centerDirection, int seed, int gridWidth = DefaultGridWidth,
         double regionSpanMeters = DefaultRegionSpanMeters, int erosionIterations = DefaultErosionIterations,
