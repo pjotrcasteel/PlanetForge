@@ -115,6 +115,43 @@ public sealed class PlanetRegionalWatershedTests
     }
 
     [TestMethod]
+    public void Build_SpatialRainfall_ConservesPrecipitationAndSuppressesErosionInDrought()
+    {
+        const int width = 48;
+        const int height = 32;
+        var bedrock = CreateMountainBasin(width, height);
+        var rainfall = new float[width * height];
+        for (var y = 0; y < height; y++)
+        {
+            for (var x = 0; x < width / 2; x++)
+            {
+                rainfall[y * width + x] = 2.0f;
+            }
+        }
+
+        var wet = PlanetRegionalWatershed.Build(width, height, 3000, bedrock, rainfall);
+        var dry = PlanetRegionalWatershed.Build(width, height, 3000, bedrock, new float[width * height]);
+        var totalRunoff = wet.DownstreamIndices.Select((receiver, i) =>
+            receiver < 0 ? wet.AccumulatedRunoffCells[i] : 0f).Sum(value => (double)value);
+
+        Assert.AreEqual(width * height, totalRunoff, 0.01);
+        Assert.AreEqual(0.0, dry.ErodedVolumeCubicMeters);
+        Assert.AreEqual(0.0, dry.ExportedVolumeCubicMeters);
+    }
+
+    [TestMethod]
+    public void Build_InvalidRainfall_RejectsNegativeAndNonFiniteWeights()
+    {
+        var heights = Enumerable.Repeat(100f, 10 * 10).ToArray();
+        var rainfall = Enumerable.Repeat(1f, 10 * 10).ToArray();
+        rainfall[10] = -1f;
+        Assert.ThrowsExactly<ArgumentException>(() => PlanetRegionalWatershed.Build(10, 10, 1000, heights, rainfall));
+
+        rainfall[10] = float.NaN;
+        Assert.ThrowsExactly<ArgumentException>(() => PlanetRegionalWatershed.Build(10, 10, 1000, heights, rainfall));
+    }
+
+    [TestMethod]
     public void Build_NonFiniteElevation_RejectsGeologicalInput()
     {
         var heights = Enumerable.Repeat(100f, 10 * 10).ToArray();
