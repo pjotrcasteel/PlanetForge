@@ -569,7 +569,10 @@ function renderGlobe(s) {
 
     gl.uniformMatrix4fv(s.globeUniforms.model, false, identityMatrix());
     gl.uniformMatrix4fv(s.globeUniforms.viewProjection, false, viewProjection);
-    gl.uniform3f(s.globeUniforms.light, 0.7, 0.35, 0.6);
+    // In geological inspection mode, a camera-relative raking light reveals slopes at every viewing angle.
+    // Ordinary climate rendering retains the fixed world-space light direction.
+    const rockLight = normalize([eye[0] + 0.65, eye[1] + 0.80, eye[2] - 0.35]);
+    gl.uniform3f(s.globeUniforms.light, ...(geologicalPreviewMode ? rockLight : [0.7, 0.35, 0.6]));
     gl.uniform3f(s.globeUniforms.cameraPosition, eye[0], eye[1], eye[2]);
     gl.uniform1f(s.globeUniforms.seaLevelMeters, s.seaLevelMeters);
     gl.uniform1f(s.globeUniforms.planetRadiusMeters, s.planetRadiusMeters);
@@ -839,7 +842,7 @@ void main() {
     vec4 world = uModel * vec4(radial * visualRadius, 1.0);
     vDirection = radial;
     vPhysicalNormal = physicalNormal;
-    vNormal = normalize(radial + (tangentNormal * 12.0));
+    vNormal = normalize(radial + (tangentNormal * (uMode == 5 ? 35.0 : 12.0)));
     vPhysicalSlope = clamp(1.0 - dot(physicalNormal, radial), 0.0, 0.5);
     vElevationMeters = elevationMeters;
     vWorldPosition = world.xyz;
@@ -943,25 +946,37 @@ vec3 terrainMaterial(vec3 radial, vec3 normal, float elevationAboveSeaLevel, boo
 }
 
 vec3 barrenRockMaterial(vec3 radial, vec3 terrainNormal, float elevationMeters) {
-    // Geological colour detail stays lightweight enough for mobile GPUs and WebGL software renderers.
-    // Canonical elevation and slope are provided by the geological simulation.
+    // Canonical elevation and physical slope define the geological provinces.
+    // Low-frequency noise contributes subtle mineral differences, never fake continents.
     vec3 offset = vec3(uSeedPhase * 17.1, uSeedPhase * 11.3, uSeedPhase * -13.7);
-    float province = valueNoise(radial * 11.0 + offset);
-    float regolith = valueNoise(radial * 68.0 + offset * 1.37);
-    float basalt = smoothstep(0.47, 0.74, province) * (1.0 - smoothstep(1100.0, 3800.0, elevationMeters));
-    float highland = smoothstep(800.0, 5100.0, elevationMeters);
-    float cliff = smoothstep(0.015, 0.17, vPhysicalSlope);
+    float minerals = valueNoise(radial * 16.0 + offset);
+    float grains = valueNoise(radial * 78.0 + offset * 1.37);
 
-    vec3 oxide = mix(vec3(0.52, 0.26, 0.16), vec3(0.74, 0.43, 0.28), province);
-    vec3 exposedRock = vec3(0.41, 0.30, 0.25);
-    vec3 basaltRock = vec3(0.27, 0.22, 0.21);
-    vec3 material = mix(oxide, exposedRock, clamp(highland * 0.30 + cliff * 0.55, 0.0, 0.70));
-    material = mix(material, basaltRock, basalt * 0.65);
-    material *= 0.88 + regolith * 0.24;
+    float basin = 1.0 - smoothstep(-2600.0, 400.0, elevationMeters);
+    float plateau = smoothstep(450.0, 2400.0, elevationMeters);
+    float highland = smoothstep(2100.0, 5400.0, elevationMeters);
+    float physicalCliff = smoothstep(0.000004, 0.0015, vPhysicalSlope);
+    float screenRelief = length(vec2(dFdx(elevationMeters), dFdy(elevationMeters)));
+    float incised = smoothstep(18.0, 230.0, screenRelief);
+
+    vec3 lowland = vec3(0.365, 0.215, 0.168);
+    vec3 dustyPlains = vec3(0.635, 0.350, 0.231);
+    vec3 upliftedRock = vec3(0.750, 0.478, 0.319);
+    vec3 ancientBedrock = vec3(0.515, 0.408, 0.343);
+    vec3 material = mix(dustyPlains, lowland, basin * 0.67);
+    material = mix(material, upliftedRock, plateau * 0.75);
+    material = mix(material, ancientBedrock, highland * 0.56);
+    material = mix(material, vec3(0.36, 0.290, 0.255), physicalCliff * 0.26 + incised * 0.17);
+
+    float mineralVariation = (minerals - 0.5) * 0.16 + (grains - 0.5) * 0.095;
+    material *= 1.0 + mineralVariation;
 
     float light = max(dot(normalize(terrainNormal), normalize(uLightDirection)), 0.0);
-    float illumination = clamp(0.34 + light * 0.78, 0.26, 1.12);
-    return material * illumination * (1.0 - cliff * 0.10);
+    float radialLight = max(dot(radial, normalize(uLightDirection)), 0.0);
+    float reliefContrast = clamp((light - radialLight) * 1.2, -0.40, 0.40);
+    float illumination = clamp(0.39 + (0.64 * light) + reliefContrast, 0.25, 1.15);
+    illumination *= 1.0 - incised * 0.17;
+    return clamp(material * illumination, 0.0, 1.0);
 }
 
 vec4 oceanMaterial(vec3 radial, vec3 normal, float elevationAboveSeaLevel) {
