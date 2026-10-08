@@ -6,6 +6,7 @@ public sealed class PlanetSurfaceLodSelector(PlanetSurfaceLodOptions options)
 {
     private const int FarOrbitLevel = 1;
     private const double FarOrbitDistanceFromCenter = 1.35;
+    private const int MaximumAdaptiveTiles = 56;
 
     public IReadOnlyList<PlanetTileId> Select(PlanetSurfaceView view)
     {
@@ -15,39 +16,59 @@ public sealed class PlanetSurfaceLodSelector(PlanetSurfaceLodOptions options)
             return CreateGlobalCoverage(FarOrbitLevel);
         }
 
-        var normalizedDirection = PlanetVector.Normalize(view.CameraDirection);
-        var normalizedView = view with { CameraDirection = normalizedDirection };
-        var result = new List<PlanetTileId>();
-
-        foreach (var face in Enum.GetValues<CubeFace>())
+        var normalizedView = view with { CameraDirection = PlanetVector.Normalize(view.CameraDirection) };
+        var maximumLevel = Math.Min(options.MaxLevel, view.CameraDistanceFromCenter switch
         {
-            SelectRecursive(new PlanetTileId(face, 0, 0, 0), normalizedView, result);
-        }
+            >= 1.14 => 3,
+            >= 1.045 => 4,
+            >= 1.012 => 5,
+            _ => 6,
+        });
 
-        return result;
-    }
-
-    private void SelectRecursive(PlanetTileId id, PlanetSurfaceView view, List<PlanetTileId> result)
-    {
-        var bounds = PlanetTileGeometry.CalculateBounds(id);
-        if (!IsVisible(bounds, view))
+        // Best-first subdivision concentrates geometry under the camera instead of refining
+        // every visible region equally. Each split adds three tiles; a fixed budget prevents
+        // pathological WebAssembly work at very low altitudes.
+        var leaves = Enum.GetValues<CubeFace>().Select(face => new PlanetTileId(face, 0, 0, 0)).ToList();
+        while (leaves.Count + 3 <= MaximumAdaptiveTiles)
         {
-            result.Add(id);
-            return;
-        }
+            var bestIndex = -1;
+            var bestScore = options.TargetTileDiameterPixels;
 
-        var projectedDiameter = CalculateProjectedDiameterPixels(bounds, view);
-        if (id.Level < options.MaxLevel && projectedDiameter > options.TargetTileDiameterPixels)
-        {
-            foreach (var child in id.Children())
+            for (var index = 0; index < leaves.Count; index++)
             {
-                SelectRecursive(child, view, result);
+                var tile = leaves[index];
+                if (tile.Level >= maximumLevel)
+                {
+                    continue;
+                }
+
+                var bounds = PlanetTileGeometry.CalculateBounds(tile);
+                if (!IsVisible(bounds, normalizedView))
+                {
+                    continue;
+                }
+
+                var alignment = Math.Max(0.0, PlanetVector.Dot(normalizedView.CameraDirection, bounds.CenterDirection));
+                var gazeWeight = 0.10 + (0.90 * Math.Pow(alignment, 8.0));
+                var score = CalculateProjectedDiameterPixels(bounds, normalizedView) * gazeWeight;
+                if (score > bestScore)
+                {
+                    bestIndex = index;
+                    bestScore = score;
+                }
             }
 
-            return;
+            if (bestIndex < 0)
+            {
+                break;
+            }
+
+            var selected = leaves[bestIndex];
+            leaves.RemoveAt(bestIndex);
+            leaves.AddRange(selected.Children());
         }
 
-        result.Add(id);
+        return leaves.OrderBy(tile => tile.Face).ThenBy(tile => tile.Level).ThenBy(tile => tile.Y).ThenBy(tile => tile.X).ToArray();
     }
 
     private static IReadOnlyList<PlanetTileId> CreateGlobalCoverage(int level)

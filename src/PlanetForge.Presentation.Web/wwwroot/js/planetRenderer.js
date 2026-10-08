@@ -10,6 +10,7 @@ const maximumRenderPixelRatio = 1.5;
 const minimumCameraAltitudeMeters = 3.0;
 const maximumCameraAltitudeRatio = 10.0;
 const localTransitionAltitudeMeters = 20_000.0;
+const adaptiveOrbitStartDistance = 1.35;
 const localExitAltitudeMeters = 25_000.0;
 const treeVisibilityAltitudeMeters = 3_000.0;
 const maximumPlaceholderTrees = 36;
@@ -30,7 +31,7 @@ export function initialize(canvasId, snapshot, dotNetReference, generatorPreview
     const gl = canvas?.getContext('webgl2', { antialias: true, alpha: true });
     if (!canvas || !gl) throw new Error('PlanetForge requires WebGL 2.');
 
-    document.title = 'PlanetForge 0.0.35.1 — Orogenic Relief';
+    document.title = 'PlanetForge 0.0.35.2 — Orogenic Relief';
     try {
         state = createState(canvas, gl, dotNetReference);
         state.generatorPreview = generatorPreview;
@@ -74,7 +75,7 @@ export function setPlanet(snapshot) {
         const enteringLocal = state.renderMode !== 'local';
         if (enteringLocal) {
             state.localYaw = -0.65;
-            state.localPitch = 0.72;
+            state.localPitch = geologicalPreviewMode ? 1.30 : 0.72;
             state.localCameraAltitudeMeters = snapshot.localSurface.cameraAltitudeMeters;
             state.distance = 1.0 + (state.localCameraAltitudeMeters / state.planetRadiusMeters);
         }
@@ -127,7 +128,7 @@ function createState(canvas, gl, dotNetReference) {
     return {
         canvas, gl, dotNetReference, globeProgram, localProgram, generatorPreview: false, renderMode: 'globe', geometryKey: null,
         surfaceKey: null, tileBufferCache: new Map(), tiles: [], localSurface: null,
-        yaw: -0.65, pitch: 0.24, distance: initialOrbitDistance(canvas), localYaw: -0.65, localPitch: 0.72,
+        yaw: -0.65, pitch: 0.24, distance: initialOrbitDistance(canvas), localYaw: -0.65, localPitch: geologicalPreviewMode ? 1.30 : 0.72,
         localCameraAltitudeMeters: null, scaleHud: createLocalScaleHud(canvas),
         activePointers: new Map(), pinchDistance: null,
         lodTimer: null, lodSequence: 0, lastSurfaceRequestSignature: null,
@@ -392,9 +393,13 @@ function applyZoomFactor(s, zoomFactor) {
     const nextDistance = 1.0 + clamp(altitudeRatio * zoomFactor, minimumCameraAltitudeRatio, maximumCameraAltitudeRatio);
     if (Math.abs(nextDistance - s.distance) < 0.000000001) return;
 
+    const previousDistance = s.distance;
     s.dirty = true;
     s.distance = nextDistance;
-    if (shouldRequestSurfaceUpdate(s)) scheduleSurfaceUpdate(s, surfaceUpdateDebounceMilliseconds);
+    // Crossing outward through the LOD boundary must restore the full coarse globe.
+    if (shouldRequestSurfaceUpdate(s) || previousDistance < adaptiveOrbitStartDistance) {
+        scheduleSurfaceUpdate(s, surfaceUpdateDebounceMilliseconds);
+    }
 }
 
 function pointerSeparation(pointers) {
@@ -455,12 +460,13 @@ function installInput(s) {
 
         if (s.renderMode === 'local') {
             s.localYaw += deltaX * 0.008;
-            s.localPitch = clamp(s.localPitch - deltaY * 0.008, minimumLocalViewPitchRadians, maximumLocalViewPitchRadians);
+            s.localPitch = clamp(s.localPitch - deltaY * 0.008, geologicalPreviewMode ? 1.12 : minimumLocalViewPitchRadians, maximumLocalViewPitchRadians);
             return;
         }
 
         s.yaw += deltaX * 0.008;
         s.pitch = clamp(s.pitch + deltaY * 0.008, -1.25, 1.25);
+        if (shouldRequestSurfaceUpdate(s)) scheduleSurfaceUpdate(s, surfaceUpdateDebounceMilliseconds);
     });
 
     canvas.addEventListener('wheel', event => {
@@ -472,7 +478,7 @@ function installInput(s) {
 function shouldRequestSurfaceUpdate(s) {
     if (s.renderMode === 'local') return true;
     const altitudeMeters = Math.max(0.0, (s.distance - 1.0) * s.planetRadiusMeters);
-    return altitudeMeters <= localTransitionAltitudeMeters;
+    return s.distance < adaptiveOrbitStartDistance;
 }
 
 function scheduleSurfaceUpdate(s, delayMilliseconds) {
@@ -545,12 +551,29 @@ function installVisualTestApi() {
         getYaw() { return state?.yaw ?? 0.0; },
         setDistance(distance) {
             if (!state) return;
-            state.distance = clamp(distance, 1.1, 11.0);
+            const previousDistance = state.distance;
+            state.distance = clamp(distance, 1.001, 11.0);
             state.dirty = true;
+            if (shouldRequestSurfaceUpdate(state) || previousDistance < adaptiveOrbitStartDistance) {
+                scheduleSurfaceUpdate(state, surfaceUpdateDebounceMilliseconds);
+            }
             renderGlobe(state);
             state.dirty = false;
         },
         getDistance() { return state?.distance ?? 0.0; },
+        getLodStats() {
+            if (!state) return null;
+            // Globe buffers remain cached after switching to the local surface.
+            // Report the geometry being rendered, not the cached offscreen buffers.
+            const activeTiles = state.renderMode === 'globe' ? state.tiles : [];
+            const levels = activeTiles.map(tile => Number(tile.key.split(':')[1]));
+            return {
+                mode: state.renderMode,
+                tileCount: activeTiles.length,
+                maximumLevel: levels.length > 0 ? Math.max(...levels) : -1,
+                altitudeMeters: (state.distance - 1.0) * state.planetRadiusMeters
+            };
+        },
         getSeed() { return state?.seed ?? null; },
         measure() {
             if (!state) return null;
@@ -860,6 +883,7 @@ in vec3 aNormal;
 uniform mat4 uModel;
 uniform mat4 uViewProjection;
 uniform float uPlanetRadiusMeters;
+uniform vec3 uCameraPosition;
 uniform float uSeaLevelMeters;
 uniform float uSeaIceFraction;
 uniform float uLandIceFraction;
@@ -883,9 +907,11 @@ void main() {
     float visualRadius = physicalRadius;
 
     if (uMode == 5) {
-        // At orbital scales height is negligible relative to planetary radius.
-        // Use canonical elevation for colour and shading, not exaggerated polygon displacement.
-        visualRadius = 1.0;
+        // Preserve a perfectly smooth silhouette from far orbit, then reveal the REAL
+        // canonical elevation smoothly during regional approach. No synthetic height exaggeration.
+        float cameraAltitudeRatio = max(length(uCameraPosition) - 1.0, 0.0);
+        float reliefBlend = 1.0 - smoothstep(0.012, 0.080, cameraAltitudeRatio);
+        visualRadius = mix(1.0, physicalRadius, reliefBlend);
     } else if (uMode == 0 || uMode == 2) {
         float exaggeration = elevationAboveSeaLevel >= 0.0 ? 8.0 : 2.0;
         visualRadius = 1.0 + ((elevationMeters * exaggeration) / uPlanetRadiusMeters);

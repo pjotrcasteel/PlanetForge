@@ -13,11 +13,14 @@ public sealed class PlanetExperience(
     PlanetSurfaceMeshCache surfaceMeshCache,
     PlanetLocalSurfacePatchSampler localSurfacePatchSampler,
     PlanetLocalSurfaceMeshBuilder localSurfaceMeshBuilder,
-    IPlanetTerrainDeformationStore? terrainDeformationStore = null)
+    IPlanetTerrainDeformationStore? terrainDeformationStore = null,
+    PlanetSurfaceLodSelector? surfaceLodSelector = null)
 {
     private const int GlobalSurfaceLevel = 1;
     private const int SurfaceCellsPerAxis = 32;
-    private const int CoarseLocalSurfaceCellsPerAxis = 8;
+    private const int AdaptiveSurfaceCellsPerAxis = 20;
+    private const double OrbitalRefinementStartDistance = 1.35;
+    private const int CoarseLocalSurfaceCellsPerAxis = 16;
     private const int MediumLocalSurfaceCellsPerAxis = 16;
     private const int DetailedLocalSurfaceCellsPerAxis = 24;
     private const int FineLocalSurfaceCellsPerAxis = 32;
@@ -27,7 +30,7 @@ public sealed class PlanetExperience(
     private const double DetailedLocalResolutionAltitudeMeters = 800.0;
     private const double FineLocalResolutionAltitudeMeters = 60.0;
     private const double MaximumLocalPatchRadiusFraction = 0.18;
-    private const double LocalPatchMarginFactor = 1.5;
+    private const double LocalPatchMarginFactor = 2.2;
     private const double MinimumOrbitalDistanceAu = 0.25;
     private const double MaximumOrbitalDistanceAu = 3.0;
     private const double MinimumStellarLuminositySolar = 0.2;
@@ -48,6 +51,7 @@ public sealed class PlanetExperience(
     private const double MaximumVisualSeaLevelMeters = 6_000.0;
 
     private readonly PlanetState state = new();
+    private readonly PlanetSurfaceLodSelector lodSelector = surfaceLodSelector ?? new PlanetSurfaceLodSelector(PlanetSurfaceLodOptions.Default);
     private PlanetSurfaceView? surfaceView;
     private PlanetVector? localAnchorDirection;
     private LocalSurfaceCacheKey? cachedLocalSurfaceKey;
@@ -268,11 +272,9 @@ public sealed class PlanetExperience(
         var atmosphereDensity = CalculateAtmosphereDensity(atmosphere.SurfacePressurePascals);
         var radiusMeters = state.PhysicalParameters.RadiusMeters;
         var localSurface = CreateLocalSurface(radiusMeters);
-        var surfaceTiles = localSurface is not null
-            ? Array.Empty<PlanetSurfaceTileMesh>()
-            : includeFullGlobalGeometry
-                ? surfaceMeshCache.GetOrBuildGlobalFull(GlobalSurfaceLevel, SurfaceCellsPerAxis, state.Seed, radiusMeters)
-                : surfaceMeshCache.GetOrBuildGlobal(GlobalSurfaceLevel, SurfaceCellsPerAxis, state.Seed, radiusMeters);
+        var surfaceTiles = localSurface is null
+            ? CreateGlobalSurfaceTiles(includeFullGlobalGeometry, radiusMeters)
+            : Array.Empty<PlanetSurfaceTileMesh>();
 
         return new PlanetRenderSnapshot(
             surfaceTiles,
@@ -289,6 +291,21 @@ public sealed class PlanetExperience(
             climateResult.Water,
             localSurface,
             terrainDeformationStore?.GetRevision(state.Seed) ?? 0);
+    }
+
+    private IReadOnlyList<PlanetSurfaceTileMesh> CreateGlobalSurfaceTiles(bool fullGeometry, double radiusMeters)
+    {
+        if (surfaceView is null || surfaceView.CameraDistanceFromCenter >= OrbitalRefinementStartDistance)
+        {
+            return fullGeometry
+                ? surfaceMeshCache.GetOrBuildGlobalFull(GlobalSurfaceLevel, SurfaceCellsPerAxis, state.Seed, radiusMeters)
+                : surfaceMeshCache.GetOrBuildGlobal(GlobalSurfaceLevel, SurfaceCellsPerAxis, state.Seed, radiusMeters);
+        }
+
+        // Use the existing view-dependent cube-sphere selector rather than repeatedly
+        // magnifying the same 24 level-one tiles until the local-ground transition.
+        var selectedTiles = lodSelector.Select(surfaceView);
+        return surfaceMeshCache.GetOrBuild(selectedTiles, AdaptiveSurfaceCellsPerAxis, state.Seed, radiusMeters);
     }
 
     private PlanetLocalSurfaceMesh? CreateLocalSurface(double radiusMeters)

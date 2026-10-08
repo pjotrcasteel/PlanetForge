@@ -53,6 +53,20 @@ public sealed class PlanetSurfaceLodSelectorTests
     }
 
     [TestMethod]
+    public void Select_ApproachingPlanet_IncreasesMaximumLevelWithoutExceedingMobileBudget()
+    {
+        var selector = new PlanetSurfaceLodSelector(PlanetSurfaceLodOptions.Default);
+        var middle = selector.Select(new PlanetSurfaceView(PlanetVector.UnitZ, 1.22, 844, Math.PI / 4.2));
+        var close = selector.Select(new PlanetSurfaceView(PlanetVector.UnitZ, 1.03, 844, Math.PI / 4.2));
+        var veryClose = selector.Select(new PlanetSurfaceView(PlanetVector.UnitZ, 1.004, 844, Math.PI / 4.2));
+
+        Assert.IsGreaterThan(1, middle.Max(tile => tile.Level));
+        Assert.IsGreaterThan(middle.Max(tile => tile.Level), close.Max(tile => tile.Level));
+        Assert.IsGreaterThanOrEqualTo(close.Max(tile => tile.Level), veryClose.Max(tile => tile.Level));
+        Assert.IsTrue(new[] { middle, close, veryClose }.All(tiles => tiles.Count <= 56));
+    }
+
+    [TestMethod]
     public void Select_CameraInsidePlanet_Throws()
     {
         var selector = new PlanetSurfaceLodSelector(PlanetSurfaceLodOptions.Default);
