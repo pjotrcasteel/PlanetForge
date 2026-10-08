@@ -41,7 +41,8 @@ public sealed class PlanetRegionalWatershed
     public double ExportedVolumeCubicMeters { get; }
 
     public static PlanetRegionalWatershed Build(
-        int width, int height, double cellSpacingMeters, IReadOnlyList<float> bedrockElevationMeters)
+        int width, int height, double cellSpacingMeters, IReadOnlyList<float> bedrockElevationMeters,
+        IReadOnlyList<float>? rainfallCellWeights = null)
     {
         ArgumentNullException.ThrowIfNull(bedrockElevationMeters);
         if (width is < 8 or > 512 || height is < 8 or > 512 || (long)width * height != bedrockElevationMeters.Count)
@@ -55,6 +56,11 @@ public sealed class PlanetRegionalWatershed
         }
 
         var count = width * height;
+        if (rainfallCellWeights is not null && rainfallCellWeights.Count != count)
+        {
+            throw new ArgumentException("Rainfall weights must match the sampled region grid.", nameof(rainfallCellWeights));
+        }
+
         var filled = new float[count];
         var distance = new double[count];
         var receivers = new int[count];
@@ -144,7 +150,17 @@ public sealed class PlanetRegionalWatershed
         }
 
         var accumulation = new double[count];
-        Array.Fill(accumulation, 1.0);
+        for (var i = 0; i < count; i++)
+        {
+            var rainfall = rainfallCellWeights is null ? 1.0f : rainfallCellWeights[i];
+            if (!float.IsFinite(rainfall) || rainfall < 0.0f)
+            {
+                throw new ArgumentException("Rainfall weights must be finite and non-negative.", nameof(rainfallCellWeights));
+            }
+
+            accumulation[i] = rainfall;
+        }
+
         for (var order = count - 1; order >= 0; order--)
         {
             var index = visitOrder[order];
