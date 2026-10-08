@@ -79,8 +79,13 @@
             </article>
             <article>
                 <h2>08 / Eroded elevation</h2>
-                <p>Height after one bounded geological erosion iteration, not a shader texture.</p>
+                <p>Actual evolved height after the selected numerical passes. No visual vertical exaggeration.</p>
                 <canvas id="lab-regional-evolved" width="96" height="96" aria-label="Regional eroded geological elevation map"></canvas>
+            </article>
+            <article>
+                <h2>09 / Cumulative elevation change</h2>
+                <p>Diagnostic only: orange is rock removed, turquoise is deposited material. Color shows physical metres of change, not exaggerated terrain.</p>
+                <canvas id="lab-regional-difference" width="96" height="96" aria-label="Regional erosion and deposition height difference map"></canvas>
             </article>
         </div>
     </section>
@@ -239,7 +244,7 @@
             var watershed = PlanetRegionalWatershed.Build(RegionSize, RegionSize, cellSizeMeters, regionalElevation);
             await module.InvokeVoidAsync("drawRegionalWatershed", cancellation.Token, RegionSize, RegionSize,
                 regionalElevation, watershed.AccumulatedRunoffCells, watershed.IncisionMeters,
-                watershed.SedimentDepositionMeters, regionalElevation);
+                watershed.SedimentDepositionMeters, regionalElevation, regionalElevation);
             status = $"Seed {selectedSeed} • above datum {land * 100.0 / elevations.Length:0.0}% • range {minimum:0}–{maximum:0} m • 0 erosion iterations";
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
@@ -289,8 +294,17 @@
             var watershed = PlanetRegionalWatershed.Build(state.Width, state.Height, state.CellSpacingMeters, lastInput);
             await module.InvokeVoidAsync("drawRegionalWatershed", cancellation.Token, state.Width, state.Height,
                 regionalBedrock, watershed.AccumulatedRunoffCells, watershed.IncisionMeters,
-                watershed.SedimentDepositionMeters, state.ElevationMeters);
-            status = $"Seed {selectedSeed} • {state.Iteration} erosion iterations • removed {state.CumulativeErodedVolumeCubicMeters / 1e9:0.00} km³ • deposited {state.CumulativeDepositedVolumeCubicMeters / 1e9:0.00} km³ • exported {state.CumulativeExportedVolumeCubicMeters / 1e9:0.00} km³";
+                watershed.SedimentDepositionMeters, state.ElevationMeters, regionalBedrock);
+            var maxRemovedMeters = 0.0;
+            var maxDepositedMeters = 0.0;
+            for (var i = 0; i < regionalBedrock.Length; i++)
+            {
+                var difference = regionalBedrock[i] - state.ElevationMeters[i];
+                maxRemovedMeters = Math.Max(maxRemovedMeters, difference);
+                maxDepositedMeters = Math.Max(maxDepositedMeters, -difference);
+            }
+
+            status = $"Seed {selectedSeed} • {state.Iteration} erosion iterations • max cut {maxRemovedMeters:0.0} m • max fill {maxDepositedMeters:0.0} m • sediment exported {state.CumulativeExportedVolumeCubicMeters / 1e9:0.00} km³";
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
