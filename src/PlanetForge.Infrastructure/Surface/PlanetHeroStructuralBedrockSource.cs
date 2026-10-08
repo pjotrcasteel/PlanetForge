@@ -50,7 +50,8 @@ public sealed class PlanetHeroStructuralBedrockSource : IPlanetElevationSource
         var position = (normalized * PlanetRadiusMeters) - (origin * PlanetRadiusMeters);
         var e = PlanetVector.Dot(position, east);
         var n = PlanetVector.Dot(position, north);
-        // Compression is across the mountain chain; bedding is elongated along strike.
+        // Orientation follows regional uplift, but moderate anisotropy prevents the
+        // kilometer-long parallel grooves rejected in the initial screenshot.
         var across = (e * acrossX) + (n * acrossY);
         var along = (-e * acrossY) + (n * acrossX);
 
@@ -61,15 +62,15 @@ public sealed class PlanetHeroStructuralBedrockSource : IPlanetElevationSource
         var foldedAcross = across + warpA;
         var foldedAlong = along + warpB;
 
-        var mainBed = Ridge(Noise(foldedAcross / 4_300.0, foldedAlong / 13_700.0, seed ^ 0x4C17));
-        var secondaryBed = Ridge(Noise(foldedAcross / 1_600.0, foldedAlong / 5_700.0, seed ^ 0x1E3B));
-        var exposedOutcrop = Ridge(Noise(foldedAcross / 570.0, foldedAlong / 2_300.0, seed ^ 0x6B29));
+        var mainBed = Ridge(Noise(foldedAcross / 6_200.0, foldedAlong / 8_300.0, seed ^ 0x4C17));
+        var secondaryBed = Ridge(Noise(foldedAcross / 2_100.0, foldedAlong / 3_100.0, seed ^ 0x1E3B));
+        var exposedOutcrop = Ridge(Noise(foldedAcross / 650.0, foldedAlong / 1_300.0, seed ^ 0x6B29));
 
         // Signed contributions preserve the highland's elevation identity; only the
         // geological morphology is added. Amplitude is conditional on rocky exposure.
         var exposure = 0.45 + 0.55 * SmoothStep((canonical + 1_400.0) / 3_600.0);
-        return canonical + exposure * (310.0 * (mainBed - 0.5) +
-            105.0 * (secondaryBed - 0.5) + 24.0 * (exposedOutcrop - 0.5));
+        return canonical + exposure * (190.0 * (mainBed - 0.5) +
+            92.0 * (secondaryBed - 0.5) + 28.0 * (exposedOutcrop - 0.5));
     }
 
     private double HeightAt(double eastMeters, double northMeters, int seed)
