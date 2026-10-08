@@ -90,7 +90,8 @@ public static class PlanetRegionalGeologyEvolution
 
     public static PlanetRegionalGeologySnapshot Advance(
         PlanetRegionalGeologySnapshot snapshot, int iterations,
-        IReadOnlyList<float>? rainfallCellWeights = null, CancellationToken cancellationToken = default)
+        IReadOnlyList<float>? rainfallCellWeights = null, CancellationToken cancellationToken = default,
+        IReadOnlyList<float>? erodibilityCellWeights = null)
     {
         if (iterations is < 1 or > MaximumIterationsPerCall)
         {
@@ -107,7 +108,7 @@ public static class PlanetRegionalGeologyEvolution
         {
             cancellationToken.ThrowIfCancellationRequested();
             var watershed = PlanetRegionalWatershed.Build(state.Width, state.Height,
-                state.CellSpacingMeters, state.ElevationMeters, rainfallCellWeights);
+                state.CellSpacingMeters, state.ElevationMeters, rainfallCellWeights, erodibilityCellWeights);
             state = state with
             {
                 Iteration = state.Iteration + 1,
