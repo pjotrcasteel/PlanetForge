@@ -90,8 +90,12 @@ public sealed class PlanetDrainageAtlas
         var visitedCount = 0;
         while (depressionQueue.Count > 0 || queue.Count > 0)
         {
-            // FIFO propagation across flooded flats prevents arbitrary index-order drainage lines.
-            var current = depressionQueue.Count > 0 ? depressionQueue.Dequeue() : queue.Dequeue();
+            // Process all equal-height boundary fronts before their flooded interior.
+            // Otherwise a single heap tie wins the entire flat and creates a long, artificial drain.
+            var hasBoundary = queue.TryPeek(out _, out var nextBoundary);
+            var takeBoundary = hasBoundary && (depressionQueue.Count == 0 ||
+                nextBoundary.Height <= filled[depressionQueue.Peek()]);
+            var current = takeBoundary ? queue.Dequeue() : depressionQueue.Dequeue();
             visitOrder[visitedCount++] = current;
             var x = current % width;
             var y = current / width;
