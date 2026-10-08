@@ -143,7 +143,7 @@ function createState(canvas, gl, dotNetReference) {
         surfaceRequestInFlight: false, surfaceRequestPending: false, dirty: true,
         surfaceRequestsStarted: 0, surfaceRequestsCompleted: 0, surfaceResponsesSuperseded: 0,
         lastGeometryCommitMs: null, lastTerrainDrawSubmittedMs: null, lastGestureToTerrainDrawMs: null,
-        pendingDrawStartedAt: null, lastGestureEndedAt: null, localElevationRangeMeters: null,
+        pendingDrawStartedAt: null, lastGestureEndedAt: null, localElevationRangeMeters: null, localCellSpacingMeters: null,
         seaLevelMeters: 0, planetRadiusMeters: 6371000, atmosphereDensity: 0.6,
         equilibriumTemperature: 255, surfaceTemperature: 288, solarFlux: 1361,
         liquidFraction: 1, vaporFraction: 0, seaIceFraction: 1, landIceFraction: 1, snowCoverFraction: 1,
@@ -297,6 +297,7 @@ function activateLocalSurface(s, localSurface) {
         return range;
     }, { minimum: Infinity, maximum: -Infinity });
     s.localElevationRangeMeters = elevationRange.maximum - elevationRange.minimum;
+    s.localCellSpacingMeters = localSurface.sizeMeters / Math.sqrt(localSurface.vertexCount / 6);
     const trees = createPlaceholderTrees(localSurface, s.seaLevelMeters);
 
     s.localSurface = {
@@ -398,6 +399,7 @@ function clearLocalSurfaceBuffer(s) {
     if (s.localSurface.treeElevationBuffer) s.gl.deleteBuffer(s.localSurface.treeElevationBuffer);
     s.localSurface = null;
     s.localElevationRangeMeters = null;
+    s.localCellSpacingMeters = null;
 }
 
 function trimSurfaceBufferCache(s, activeKeys) {
@@ -690,7 +692,8 @@ function installVisualTestApi() {
                 lastGeometryCommitMs: state.lastGeometryCommitMs,
                 lastTerrainDrawSubmittedMs: state.lastTerrainDrawSubmittedMs,
                 lastGestureToTerrainDrawMs: state.lastGestureToTerrainDrawMs,
-                localElevationRangeMeters: state.renderMode === 'local' ? state.localElevationRangeMeters : null
+                localElevationRangeMeters: state.renderMode === 'local' ? state.localElevationRangeMeters : null,
+                localCellSpacingMeters: state.renderMode === 'local' ? state.localCellSpacingMeters : null
             };
         },
         getSeed() { return state?.seed ?? null; },
