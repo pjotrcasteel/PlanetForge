@@ -94,7 +94,45 @@ public sealed class ProceduralPlanetElevationSource : IPlanetElevationSource
 
         normalized = Math.Clamp(normalized, -1.0, 1.0);
         var elevation = normalized >= 0.0 ? normalized * MaximumLandElevationMeters : normalized * MaximumOceanDepthMeters;
+
+        // Real drainage/erosion belongs in the geological state, not this analytic bedrock field.
+        // These band-limited-scale rock fractures supply missing bedrock detail between mountain
+        // provinces and local meshes. All LODs sample the same spherical directions, so zooming
+        // never changes geographical identity or creates screen-space texture islands.
+        elevation += SampleFracturedBedrockMeters(direction, seed, crust, mountainBelt, province);
         return new PlanetTerrainFieldSample(continental, plateUplift * belt, mountainBelt, elevation);
+    }
+
+    private static double SampleFracturedBedrockMeters(PlanetVector direction, int seed, double crust, double mountainBelt, double province)
+    {
+        // Mesoscale faults and rock massifs are distinct from valleys: avoid inventing
+        // decorative "rivers" here. The upcoming drainage state will incise this bedrock.
+        // Below-datum terrain still has bedrock. The geology-only preview deliberately
+        // hides oceans, so masking out all sub-sea-floor relief would create blank brown views.
+        var exposedBedrock = 0.65 + (0.35 * SmoothStep(-0.055, 0.135, crust));
+        var reliefStrength = (0.65 + (Math.Max(0.0, mountainBelt) * 0.65) +
+            (Math.Max(0.0, province) * 0.20)) * exposedBedrock;
+
+        // The same rotated 3D coordinates work on every cube face, including the poles.
+        // Frequency is cycles around the unit sphere; amplitudes are physical metres.
+        // Scale ratios are deliberately nonintegral to avoid repetitive procedural rings.
+        var regional = FractureBand(direction, seed ^ RegionalSeedSalt, 145.0) * 285.0;
+        var district = FractureBand(direction, seed ^ UplandSeedSalt, 520.0) * 115.0;
+        var ridgeline = FractureBand(direction, seed ^ DetailSeedSalt, 1_920.0) * 42.0;
+        var outcrop = FractureBand(direction, seed ^ ProvinceSeedSalt, 7_400.0) * 11.0;
+        var rock = FractureBand(direction, seed ^ BoundarySeedSalt, 27_600.0) * 3.0;
+        return (regional + district + ridgeline + outcrop + rock) * reliefStrength;
+    }
+
+    private static double FractureBand(PlanetVector direction, int seed, double frequency)
+    {
+        // Oblique lattice coordinates keep the rock fabric from following map parallels
+        // or cube-face edges. Height is continuous in world direction and seed.
+        var x = (direction.X + (direction.Y * 0.27) - (direction.Z * 0.19)) * frequency;
+        var y = (direction.Y - (direction.Z * 0.31) + (direction.X * 0.11)) * frequency;
+        var z = (direction.Z + (direction.X * 0.23) + (direction.Y * 0.17)) * frequency;
+        var noise = ValueNoise(x, y, z, seed);
+        return 0.58 - Math.Abs(noise);
     }
 
     private double SampleOrogenicSystems(PlanetVector direction, int seed, double distortion)
