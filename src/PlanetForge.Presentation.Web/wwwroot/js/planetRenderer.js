@@ -868,7 +868,11 @@ void main() {
     vec4 world = uModel * vec4(radial * visualRadius, 1.0);
     vDirection = radial;
     vPhysicalNormal = physicalNormal;
-    vNormal = normalize(radial + (tangentNormal * (uMode == 5 ? 35.0 : 12.0)));
+    // Enhance relief without multiplying narrow ridges into black gouges at orbital scale.
+    // The tangent component saturates smoothly while preserving small bedrock features.
+    float tangentMagnitude = length(tangentNormal);
+    float rockyRelief = 18.0 / (1.0 + (tangentMagnitude * 18.0 / 0.42));
+    vNormal = normalize(radial + (tangentNormal * (uMode == 5 ? rockyRelief : 12.0)));
     vPhysicalSlope = clamp(1.0 - dot(physicalNormal, radial), 0.0, 0.5);
     vElevationMeters = elevationMeters;
     vWorldPosition = world.xyz;
