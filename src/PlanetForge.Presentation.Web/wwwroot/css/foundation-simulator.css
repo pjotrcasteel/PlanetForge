@@ -223,3 +223,10 @@
         bottom: max(26px, calc(env(safe-area-inset-bottom) + 14px));
     }
 }
+
+.foundation-clock .foundation-geology-preview {
+    color: #c3b294;
+    font-size: 0.48rem;
+    font-weight: 800;
+    letter-spacing: 0.17em;
+}
