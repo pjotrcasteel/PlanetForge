@@ -38,6 +38,24 @@ public sealed class PlanetRegionalWatershedTests
     }
 
     [TestMethod]
+    public void Build_HighPerimeterRidge_DoesNotTurnTheRidgeIntoAnArtificialOutlet()
+    {
+        const int width = 24;
+        const int height = 24;
+        var heights = Enumerable.Repeat(1200f, width * height).ToArray();
+        for (var x = 0; x < width; x++)
+        {
+            heights[x] = (float)(2000 + 600 * Math.Sin(Math.PI * x / (width - 1)));
+        }
+
+        var watershed = PlanetRegionalWatershed.Build(width, height, 2000, heights);
+        var perimeterPeak = width / 2;
+
+        Assert.IsGreaterThanOrEqualTo(0, watershed.DownstreamIndices[perimeterPeak],
+            "A high edge ridge is part of the catchment, not an outlet by definition.");
+    }
+
+    [TestMethod]
     public void Build_FlatPlateau_ProducesAcyclicShortestPathsToEdges()
     {
         const int width = 48;
