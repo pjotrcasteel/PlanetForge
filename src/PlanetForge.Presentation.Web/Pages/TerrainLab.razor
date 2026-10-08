@@ -47,12 +47,42 @@
             <canvas id="lab-elevation" width="256" height="128" aria-label="Canonical planetary elevation global map"></canvas>
         </article>
     </section>
+    <section class="lab-regional" aria-label="Regional watershed diagnostics">
+        <h2>Regional hydrology / experimental</h2>
+        <p>One deterministic high-relief location per seed. The regional model samples canonical bedrock at approximately 6 km spacing and routes runoff toward real low points and open boundaries. These maps do not yet alter gameplay elevation.</p>
+        <div class="lab-grid">
+            <article>
+                <h2>05 / Regional bedrock</h2>
+                <p>Sampled topography before erosion. This defines every downstream route.</p>
+                <canvas id="lab-regional-bedrock" width="96" height="96" aria-label="Regional canonical bedrock map"></canvas>
+            </article>
+            <article>
+                <h2>06 / Connected catchments</h2>
+                <p>Accumulated runoff from connected downhill routing, not drawn river noise.</p>
+                <canvas id="lab-regional-flow" width="96" height="96" aria-label="Regional watershed flow accumulation map"></canvas>
+            </article>
+            <article>
+                <h2>07 / Incision and sediment</h2>
+                <p>Stream power removes material from connected channels; deposition is conserved with exported sediment.</p>
+                <canvas id="lab-regional-incision" width="96" height="96" aria-label="Regional stream power incision map"></canvas>
+                <canvas id="lab-regional-sediment" width="96" height="96" aria-label="Regional sediment deposition map"></canvas>
+            </article>
+            <article>
+                <h2>08 / Eroded elevation</h2>
+                <p>Height after one bounded geological erosion iteration, not a shader texture.</p>
+                <canvas id="lab-regional-evolved" width="96" height="96" aria-label="Regional eroded geological elevation map"></canvas>
+            </article>
+        </div>
+    </section>
     <footer class="lab-footer">Equirectangular projections are diagnostic maps only. Gameplay and local terrain sample these exact same elevation fields. The current generator does not yet simulate hydraulic erosion.</footer>
 </div>
 
 @code {
     private const int MapWidth = 256;
     private const int MapHeight = 128;
+    private const int RegionSize = 96;
+    private const double RegionSpanMeters = 576_000.0;
+    private const double ReferencePlanetRadiusMeters = 6_371_000.0;
     private readonly CancellationTokenSource cancellation = new();
     private IJSObjectReference? module;
     private int selectedSeed = PlanetSeedCatalog.ShowcaseSeed;
@@ -130,7 +160,67 @@
             }
 
             await module.InvokeVoidAsync("drawTerrainLab", cancellation.Token, MapWidth, MapHeight, crust, tectonic, mountains, elevations);
-            status = $"Seed {selectedSeed} • above datum {land * 100.0 / elevations.Length:0.0}% • range {minimum:0} to {maximum:0} m";
+
+            // Select a real high-relief location rather than placing decorative rivers.
+            // This is deterministic for the seed and remains stable through regeneration.
+            var centerX = 0;
+            var centerY = 0;
+            var highestRelief = double.NegativeInfinity;
+            for (var y = 1; y < MapHeight - 1; y++)
+            {
+                for (var x = 1; x < MapWidth - 1; x++)
+                {
+                    var i = y * MapWidth + x;
+                    var gradient = Math.Abs(elevations[i + 1] - elevations[i - 1]) +
+                        Math.Abs(elevations[i + MapWidth] - elevations[i - MapWidth]);
+                    var relief = Math.Max(0, elevations[i]) * (gradient + 50.0) *
+                        (0.5 + Math.Max(0.0, mountains[i]));
+                    if (relief <= highestRelief)
+                    {
+                        continue;
+                    }
+
+                    highestRelief = relief;
+                    centerX = x;
+                    centerY = y;
+                }
+            }
+
+            var anchorLatitude = Math.PI * (0.5 - (centerY + 0.5) / MapHeight);
+            var anchorLongitude = 2.0 * Math.PI * (centerX + 0.5) / MapWidth;
+            var anchor = new PlanetVector(Math.Cos(anchorLatitude) * Math.Cos(anchorLongitude),
+                Math.Sin(anchorLatitude), Math.Cos(anchorLatitude) * Math.Sin(anchorLongitude));
+            var referenceElevation = Elevation.SampleElevationMeters(anchor, selectedSeed);
+            var localFrame = PlanetLocalFrame.Create(anchor, ReferencePlanetRadiusMeters, referenceElevation);
+            var regionalElevation = new float[RegionSize * RegionSize];
+            var cellSizeMeters = RegionSpanMeters / RegionSize;
+            status = $"Sampling 576 km watershed for seed {selectedSeed}…";
+            await InvokeAsync(StateHasChanged);
+            await Task.Yield();
+
+            for (var y = 0; y < RegionSize; y++)
+            {
+                cancellation.Token.ThrowIfCancellationRequested();
+                var northMeters = (y + 0.5 - RegionSize * 0.5) * cellSizeMeters;
+                for (var x = 0; x < RegionSize; x++)
+                {
+                    var eastMeters = (x + 0.5 - RegionSize * 0.5) * cellSizeMeters;
+                    var direction = PlanetVector.Normalize((anchor * ReferencePlanetRadiusMeters) +
+                        (localFrame.East * eastMeters) + (localFrame.North * northMeters));
+                    regionalElevation[y * RegionSize + x] = (float)Elevation.SampleElevationMeters(direction, selectedSeed);
+                }
+
+                if (y % 12 == 0)
+                {
+                    await Task.Delay(1, cancellation.Token);
+                }
+            }
+
+            var watershed = PlanetRegionalWatershed.Build(RegionSize, RegionSize, cellSizeMeters, regionalElevation);
+            await module.InvokeVoidAsync("drawRegionalWatershed", cancellation.Token, RegionSize, RegionSize,
+                regionalElevation, watershed.AccumulatedRunoffCells, watershed.IncisionMeters,
+                watershed.SedimentDepositionMeters, watershed.EvolvedElevationMeters);
+            status = $"Seed {selectedSeed} • above datum {land * 100.0 / elevations.Length:0.0}% • range {minimum:0}–{maximum:0} m • sediment exported {watershed.ExportedVolumeCubicMeters / 1e9:0.0} km³";
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
