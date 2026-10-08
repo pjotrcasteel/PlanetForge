@@ -62,10 +62,10 @@ public sealed class ProceduralPlanetElevationSource : IPlanetElevationSource
         // Finer ridges modulate those envelopes but cannot define the continents.
         var rangeEnvelope = RidgedNoise(macroDirection, seed ^ UplandSeedSalt, 2.85, 3, 2.09, 0.50);
         var oldRange = SmoothStep(0.06, 0.56, rangeEnvelope) * SmoothStep(-0.12, 0.38, province);
-        var mountainBelt = Math.Max(oldRange * 0.50, belt * 0.87);
+        var mountainBelt = Math.Max(oldRange * 0.62, belt * 0.90);
         var narrowRidges = RidgedNoise(direction, seed ^ DetailSeedSalt, 10.0, 3, 2.12, 0.47);
         var ridgedStrength = Math.Max(0.0, narrowRidges);
-        var uplift = landMask * ((plateUplift * 0.62) + (mountainBelt * (0.08 + ridgedStrength * 0.16)));
+        var uplift = landMask * ((plateUplift * 0.62) + (mountainBelt * (0.15 + ridgedStrength * 0.24)));
         var rolling = FractalNoise(direction, seed ^ DetailSeedSalt, 5.2, 3, 2.1, 0.48);
         var terrain = landMask * ((province * 0.083) + (rolling * 0.036) - (Math.Max(0.0, -basin) * 0.055));
 
