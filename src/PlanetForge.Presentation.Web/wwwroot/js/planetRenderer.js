@@ -31,7 +31,7 @@ export function initialize(canvasId, snapshot, dotNetReference, generatorPreview
     const gl = canvas?.getContext('webgl2', { antialias: true, alpha: true });
     if (!canvas || !gl) throw new Error('PlanetForge requires WebGL 2.');
 
-    document.title = 'PlanetForge 0.0.35.3 — Responsive Terrain LOD';
+    document.title = 'PlanetForge 0.0.35.4 — Mobile Gesture Scheduling';
     try {
         state = createState(canvas, gl, dotNetReference);
         state.generatorPreview = generatorPreview;
@@ -141,6 +141,9 @@ function createState(canvas, gl, dotNetReference) {
         activePointers: new Map(), pinchDistance: null,
         lodTimer: null, lodSequence: 0, lastSurfaceRequestSignature: null, lastTerrainUpdateMs: null, lastGeometryPayloadCount: 0,
         surfaceRequestInFlight: false, surfaceRequestPending: false, dirty: true,
+        surfaceRequestsStarted: 0, surfaceRequestsCompleted: 0, surfaceResponsesSuperseded: 0,
+        lastGeometryCommitMs: null, lastTerrainDrawSubmittedMs: null, lastGestureToTerrainDrawMs: null,
+        pendingDrawStartedAt: null, lastGestureEndedAt: null, localElevationRangeMeters: null, localCellSpacingMeters: null,
         seaLevelMeters: 0, planetRadiusMeters: 6371000, atmosphereDensity: 0.6,
         equilibriumTemperature: 255, surfaceTemperature: 288, solarFlux: 1361,
         liquidFraction: 1, vaporFraction: 0, seaIceFraction: 1, landIceFraction: 1, snowCoverFraction: 1,
@@ -288,6 +291,13 @@ function activateLocalSurface(s, localSurface) {
     const positionBuffer = createStaticBuffer(s.gl, localSurface.positionsMeters);
     const normalBuffer = createStaticBuffer(s.gl, localSurface.normals);
     const elevationBuffer = createStaticBuffer(s.gl, localSurface.elevationsMeters);
+    const elevationRange = localSurface.elevationsMeters.reduce((range, elevation) => {
+        range.minimum = Math.min(range.minimum, elevation);
+        range.maximum = Math.max(range.maximum, elevation);
+        return range;
+    }, { minimum: Infinity, maximum: -Infinity });
+    s.localElevationRangeMeters = elevationRange.maximum - elevationRange.minimum;
+    s.localCellSpacingMeters = localSurface.sizeMeters / Math.sqrt(localSurface.vertexCount / 6);
     const trees = createPlaceholderTrees(localSurface, s.seaLevelMeters);
 
     s.localSurface = {
@@ -388,6 +398,8 @@ function clearLocalSurfaceBuffer(s) {
     if (s.localSurface.treeNormalBuffer) s.gl.deleteBuffer(s.localSurface.treeNormalBuffer);
     if (s.localSurface.treeElevationBuffer) s.gl.deleteBuffer(s.localSurface.treeElevationBuffer);
     s.localSurface = null;
+    s.localElevationRangeMeters = null;
+    s.localCellSpacingMeters = null;
 }
 
 function trimSurfaceBufferCache(s, activeKeys) {
@@ -460,6 +472,12 @@ function installInput(s) {
         if (event.cancelable) event.preventDefault();
 
         s.activePointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+        // A previously scheduled zoom must not begin while the next gesture is active.
+        if (s.lodTimer !== null) {
+            clearTimeout(s.lodTimer);
+            s.lodTimer = null;
+            s.surfaceRequestPending = true;
+        }
         if (s.activePointers.size === 2) s.pinchDistance = pointerSeparation(s.activePointers);
         if (s.activePointers.size > 2) s.pinchDistance = null;
         canvas.setPointerCapture(event.pointerId);
@@ -472,6 +490,7 @@ function installInput(s) {
         // Zoom/rotation are visually immediate, and terrain generation starts as soon as
         // the gesture ends instead of waiting through another debounce period.
         if (s.activePointers.size === 0 && (s.surfaceRequestPending || shouldRequestSurfaceUpdate(s))) {
+            s.lastGestureEndedAt = performance.now();
             scheduleSurfaceUpdate(s, 0);
         }
     };
@@ -535,7 +554,10 @@ function scheduleSurfaceUpdate(s, delayMilliseconds) {
     const sequence = ++s.lodSequence;
     s.surfaceRequestPending = true;
     updateTerrainDetailHud(s);
-    if (s.surfaceRequestInFlight) return;
+    // Touch gestures change the camera immediately. Wait for the final finger to lift
+    // before asking WebAssembly to build meshes: brief pauses during a pinch must not
+    // block the main thread or generate multiple already-obsolete terrain views.
+    if (s.activePointers.size > 0 || s.surfaceRequestInFlight) return;
     s.lodTimer = setTimeout(() => requestSurfaceUpdate(s, sequence), delayMilliseconds);
 }
 
@@ -579,6 +601,7 @@ async function requestSurfaceUpdate(s, sequence) {
 
     s.surfaceRequestInFlight = true;
     s.surfaceRequestPending = false;
+    s.surfaceRequestsStarted++;
     updateTerrainDetailHud(s);
     const startedAt = performance.now();
     try {
@@ -595,8 +618,13 @@ async function requestSurfaceUpdate(s, sequence) {
             s.lastGeometryPayloadCount = (snapshot.surfaceTiles ?? []).filter(tile => tile.positions?.length > 0).length;
             s.lastSurfaceRequestSignature = signature;
             if (sequence === s.lodSequence) {
+                const commitStartedAt = performance.now();
                 setPlanet(snapshot);
+                s.lastGeometryCommitMs = Math.round(performance.now() - commitStartedAt);
+                s.pendingDrawStartedAt = startedAt;
+                s.surfaceRequestsCompleted++;
             } else {
+                s.surfaceResponsesSuperseded++;
                 preserveStaleSurfaceGeometry(s, snapshot);
             }
         }
@@ -604,7 +632,7 @@ async function requestSurfaceUpdate(s, sequence) {
         if (state === s) console.error('PlanetForge surface update failed.', error);
     } finally {
         s.surfaceRequestInFlight = false;
-        if (state === s && s.surfaceRequestPending) {
+        if (state === s && s.surfaceRequestPending && s.activePointers.size === 0) {
             s.surfaceRequestPending = false;
             scheduleSurfaceUpdate(s, 0);
         } else if (state === s) {
@@ -657,7 +685,15 @@ function installVisualTestApi() {
                 altitudeMeters: (state.distance - 1.0) * state.planetRadiusMeters,
                 refining: state.surfaceRequestPending || state.surfaceRequestInFlight || state.lodTimer !== null,
                 lastTerrainUpdateMs: state.lastTerrainUpdateMs,
-                geometryPayloadCount: state.lastGeometryPayloadCount
+                geometryPayloadCount: state.lastGeometryPayloadCount,
+                surfaceRequestsStarted: state.surfaceRequestsStarted,
+                surfaceRequestsCompleted: state.surfaceRequestsCompleted,
+                surfaceResponsesSuperseded: state.surfaceResponsesSuperseded,
+                lastGeometryCommitMs: state.lastGeometryCommitMs,
+                lastTerrainDrawSubmittedMs: state.lastTerrainDrawSubmittedMs,
+                lastGestureToTerrainDrawMs: state.lastGestureToTerrainDrawMs,
+                localElevationRangeMeters: state.renderMode === 'local' ? state.localElevationRangeMeters : null,
+                localCellSpacingMeters: state.renderMode === 'local' ? state.localCellSpacingMeters : null
             };
         },
         getSeed() { return state?.seed ?? null; },
@@ -722,6 +758,15 @@ function render() {
         if (state.renderMode === 'local' && state.localSurface) renderLocal(state);
         else renderGlobe(state);
         state.dirty = false;
+        if (state.pendingDrawStartedAt !== null) {
+            const submittedAt = performance.now();
+            // This is CPU-side frame submission, not proof the iPhone GPU has presented it.
+            state.lastTerrainDrawSubmittedMs = Math.round(submittedAt - state.pendingDrawStartedAt);
+            state.lastGestureToTerrainDrawMs = state.lastGestureEndedAt === null
+                ? null : Math.round(submittedAt - state.lastGestureEndedAt);
+            state.pendingDrawStartedAt = null;
+            state.lastGestureEndedAt = null;
+        }
     }
     requestAnimationFrame(render);
 }
