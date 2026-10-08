@@ -1377,11 +1377,18 @@ in vec3 aPositionMeters;
 in vec3 aNormal;
 in float aElevationMeters;
 uniform mat4 uViewProjection;
+uniform vec3 uRockEast;
+uniform vec3 uRockNorth;
+uniform vec3 uRockUp;
+uniform vec3 uRockCenterKm;
 out vec3 vNormal;
+out vec3 vRockPositionKm;
 out float vElevationMeters;
 void main() {
     vNormal = normalize(aNormal);
     vElevationMeters = aElevationMeters;
+    vRockPositionKm = uRockCenterKm + ((uRockEast * aPositionMeters.x) -
+        (uRockNorth * aPositionMeters.z) + (uRockUp * aPositionMeters.y)) * 0.001;
     gl_Position = uViewProjection * vec4(aPositionMeters, 1.0);
 }`;
 
@@ -1389,6 +1396,7 @@ const localFragmentShaderSource = `#version 300 es
 precision highp float;
 precision highp int;
 in vec3 vNormal;
+in vec3 vRockPositionKm;
 in float vElevationMeters;
 uniform vec3 uLightDirection;
 uniform float uSeaLevelMeters;
@@ -1396,7 +1404,26 @@ uniform float uSurfaceTemperature;
 uniform float uLiquidFraction;
 uniform float uVaporFraction;
 uniform int uObjectMode;
+uniform float uSeedPhase;
 out vec4 outColor;
+
+float localRockHash(vec3 position) {
+    position = fract(position * 0.1031);
+    position += dot(position, position.yzx + 33.33);
+    return fract((position.x + position.y) * position.z);
+}
+
+float localRockNoise(vec3 position) {
+    vec3 cell = floor(position);
+    vec3 local = fract(position);
+    vec3 blend = local * local * (3.0 - 2.0 * local);
+    float a = mix(localRockHash(cell), localRockHash(cell + vec3(1, 0, 0)), blend.x);
+    float b = mix(localRockHash(cell + vec3(0, 1, 0)), localRockHash(cell + vec3(1, 1, 0)), blend.x);
+    float c = mix(localRockHash(cell + vec3(0, 0, 1)), localRockHash(cell + vec3(1, 0, 1)), blend.x);
+    float d = mix(localRockHash(cell + vec3(0, 1, 1)), localRockHash(cell + vec3(1, 1, 1)), blend.x);
+    return mix(mix(a, b, blend.y), mix(c, d, blend.y), blend.z);
+}
+
 void main() {
     float light = max(dot(normalize(vNormal), normalize(uLightDirection)), 0.0);
     if (uObjectMode == 1) {
@@ -1423,6 +1450,15 @@ void main() {
         float direct = max(dot(n, sun), 0.0);
         float reliefLight = clamp((direct - sun.y) * 3.25, -0.43, 0.43);
         float illumination = clamp(0.66 + (direct * 0.27) + reliefLight, 0.27, 1.20);
+        // Material variation follows fixed planetary coordinates, not screen pixels or patch UVs.
+        // This is subtle mineral weathering, not a substitute for actual erosional relief.
+        vec3 mineralOffset = vec3(uSeedPhase * 11.7, -uSeedPhase * 8.1, uSeedPhase * 5.9);
+        float lithology = localRockNoise(vRockPositionKm * 0.45 + mineralOffset);
+        float oxidation = localRockNoise(vRockPositionKm * 2.1 + mineralOffset * 0.37);
+        float exposedGrains = localRockNoise(vRockPositionKm * 7.8 + mineralOffset * 1.7);
+        float mineralVariation = (lithology - 0.5) * 0.34 +
+            (oxidation - 0.5) * 0.17 + (exposedGrains - 0.5) * 0.07;
+        material *= 1.0 + mineralVariation;
         outColor = vec4(material * illumination, 1.0);
         return;
     }
