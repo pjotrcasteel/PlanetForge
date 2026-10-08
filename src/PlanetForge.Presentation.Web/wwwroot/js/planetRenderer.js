@@ -470,6 +470,12 @@ function installInput(s) {
         if (event.cancelable) event.preventDefault();
 
         s.activePointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+        // A previously scheduled zoom must not begin while the next gesture is active.
+        if (s.lodTimer !== null) {
+            clearTimeout(s.lodTimer);
+            s.lodTimer = null;
+            s.surfaceRequestPending = true;
+        }
         if (s.activePointers.size === 2) s.pinchDistance = pointerSeparation(s.activePointers);
         if (s.activePointers.size > 2) s.pinchDistance = null;
         canvas.setPointerCapture(event.pointerId);
