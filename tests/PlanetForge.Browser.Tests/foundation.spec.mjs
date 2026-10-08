@@ -21,6 +21,7 @@ test('PlanetStages_ReloadUsesShowcaseAndGenerateCreatesNewWorld', async ({ page 
 
   const surfaceError = await page.evaluate(() => window.__planetForgeSurfaceError ?? null);
   expect(surfaceError, `Planet renderer failed to initialize: ${surfaceError}`).toBeNull();
+  await page.waitForFunction(() => window.__planetForgeSurfaceTest.getAtlasReady(), null, { timeout: 60_000 });
   const showcase = await page.evaluate(() => window.__planetForgeSurfaceTest.measure());
   expect(showcase.planetPixels).toBeGreaterThan(10_000);
   expect(showcase.edgePlanetPixels).toBe(0);
@@ -37,6 +38,7 @@ test('PlanetStages_ReloadUsesShowcaseAndGenerateCreatesNewWorld', async ({ page 
 test('GeneratorQualityGate_RendersMeltedShowcaseFromMultipleAngles', async ({ page }, testInfo) => {
   await page.goto('/?visualTest=1');
   await page.waitForFunction(() => Boolean(window.__planetForgeSurfaceTest), null, { timeout: 15_000 });
+  await page.waitForFunction(() => window.__planetForgeSurfaceTest.getAtlasReady(), null, { timeout: 60_000 });
   await page.getByRole('button', { name: 'NEXT' }).click();
   await expect(page.getByText('MELTING WORLD', { exact: true })).toBeVisible({ timeout: 45_000 });
 
@@ -90,6 +92,7 @@ for (const seed of [24061984, 346147916, 579460630]) {
     await expect(page.getByTestId('planet-seed')).toHaveText(`SEED ${seed}`, { timeout: 30_000 });
     await page.waitForFunction(() => Boolean(window.__planetForgeSurfaceTest) || Boolean(window.__planetForgeSurfaceError), null, { timeout: 40_000 });
     expect(await page.evaluate(() => window.__planetForgeSurfaceError ?? null)).toBeNull();
+    await page.waitForFunction(() => window.__planetForgeSurfaceTest.getAtlasReady(), null, { timeout: 60_000 });
     await page.getByRole('button', { name: 'NEXT' }).click();
     await expect(page.getByText('MELTING WORLD', { exact: true })).toBeVisible({ timeout: 50_000 });
 
