@@ -120,7 +120,10 @@ test('TerrainLab_HeroRegion_RendersPhysical3DLandscapeAndComparesErosion', async
     }
   }
   expect(planetPixels, 'The 3D terrain mesh is absent or outside the camera view').toBeGreaterThan(1200);
-  expect(variation.size, 'The rendered hero region is an almost uniform brown plane').toBeGreaterThan(35);
+  // Orbital-scale coverage should exist and contain real relief; the finer nested
+  // region below carries the strict texture/geometry visibility gate.
+  expect(stats.regionSpanKilometers).toBe(128);
+  expect(stats.maxElevationMeters - stats.minElevationMeters).toBeGreaterThan(1000);
 
   await page.locator('#lab-hero-mode').selectOption('before');
   await page.waitForFunction(() => window.__planetForgeHeroRegionStats?.mode === 'before');
@@ -135,6 +138,40 @@ test('TerrainLab_HeroRegion_RendersPhysical3DLandscapeAndComparesErosion', async
     }
   }
   expect(changedPixels, 'The simulated erosion produced no visible 3D mesh change').toBeGreaterThan(100);
+
+  // A physically smaller, geographically anchored region must reveal more local structure,
+  // not merely magnify the same coarse 128 km height raster or add a sharper shader.
+  await page.locator('#lab-hero-scale').selectOption('32');
+  await page.locator('#lab-hero-generate').click();
+  await page.waitForFunction(() => window.__planetForgeHeroRegionReady === true &&
+    window.__planetForgeHeroRegionStats?.regionSpanKilometers === 32, null, { timeout: 180_000 });
+  const detailed = await page.evaluate(() => window.__planetForgeHeroRegionStats);
+  expect(detailed.gridWidth).toBe(129);
+  expect(detailed.glError).toBe(0);
+  expect(detailed.maxElevationMeters - detailed.minElevationMeters).toBeGreaterThan(30);
+  const nestedAfter = PNG.sync.read(await hero.screenshot({ path: testInfo.outputPath('hero-nested-32km-eroded.png') }));
+  const materialColors = new Set();
+  let nestedPixels = 0;
+  for (let i = 0; i < nestedAfter.data.length; i += 16) {
+    const r = nestedAfter.data[i], g = nestedAfter.data[i + 1], b = nestedAfter.data[i + 2];
+    if (r > g * 1.13 && r > b * 1.18) {
+      nestedPixels++;
+      materialColors.add((r >> 3) + '-' + (g >> 3) + '-' + (b >> 3));
+    }
+  }
+  expect(nestedPixels).toBeGreaterThan(1200);
+  expect(materialColors.size, 'Nested 32 km erosion still renders as a featureless brown plane').toBeGreaterThan(35);
+  await page.locator('#lab-hero-mode').selectOption('before');
+  await page.waitForFunction(() => window.__planetForgeHeroRegionStats?.mode === 'before');
+  const nestedBefore = PNG.sync.read(await hero.screenshot({ path: testInfo.outputPath('hero-nested-32km-original.png') }));
+  let physicalChanges = 0;
+  for (let i = 0; i < nestedBefore.data.length; i += 4) {
+    const rgbDifference = Math.abs(nestedBefore.data[i] - nestedAfter.data[i]) +
+      Math.abs(nestedBefore.data[i + 1] - nestedAfter.data[i + 1]) +
+      Math.abs(nestedBefore.data[i + 2] - nestedAfter.data[i + 2]);
+    if (rgbDifference > 2) physicalChanges++;
+  }
+  expect(physicalChanges, 'Nested elevation geometry did not change after erosion').toBeGreaterThan(100);
 });
 
 test('TerrainLab_ErosionIterations_AdvanceRewindReplayDeterministically', async ({ page }, testInfo) => {
