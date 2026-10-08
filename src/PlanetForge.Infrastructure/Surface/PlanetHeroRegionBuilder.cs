@@ -136,16 +136,21 @@ public sealed class PlanetHeroRegionBuilder(IPlanetElevationSource elevationSour
         // bank retreat without applying fake shader displacement to the preview.
         var relaxedElevation = PlanetLateralErosionRelaxation.Apply(original, evolved.ElevationMeters, gridWidth, gridWidth);
         var finalWatershed = PlanetRegionalWatershed.Build(gridWidth, gridWidth, spacing, relaxedElevation);
+        // Hydraulically routed tributaries excavate lateral bank shoulders into the
+        // actual mesh. Excavated material is currently exported at this research
+        // region's boundary; downstream inter-region deposition is future work.
+        var valleys = PlanetValleyBankCarver.Apply(
+            original, relaxedElevation, finalWatershed.AccumulatedRunoffCells, gridWidth, gridWidth, spacing);
         var cut = new float[original.Length];
-
         for (var index = 0; index < cut.Length; index++)
         {
-            cut[index] = original[index] - relaxedElevation[index];
+            cut[index] = original[index] - valleys.ElevationMeters[index];
         }
 
-        return new PlanetHeroRegion(seed, gridWidth, spacing, original, relaxedElevation, cut,
+        return new PlanetHeroRegion(seed, gridWidth, spacing, original, valleys.ElevationMeters, cut,
             finalWatershed.AccumulatedRunoffCells, erosionIterations, PlanetLateralErosionRelaxation.DefaultPasses,
-            evolved.CumulativeErodedVolumeCubicMeters,
-            evolved.CumulativeDepositedVolumeCubicMeters, evolved.CumulativeExportedVolumeCubicMeters);
+            evolved.CumulativeErodedVolumeCubicMeters + valleys.AdditionalExportedSedimentCubicMeters,
+            evolved.CumulativeDepositedVolumeCubicMeters,
+            evolved.CumulativeExportedVolumeCubicMeters + valleys.AdditionalExportedSedimentCubicMeters);
     }
 }
