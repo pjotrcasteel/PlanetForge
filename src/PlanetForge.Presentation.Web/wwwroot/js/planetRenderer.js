@@ -246,6 +246,9 @@ function activateSurfaceTiles(s, surfaceTiles) {
         activeKeys.add(tile.key);
         let bufferedTile = s.tileBufferCache.get(tile.key);
         if (!bufferedTile) {
+            if (!tile.positions?.length || !tile.normals?.length) {
+                throw new Error(`PlanetForge missing GPU geometry for LOD tile ${tile.key}.`);
+            }
             bufferedTile = createBufferedTile(s.gl, tile);
             s.tileBufferCache.set(tile.key, bufferedTile);
         }
