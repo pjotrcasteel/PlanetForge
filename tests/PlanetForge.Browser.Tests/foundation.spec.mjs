@@ -49,3 +49,49 @@ test('GeneratorQualityGate_RendersMeltedShowcaseFromMultipleAngles', async ({ pa
     await page.screenshot({ path: testInfo.outputPath(`generator-quality-${name}.png`), fullPage: true });
   }
 });
+
+
+test('TerrainLab_DisplaysCanonicalGeologicalLayers', async ({ page }, testInfo) => {
+  await page.goto('/?terrainLab=1');
+  await expect(page.getByRole('heading', { name: /Terrain Lab/ })).toBeVisible({ timeout: 20_000 });
+  await page.waitForFunction(() => window.__planetForgeTerrainLabReady === true, null, { timeout: 90_000 });
+  await expect(page.getByRole('status')).toContainText('Seed 24061984', { timeout: 10_000 });
+  for (const name of ['lab-crust', 'lab-tectonic', 'lab-mountains', 'lab-elevation']) {
+    const metrics = await page.locator(`#${name}`).evaluate(canvas => {
+      const data = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height).data;
+      let minimum = 255;
+      let maximum = 0;
+      for (let i = 0; i < data.length; i += 4) {
+        minimum = Math.min(minimum, data[i]);
+        maximum = Math.max(maximum, data[i]);
+      }
+      return { width: canvas.width, height: canvas.height, range: maximum - minimum };
+    });
+    expect(metrics.width).toBe(256);
+    expect(metrics.height).toBe(128);
+    expect(metrics.range).toBeGreaterThan(12);
+  }
+  await page.screenshot({ path: testInfo.outputPath('terrain-lab-showcase.png'), fullPage: true });
+});
+
+for (const seed of [24061984, 346147916, 579460630]) {
+  test(`GeneratorQualityGate_Seed${seed}_RendersMultipleOrbitalAngles`, async ({ page }, testInfo) => {
+    await page.goto(`/?visualTest=1&seed=${seed}`);
+    await expect(page.getByTestId('planet-seed')).toHaveText(`SEED ${seed}`, { timeout: 30_000 });
+    await page.waitForFunction(() => Boolean(window.__planetForgeSurfaceTest) || Boolean(window.__planetForgeSurfaceError), null, { timeout: 40_000 });
+    expect(await page.evaluate(() => window.__planetForgeSurfaceError ?? null)).toBeNull();
+    await page.getByRole('button', { name: 'NEXT' }).click();
+    await expect(page.getByText('MELTING WORLD', { exact: true })).toBeVisible({ timeout: 50_000 });
+
+    for (const [name, yaw, pitch] of [['front', 0, 0.1], ['back', Math.PI, -0.2], ['polar', 0.4, 1.1]]) {
+      await page.evaluate(({ yaw, pitch }) => {
+        window.__planetForgeSurfaceTest.setYaw(yaw);
+        window.__planetForgeSurfaceTest.setPitch(pitch);
+      }, { yaw, pitch });
+      const metrics = await page.evaluate(() => window.__planetForgeSurfaceTest.measure());
+      expect(metrics.planetPixels).toBeGreaterThan(10_000);
+      expect(metrics.glError).toBe(0);
+      await page.screenshot({ path: testInfo.outputPath(`terrain-seed-${seed}-${name}.png`), fullPage: true });
+    }
+  });
+}
