@@ -2,6 +2,15 @@ import { expect, test } from '@playwright/test';
 
 test.setTimeout(120_000);
 
+test.beforeEach(async ({ page }) => {
+  page.on('pageerror', error => console.log('PlanetForge browser exception:', error.message));
+  page.on('console', message => {
+    if (message.type() === 'error' || message.type() === 'warning') {
+      console.log('PlanetForge browser console:', message.text());
+    }
+  });
+});
+
 test('PlanetStages_ReloadUsesShowcaseAndGenerateCreatesNewWorld', async ({ page }) => {
   await page.goto('/?visualTest=1');
   const seedLabel = page.getByTestId('planet-seed');
