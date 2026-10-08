@@ -113,6 +113,26 @@ for (const seed of [24061984, 346147916, 579460630]) {
   });
 }
 
+test('OrbitalNearGround_RefinesBeyondLevelSixWithoutExcessiveTiles', async ({ page }, testInfo) => {
+  test.setTimeout(240_000);
+  for (const seed of [24061984, 346147916, 579460630]) {
+    await page.goto('/?visualTest=1&seed=' + seed);
+    await page.waitForFunction(() => Boolean(window.__planetForgeSurfaceTest), null, { timeout: 45_000 });
+
+    for (const [label, distance] of [['regional', 1.008], ['near-ground', 1.0039]]) {
+      await page.evaluate(value => window.__planetForgeSurfaceTest.setDistance(value), distance);
+      await page.waitForFunction(() => !window.__planetForgeSurfaceTest.getLodStats().refining, null, { timeout: 90_000 });
+      const stats = await page.evaluate(() => window.__planetForgeSurfaceTest.getLodStats());
+      expect(stats.mode).toBe('globe');
+      expect(stats.tileCount).toBeLessThanOrEqual(56);
+      if (label === 'near-ground') expect(stats.maximumLevel).toBeGreaterThanOrEqual(7);
+      const output = await page.evaluate(() => window.__planetForgeSurfaceTest.measure());
+      expect(output.glError).toBe(0);
+      await page.screenshot({ path: testInfo.outputPath('near-orbit-' + seed + '-' + label + '.png'), fullPage: true });
+    }
+  }
+});
+
 test('OrbitalZoom_RequestsHigherLodAndRestoresCoarseGlobe', async ({ page }, testInfo) => {
   await page.goto('/?visualTest=1');
   await page.waitForFunction(() => Boolean(window.__planetForgeSurfaceTest), null, { timeout: 30_000 });
