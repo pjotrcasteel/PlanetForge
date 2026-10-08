@@ -15,7 +15,8 @@ public static class ServiceCollectionExtensions
     public static IServiceCollection AddPlanetForge(this IServiceCollection services)
     {
         services.AddSingleton<IPlanetTerrainDeformationStore, PlanetTerrainDeformationStore>();
-        services.AddSingleton<IPlanetElevationSource, ProceduralPlanetElevationSource>();
+        services.AddSingleton<ProceduralPlanetElevationSource>();
+        services.AddSingleton<IPlanetElevationSource>(provider => provider.GetRequiredService<ProceduralPlanetElevationSource>());
         services.AddSingleton(PlanetSurfaceLodOptions.Default);
         services.AddSingleton<PlanetSurfaceTileSampler>();
         services.AddSingleton<PlanetSurfaceLodSelector>();
