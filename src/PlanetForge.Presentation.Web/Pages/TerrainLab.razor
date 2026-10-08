@@ -96,7 +96,7 @@
                 <h2>Hero region / multiscale geological relief</h2>
                 <p>Generate the 128 km watershed, refine its incised valley at 32 km, then inspect an 8 km
                     nested local terrain. Each level inherits its parent geology at fixed spherical locations.
-                    Every level uses 129×129 physical height samples,
+                    Every level uses 129×129 physical height samples and variable rock resistance,
                     six hydraulic erosion passes and eight conservative bank-relaxation passes. No vertical exaggeration.</p>
             </div>
             <button id="lab-hero-generate" @onclick="GenerateHeroRegionAsync" disabled="@(working || heroAnchor is null)">
@@ -113,7 +113,7 @@
             <label for="lab-hero-mode">Compare terrain</label>
             <select id="lab-hero-mode" @bind="heroMode" @bind:after="UpdateHeroModeAsync" disabled="@(heroRegion is null || working)">
                 <option value="after">Eroded geological terrain</option>
-                <option value="before">@(heroSpanKilometers == 8 ? "Inherited regional + valley terrain" : heroSpanKilometers == 32 ? "Inherited regional terrain" : "Pre-erosion structural bedrock")</option>
+                <option value="before">@(heroSpanKilometers == 8 ? "Inherited regional + valley terrain" : heroSpanKilometers == 32 ? "Inherited regional terrain" : "Canonical bedrock before erosion")</option>
             </select>
             <span>Generate after changing scale · Drag to orbit · Scroll to zoom · physical elevation scale</span>
         </div>
@@ -139,7 +139,6 @@
     private PlanetVector? heroMicroAnchor;
     private PlanetRegionalGeologyOverlay? heroNestedOverlay;
     private PlanetRegionalGeologyOverlay? heroParentOverlay;
-    private IPlanetElevationSource? heroStructuralSource;
     private int heroSpanKilometers = 128;
     private PlanetHeroRegion? heroRegion;
     private IJSObjectReference? heroModule;
@@ -182,7 +181,6 @@
         heroMicroAnchor = null;
         heroParentOverlay = null;
         heroNestedOverlay = null;
-        heroStructuralSource = null;
         heroSpanKilometers = 128;
         heroRegion = null;
         heroMode = "after";
@@ -406,10 +404,10 @@
                 throw new InvalidOperationException("Generate the 32 km nested geology before refining to 8 km.");
             }
 
-            // Every finer region inherits the full geological history of its
-            // ancestors at identical spherical locations, before adding local cuts.
-            heroStructuralSource ??= new PlanetHeroStructuralBedrockSource(Elevation, heroAnchor.Value, selectedSeed);
-            IPlanetElevationSource inputElevation = heroStructuralSource;
+            // No synthetic rock ridges: variable lithology controls physical
+            // hydraulic incision instead. Finer regions inherit their ancestors'
+            // eroded elevations at identical spherical locations.
+            IPlanetElevationSource inputElevation = Elevation;
             if (heroSpanKilometers != 128)
             {
                 inputElevation = new PlanetRegionalEvolvedElevationSource(inputElevation, heroParentOverlay!);
