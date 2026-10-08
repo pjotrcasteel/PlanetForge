@@ -80,7 +80,7 @@ export function setPlanet(snapshot) {
         const enteringLocal = state.renderMode !== 'local';
         if (enteringLocal) {
             state.localYaw = -0.65;
-            state.localPitch = geologicalPreviewMode ? 1.30 : 0.72;
+            state.localPitch = geologicalPreviewMode ? 0.78 : 0.72;
             state.localCameraAltitudeMeters = snapshot.localSurface.cameraAltitudeMeters;
             state.distance = 1.0 + (state.localCameraAltitudeMeters / state.planetRadiusMeters);
         }
@@ -136,7 +136,7 @@ function createState(canvas, gl, dotNetReference) {
     return {
         canvas, gl, dotNetReference, globeProgram, localProgram, generatorPreview: false, renderMode: 'globe', geometryKey: null,
         surfaceKey: null, tileBufferCache: new Map(), tiles: [], localSurface: null,
-        yaw: -0.65, pitch: 0.24, distance: initialOrbitDistance(canvas), localYaw: -0.65, localPitch: geologicalPreviewMode ? 1.30 : 0.72,
+        yaw: -0.65, pitch: 0.24, distance: initialOrbitDistance(canvas), localYaw: -0.65, localPitch: geologicalPreviewMode ? 0.78 : 0.72,
         localCameraAltitudeMeters: null, scaleHud: createLocalScaleHud(canvas), detailHud: createTerrainDetailHud(canvas),
         activePointers: new Map(), pinchDistance: null,
         lodTimer: null, lodSequence: 0, lastSurfaceRequestSignature: null, lastTerrainUpdateMs: null, lastGeometryPayloadCount: 0,
@@ -526,7 +526,7 @@ function installInput(s) {
 
         if (s.renderMode === 'local') {
             s.localYaw += deltaX * 0.008;
-            s.localPitch = clamp(s.localPitch - deltaY * 0.008, geologicalPreviewMode ? 1.12 : minimumLocalViewPitchRadians, maximumLocalViewPitchRadians);
+            s.localPitch = clamp(s.localPitch - deltaY * 0.008, geologicalPreviewMode ? 0.38 : minimumLocalViewPitchRadians, maximumLocalViewPitchRadians);
             return;
         }
 
@@ -859,7 +859,7 @@ function renderLocal(s) {
     const preBiological = isPreBiologicalSurface(s);
 
     gl.uniformMatrix4fv(s.localUniforms.viewProjection, false, viewProjection);
-    gl.uniform3f(s.localUniforms.light, 0.45, 0.82, 0.35);
+    gl.uniform3f(s.localUniforms.light, 0.86, 0.32, 0.26);
     gl.uniform1f(s.localUniforms.seaLevelMeters, s.seaLevelMeters);
     gl.uniform1f(s.localUniforms.surfaceTemperature, s.surfaceTemperature);
     gl.uniform1f(s.localUniforms.liquidFraction, s.liquidFraction);
@@ -1386,16 +1386,23 @@ void main() {
     }
 
     if (uObjectMode == 3) {
+        // The local mesh uses smooth normals derived from canonical height samples.
+        // Expose *physical* slopes with a raking light; do not fabricate canyon normals.
+        vec3 n = normalize(vNormal);
+        vec3 sun = normalize(uLightDirection);
         float elevation = vElevationMeters;
+        float slope = length(n.xz);
+        float exposure = smoothstep(0.012, 0.19, slope);
         float elevationBand = smoothstep(300.0, 2800.0, elevation);
         float highlandBand = smoothstep(2500.0, 6500.0, elevation);
-        float cliff = smoothstep(0.07, 0.62, 1.0 - max(normalize(vNormal).y, 0.0));
         vec3 dustyPlains = vec3(0.60, 0.34, 0.22);
         vec3 upliftedRock = vec3(0.71, 0.45, 0.31);
         vec3 exposedBedrock = vec3(0.33, 0.27, 0.24);
         vec3 material = mix(dustyPlains, upliftedRock, elevationBand * 0.75);
-        material = mix(material, exposedBedrock, clamp(cliff * 0.60 + highlandBand * 0.22, 0.0, 0.88));
-        float illumination = clamp(0.34 + (0.76 * light), 0.23, 1.13);
+        material = mix(material, exposedBedrock, clamp(exposure * 0.72 + highlandBand * 0.22, 0.0, 0.88));
+        float direct = max(dot(n, sun), 0.0);
+        float reliefLight = clamp((direct - sun.y) * 3.25, -0.43, 0.43);
+        float illumination = clamp(0.66 + (direct * 0.27) + reliefLight, 0.27, 1.20);
         outColor = vec4(material * illumination, 1.0);
         return;
     }
