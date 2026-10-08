@@ -32,6 +32,13 @@ function drawLayer(id, width, height, values, kind, elevations) {
                 color = blend([29, 38, 49], [234, 151, 79], clamp(value * 7.0 + 0.05, 0, 1));
             } else if (kind === 'mountains') {
                 color = blend([40, 50, 49], [226, 215, 177], clamp(value, 0, 1));
+            } else if (kind === 'flow') {
+                const drainage = clamp(Math.log1p(Math.max(0, value) / 3) / 7, 0, 1);
+                color = blend([27, 42, 43], [104, 227, 233], Math.pow(drainage, 0.65));
+            } else if (kind === 'incision') {
+                color = blend([34, 36, 39], [237, 146, 78], Math.sqrt(clamp(value / 240, 0, 1)));
+            } else if (kind === 'sediment') {
+                color = blend([37, 43, 46], [239, 203, 129], Math.sqrt(clamp(value / 120, 0, 1)));
             } else {
                 color = colorForElevation(value);
                 const west = elevations[y * width + (x + width - 1) % width];
@@ -55,10 +62,15 @@ function drawLayer(id, width, height, values, kind, elevations) {
     context.putImageData(pixels, 0, 0);
 }
 
-export function drawTerrainLab(width, height, crust, tectonic, mountains, elevation) {
+export function drawTerrainLab(width, height, crust, tectonic, mountains, elevation, flow, incision, sediment, eroded) {
+    window.__planetForgeTerrainLabReady = false;
     drawLayer('lab-crust', width, height, crust, 'crust', elevation);
     drawLayer('lab-tectonic', width, height, tectonic, 'tectonic', elevation);
     drawLayer('lab-mountains', width, height, mountains, 'mountains', elevation);
     drawLayer('lab-elevation', width, height, elevation, 'elevation', elevation);
+    drawLayer('lab-flow', width, height, flow, 'flow', elevation);
+    drawLayer('lab-incision', width, height, incision, 'incision', elevation);
+    drawLayer('lab-sediment', width, height, sediment, 'sediment', elevation);
+    drawLayer('lab-eroded', width, height, eroded, 'elevation', eroded);
     window.__planetForgeTerrainLabReady = true;
 }
