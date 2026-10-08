@@ -551,8 +551,12 @@ function installVisualTestApi() {
         getYaw() { return state?.yaw ?? 0.0; },
         setDistance(distance) {
             if (!state) return;
-            state.distance = clamp(distance, 1.1, 11.0);
+            const previousDistance = state.distance;
+            state.distance = clamp(distance, 1.001, 11.0);
             state.dirty = true;
+            if (shouldRequestSurfaceUpdate(state) || previousDistance < adaptiveOrbitStartDistance) {
+                scheduleSurfaceUpdate(state, surfaceUpdateDebounceMilliseconds);
+            }
             renderGlobe(state);
             state.dirty = false;
         },
