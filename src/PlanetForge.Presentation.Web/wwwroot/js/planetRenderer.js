@@ -939,34 +939,25 @@ vec3 terrainMaterial(vec3 radial, vec3 normal, float elevationAboveSeaLevel, boo
 }
 
 vec3 barrenRockMaterial(vec3 radial, vec3 terrainNormal, float elevationMeters) {
-    // Material scale follows actual spherical directions and canonical elevation.
-    // The noise below changes mineral colour and apparent roughness, not coastline or terrain shape.
+    // Geological colour detail stays lightweight enough for mobile GPUs and WebGL software renderers.
+    // Canonical elevation and slope are provided by the geological simulation.
     vec3 offset = vec3(uSeedPhase * 17.1, uSeedPhase * 11.3, uSeedPhase * -13.7);
-    float province = fbm(radial * 7.5 + offset);
-    float strata = fbm(radial * 28.0 + offset * 1.37);
-    float regolith = valueNoise(radial * 112.0 + offset * 3.1);
-    float basalt = smoothstep(0.48, 0.68, province) * (1.0 - smoothstep(1100.0, 3800.0, elevationMeters));
-    float dusty = smoothstep(0.29, 0.71, province * 0.55 + strata * 0.45);
-    float cliff = smoothstep(0.015, 0.17, vPhysicalSlope);
+    float province = valueNoise(radial * 11.0 + offset);
+    float regolith = valueNoise(radial * 68.0 + offset * 1.37);
+    float basalt = smoothstep(0.47, 0.74, province) * (1.0 - smoothstep(1100.0, 3800.0, elevationMeters));
     float highland = smoothstep(800.0, 5100.0, elevationMeters);
+    float cliff = smoothstep(0.015, 0.17, vPhysicalSlope);
 
-    vec3 ironOxide = vec3(0.53, 0.265, 0.163);
-    vec3 oxidizedDust = vec3(0.72, 0.435, 0.285);
-    vec3 exposedRock = vec3(0.40, 0.285, 0.235);
-    vec3 darkVolcanic = vec3(0.25, 0.215, 0.205);
-    vec3 minerals = mix(ironOxide, oxidizedDust, dusty * 0.70 + regolith * 0.15);
-    minerals = mix(minerals, exposedRock, clamp(highland * 0.33 + cliff * 0.50, 0.0, 0.72));
-    minerals = mix(minerals, darkVolcanic, basalt * 0.65);
-    float layeredVariation = (strata - 0.5) * 0.32 + (regolith - 0.5) * 0.12;
-    minerals *= 1.0 + layeredVariation;
+    vec3 oxide = mix(vec3(0.52, 0.26, 0.16), vec3(0.74, 0.43, 0.28), province);
+    vec3 exposedRock = vec3(0.41, 0.30, 0.25);
+    vec3 basaltRock = vec3(0.27, 0.22, 0.21);
+    vec3 material = mix(oxide, exposedRock, clamp(highland * 0.30 + cliff * 0.55, 0.0, 0.70));
+    material = mix(material, basaltRock, basalt * 0.65);
+    material *= 0.88 + regolith * 0.24;
 
-    vec3 lightDir = normalize(uLightDirection);
-    float diffuse = max(dot(normalize(terrainNormal), lightDir), 0.0);
-    float radialLight = max(dot(radial, lightDir), 0.0);
-    float reliefShading = clamp(diffuse - radialLight, -0.48, 0.48);
-    float illumination = clamp(0.32 + diffuse * 0.77 + reliefShading * 0.35, 0.23, 1.13);
-    illumination *= 1.0 - cliff * 0.12;
-    return clamp(minerals * illumination, 0.0, 1.0);
+    float light = max(dot(normalize(terrainNormal), normalize(uLightDirection)), 0.0);
+    float illumination = clamp(0.34 + light * 0.78, 0.26, 1.12);
+    return material * illumination * (1.0 - cliff * 0.10);
 }
 
 vec4 oceanMaterial(vec3 radial, vec3 normal, float elevationAboveSeaLevel) {
