@@ -36,7 +36,7 @@ public sealed class PlanetSurfaceMeshCache(PlanetSurfaceMeshBuilder meshBuilder)
         // Send only genuinely new meshes; retransmitting every existing tile after a small
         // rotation or zoom can cost megabytes and causes visible stalls on mobile.
         var canReusePrevious = lastRequestedIds is not null && lastCellsPerAxis == cellsPerAxis && lastPlanetRadiusMeters == planetRadiusMeters;
-        var previousIds = canReusePrevious ? lastRequestedIds!.ToHashSet() : [];
+        HashSet<PlanetTileId> previousIds = canReusePrevious ? lastRequestedIds!.ToHashSet() : [];
         var result = new PlanetSurfaceTileMesh[ids.Count];
         for (var index = 0; index < ids.Count; index++)
         {
