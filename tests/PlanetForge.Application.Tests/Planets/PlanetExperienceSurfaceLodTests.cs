@@ -69,7 +69,7 @@ public sealed class PlanetExperienceSurfaceLodTests
 
         Assert.IsNotNull(snapshot.LocalSurface);
         Assert.AreEqual(0, snapshot.SurfaceTiles.Count);
-        Assert.AreEqual(128, snapshot.LocalSurface.TriangleCount);
+        Assert.AreEqual(512, snapshot.LocalSurface.TriangleCount);
     }
 
     [TestMethod]
