@@ -124,8 +124,11 @@ test('OrbitalZoom_RequestsHigherLodAndRestoresCoarseGlobe', async ({ page }, tes
 
   await page.evaluate(() => window.__planetForgeSurfaceTest.setDistance(1.22));
   await page.waitForFunction(() => window.__planetForgeSurfaceTest.getLodStats().maximumLevel > 1, null, { timeout: 75_000 });
+  await page.waitForFunction(() => !window.__planetForgeSurfaceTest.getLodStats().refining, null, { timeout: 30_000 });
   const regional = await page.evaluate(() => window.__planetForgeSurfaceTest.getLodStats());
   expect(regional.tileCount).toBeLessThanOrEqual(56);
+  expect(regional.lastTerrainUpdateMs).toBeGreaterThanOrEqual(0);
+  await expect(page.locator('.terrain-detail-hud')).toContainText(/TERRAIN DETAIL · LOD [2-6]/);
 
   await page.evaluate(() => window.__planetForgeSurfaceTest.setDistance(1.03));
   await page.waitForFunction(level => window.__planetForgeSurfaceTest.getLodStats().maximumLevel > level, regional.maximumLevel, { timeout: 75_000 });
@@ -140,8 +143,10 @@ test('OrbitalZoom_RequestsHigherLodAndRestoresCoarseGlobe', async ({ page }, tes
   // Crossing the 20 km boundary must switch from orbit tiles to the local metre-based mesh.
   await page.evaluate(() => window.__planetForgeSurfaceTest.setDistance(1.001));
   await page.waitForFunction(() => window.__planetForgeSurfaceTest.getLodStats().mode === 'local', null, { timeout: 75_000 });
+  await page.waitForFunction(() => !window.__planetForgeSurfaceTest.getLodStats().refining, null, { timeout: 30_000 });
   const local = await page.evaluate(() => window.__planetForgeSurfaceTest.getLodStats());
   expect(local.tileCount).toBe(0);
+  await expect(page.locator('.terrain-detail-hud')).toContainText('LOCAL TERRAIN READY');
   await page.screenshot({ path: testInfo.outputPath('local-surface-transition.png'), fullPage: true });
 
   await page.evaluate(() => window.__planetForgeSurfaceTest.setDistance(3.2));
@@ -149,6 +154,8 @@ test('OrbitalZoom_RequestsHigherLodAndRestoresCoarseGlobe', async ({ page }, tes
     const stats = window.__planetForgeSurfaceTest.getLodStats();
     return stats.mode === 'globe' && stats.maximumLevel === 1;
   }, null, { timeout: 75_000 });
+  await page.waitForFunction(() => !window.__planetForgeSurfaceTest.getLodStats().refining, null, { timeout: 30_000 });
   const restored = await page.evaluate(() => window.__planetForgeSurfaceTest.getLodStats());
   expect(restored.tileCount).toBe(24);
+  await expect(page.locator('.terrain-detail-hud')).toBeHidden();
 });

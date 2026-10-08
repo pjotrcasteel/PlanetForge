@@ -3,8 +3,8 @@ import { clearRetainedSurfaceGeometry, retainSurfaceGeometry } from './surfaceGe
 let state;
 
 const verticalFieldOfViewRadians = Math.PI / 4.2;
-const surfaceUpdateDebounceMilliseconds = 240;
-const localSurfaceUpdateDebounceMilliseconds = 650;
+const surfaceUpdateDebounceMilliseconds = 110;
+const localSurfaceUpdateDebounceMilliseconds = 180;
 const maximumCachedSurfaceTiles = 512;
 const maximumRenderPixelRatio = 1.5;
 const minimumCameraAltitudeMeters = 3.0;
@@ -31,7 +31,7 @@ export function initialize(canvasId, snapshot, dotNetReference, generatorPreview
     const gl = canvas?.getContext('webgl2', { antialias: true, alpha: true });
     if (!canvas || !gl) throw new Error('PlanetForge requires WebGL 2.');
 
-    document.title = 'PlanetForge 0.0.35.2 — Orogenic Relief';
+    document.title = 'PlanetForge 0.0.35.3 — Responsive Terrain LOD';
     try {
         state = createState(canvas, gl, dotNetReference);
         state.generatorPreview = generatorPreview;
@@ -64,6 +64,11 @@ export function setPlanet(snapshot) {
 
     const geometryKey = `${snapshot.seed}:${snapshot.physicalParameters.radiusMeters}:${snapshot.terrainRevision ?? 0}`;
     if (state.geometryKey !== geometryKey) {
+        if (state.lodTimer !== null) clearTimeout(state.lodTimer);
+        state.lodTimer = null;
+        state.lodSequence++;
+        state.surfaceRequestPending = false;
+        state.lastSurfaceRequestSignature = null;
         clearRetainedSurfaceGeometry();
         clearSurfaceBufferCache(state);
         clearLocalSurfaceBuffer(state);
@@ -83,6 +88,7 @@ export function setPlanet(snapshot) {
         state.renderMode = 'local';
         activateLocalSurface(state, snapshot.localSurface);
         updateLocalScaleHud(state);
+        updateTerrainDetailHud(state);
         return;
     }
 
@@ -94,6 +100,7 @@ export function setPlanet(snapshot) {
         state.surfaceKey = surfaceKey;
         activateSurfaceTiles(state, snapshot.surfaceTiles);
     }
+    updateTerrainDetailHud(state);
 }
 
 export function dispose() {
@@ -105,6 +112,7 @@ export function dispose() {
     clearSurfaceBufferCache(state);
     clearLocalSurfaceBuffer(state);
     state.scaleHud?.remove();
+    state.detailHud?.remove();
     state.gl.deleteProgram(state.globeProgram);
     state.gl.deleteProgram(state.localProgram);
     clearRetainedSurfaceGeometry();
@@ -129,9 +137,9 @@ function createState(canvas, gl, dotNetReference) {
         canvas, gl, dotNetReference, globeProgram, localProgram, generatorPreview: false, renderMode: 'globe', geometryKey: null,
         surfaceKey: null, tileBufferCache: new Map(), tiles: [], localSurface: null,
         yaw: -0.65, pitch: 0.24, distance: initialOrbitDistance(canvas), localYaw: -0.65, localPitch: geologicalPreviewMode ? 1.30 : 0.72,
-        localCameraAltitudeMeters: null, scaleHud: createLocalScaleHud(canvas),
+        localCameraAltitudeMeters: null, scaleHud: createLocalScaleHud(canvas), detailHud: createTerrainDetailHud(canvas),
         activePointers: new Map(), pinchDistance: null,
-        lodTimer: null, lodSequence: 0, lastSurfaceRequestSignature: null,
+        lodTimer: null, lodSequence: 0, lastSurfaceRequestSignature: null, lastTerrainUpdateMs: null, lastGeometryPayloadCount: 0,
         surfaceRequestInFlight: false, surfaceRequestPending: false, dirty: true,
         seaLevelMeters: 0, planetRadiusMeters: 6371000, atmosphereDensity: 0.6,
         equilibriumTemperature: 255, surfaceTemperature: 288, solarFlux: 1361,
@@ -176,6 +184,37 @@ function createState(canvas, gl, dotNetReference) {
     };
 }
 
+function createTerrainDetailHud(canvas) {
+    const stage = canvas.closest('.planet-stage');
+    if (!stage) return null;
+
+    const hud = document.createElement('div');
+    hud.className = 'terrain-detail-hud';
+    hud.hidden = true;
+    hud.setAttribute('role', 'status');
+    hud.setAttribute('aria-live', 'polite');
+    hud.setAttribute('aria-atomic', 'true');
+    stage.appendChild(hud);
+    return hud;
+}
+
+function updateTerrainDetailHud(s) {
+    if (!s.detailHud) return;
+    const isNearSurface = s.renderMode === 'local' || s.distance < adaptiveOrbitStartDistance;
+    if (!isNearSurface) {
+        s.detailHud.hidden = true;
+        return;
+    }
+
+    const waiting = s.surfaceRequestPending || s.surfaceRequestInFlight || s.lodTimer !== null;
+    const levels = s.tiles.map(tile => Number(tile.key.split(':')[1]));
+    const level = levels.length > 0 ? Math.max(...levels) : 1;
+    const label = waiting ? 'REFINING TERRAIN' : (s.renderMode === 'local' ? 'LOCAL TERRAIN READY' : `TERRAIN DETAIL · LOD ${level}`);
+    s.detailHud.hidden = false;
+    s.detailHud.dataset.loading = String(waiting);
+    if (s.detailHud.textContent !== label) s.detailHud.textContent = label;
+}
+
 function createLocalScaleHud(canvas) {
     const stage = canvas.closest('.planet-stage');
     if (!stage) return null;
@@ -212,6 +251,9 @@ function activateSurfaceTiles(s, surfaceTiles) {
         activeKeys.add(tile.key);
         let bufferedTile = s.tileBufferCache.get(tile.key);
         if (!bufferedTile) {
+            if (!tile.positions?.length || !tile.normals?.length) {
+                throw new Error(`PlanetForge missing GPU geometry for LOD tile ${tile.key}.`);
+            }
             bufferedTile = createBufferedTile(s.gl, tile);
             s.tileBufferCache.set(tile.key, bufferedTile);
         }
@@ -427,6 +469,11 @@ function installInput(s) {
         s.activePointers.delete(event.pointerId);
         s.pinchDistance = s.activePointers.size === 2 ? pointerSeparation(s.activePointers) : null;
         if (canvas.hasPointerCapture(event.pointerId)) canvas.releasePointerCapture(event.pointerId);
+        // Zoom/rotation are visually immediate, and terrain generation starts as soon as
+        // the gesture ends instead of waiting through another debounce period.
+        if (s.activePointers.size === 0 && (s.surfaceRequestPending || shouldRequestSurfaceUpdate(s))) {
+            scheduleSurfaceUpdate(s, 0);
+        }
     };
     canvas.addEventListener('pointerup', endPointer);
     canvas.addEventListener('pointercancel', endPointer);
@@ -487,8 +534,28 @@ function scheduleSurfaceUpdate(s, delayMilliseconds) {
 
     const sequence = ++s.lodSequence;
     s.surfaceRequestPending = true;
+    updateTerrainDetailHud(s);
     if (s.surfaceRequestInFlight) return;
     s.lodTimer = setTimeout(() => requestSurfaceUpdate(s, sequence), delayMilliseconds);
+}
+
+// Buffer completed-but-obsolete requests so the next delta-only response can safely
+// refer to tiles already uploaded to the GPU. The previous camera view is not activated.
+function preserveStaleSurfaceGeometry(s, snapshot) {
+    // Keep overlay terrain geometry in sync with the GPU cache even when an old
+    // camera response is superseded before it can become the active view.
+    retainSurfaceGeometry(snapshot);
+    if (snapshot.localSurface) {
+        activateLocalSurface(s, snapshot.localSurface);
+        return;
+    }
+
+    for (const tile of snapshot.surfaceTiles ?? []) {
+        if (s.tileBufferCache.has(tile.key) || !tile.positions?.length || !tile.normals?.length) continue;
+        s.tileBufferCache.set(tile.key, createBufferedTile(s.gl, tile));
+    }
+
+    trimSurfaceBufferCache(s, new Set(s.tiles.map(tile => tile.key)));
 }
 
 async function requestSurfaceUpdate(s, sequence) {
@@ -503,22 +570,36 @@ async function requestSurfaceUpdate(s, sequence) {
     const direction = normalize(eye);
     const viewportWidth = Math.max(s.canvas.width, 1);
     const viewportHeight = Math.max(s.canvas.height, 1);
-    const signature = `${direction[0].toFixed(5)}:${direction[1].toFixed(5)}:${direction[2].toFixed(5)}:${s.distance.toFixed(7)}:${viewportWidth}:${viewportHeight}`;
+    const signature = `${direction[0].toFixed(4)}:${direction[1].toFixed(4)}:${direction[2].toFixed(4)}:${s.distance.toFixed(6)}:${viewportWidth}:${viewportHeight}`;
     if (signature === s.lastSurfaceRequestSignature) {
         s.surfaceRequestPending = false;
+        updateTerrainDetailHud(s);
         return;
     }
 
     s.surfaceRequestInFlight = true;
     s.surfaceRequestPending = false;
-    s.lastSurfaceRequestSignature = signature;
+    updateTerrainDetailHud(s);
+    const startedAt = performance.now();
     try {
         const snapshot = await s.dotNetReference.invokeMethodAsync(
             'UpdateSurfaceView',
             direction[0], direction[1], direction[2], s.distance,
             viewportWidth, viewportHeight, verticalFieldOfViewRadians);
 
-        if (state === s && sequence === s.lodSequence) setPlanet(snapshot);
+        // A seed, radius or terrain-revision change can supersede an in-flight zoom.
+        // Never cache old-world geometry under the new world's tile identities.
+        const snapshotGeometryKey = `${snapshot.seed}:${snapshot.physicalParameters.radiusMeters}:${snapshot.terrainRevision ?? 0}`;
+        if (state === s && snapshotGeometryKey === s.geometryKey) {
+            s.lastTerrainUpdateMs = Math.round(performance.now() - startedAt);
+            s.lastGeometryPayloadCount = (snapshot.surfaceTiles ?? []).filter(tile => tile.positions?.length > 0).length;
+            s.lastSurfaceRequestSignature = signature;
+            if (sequence === s.lodSequence) {
+                setPlanet(snapshot);
+            } else {
+                preserveStaleSurfaceGeometry(s, snapshot);
+            }
+        }
     } catch (error) {
         if (state === s) console.error('PlanetForge surface update failed.', error);
     } finally {
@@ -526,6 +607,8 @@ async function requestSurfaceUpdate(s, sequence) {
         if (state === s && s.surfaceRequestPending) {
             s.surfaceRequestPending = false;
             scheduleSurfaceUpdate(s, 0);
+        } else if (state === s) {
+            updateTerrainDetailHud(s);
         }
     }
 }
@@ -571,7 +654,10 @@ function installVisualTestApi() {
                 mode: state.renderMode,
                 tileCount: activeTiles.length,
                 maximumLevel: levels.length > 0 ? Math.max(...levels) : -1,
-                altitudeMeters: (state.distance - 1.0) * state.planetRadiusMeters
+                altitudeMeters: (state.distance - 1.0) * state.planetRadiusMeters,
+                refining: state.surfaceRequestPending || state.surfaceRequestInFlight || state.lodTimer !== null,
+                lastTerrainUpdateMs: state.lastTerrainUpdateMs,
+                geometryPayloadCount: state.lastGeometryPayloadCount
             };
         },
         getSeed() { return state?.seed ?? null; },
