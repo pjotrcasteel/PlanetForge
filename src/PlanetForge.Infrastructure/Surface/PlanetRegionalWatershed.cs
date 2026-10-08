@@ -75,7 +75,7 @@ public sealed class PlanetRegionalWatershed
 
             var x = i % width;
             var y = i / width;
-            if (x == 0 || x == width - 1 || y == 0 || y == height - 1 || elevation <= 0.0f)
+            if (elevation <= 0.0f || IsBoundarySpillway(x, y, width, height, bedrockElevationMeters))
             {
                 filled[i] = elevation;
                 distance[i] = 0.0;
@@ -206,6 +206,21 @@ public sealed class PlanetRegionalWatershed
 
         return new PlanetRegionalWatershed(width, height, cellSpacingMeters, receivers, filled,
             accumulation.Select(value => (float)value).ToArray(), incision, deposition, evolved, eroded, deposited, exported);
+    }
+
+    private static bool IsBoundarySpillway(int x, int y, int width, int height, IReadOnlyList<float> elevation)
+    {
+        var value = elevation[y * width + x];
+        // Open regional patches are not boxes with independent drains at every edge cell:
+        // select physically plausible low saddles along the actual perimeter. High boundary
+        // ridges must not become artificial sinks merely because the raster stops here.
+        var alongRow = (y == 0 || y == height - 1) &&
+            value <= elevation[y * width + Math.Max(0, x - 1)] &&
+            value <= elevation[y * width + Math.Min(width - 1, x + 1)];
+        var alongColumn = (x == 0 || x == width - 1) &&
+            value <= elevation[Math.Max(0, y - 1) * width + x] &&
+            value <= elevation[Math.Min(height - 1, y + 1) * width + x];
+        return alongRow || alongColumn;
     }
 
     private static bool IsDiagonal(int from, int to, int width) =>
