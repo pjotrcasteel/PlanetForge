@@ -605,6 +605,10 @@ function renderGlobe(s) {
         gl.disable(gl.POLYGON_OFFSET_FILL);
     }
 
+    // The atmosphere must always blend over the solid planet, even when
+    // water and cryosphere passes are intentionally disabled in geology preview.
+    gl.enable(gl.BLEND);
+    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
     gl.depthMask(false);
     gl.disable(gl.CULL_FACE);
     gl.uniform1i(s.globeUniforms.mode, 1);
