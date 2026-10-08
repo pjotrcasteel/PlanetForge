@@ -141,6 +141,7 @@ function createState(canvas, gl, dotNetReference) {
         activePointers: new Map(), pinchDistance: null,
         lodTimer: null, lodSequence: 0, lastSurfaceRequestSignature: null, lastTerrainUpdateMs: null, lastGeometryPayloadCount: 0,
         surfaceRequestInFlight: false, surfaceRequestPending: false, dirty: true,
+        localElevationRangeMeters: null, localCellSpacingMeters: null,
         seaLevelMeters: 0, planetRadiusMeters: 6371000, atmosphereDensity: 0.6,
         equilibriumTemperature: 255, surfaceTemperature: 288, solarFlux: 1361,
         liquidFraction: 1, vaporFraction: 0, seaIceFraction: 1, landIceFraction: 1, snowCoverFraction: 1,
@@ -288,6 +289,16 @@ function activateLocalSurface(s, localSurface) {
     const positionBuffer = createStaticBuffer(s.gl, localSurface.positionsMeters);
     const normalBuffer = createStaticBuffer(s.gl, localSurface.normals);
     const elevationBuffer = createStaticBuffer(s.gl, localSurface.elevationsMeters);
+    const elevations = localSurface.elevationsMeters;
+    let minHeight = Infinity;
+    let maxHeight = -Infinity;
+    for (const height of elevations) {
+        minHeight = Math.min(minHeight, height);
+        maxHeight = Math.max(maxHeight, height);
+    }
+    s.localElevationRangeMeters = maxHeight - minHeight;
+    // Triangles do not have shared vertices in the current unindexed local mesh.
+    s.localCellSpacingMeters = localSurface.sizeMeters / Math.sqrt(localSurface.vertexCount / 6);
     const trees = createPlaceholderTrees(localSurface, s.seaLevelMeters);
 
     s.localSurface = {
@@ -388,6 +399,8 @@ function clearLocalSurfaceBuffer(s) {
     if (s.localSurface.treeNormalBuffer) s.gl.deleteBuffer(s.localSurface.treeNormalBuffer);
     if (s.localSurface.treeElevationBuffer) s.gl.deleteBuffer(s.localSurface.treeElevationBuffer);
     s.localSurface = null;
+    s.localElevationRangeMeters = null;
+    s.localCellSpacingMeters = null;
 }
 
 function trimSurfaceBufferCache(s, activeKeys) {
@@ -657,7 +670,9 @@ function installVisualTestApi() {
                 altitudeMeters: (state.distance - 1.0) * state.planetRadiusMeters,
                 refining: state.surfaceRequestPending || state.surfaceRequestInFlight || state.lodTimer !== null,
                 lastTerrainUpdateMs: state.lastTerrainUpdateMs,
-                geometryPayloadCount: state.lastGeometryPayloadCount
+                geometryPayloadCount: state.lastGeometryPayloadCount,
+                localElevationRangeMeters: state.renderMode === 'local' ? state.localElevationRangeMeters : null,
+                localCellSpacingMeters: state.renderMode === 'local' ? state.localCellSpacingMeters : null
             };
         },
         getSeed() { return state?.seed ?? null; },
