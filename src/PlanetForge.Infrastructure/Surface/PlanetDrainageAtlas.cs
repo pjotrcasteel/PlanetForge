@@ -53,6 +53,7 @@ public sealed class PlanetDrainageAtlas
         var visited = new bool[count];
         var visitOrder = new int[count];
         var queue = new PriorityQueue<int, (float Height, int Index)>();
+        var depressionQueue = new Queue<int>();
         Array.Fill(receivers, -1);
 
         var hasOcean = false;
@@ -87,8 +88,10 @@ public sealed class PlanetDrainageAtlas
         }
 
         var visitedCount = 0;
-        while (queue.TryDequeue(out var current, out _))
+        while (depressionQueue.Count > 0 || queue.Count > 0)
         {
+            // FIFO propagation across flooded flats prevents arbitrary index-order drainage lines.
+            var current = depressionQueue.Count > 0 ? depressionQueue.Dequeue() : queue.Dequeue();
             visitOrder[visitedCount++] = current;
             var x = current % width;
             var y = current / width;
@@ -96,10 +99,8 @@ public sealed class PlanetDrainageAtlas
             for (var dy = -1; dy <= 1; dy++)
             {
                 var ny = y + dy;
-                if (ny < 0 || ny >= height)
-                {
-                    continue;
-                }
+                var crossingPole = ny < 0 || ny >= height;
+                ny = Math.Clamp(ny, 0, height - 1);
 
                 for (var dx = -1; dx <= 1; dx++)
                 {
@@ -108,7 +109,8 @@ public sealed class PlanetDrainageAtlas
                         continue;
                     }
 
-                    var nx = (x + dx + width) % width;
+                    // Opposite meridians are adjacent across a polar cap, not a hard latitude wall.
+                    var nx = (x + dx + width + (crossingPole ? width / 2 : 0)) % width;
                     var neighbor = (ny * width) + nx;
                     if (visited[neighbor])
                     {
@@ -118,7 +120,14 @@ public sealed class PlanetDrainageAtlas
                     visited[neighbor] = true;
                     receivers[neighbor] = current;
                     filled[neighbor] = Math.Max(filled[neighbor], filled[current]);
-                    queue.Enqueue(neighbor, (filled[neighbor], neighbor));
+                    if (bedrockElevationMeters[neighbor] <= filled[current])
+                    {
+                        depressionQueue.Enqueue(neighbor);
+                    }
+                    else
+                    {
+                        queue.Enqueue(neighbor, (filled[neighbor], neighbor));
+                    }
                 }
             }
         }
@@ -200,9 +209,11 @@ public sealed class PlanetDrainageAtlas
         deltaX = Math.Min(deltaX, width - deltaX);
         var fromY = from / width;
         var toY = to / width;
-        var latitude = Math.PI * (0.5 - ((fromY + toY + 1.0) / (2.0 * height)));
-        var east = deltaX * Math.Cos(latitude) * (2.0 * Math.PI * PlanetRadiusKilometers / width);
-        var north = Math.Abs(fromY - toY) * (Math.PI * PlanetRadiusKilometers / height);
-        return Math.Max(1.0, Math.Sqrt((east * east) + (north * north)));
+        var fromLatitude = Math.PI * (0.5 - ((fromY + 0.5) / height));
+        var toLatitude = Math.PI * (0.5 - ((toY + 0.5) / height));
+        var angularLongitude = 2.0 * Math.PI * deltaX / width;
+        var dot = (Math.Sin(fromLatitude) * Math.Sin(toLatitude)) +
+            (Math.Cos(fromLatitude) * Math.Cos(toLatitude) * Math.Cos(angularLongitude));
+        return Math.Max(1.0, Math.Acos(Math.Clamp(dot, -1.0, 1.0)) * PlanetRadiusKilometers);
     }
 }
