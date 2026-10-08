@@ -85,6 +85,38 @@ test('TerrainLab_DisplaysCanonicalGeologicalLayers', async ({ page }, testInfo) 
   await page.screenshot({ path: testInfo.outputPath('terrain-lab-showcase.png'), fullPage: true });
 });
 
+test('TerrainLab_DrainageRegression_InspectsThreeCanonicalSeeds', async ({ page }, testInfo) => {
+  test.setTimeout(360_000);
+  await page.goto('/?terrainLab=1');
+  await page.waitForFunction(() => window.__planetForgeTerrainLabReady === true, null, { timeout: 120_000 });
+  const fingerprints = [];
+
+  for (const seed of [24061984, 346147916, 579460630]) {
+    if (seed !== 24061984) {
+      await page.locator('#lab-seed').selectOption(String(seed));
+      await page.getByRole('button', { name: 'REGENERATE' }).click();
+      await expect(page.getByRole('status')).toContainText('Seed ' + seed + ' • above datum', { timeout: 120_000 });
+    }
+
+    const signature = await page.locator('#lab-flow').evaluate(canvas => {
+      const { data } = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height);
+      let hash = 2166136261;
+      let brightCells = 0;
+      for (let offset = 0; offset < data.length; offset += 4) {
+        hash = Math.imul(hash ^ data[offset], 16777619) >>> 0;
+        if (data[offset + 1] > 100) brightCells++;
+      }
+      return { hash, brightCells };
+    });
+
+    expect(signature.brightCells).toBeGreaterThan(20);
+    fingerprints.push(signature.hash);
+    await page.screenshot({ path: testInfo.outputPath('drainage-terrain-lab-' + seed + '.png'), fullPage: true });
+  }
+
+  expect(new Set(fingerprints).size).toBe(3);
+});
+
 for (const seed of [24061984, 346147916, 579460630]) {
   test(`GeneratorQualityGate_Seed${seed}_RendersMultipleOrbitalAngles`, async ({ page }, testInfo) => {
     await page.goto(`/?visualTest=1&seed=${seed}`);
