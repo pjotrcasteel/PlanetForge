@@ -68,8 +68,8 @@ public sealed class ProceduralPlanetElevationSource : IPlanetElevationSource
 
         // Geomorphic hierarchy: ranges are broad envelopes cut by finer ridges/valleys instead of plate-sized slabs.
         var rangeEnvelope = Math.Max(0.0, RidgedNoise(provinceDirection, seed ^ UplandSeedSalt, 2.1, 3, 2.03, 0.50));
-        var ridgeSystem = RidgedNoise(WarpDirection(direction, seed ^ UplandSeedSalt, 0.045, 5.0), seed ^ UplandSeedSalt, 7.5, 4, 2.08, 0.48);
-        var drainage = FractalNoise(WarpDirection(direction, seed ^ BasinSeedSalt, 0.035, 8.0), seed ^ BasinSeedSalt, 13.0, 3, 2.05, 0.48);
+        var ridgeSystem = RidgedNoise(provinceDirection, seed ^ UplandSeedSalt, 7.5, 3, 2.08, 0.48);
+        var drainage = FractalNoise(provinceDirection, seed ^ BasinSeedSalt, 13.0, 3, 2.05, 0.48);
         var mountainMask = continentalWeight * SmoothStep(0.18, 0.72, rangeEnvelope + (boundaryInfluence * 0.65));
         var ridges = Math.Max(0.0, ridgeSystem) * mountainMask;
         var valleys = Math.Max(0.0, -drainage) * mountainMask;
@@ -78,7 +78,7 @@ public sealed class ProceduralPlanetElevationSource : IPlanetElevationSource
 
         // Sea level intersects the already-built terrain. Near-shore variation is subtle and cannot create stair-step coasts.
         var coastEnvelope = 1.0 - SmoothStep(0.0, 0.10, Math.Abs(normalized));
-        var coastDetail = FractalNoise(WarpDirection(direction, seed ^ CoastSeedSalt, 0.035, 5.5), seed ^ CoastSeedSalt, 9.0, 3, 2.13, 0.47);
+        var coastDetail = FractalNoise(direction, seed ^ CoastSeedSalt, 9.0, 3, 2.13, 0.47);
         normalized += coastDetail * coastEnvelope * 0.018;
 
         if (normalized < 0.0)

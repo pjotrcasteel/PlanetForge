@@ -17,6 +17,29 @@
     </div>
     <div id="planetforge-build-badge" style="position:fixed;left:50%;bottom:max(4px, env(safe-area-inset-bottom));transform:translateX(-50%);z-index:1000;font:600 9px/1.2 ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;letter-spacing:.08em;color:rgba(210,225,220,.45);pointer-events:none;user-select:none;white-space:nowrap">PF 0.0.33 · __BUILD_SHA_SHORT__</div>
     <script src="js/buildVersion.js"></script>
+    <script>
+        (() => {
+            const boot = document.querySelector(".boot-screen");
+            let failure = null;
+            const report = message => {
+                failure = message;
+                if (boot) {
+                    boot.textContent = "PLANETFORGE FAILED TO START — " + message;
+                    boot.style.whiteSpace = "normal";
+                    boot.style.maxWidth = "min(90vw, 800px)";
+                    boot.style.margin = "auto";
+                }
+                console.error("PlanetForge startup:", message);
+            };
+            window.addEventListener("error", event => report(event.message || "JavaScript error"));
+            window.addEventListener("unhandledrejection", event => report(String(event.reason || "Unhandled promise rejection")));
+            setTimeout(() => {
+                if (!failure && document.querySelector(".boot-screen")) {
+                    report("Startup exceeded 30 seconds. Check browser console and reload.");
+                }
+            }, 30000);
+        })();
+    </script>
     <script src="_framework/blazor.webassembly.js"></script>
 </body>
 </html>
