@@ -563,10 +563,13 @@ function installVisualTestApi() {
         getDistance() { return state?.distance ?? 0.0; },
         getLodStats() {
             if (!state) return null;
-            const levels = state.tiles.map(tile => Number(tile.key.split(':')[1]));
+            // Globe buffers remain cached after switching to the local surface.
+            // Report the geometry being rendered, not the cached offscreen buffers.
+            const activeTiles = state.renderMode === 'globe' ? state.tiles : [];
+            const levels = activeTiles.map(tile => Number(tile.key.split(':')[1]));
             return {
                 mode: state.renderMode,
-                tileCount: state.tiles.length,
+                tileCount: activeTiles.length,
                 maximumLevel: levels.length > 0 ? Math.max(...levels) : -1,
                 altitudeMeters: (state.distance - 1.0) * state.planetRadiusMeters
             };
