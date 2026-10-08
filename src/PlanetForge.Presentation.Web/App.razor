@@ -3,4 +3,13 @@
     <meta name="description" content="PlanetForge procedural planet simulation." />
 </HeadContent>
 
-<Home />
+@inject NavigationManager Navigation
+
+@if (Navigation.Uri.Contains("terrainLab=1", StringComparison.OrdinalIgnoreCase))
+{
+    <TerrainLab />
+}
+else
+{
+    <Home />
+}
