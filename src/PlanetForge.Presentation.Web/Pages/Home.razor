@@ -5,6 +5,7 @@
 @inject PlanetExperience Experience
 @inject PlanetRun Run
 @inject IJSRuntime JsRuntime
+@inject NavigationManager Navigation
 
 <main class="foundation-shell">
     <section class="planet-stage foundation-stage @PlanetVisualClass()">
@@ -49,7 +50,8 @@
 
     protected override void OnInitialized()
     {
-        ApplyRun(Run.StartNew());
+        var visualTestSeed = GetVisualTestSeed();
+        ApplyRun(visualTestSeed.HasValue ? Run.StartNew(visualTestSeed.Value) : Run.StartNew());
         currentStage = FoundationStage.FrozenWorld;
         elapsedYears = 0.0;
     }
@@ -67,6 +69,26 @@
         waterRendererModule = await JsRuntime.InvokeAsync<IJSObjectReference>("import", disposeCancellationTokenSource.Token, "./js/waterOverlay.js");
         await waterRendererModule.InvokeVoidAsync("initialize", disposeCancellationTokenSource.Token, "water-overlay-canvas", "planet-canvas", snapshot.PhysicalParameters.RadiusMeters);
         await waterRendererModule.InvokeVoidAsync("clearWaterCycle", disposeCancellationTokenSource.Token);
+    }
+
+    private int? GetVisualTestSeed()
+    {
+        var query = new Uri(Navigation.Uri).Query.TrimStart('?');
+        var values = query.Split('&', StringSplitOptions.RemoveEmptyEntries);
+        if (!values.Contains("visualTest=1", StringComparer.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        foreach (var value in values)
+        {
+            if (value.StartsWith("seed=", StringComparison.OrdinalIgnoreCase) && int.TryParse(value[5..], out var seed) && seed > 0)
+            {
+                return seed;
+            }
+        }
+
+        return null;
     }
 
     private async Task GeneratePlanetAsync()
