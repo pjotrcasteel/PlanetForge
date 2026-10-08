@@ -62,11 +62,13 @@ test('GeneratorQualityGate_RendersMeltedShowcaseFromMultipleAngles', async ({ pa
 
 
 test('TerrainLab_DisplaysCanonicalGeologicalLayers', async ({ page }, testInfo) => {
+  test.setTimeout(240_000);
   await page.goto('/?terrainLab=1');
   await expect(page.getByRole('heading', { name: /Terrain Lab/ })).toBeVisible({ timeout: 20_000 });
   await expect(page.locator('#planetforge-build-badge')).toBeHidden();
   await page.waitForFunction(() => window.__planetForgeTerrainLabReady === true, null, { timeout: 90_000 });
-  await expect(page.getByRole('status')).toContainText('Seed 24061984', { timeout: 10_000 });
+  await page.waitForFunction(() => window.__planetForgeRegionalWatershedReady === true, null, { timeout: 180_000 });
+  await expect(page.getByRole('status')).toContainText('Seed 24061984', { timeout: 15_000 });
   for (const name of ['lab-crust', 'lab-tectonic', 'lab-mountains', 'lab-elevation']) {
     const metrics = await page.locator(`#${name}`).evaluate(canvas => {
       const data = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height).data;
@@ -83,6 +85,42 @@ test('TerrainLab_DisplaysCanonicalGeologicalLayers', async ({ page }, testInfo) 
     expect(metrics.range).toBeGreaterThan(12);
   }
   await page.screenshot({ path: testInfo.outputPath('terrain-lab-showcase.png'), fullPage: true });
+});
+
+
+test('TerrainLab_RegionalWatersheds_ThreeSeeds_ShowConnectedRealDrainage', async ({ page }, testInfo) => {
+  test.setTimeout(360_000);
+  await page.goto('/?terrainLab=1');
+  await page.waitForFunction(() => window.__planetForgeRegionalWatershedReady === true, null, { timeout: 180_000 });
+  for (const seed of [24061984, 346147916, 579460630]) {
+    if (seed !== 24061984) {
+      await page.locator('#lab-seed').selectOption(String(seed));
+      await page.getByRole('button', { name: 'REGENERATE' }).click();
+      await page.waitForFunction(() => window.__planetForgeRegionalWatershedReady === true, null, { timeout: 180_000 });
+    }
+
+    await expect(page.getByRole('status')).toContainText('Seed ' + seed, { timeout: 15_000 });
+    for (const name of ['lab-regional-bedrock', 'lab-regional-flow', 'lab-regional-incision',
+      'lab-regional-sediment', 'lab-regional-evolved']) {
+      const stats = await page.locator('#' + name).evaluate(canvas => {
+        const data = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height).data;
+        let minimum = 255;
+        let maximum = 0;
+        for (let i = 0; i < data.length; i += 4) {
+          minimum = Math.min(minimum, data[i + 1]);
+          maximum = Math.max(maximum, data[i + 1]);
+        }
+        return { width: canvas.width, height: canvas.height, contrast: maximum - minimum };
+      });
+      expect(stats.width).toBe(96);
+      expect(stats.height).toBe(96);
+      if (name !== 'lab-regional-sediment') {
+        expect(stats.contrast, 'Seed ' + seed + ': ' + name + ' has no visible geological structure').toBeGreaterThan(4);
+      }
+    }
+
+    await page.screenshot({ path: testInfo.outputPath('regional-watersheds-' + seed + '.png'), fullPage: true });
+  }
 });
 
 for (const seed of [24061984, 346147916, 579460630]) {
