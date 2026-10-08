@@ -67,7 +67,7 @@ test('TerrainLab_DisplaysCanonicalGeologicalLayers', async ({ page }, testInfo) 
   await expect(page.locator('#planetforge-build-badge')).toBeHidden();
   await page.waitForFunction(() => window.__planetForgeTerrainLabReady === true, null, { timeout: 90_000 });
   await expect(page.getByRole('status')).toContainText('Seed 24061984', { timeout: 10_000 });
-  for (const name of ['lab-crust', 'lab-tectonic', 'lab-mountains', 'lab-elevation']) {
+  for (const name of ['lab-crust', 'lab-tectonic', 'lab-mountains', 'lab-elevation', 'lab-flow', 'lab-incision', 'lab-sediment', 'lab-eroded']) {
     const metrics = await page.locator(`#${name}`).evaluate(canvas => {
       const data = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height).data;
       let minimum = 255;
