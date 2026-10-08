@@ -30,7 +30,7 @@ export function initialize(canvasId, snapshot, dotNetReference, generatorPreview
     const gl = canvas?.getContext('webgl2', { antialias: true, alpha: true });
     if (!canvas || !gl) throw new Error('PlanetForge requires WebGL 2.');
 
-    document.title = 'PlanetForge 0.0.35 — Orogenic Relief';
+    document.title = 'PlanetForge 0.0.35.1 — Orogenic Relief';
     try {
         state = createState(canvas, gl, dotNetReference);
         state.generatorPreview = generatorPreview;
@@ -129,7 +129,7 @@ function createState(canvas, gl, dotNetReference) {
         surfaceKey: null, tileBufferCache: new Map(), tiles: [], localSurface: null,
         yaw: -0.65, pitch: 0.24, distance: initialOrbitDistance(canvas), localYaw: -0.65, localPitch: 0.72,
         localCameraAltitudeMeters: null, scaleHud: createLocalScaleHud(canvas),
-        dragging: false, lastX: 0, lastY: 0,
+        activePointers: new Map(), pinchDistance: null,
         lodTimer: null, lodSequence: 0, lastSurfaceRequestSignature: null,
         surfaceRequestInFlight: false, surfaceRequestPending: false, dirty: true,
         seaLevelMeters: 0, planetRadiusMeters: 6371000, atmosphereDensity: 0.6,
@@ -362,29 +362,96 @@ function deleteBufferedTile(gl, tile) {
     gl.deleteBuffer(tile.normalBuffer);
 }
 
+function applyZoomFactor(s, zoomFactor) {
+    if (!Number.isFinite(zoomFactor) || zoomFactor <= 0.0) return;
+
+    if (s.renderMode === 'local' && s.localSurface) {
+        const currentAltitude = s.localCameraAltitudeMeters ?? localTransitionAltitudeMeters;
+        const nextAltitude = clamp(currentAltitude * zoomFactor, minimumCameraAltitudeMeters, localExitAltitudeMeters);
+        if (Math.abs(nextAltitude - currentAltitude) < 0.000001) return;
+
+        s.dirty = true;
+        s.localCameraAltitudeMeters = nextAltitude;
+        s.distance = 1.0 + (nextAltitude / Math.max(s.planetRadiusMeters, 1.0));
+
+        if (nextAltitude >= localExitAltitudeMeters) {
+            s.renderMode = 'globe';
+            s.localCameraAltitudeMeters = null;
+            updateLocalScaleHud(s);
+            scheduleSurfaceUpdate(s, surfaceUpdateDebounceMilliseconds);
+            return;
+        }
+
+        updateLocalScaleHud(s);
+        scheduleSurfaceUpdate(s, localSurfaceUpdateDebounceMilliseconds);
+        return;
+    }
+
+    const minimumCameraAltitudeRatio = minimumCameraAltitudeMeters / Math.max(s.planetRadiusMeters, 1.0);
+    const altitudeRatio = clamp(s.distance - 1.0, minimumCameraAltitudeRatio, maximumCameraAltitudeRatio);
+    const nextDistance = 1.0 + clamp(altitudeRatio * zoomFactor, minimumCameraAltitudeRatio, maximumCameraAltitudeRatio);
+    if (Math.abs(nextDistance - s.distance) < 0.000000001) return;
+
+    s.dirty = true;
+    s.distance = nextDistance;
+    if (shouldRequestSurfaceUpdate(s)) scheduleSurfaceUpdate(s, surfaceUpdateDebounceMilliseconds);
+}
+
+function pointerSeparation(pointers) {
+    const [first, second] = Array.from(pointers.values()).slice(0, 2);
+    return Math.hypot(first.x - second.x, first.y - second.y);
+}
+
 function installInput(s) {
     const canvas = s.canvas;
+    // Prevent Safari from consuming the two-finger gesture as browser page zoom.
+    // The rest of the document retains ordinary touch scrolling.
+    canvas.style.touchAction = 'none';
+
     canvas.addEventListener('pointerdown', event => {
-        s.dragging = true;
-        s.dirty = true;
-        s.lastX = event.clientX;
-        s.lastY = event.clientY;
+        if (event.pointerType === 'mouse' && event.button !== 0) return;
+        if (event.cancelable) event.preventDefault();
+
+        s.activePointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+        if (s.activePointers.size === 2) s.pinchDistance = pointerSeparation(s.activePointers);
+        if (s.activePointers.size > 2) s.pinchDistance = null;
         canvas.setPointerCapture(event.pointerId);
     });
-    canvas.addEventListener('pointerup', event => {
-        s.dragging = false;
-        canvas.releasePointerCapture(event.pointerId);
+
+    const endPointer = event => {
+        s.activePointers.delete(event.pointerId);
+        s.pinchDistance = s.activePointers.size === 2 ? pointerSeparation(s.activePointers) : null;
+        if (canvas.hasPointerCapture(event.pointerId)) canvas.releasePointerCapture(event.pointerId);
+    };
+    canvas.addEventListener('pointerup', endPointer);
+    canvas.addEventListener('pointercancel', endPointer);
+    canvas.addEventListener('lostpointercapture', event => {
+        s.activePointers.delete(event.pointerId);
+        s.pinchDistance = null;
     });
-    canvas.addEventListener('pointercancel', () => {
-        s.dragging = false;
-    });
+
     canvas.addEventListener('pointermove', event => {
-        if (!s.dragging) return;
+        const previous = s.activePointers.get(event.pointerId);
+        if (!previous) return;
+        if (event.cancelable) event.preventDefault();
+        s.activePointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+
+        if (s.activePointers.size === 2) {
+            const nextDistance = pointerSeparation(s.activePointers);
+            if (s.pinchDistance !== null && s.pinchDistance > 0 && nextDistance > 0) {
+                // Spreading fingers reduces camera altitude; pinching inward increases it.
+                applyZoomFactor(s, s.pinchDistance / nextDistance);
+            }
+
+            s.pinchDistance = nextDistance;
+            return;
+        }
+
+        if (s.activePointers.size !== 1) return;
+        const deltaX = event.clientX - previous.x;
+        const deltaY = event.clientY - previous.y;
+        if (deltaX === 0 && deltaY === 0) return;
         s.dirty = true;
-        const deltaX = event.clientX - s.lastX;
-        const deltaY = event.clientY - s.lastY;
-        s.lastX = event.clientX;
-        s.lastY = event.clientY;
 
         if (s.renderMode === 'local') {
             s.localYaw += deltaX * 0.008;
@@ -395,34 +462,10 @@ function installInput(s) {
         s.yaw += deltaX * 0.008;
         s.pitch = clamp(s.pitch + deltaY * 0.008, -1.25, 1.25);
     });
+
     canvas.addEventListener('wheel', event => {
         event.preventDefault();
-        s.dirty = true;
-        const zoomFactor = Math.exp(event.deltaY * 0.0015);
-
-        if (s.renderMode === 'local' && s.localSurface) {
-            const currentAltitude = s.localCameraAltitudeMeters ?? localTransitionAltitudeMeters;
-            const nextAltitude = clamp(currentAltitude * zoomFactor, minimumCameraAltitudeMeters, localExitAltitudeMeters);
-            s.localCameraAltitudeMeters = nextAltitude;
-            s.distance = 1.0 + (nextAltitude / Math.max(s.planetRadiusMeters, 1.0));
-
-            if (nextAltitude >= localExitAltitudeMeters) {
-                s.renderMode = 'globe';
-                s.localCameraAltitudeMeters = null;
-                updateLocalScaleHud(s);
-                scheduleSurfaceUpdate(s, surfaceUpdateDebounceMilliseconds);
-                return;
-            }
-
-            updateLocalScaleHud(s);
-            scheduleSurfaceUpdate(s, localSurfaceUpdateDebounceMilliseconds);
-            return;
-        }
-
-        const minimumCameraAltitudeRatio = minimumCameraAltitudeMeters / Math.max(s.planetRadiusMeters, 1.0);
-        const altitudeRatio = clamp(s.distance - 1.0, minimumCameraAltitudeRatio, maximumCameraAltitudeRatio);
-        s.distance = 1.0 + clamp(altitudeRatio * zoomFactor, minimumCameraAltitudeRatio, maximumCameraAltitudeRatio);
-        if (shouldRequestSurfaceUpdate(s)) scheduleSurfaceUpdate(s, surfaceUpdateDebounceMilliseconds);
+        applyZoomFactor(s, Math.exp(event.deltaY * 0.0015));
     }, { passive: false });
 }
 

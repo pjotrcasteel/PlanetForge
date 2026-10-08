@@ -30,6 +30,9 @@
 
 .foundation-stage #planet-canvas {
     z-index: 1;
+    touch-action: none;
+    -webkit-user-select: none;
+    user-select: none;
 }
 
 
