@@ -113,6 +113,7 @@ public sealed class PlanetHeroRegionBuilder(IPlanetElevationSource elevationSour
         var frame = PlanetLocalFrame.Create(center, ReferencePlanetRadiusMeters, 0);
         var spacing = regionSpanMeters / (gridWidth - 1);
         var original = new float[gridWidth * gridWidth];
+        var erodibility = new float[gridWidth * gridWidth];
         var half = (gridWidth - 1) * 0.5;
 
         for (var y = 0; y < gridWidth; y++)
@@ -124,13 +125,16 @@ public sealed class PlanetHeroRegionBuilder(IPlanetElevationSource elevationSour
                 var east = (x - half) * spacing;
                 var direction = PlanetVector.Normalize((center * ReferencePlanetRadiusMeters) +
                     (frame.East * east) + (frame.North * north));
-                original[y * gridWidth + x] = (float)elevationSource.SampleElevationMeters(direction, seed);
+                var index = y * gridWidth + x;
+                original[index] = (float)elevationSource.SampleElevationMeters(direction, seed);
+                erodibility[index] = PlanetHeroRockResistance.SampleErodibility(direction, seed, original[index]);
             }
         }
 
         var key = $"hero/{seed}/{center.X:R}/{center.Y:R}/{center.Z:R}/{gridWidth}/{regionSpanMeters:R}";
         var initial = PlanetRegionalGeologyEvolution.Initialize(seed, key, gridWidth, gridWidth, spacing, original);
-        var evolved = PlanetRegionalGeologyEvolution.Advance(initial, erosionIterations, cancellationToken: cancellationToken);
+        var evolved = PlanetRegionalGeologyEvolution.Advance(initial, erosionIterations,
+            cancellationToken: cancellationToken, erodibilityCellWeights: erodibility);
         // Hydraulic flow is discrete at the research grid resolution. Redistributing
         // its already-computed cut/fill field conservatively approximates lateral
         // bank retreat without applying fake shader displacement to the preview.
