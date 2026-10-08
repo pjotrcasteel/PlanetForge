@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using PlanetForge.Domain.Surface;
 
 namespace PlanetForge.Infrastructure.Surface;
@@ -22,6 +23,7 @@ public sealed class ProceduralPlanetElevationSource : IPlanetElevationSource
     private const int ShelfSeedSalt = 0x5A827999;
 
     private readonly IPlanetTerrainDeformationStore? terrainDeformationStore;
+    private readonly ConcurrentDictionary<int, OrogenicArc[]> orogenicArcs = new();
 
     public ProceduralPlanetElevationSource()
     {
@@ -95,13 +97,41 @@ public sealed class ProceduralPlanetElevationSource : IPlanetElevationSource
         return new PlanetTerrainFieldSample(continental, plateUplift * belt, mountainBelt, elevation);
     }
 
-    private static double SampleOrogenicSystems(PlanetVector direction, int seed, double distortion)
+    private double SampleOrogenicSystems(PlanetVector direction, int seed, double distortion)
     {
-        // A deterministic catalogue of geodesic arcs defines old mountain belts independently
-        // from the plate assignment. Plate stresses still influence the separate uplift field.
+        // The arc geometry is immutable for a seed; calculating it once avoids hundreds of
+        // thousands of repeated SeedDirection and trigonometric operations per planet.
+        if (orogenicArcs.Count > 32)
+        {
+            orogenicArcs.Clear();
+        }
+
+        var arcs = orogenicArcs.GetOrAdd(seed, BuildOrogenicArcs);
         var strongest = 0.0;
 
-        for (var index = 0; index < 11; index++)
+        foreach (var arc in arcs)
+        {
+            var arcDistance = Math.Asin(Math.Clamp(Math.Abs(PlanetVector.Dot(direction, arc.Normal)), 0.0, 1.0));
+            var warpedDistance = Math.Max(0.0, arcDistance + (distortion * arc.Breadth * 0.35));
+            var crossSection = 1.0 - SmoothStep(arc.Breadth * 0.10, arc.Breadth, warpedDistance);
+            if (crossSection <= 0.0)
+            {
+                continue;
+            }
+
+            var along = PlanetVector.Dot(direction, arc.Center);
+            var lengthMask = SmoothStep(arc.StartAlong, arc.FullAlong, along);
+            strongest = Math.Max(strongest, crossSection * lengthMask);
+        }
+
+        return strongest;
+    }
+
+    private static OrogenicArc[] BuildOrogenicArcs(int seed)
+    {
+        var arcs = new OrogenicArc[11];
+
+        for (var index = 0; index < arcs.Length; index++)
         {
             var start = SeedDirection(seed ^ UplandSeedSalt, index, 70_117 + (index * 193));
             var pole = SeedDirection(seed ^ ProvinceSeedSalt, index, 230_019 + (index * 317));
@@ -113,20 +143,14 @@ public sealed class ProceduralPlanetElevationSource : IPlanetElevationSource
             }
 
             tangent = PlanetVector.Normalize(tangent);
-            var arcNormal = PlanetVector.Normalize(PlanetVector.Cross(start, tangent));
+            var normal = PlanetVector.Normalize(PlanetVector.Cross(start, tangent));
             var halfSpan = Lerp(0.28, 0.71, ToUnitRange(HashValue(index, seed, UplandSeedSalt, ProvinceSeedSalt)));
             var center = PlanetVector.Normalize((start * Math.Cos(halfSpan * 0.5)) + (tangent * Math.Sin(halfSpan * 0.5)));
             var breadth = Lerp(0.035, 0.085, ToUnitRange(HashValue(index, BasinSeedSalt, seed, DetailSeedSalt)));
-            var arcDistance = Math.Asin(Math.Clamp(Math.Abs(PlanetVector.Dot(direction, arcNormal)), 0.0, 1.0));
-            var warpedDistance = Math.Max(0.0, arcDistance + (distortion * breadth * 0.35));
-            var crossSection = 1.0 - SmoothStep(breadth * 0.10, breadth, warpedDistance);
-            var along = PlanetVector.Dot(direction, center);
-            var lengthMask = SmoothStep(Math.Cos(halfSpan), Math.Cos(halfSpan * 0.70), along);
-            var influence = crossSection * lengthMask;
-            strongest = Math.Max(strongest, influence);
+            arcs[index] = new OrogenicArc(normal, center, breadth, Math.Cos(halfSpan), Math.Cos(halfSpan * 0.70));
         }
 
-        return strongest;
+        return arcs;
     }
 
     private static double SampleImpactRelief(PlanetVector direction, int seed)
@@ -360,6 +384,8 @@ public sealed class ProceduralPlanetElevationSource : IPlanetElevationSource
         var t = Math.Clamp((value - edge0) / (edge1 - edge0), 0.0, 1.0);
         return t * t * (3.0 - (2.0 * t));
     }
+
+    private readonly record struct OrogenicArc(PlanetVector Normal, PlanetVector Center, double Breadth, double StartAlong, double FullAlong);
 
     private readonly record struct NearestPlatePair(int PrimaryIndex, int SecondaryIndex, double PrimaryDot, double SecondaryDot);
 }
