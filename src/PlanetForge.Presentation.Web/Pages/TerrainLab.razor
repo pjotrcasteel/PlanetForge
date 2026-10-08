@@ -94,8 +94,9 @@
             <div>
                 <small>PF 0.0.36 / WORLD MACHINE-INSPIRED RESEARCH</small>
                 <h2>Hero region / 128 km of real geological relief</h2>
-                <p>Generate a 129×129 terrain mesh from canonical bedrock, then apply six actual erosion passes.
-                    The terrain is displayed at physical scale, without vertical exaggeration or fake shader displacement.</p>
+                <p>Generate a 129×129 terrain mesh from canonical bedrock, apply six hydraulic erosion passes
+                    and eight conservative lateral valley-bank relaxation passes. This is a numerical prototype,
+                    not a calibrated geological timescale. Height is shown at physical scale without exaggeration.</p>
             </div>
             <button id="lab-hero-generate" @onclick="GenerateHeroRegionAsync" disabled="@(working || heroAnchor is null)">
                 @(working ? "WORKING…" : "GENERATE 3D TERRAIN")
@@ -377,7 +378,8 @@
             heroRegion = result;
             var relief = result.EvolvedElevationMeters.Max() - result.EvolvedElevationMeters.Min();
             heroStatus = $"Seed {selectedSeed} • {result.Width}² vertices • {relief:0} m actual relief • " +
-                $"{result.ErosionIterations} erosion passes • deepest cut {result.CumulativeCutMeters.Max():0} m • " +
+                $"{result.ErosionIterations} hydraulic + {result.LateralRelaxationPasses} bank passes • " +
+                $"deepest cut {result.CumulativeCutMeters.Max():0} m • " +
                 $"sediment exported {result.ExportedVolumeCubicMeters / 1e9:0.00} km³";
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
