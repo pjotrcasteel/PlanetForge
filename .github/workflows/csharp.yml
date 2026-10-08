@@ -53,6 +53,13 @@ jobs:
       - name: Publish web
         run: dotnet publish src/PlanetForge.Presentation.Web/PlanetForge.Presentation.Web.csproj -c Release --no-restore -o ./artifacts/web
 
+      - name: Upload temporary browser build for WebGL diagnosis
+        uses: actions/upload-artifact@v4
+        with:
+          name: planetforge-debug-web
+          path: ./artifacts/web/wwwroot
+          if-no-files-found: error
+
       - name: Install browser test dependencies
         working-directory: tests/PlanetForge.Browser.Tests
         run: |
