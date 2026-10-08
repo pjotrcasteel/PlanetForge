@@ -93,22 +93,27 @@
         <div class="lab-hero-heading">
             <div>
                 <small>PF 0.0.36 / WORLD MACHINE-INSPIRED RESEARCH</small>
-                <h2>Hero region / 128 km of real geological relief</h2>
-                <p>Generate a 129×129 terrain mesh from canonical bedrock, apply six hydraulic erosion passes
-                    and eight conservative lateral valley-bank relaxation passes. This is a numerical prototype,
-                    not a calibrated geological timescale. Height is shown at physical scale without exaggeration.</p>
+                <h2>Hero region / multiscale geological relief</h2>
+                <p>First generate the 128 km watershed, then inspect a 32 km high-detail region
+                    centered on its actual incised channels. Both use 129×129 canonical height samples,
+                    six hydraulic erosion passes and eight conservative bank-relaxation passes. No vertical exaggeration.</p>
             </div>
             <button id="lab-hero-generate" @onclick="GenerateHeroRegionAsync" disabled="@(working || heroAnchor is null)">
                 @(working ? "WORKING…" : "GENERATE 3D TERRAIN")
             </button>
         </div>
         <div class="lab-hero-toolbar">
+            <label for="lab-hero-scale">Region scale</label>
+            <select id="lab-hero-scale" @bind="heroSpanKilometers" disabled="@working">
+                <option value="128">128 km regional geology</option>
+                <option value="32" disabled="@(!heroFocusAnchor.HasValue)">32 km nested valley detail</option>
+            </select>
             <label for="lab-hero-mode">Compare terrain</label>
             <select id="lab-hero-mode" @bind="heroMode" @bind:after="UpdateHeroModeAsync" disabled="@(heroRegion is null || working)">
                 <option value="after">Eroded geological terrain</option>
                 <option value="before">Original geological bedrock</option>
             </select>
-            <span>Drag to orbit · Scroll to zoom · 128 km physical scale</span>
+            <span>Generate after changing scale · Drag to orbit · Scroll to zoom · physical elevation scale</span>
         </div>
         <canvas id="lab-hero-render" width="960" height="540" aria-label="Interactive 3D landscape from eroded geological height data"></canvas>
         <p class="lab-hero-status" aria-live="polite">@heroStatus</p>
@@ -128,6 +133,8 @@
     private int selectedIterations;
     private readonly CancellationTokenSource cancellation = new();
     private PlanetVector? heroAnchor;
+    private PlanetVector? heroFocusAnchor;
+    private int heroSpanKilometers = 128;
     private PlanetHeroRegion? heroRegion;
     private IJSObjectReference? heroModule;
     private string heroMode = "after";
@@ -165,6 +172,8 @@
 
         working = true;
         heroAnchor = null;
+        heroFocusAnchor = null;
+        heroSpanKilometers = 128;
         heroRegion = null;
         heroMode = "after";
         heroStatus = "Select Generate 3D Terrain after the canonical region finishes sampling.";
@@ -371,13 +380,19 @@
         try
         {
             heroModule ??= await Js.InvokeAsync<IJSObjectReference>("import", cancellation.Token, "./js/heroRegion.js");
+            var anchor = heroSpanKilometers == 32 ? heroFocusAnchor ?? heroAnchor.Value : heroAnchor.Value;
             var result = new PlanetHeroRegionBuilder(Elevation).Build(
-                heroAnchor.Value, selectedSeed, cancellationToken: cancellation.Token);
+                anchor, selectedSeed, regionSpanMeters: heroSpanKilometers * 1000.0,
+                cancellationToken: cancellation.Token);
+            if (heroSpanKilometers == 128)
+            {
+                heroFocusAnchor = PlanetHeroRegionBuilder.FindIncisedChannelFocus(result, anchor);
+            }
             heroMode = "after";
             await heroModule.InvokeVoidAsync("drawHeroRegion", cancellation.Token, result, heroMode);
             heroRegion = result;
             var relief = result.EvolvedElevationMeters.Max() - result.EvolvedElevationMeters.Min();
-            heroStatus = $"Seed {selectedSeed} • {result.Width}² vertices • {relief:0} m actual relief • " +
+            heroStatus = $"Seed {selectedSeed} • {heroSpanKilometers} km region • {result.Width}² vertices • {relief:0} m actual relief • " +
                 $"{result.ErosionIterations} hydraulic + {result.LateralRelaxationPasses} bank passes • " +
                 $"deepest cut {result.CumulativeCutMeters.Max():0} m • " +
                 $"sediment exported {result.ExportedVolumeCubicMeters / 1e9:0.00} km³";
