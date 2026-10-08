@@ -37,6 +37,28 @@ public sealed class ProceduralPlanetElevationSourceTests
     }
 
     [TestMethod]
+    public void SampleElevationMeters_HighlandAtRegionalScale_ResolvesShortWavelengthBedrock()
+    {
+        var source = new ProceduralPlanetElevationSource();
+        foreach (var seed in new[] { PlanetSeedCatalog.ShowcaseSeed, 346147916, 579460630 })
+        {
+            var highland = FibonacciDirections(1_024).First(direction => source.SampleElevationMeters(direction, seed) > 2_000.0);
+            var reference = Math.Abs(highland.Y) < 0.9 ? PlanetVector.UnitY : PlanetVector.UnitX;
+            var east = PlanetVector.Normalize(PlanetVector.Cross(reference, highland));
+            var elevations = Enumerable.Range(-16, 33)
+                .Select(step => source.SampleElevationMeters(PlanetVector.Normalize(highland + (east * (step * 250.0 / 6_371_000.0))), seed))
+                .ToArray();
+
+            // First-order detrending removes the surrounding mountain slope; a genuine
+            // regional-scale relief cascade should still contain a resolvable rock fabric.
+            var curvature = Enumerable.Range(1, elevations.Length - 2)
+                .Max(index => Math.Abs(elevations[index - 1] - (2.0 * elevations[index]) + elevations[index + 1]));
+
+            Assert.IsGreaterThan(0.75, curvature, $"Seed {seed} lacks regional bedrock relief at 250 m sampling.");
+        }
+    }
+
+    [TestMethod]
     public void SampleElevationMeters_DifferentSeed_ProducesDifferentElevation()
     {
         var source = new ProceduralPlanetElevationSource();
