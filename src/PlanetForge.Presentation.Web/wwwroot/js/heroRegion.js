@@ -35,7 +35,7 @@ const fragmentShader = [
     'void main(){',
     'vec3 n=normalize(vNormal); vec3 sun=normalize(vec3(0.88,0.24,0.41));',
     'float altitude=smoothstep(uLowest,uHighest,vGeology.x);',
-    'float exposed=smoothstep(0.012,0.17,1.0-n.y);',
+    'float slope=length(n.xz); float exposed=smoothstep(0.025,0.26,slope);',
     'vec3 mineral=mix(vec3(0.51,0.32,0.21),vec3(0.66,0.50,0.37),altitude*0.72);',
     'mineral=mix(mineral,vec3(0.34,0.30,0.28),exposed*0.72);',
     'float wear=smoothstep(0.0,75.0,max(vGeology.y,0.0));',
