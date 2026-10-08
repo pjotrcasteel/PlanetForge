@@ -89,6 +89,29 @@
             </article>
         </div>
     </section>
+    <section class="lab-hero" aria-label="Three-dimensional geological hero region">
+        <div class="lab-hero-heading">
+            <div>
+                <small>PF 0.0.36 / WORLD MACHINE-INSPIRED RESEARCH</small>
+                <h2>Hero region / 128 km of real geological relief</h2>
+                <p>Generate a 129×129 terrain mesh from canonical bedrock, then apply six actual erosion passes.
+                    The terrain is displayed at physical scale, without vertical exaggeration or fake shader displacement.</p>
+            </div>
+            <button id="lab-hero-generate" @onclick="GenerateHeroRegionAsync" disabled="@(working || heroAnchor is null)">
+                @(working ? "WORKING…" : "GENERATE 3D TERRAIN")
+            </button>
+        </div>
+        <div class="lab-hero-toolbar">
+            <label for="lab-hero-mode">Compare terrain</label>
+            <select id="lab-hero-mode" @bind="heroMode" @bind:after="UpdateHeroModeAsync" disabled="@(heroRegion is null || working)">
+                <option value="after">Eroded geological terrain</option>
+                <option value="before">Original geological bedrock</option>
+            </select>
+            <span>Drag to orbit · Scroll to zoom · 128 km physical scale</span>
+        </div>
+        <canvas id="lab-hero-render" width="960" height="540" aria-label="Interactive 3D landscape from eroded geological height data"></canvas>
+        <p class="lab-hero-status" role="status">@heroStatus</p>
+    </section>
     <footer class="lab-footer">Equirectangular projections are diagnostic maps only. Gameplay and local terrain sample these exact same elevation fields. The current generator does not yet simulate hydraulic erosion.</footer>
 </div>
 
@@ -103,6 +126,11 @@
     private float[]? regionalBedrock;
     private int selectedIterations;
     private readonly CancellationTokenSource cancellation = new();
+    private PlanetVector? heroAnchor;
+    private PlanetHeroRegion? heroRegion;
+    private IJSObjectReference? heroModule;
+    private string heroMode = "after";
+    private string heroStatus = "Generate the hero region to inspect real eroded 3D terrain.";
     private IJSObjectReference? module;
     private int selectedSeed = PlanetSeedCatalog.ShowcaseSeed;
     private bool working;
@@ -135,6 +163,15 @@
         }
 
         working = true;
+        heroAnchor = null;
+        heroRegion = null;
+        heroMode = "after";
+        heroStatus = "Select Generate 3D Terrain after the canonical region finishes sampling.";
+        if (heroModule is not null)
+        {
+            await heroModule.InvokeVoidAsync("resetHeroRegion", cancellation.Token);
+        }
+
         status = $"Sampling seed {selectedSeed}…";
         await InvokeAsync(StateHasChanged);
         await Task.Yield();
@@ -209,6 +246,7 @@
             var anchorLongitude = 2.0 * Math.PI * (centerX + 0.5) / MapWidth;
             var anchor = new PlanetVector(Math.Cos(anchorLatitude) * Math.Cos(anchorLongitude),
                 Math.Sin(anchorLatitude), Math.Cos(anchorLatitude) * Math.Sin(anchorLongitude));
+            heroAnchor = anchor;
             var referenceElevation = Elevation.SampleElevationMeters(anchor, selectedSeed);
             var localFrame = PlanetLocalFrame.Create(anchor, ReferencePlanetRadiusMeters, referenceElevation);
             var regionalElevation = new float[RegionSize * RegionSize];
@@ -317,6 +355,50 @@
         }
     }
 
+    private async Task GenerateHeroRegionAsync()
+    {
+        if (working || heroAnchor is null)
+        {
+            return;
+        }
+
+        working = true;
+        heroStatus = $"Building physical 3D terrain for seed {selectedSeed}. Erosion runs only when requested…";
+        await InvokeAsync(StateHasChanged);
+        await Task.Yield();
+
+        try
+        {
+            heroModule ??= await Js.InvokeAsync<IJSObjectReference>("import", cancellation.Token, "./js/heroRegion.js");
+            var result = new PlanetHeroRegionBuilder(Elevation).Build(
+                heroAnchor.Value, selectedSeed, cancellationToken: cancellation.Token);
+            heroMode = "after";
+            await heroModule.InvokeVoidAsync("drawHeroRegion", cancellation.Token, result, heroMode);
+            heroRegion = result;
+            var relief = result.EvolvedElevationMeters.Max() - result.EvolvedElevationMeters.Min();
+            heroStatus = $"Seed {selectedSeed} • {result.Width}² vertices • {relief:0} m actual relief • " +
+                $"{result.ErosionIterations} erosion passes • deepest cut {result.CumulativeCutMeters.Max():0} m • " +
+                $"sediment exported {result.ExportedVolumeCubicMeters / 1e9:0.00} km³";
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            heroStatus = $"3D geological preview failed: {ex.Message}";
+        }
+        finally
+        {
+            working = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task UpdateHeroModeAsync()
+    {
+        if (heroRegion is not null && heroModule is not null)
+        {
+            await heroModule.InvokeVoidAsync("setHeroRegionMode", cancellation.Token, heroMode);
+        }
+    }
+
     public async ValueTask DisposeAsync()
     {
         cancellation.Cancel();
@@ -325,6 +407,17 @@
             try
             {
                 await module.DisposeAsync();
+            }
+            catch (JSDisconnectedException)
+            {
+            }
+        }
+
+        if (heroModule is not null)
+        {
+            try
+            {
+                await heroModule.DisposeAsync();
             }
             catch (JSDisconnectedException)
             {
