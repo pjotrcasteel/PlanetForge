@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { PNG } from 'pngjs';
 
 test.setTimeout(120_000);
 
@@ -87,6 +88,54 @@ test('TerrainLab_DisplaysCanonicalGeologicalLayers', async ({ page }, testInfo) 
   await page.screenshot({ path: testInfo.outputPath('terrain-lab-showcase.png'), fullPage: true });
 });
 
+
+test('TerrainLab_HeroRegion_RendersPhysical3DLandscapeAndComparesErosion', async ({ page }, testInfo) => {
+  test.setTimeout(420_000);
+  await page.goto('/?terrainLab=1');
+  await page.waitForFunction(() => window.__planetForgeRegionalWatershedReady === true, null, { timeout: 180_000 });
+
+  await expect(page.locator('#lab-hero-generate')).toBeEnabled();
+  await page.locator('#lab-hero-generate').click();
+  await page.waitForFunction(() => window.__planetForgeHeroRegionReady === true, null, { timeout: 180_000 });
+  const hero = page.locator('#lab-hero-render');
+
+  const stats = await page.evaluate(() => window.__planetForgeHeroRegionStats);
+  expect(stats.seed).toBe(24061984);
+  expect(stats.mode).toBe('after');
+  expect(stats.gridWidth).toBe(129);
+  expect(stats.triangles).toBe(128 * 128 * 2);
+  expect(stats.glError).toBe(0);
+  expect(stats.maxElevationMeters - stats.minElevationMeters).toBeGreaterThan(50);
+  await expect(page.locator('.lab-hero-status')).toContainText('deepest cut');
+
+  const afterScreenshot = await hero.screenshot({ path: testInfo.outputPath('hero-eroded-seed-24061984.png') });
+  const after = PNG.sync.read(afterScreenshot);
+  const variation = new Set();
+  let planetPixels = 0;
+  for (let i = 0; i < after.data.length; i += 16) {
+    const red = after.data[i], green = after.data[i + 1], blue = after.data[i + 2];
+    if (red > green * 1.13 && red > blue * 1.18) {
+      planetPixels++;
+      variation.add((red >> 3) + '-' + (green >> 3) + '-' + (blue >> 3));
+    }
+  }
+  expect(planetPixels, 'The 3D terrain mesh is absent or outside the camera view').toBeGreaterThan(1200);
+  expect(variation.size, 'The rendered hero region is an almost uniform brown plane').toBeGreaterThan(35);
+
+  await page.locator('#lab-hero-mode').selectOption('before');
+  await page.waitForFunction(() => window.__planetForgeHeroRegionStats?.mode === 'before');
+  const beforeScreenshot = await hero.screenshot({ path: testInfo.outputPath('hero-original-seed-24061984.png') });
+  const before = PNG.sync.read(beforeScreenshot);
+  let changedPixels = 0;
+  for (let i = 0; i < after.data.length; i += 4) {
+    if (Math.abs(after.data[i] - before.data[i]) +
+        Math.abs(after.data[i + 1] - before.data[i + 1]) +
+        Math.abs(after.data[i + 2] - before.data[i + 2]) > 2) {
+      changedPixels++;
+    }
+  }
+  expect(changedPixels, 'The simulated erosion produced no visible 3D mesh change').toBeGreaterThan(100);
+});
 
 test('TerrainLab_ErosionIterations_AdvanceRewindReplayDeterministically', async ({ page }, testInfo) => {
   test.setTimeout(270_000);
