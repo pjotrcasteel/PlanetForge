@@ -57,7 +57,7 @@ public sealed class PlanetHeroRockResistanceTests
             heights, erodibilityCellWeights: Enumerable.Repeat(1.9f, heights.Length).ToArray());
 
         Assert.IsGreaterThan(0.0, resistant.ErodedVolumeCubicMeters);
-        Assert.IsLessThan(resistant.ErodedVolumeCubicMeters, weak.ErodedVolumeCubicMeters);
+        Assert.IsLessThan(weak.ErodedVolumeCubicMeters, resistant.ErodedVolumeCubicMeters);
         Assert.AreEqual(heights.Length, weak.EvolvedElevationMeters.Length);
 
         foreach (var result in new[] { resistant, weak })
