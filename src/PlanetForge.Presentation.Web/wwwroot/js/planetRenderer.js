@@ -31,7 +31,7 @@ export function initialize(canvasId, snapshot, dotNetReference, generatorPreview
     const gl = canvas?.getContext('webgl2', { antialias: true, alpha: true });
     if (!canvas || !gl) throw new Error('PlanetForge requires WebGL 2.');
 
-    document.title = 'PlanetForge 0.0.35.2 — Orogenic Relief';
+    document.title = 'PlanetForge 0.0.35.3 — Responsive Terrain LOD';
     try {
         state = createState(canvas, gl, dotNetReference);
         state.generatorPreview = generatorPreview;
