@@ -31,3 +31,6 @@
     .lab-grid { grid-template-columns: 1fr; }
     .lab-grid p { min-height: 0; }
 }
+
+/* The world version is already in the lab heading; do not overlay a fixed badge on scrollable terrain diagnostics. */
+body:has(.terrain-lab) #planetforge-build-badge { display: none; }
