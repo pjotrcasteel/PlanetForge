@@ -173,8 +173,8 @@ export function drawHeroRegion(region,mode='after'){
     // Frame actual valleys close enough to resolve physical slopes on mobile.
     // Previously nested terrain inherited the overview camera framing.
     const regionSpanKm = (region.width - 1) * region.cellSpacingMeters / 1000;
-    scene.pitch = regionSpanKm <= 32 ? 0.34 : 0.25;
-    scene.zoom = regionSpanKm <= 32 ? 0.33 : 0.64;
+    scene.pitch = regionSpanKm <= 8 ? 0.68 : regionSpanKm <= 32 ? 0.55 : 0.33;
+    scene.zoom = regionSpanKm <= 8 ? 0.63 : regionSpanKm <= 32 ? 0.53 : 0.70;
     scene.region=region;scene.indices=indices.length;useMode(mode);
 }
 export function setHeroRegionMode(mode){
