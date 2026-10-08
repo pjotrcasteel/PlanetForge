@@ -8,7 +8,7 @@ const localSurfaceUpdateDebounceMilliseconds = 650;
 const maximumCachedSurfaceTiles = 512;
 const maximumRenderPixelRatio = 1.5;
 const minimumCameraAltitudeMeters = 3.0;
-const maximumCameraAltitudeRatio = 4.2;
+const maximumCameraAltitudeRatio = 10.0;
 const localTransitionAltitudeMeters = 20_000.0;
 const localExitAltitudeMeters = 25_000.0;
 const treeVisibilityAltitudeMeters = 3_000.0;
@@ -17,9 +17,11 @@ const placeholderTreeHeightMeters = 15.0;
 const placeholderTreeHalfWidthMeters = 3.0;
 const minimumLocalViewPitchRadians = 0.24;
 const maximumLocalViewPitchRadians = 1.48;
-const landReliefExaggeration = 36.0;
+// Temporary research presentation: allow geology to pass visual acceptance before reintroducing climate overlays.
+const geologicalPreviewMode = true;
+const landReliefExaggeration = 8.0;
 const oceanReliefExaggeration = 4.0;
-const iceVisualExaggeration = 18.0;
+const iceVisualExaggeration = 4.0;
 const waterSurfaceClearanceMeters = 18.0;
 const globeSkirtVisibilityAltitudeMeters = 500_000.0;
 
@@ -28,7 +30,7 @@ export function initialize(canvasId, snapshot, dotNetReference, generatorPreview
     const gl = canvas?.getContext('webgl2', { antialias: true, alpha: true });
     if (!canvas || !gl) throw new Error('PlanetForge requires WebGL 2.');
 
-    document.title = 'PlanetForge 0.0.33 — Geomorphic Terrain';
+    document.title = 'PlanetForge 0.0.34 — Terrain Lab & Macro Geology';
     try {
         state = createState(canvas, gl, dotNetReference);
         state.generatorPreview = generatorPreview;
@@ -110,13 +112,22 @@ export function dispose() {
     state = null;
 }
 
+function initialOrbitDistance(canvas) {
+    // Portrait layouts are limited by the horizontal field of view, not the vertical one.
+    // Keep the atmosphere and enough empty space visible to recognize a complete planet.
+    const aspect = Math.max(canvas.clientWidth, 1) / Math.max(canvas.clientHeight, 1);
+    const halfHorizontalFov = Math.atan(Math.tan(verticalFieldOfViewRadians * 0.5) * aspect);
+    const distanceToFit = 1.0 / Math.sin(Math.max(0.045, halfHorizontalFov * 0.79));
+    return Math.max(3.15, Math.min(distanceToFit, 10.5));
+}
+
 function createState(canvas, gl, dotNetReference) {
     const globeProgram = createProgram(gl, globeVertexShaderSource, globeFragmentShaderSource);
     const localProgram = createProgram(gl, localVertexShaderSource, localFragmentShaderSource);
     return {
         canvas, gl, dotNetReference, globeProgram, localProgram, generatorPreview: false, renderMode: 'globe', geometryKey: null,
         surfaceKey: null, tileBufferCache: new Map(), tiles: [], localSurface: null,
-        yaw: -0.65, pitch: 0.24, distance: 3.15, localYaw: -0.65, localPitch: 0.72,
+        yaw: -0.65, pitch: 0.24, distance: initialOrbitDistance(canvas), localYaw: -0.65, localPitch: 0.72,
         localCameraAltitudeMeters: null, scaleHud: createLocalScaleHud(canvas),
         dragging: false, lastX: 0, lastY: 0,
         lodTimer: null, lodSequence: 0, lastSurfaceRequestSignature: null,
@@ -144,6 +155,7 @@ function createState(canvas, gl, dotNetReference) {
             seaIceFraction: gl.getUniformLocation(globeProgram, 'uSeaIceFraction'),
             landIceFraction: gl.getUniformLocation(globeProgram, 'uLandIceFraction'),
             snowCoverFraction: gl.getUniformLocation(globeProgram, 'uSnowCoverFraction'),
+            seedPhase: gl.getUniformLocation(globeProgram, 'uSeedPhase'),
             mode: gl.getUniformLocation(globeProgram, 'uMode')
         },
         localAttributes: {
@@ -488,6 +500,14 @@ function installVisualTestApi() {
             state.dirty = false;
         },
         getYaw() { return state?.yaw ?? 0.0; },
+        setDistance(distance) {
+            if (!state) return;
+            state.distance = clamp(distance, 1.1, 11.0);
+            state.dirty = true;
+            renderGlobe(state);
+            state.dirty = false;
+        },
+        getDistance() { return state?.distance ?? 0.0; },
         getSeed() { return state?.seed ?? null; },
         measure() {
             if (!state) return null;
@@ -503,6 +523,7 @@ function measureSurface(s) {
     const pixels = new Uint8Array(canvas.width * canvas.height * 4);
     gl.readPixels(0, 0, canvas.width, canvas.height, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
     let planetPixels = 0;
+    let edgePlanetPixels = 0;
     let oceanPixels = 0;
     let icePixels = 0;
     let minimumOceanLuminance = Number.POSITIVE_INFINITY;
@@ -516,6 +537,9 @@ function measureSurface(s) {
         const blue = pixels[offset + 2] / 255.0;
         const luminance = (red * 0.2126) + (green * 0.7152) + (blue * 0.0722);
         planetPixels++;
+        const pixelIndex = offset / 4;
+        const column = pixelIndex % canvas.width;
+        if (column < 2 || column >= canvas.width - 2) edgePlanetPixels++;
 
         const isIce = luminance > 0.46 && green >= red * 0.82 && blue >= red * 0.82;
         if (isIce) icePixels++;
@@ -529,6 +553,7 @@ function measureSurface(s) {
 
     return {
         planetPixels,
+        edgePlanetPixels,
         oceanPixels,
         icePixels,
         iceFraction: planetPixels > 0 ? icePixels / planetPixels : 0.0,
@@ -566,7 +591,10 @@ function renderGlobe(s) {
 
     gl.uniformMatrix4fv(s.globeUniforms.model, false, identityMatrix());
     gl.uniformMatrix4fv(s.globeUniforms.viewProjection, false, viewProjection);
-    gl.uniform3f(s.globeUniforms.light, 0.7, 0.35, 0.6);
+    // In geological inspection mode, a camera-relative raking light reveals slopes at every viewing angle.
+    // Ordinary climate rendering retains the fixed world-space light direction.
+    const rockLight = normalize([eye[0] + 0.65, eye[1] + 0.80, eye[2] - 0.35]);
+    gl.uniform3f(s.globeUniforms.light, ...(geologicalPreviewMode ? rockLight : [0.7, 0.35, 0.6]));
     gl.uniform3f(s.globeUniforms.cameraPosition, eye[0], eye[1], eye[2]);
     gl.uniform1f(s.globeUniforms.seaLevelMeters, s.seaLevelMeters);
     gl.uniform1f(s.globeUniforms.planetRadiusMeters, s.planetRadiusMeters);
@@ -579,26 +607,33 @@ function renderGlobe(s) {
     gl.uniform1f(s.globeUniforms.seaIceFraction, s.seaIceFraction);
     gl.uniform1f(s.globeUniforms.landIceFraction, s.landIceFraction);
     gl.uniform1f(s.globeUniforms.snowCoverFraction, s.snowCoverFraction);
+    gl.uniform1f(s.globeUniforms.seedPhase, (((s.seed % 10007) + 10007) % 10007) / 10007);
 
     gl.disable(gl.BLEND);
     gl.depthMask(true);
-    gl.uniform1i(s.globeUniforms.mode, isPreBiologicalSurface(s) ? 2 : 0);
+    gl.uniform1i(s.globeUniforms.mode, geologicalPreviewMode ? 5 : (isPreBiologicalSurface(s) ? 2 : 0));
     drawTerrain(s);
 
-    if (s.liquidFraction > 0.001) {
-        gl.uniform1i(s.globeUniforms.mode, 3);
+    if (!geologicalPreviewMode) {
+        if (s.liquidFraction > 0.001) {
+            gl.uniform1i(s.globeUniforms.mode, 3);
+            drawSurface(s);
+        }
+
+        gl.enable(gl.BLEND);
+        gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+        gl.depthMask(true);
+        gl.enable(gl.POLYGON_OFFSET_FILL);
+        gl.polygonOffset(-4.0, -8.0);
+        gl.uniform1i(s.globeUniforms.mode, 4);
         drawSurface(s);
+        gl.disable(gl.POLYGON_OFFSET_FILL);
     }
 
+    // The atmosphere must always blend over the solid planet, even when
+    // water and cryosphere passes are intentionally disabled in geology preview.
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
-    gl.depthMask(true);
-    gl.enable(gl.POLYGON_OFFSET_FILL);
-    gl.polygonOffset(-4.0, -8.0);
-    gl.uniform1i(s.globeUniforms.mode, 4);
-    drawSurface(s);
-    gl.disable(gl.POLYGON_OFFSET_FILL);
-
     gl.depthMask(false);
     gl.disable(gl.CULL_FACE);
     gl.uniform1i(s.globeUniforms.mode, 1);
@@ -804,8 +839,12 @@ void main() {
     float elevationAboveSeaLevel = elevationMeters - uSeaLevelMeters;
     float visualRadius = physicalRadius;
 
-    if (uMode == 0 || uMode == 2) {
-        float exaggeration = elevationAboveSeaLevel >= 0.0 ? 36.0 : 4.0;
+    if (uMode == 5) {
+        // At orbital scales height is negligible relative to planetary radius.
+        // Use canonical elevation for colour and shading, not exaggerated polygon displacement.
+        visualRadius = 1.0;
+    } else if (uMode == 0 || uMode == 2) {
+        float exaggeration = elevationAboveSeaLevel >= 0.0 ? 8.0 : 2.0;
         visualRadius = 1.0 + ((elevationMeters * exaggeration) / uPlanetRadiusMeters);
     } else if (uMode == 3) {
         visualRadius = 1.0 + ((uSeaLevelMeters + 18.0) / uPlanetRadiusMeters);
@@ -817,8 +856,8 @@ void main() {
         float landSupport = clamp((0.14 + (0.66 * polarSupport) + (0.36 * highlandSupport))
             * max(clamp(uLandIceFraction, 0.0, 1.0), clamp(uSnowCoverFraction, 0.0, 1.0) * 0.55), 0.0, 1.0);
         float landIceThicknessMeters = (90.0 + (760.0 * polarSupport) + (340.0 * highlandSupport)) * landSupport;
-        float seaIceVisualElevationMeters = uSeaLevelMeters + 18.0 + (seaIceThicknessMeters * 18.0);
-        float landIceVisualElevationMeters = (elevationMeters * 36.0) + (landIceThicknessMeters * 18.0);
+        float seaIceVisualElevationMeters = uSeaLevelMeters + 18.0 + (seaIceThicknessMeters * 4.0);
+        float landIceVisualElevationMeters = (elevationMeters * 8.0) + (landIceThicknessMeters * 4.0);
         bool snowballGeometry = uSeaIceFraction >= 0.999 && uLandIceFraction >= 0.999 && uSnowCoverFraction >= 0.999;
         if (snowballGeometry) landIceVisualElevationMeters = max(landIceVisualElevationMeters, seaIceVisualElevationMeters + 8.0);
         float shorelineBlend = smoothstep(-900.0, 900.0, elevationAboveSeaLevel);
@@ -829,7 +868,7 @@ void main() {
     vec4 world = uModel * vec4(radial * visualRadius, 1.0);
     vDirection = radial;
     vPhysicalNormal = physicalNormal;
-    vNormal = normalize(radial + (tangentNormal * 44.0));
+    vNormal = normalize(radial + (tangentNormal * (uMode == 5 ? 35.0 : 12.0)));
     vPhysicalSlope = clamp(1.0 - dot(physicalNormal, radial), 0.0, 0.5);
     vElevationMeters = elevationMeters;
     vWorldPosition = world.xyz;
@@ -858,6 +897,7 @@ uniform float uSeaIceFraction;
 uniform float uLandIceFraction;
 uniform float uSnowCoverFraction;
 uniform int uMode;
+uniform float uSeedPhase;
 out vec4 outColor;
 
 float hash31(vec3 p) {
@@ -929,6 +969,38 @@ vec3 terrainMaterial(vec3 radial, vec3 normal, float elevationAboveSeaLevel, boo
     float illumination = clamp(0.34 + (0.72 * smoothstep(0.0, 0.94, direct)) + (faceDelta * 0.24), 0.28, 1.10);
     illumination *= 1.0 - (steep * 0.08) - (cliff * 0.14);
     return material * illumination;
+}
+
+vec3 barrenRockMaterial(vec3 radial, vec3 terrainNormal, float elevationMeters) {
+    // Canonical elevation and physical slope define the geological provinces.
+    // Low-frequency noise contributes subtle mineral differences, never fake continents.
+    vec3 offset = vec3(uSeedPhase * 17.1, uSeedPhase * 11.3, uSeedPhase * -13.7);
+    float minerals = valueNoise(radial * 16.0 + offset);
+    float grains = valueNoise(radial * 78.0 + offset * 1.37);
+
+    float basin = 1.0 - smoothstep(-2600.0, 400.0, elevationMeters);
+    float plateau = smoothstep(450.0, 2400.0, elevationMeters);
+    float highland = smoothstep(2100.0, 5400.0, elevationMeters);
+    float physicalCliff = smoothstep(0.000004, 0.0015, vPhysicalSlope);
+
+    vec3 lowland = vec3(0.365, 0.215, 0.168);
+    vec3 dustyPlains = vec3(0.635, 0.350, 0.231);
+    vec3 upliftedRock = vec3(0.750, 0.478, 0.319);
+    vec3 ancientBedrock = vec3(0.515, 0.408, 0.343);
+    vec3 material = mix(dustyPlains, lowland, basin * 0.67);
+    material = mix(material, upliftedRock, plateau * 0.75);
+    material = mix(material, ancientBedrock, highland * 0.56);
+    material = mix(material, vec3(0.36, 0.290, 0.255), physicalCliff * 0.38);
+
+    float mineralVariation = (minerals - 0.5) * 0.16 + (grains - 0.5) * 0.095;
+    material *= 1.0 + mineralVariation;
+
+    float light = max(dot(normalize(terrainNormal), normalize(uLightDirection)), 0.0);
+    float radialLight = max(dot(radial, normalize(uLightDirection)), 0.0);
+    float reliefContrast = clamp((light - radialLight) * 1.2, -0.40, 0.40);
+    float illumination = clamp(0.39 + (0.64 * light) + reliefContrast, 0.25, 1.15);
+    illumination *= 1.0 - physicalCliff * 0.12;
+    return clamp(material * illumination, 0.0, 1.0);
 }
 
 vec4 oceanMaterial(vec3 radial, vec3 normal, float elevationAboveSeaLevel) {
@@ -1045,6 +1117,11 @@ void main() {
         float steam = clamp(uVaporFraction * 0.7, 0.0, 0.7);
         vec3 atmosphereColor = mix(vec3(0.20, 0.72, 0.72), vec3(0.72, 0.78, 0.72), steam);
         outColor = vec4(atmosphereColor, rim * 0.24 * uAtmosphere * fluxGlow);
+        return;
+    }
+
+    if (uMode == 5) {
+        outColor = vec4(barrenRockMaterial(radial, normal, vElevationMeters), 1.0);
         return;
     }
 

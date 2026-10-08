@@ -9,7 +9,8 @@ export default defineConfig({
     baseURL: process.env.PLANETFORGE_BASE_URL ?? 'http://127.0.0.1:4173',
     viewport: { width: 390, height: 844 },
     deviceScaleFactor: 1,
-    colorScheme: 'dark'
+    colorScheme: 'dark',
+    screenshot: 'only-on-failure'
   },
   reporter: [['line']],
   outputDir: 'artifacts/test-results'

@@ -1,0 +1,33 @@
+.terrain-lab {
+    min-height: 100dvh;
+    box-sizing: border-box;
+    padding: max(24px, env(safe-area-inset-top)) clamp(14px, 4vw, 52px) 64px;
+    background: #101819;
+    color: #e4e5db;
+    font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.lab-top { display: flex; justify-content: space-between; align-items: start; gap: 18px; max-width: 1400px; margin: 0 auto 20px; }
+.lab-top small { font: 700 0.7rem/1.5 ui-monospace, monospace; letter-spacing: .15em; color: #86b3a2; }
+.lab-top h1 { font-size: clamp(2rem, 5vw, 3.5rem); font-weight: 720; margin: 8px 0 4px; letter-spacing: -.045em; }
+.lab-top h1 span { font: 600 .9rem ui-monospace, monospace; color: #94b4a0; letter-spacing: normal; }
+.lab-top p { color: #a8b6b0; max-width: 720px; line-height: 1.5; margin: 0; }
+.lab-back { color: #bedcca; text-decoration: none; border: 1px solid #536b60; padding: 10px 14px; border-radius: 12px; white-space: nowrap; }
+.lab-back:hover { background: #23332d; }
+.lab-controls { max-width: 1400px; margin: 0 auto 20px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; border: 1px solid #334641; padding: 13px; border-radius: 12px; background: #182323; }
+.lab-controls label { font-weight: 700; color: #b8c5b9; }
+.lab-controls select, .lab-controls button { min-height: 38px; background: #20322e; color: #e6f4e9; padding: 5px 12px; border: 1px solid #6e9780; border-radius: 8px; }
+.lab-controls button { cursor: pointer; font-weight: 700; }
+.lab-controls button:disabled { opacity: .6; cursor: default; }
+.lab-controls [role="status"] { font: 500 .82rem ui-monospace, monospace; color: #b7c9b9; }
+.lab-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); max-width: 1400px; gap: 18px; margin: 0 auto; }
+.lab-grid article { background: #1b2928; padding: 14px; border: 1px solid #344641; border-radius: 14px; overflow: hidden; }
+.lab-grid h2 { color: #deeade; font-size: 1rem; letter-spacing: .03em; margin: 0 0 7px; }
+.lab-grid p { color: #a4bab0; font-size: .85rem; line-height: 1.5; min-height: 2.4em; margin: 0 0 11px; }
+.lab-grid canvas { width: 100%; height: auto; aspect-ratio: 2/1; display: block; border-radius: 7px; background: #273638; }
+.lab-footer { max-width: 1400px; margin: 20px auto; color: #9db4ab; font-size: .8rem; line-height: 1.5; }
+@media (max-width: 700px) {
+    .lab-top { flex-direction: column; }
+    .lab-grid { grid-template-columns: 1fr; }
+    .lab-grid p { min-height: 0; }
+}

@@ -31,125 +31,86 @@ public sealed class ProceduralPlanetElevationSource : IPlanetElevationSource
 
     public double SampleElevationMeters(PlanetVector direction, int seed)
     {
-        var normalizedElevation = SamplePlateWorld(direction, seed);
-        var baseElevationMeters = normalizedElevation >= 0.0
-            ? normalizedElevation * MaximumLandElevationMeters
-            : normalizedElevation * MaximumOceanDepthMeters;
-        return baseElevationMeters + (terrainDeformationStore?.SampleElevationDeltaMeters(direction, seed) ?? 0.0);
+        var fields = SampleTerrainFields(direction, seed);
+        return fields.ElevationMeters + (terrainDeformationStore?.SampleElevationDeltaMeters(direction, seed) ?? 0.0);
     }
 
-    private static double SamplePlateWorld(PlanetVector direction, int seed)
+    // The same canonical geological fields drive the globe, local terrain and the diagnostic laboratory.
+    // Display layers must never recreate a different terrain algorithm.
+    public PlanetTerrainFieldSample SampleTerrainFields(PlanetVector direction, int seed)
     {
-        // World-Machine-style staged synthesis: broad form first, geology second, then terrain character.
-        // Plate ownership is deliberately never used as the visible surface.
-        var macroDirection = WarpDirection(direction, seed, 0.18, 0.72);
-        var continentalPotential = SampleContinentalPotential(macroDirection, seed);
-        var continentalWarp = FractalNoise(macroDirection, seed ^ RegionalSeedSalt, 0.72, 4, 2.01, 0.52);
-        var continentalDetail = FractalNoise(WarpDirection(direction, seed ^ CoastSeedSalt, 0.055, 2.2), seed ^ CoastSeedSalt, 2.8, 4, 2.08, 0.49);
-        var crustField = continentalPotential + (continentalWarp * 0.23) + (continentalDetail * 0.07);
-        var normalized = (crustField * 0.34) - 0.37;
+        var macroDirection = WarpDirection(direction, seed ^ WarpSeedSalt, 0.29, 1.16);
+        var continental = FractalNoise(macroDirection, seed ^ CrustSeedSalt, 1.22, 4, 2.06, 0.53) * 0.74;
+        continental += FractalNoise(macroDirection, seed ^ RegionalSeedSalt, 2.95, 3, 2.09, 0.51) * 0.29;
+        continental += FractalNoise(direction, seed ^ CoastSeedSalt, 6.8, 3, 2.09, 0.46) * 0.075;
 
-        var continentalWeight = SmoothStep(-0.06, 0.14, normalized);
-        var provinceDirection = WarpDirection(direction, seed ^ ProvinceSeedSalt, 0.10, 1.55);
-        var province = FractalNoise(provinceDirection, seed ^ ProvinceSeedSalt, 1.45, 4, 2.02, 0.52);
-        var rollingRelief = FractalNoise(provinceDirection, seed ^ DetailSeedSalt, 4.6, 4, 2.10, 0.47);
-        var basin = FractalNoise(provinceDirection, seed ^ BasinSeedSalt, 2.4, 4, 2.07, 0.50);
-        normalized += continentalWeight * ((province * 0.050) + (rollingRelief * 0.020) - (Math.Max(0.0, -basin) * 0.025));
-
-        // Tectonics provide narrow uplift/rift masks. They influence geology but never define continent silhouettes.
+        // Continental topology is derived from coherent spherical fields, not radial plate ownership.
+        // The boundaries below shape mountain belts, never the outline of a continent.
+        var crust = (continental * 0.80) - 0.025;
+        var landMask = SmoothStep(-0.095, 0.19, crust);
+        var province = FractalNoise(macroDirection, seed ^ ProvinceSeedSalt, 2.5, 3, 2.06, 0.49);
+        var basin = FractalNoise(direction, seed ^ BasinSeedSalt, 3.8, 3, 2.11, 0.49);
         var nearest = FindNearestPlates(macroDirection, seed);
-        var primaryContinental = IsContinentalPlate(seed, nearest.PrimaryIndex);
-        var secondaryContinental = IsContinentalPlate(seed, nearest.SecondaryIndex);
-        var boundaryNoise = FractalNoise(direction, seed ^ BoundarySeedSalt, 3.9, 4, 2.07, 0.50);
-        var boundaryDistance = Math.Max(0.0, nearest.PrimaryDot - nearest.SecondaryDot);
-        var boundaryInfluence = 1.0 - SmoothStep(0.006, 0.060, Math.Max(0.0, boundaryDistance + (boundaryNoise * 0.012)));
-        var tectonics = SampleTectonicRelief(direction, seed, nearest, primaryContinental, secondaryContinental, boundaryInfluence, boundaryNoise);
-        normalized += tectonics * continentalWeight * 0.72;
+        var boundaryNoise = FractalNoise(direction, seed ^ BoundarySeedSalt, 4.2, 3, 2.05, 0.49);
+        var separation = Math.Max(0.0, nearest.PrimaryDot - nearest.SecondaryDot);
+        var belt = 1.0 - SmoothStep(0.007, 0.075, Math.Max(0.0, separation + boundaryNoise * 0.013));
+        var plateUplift = SampleTectonicRelief(direction, seed, nearest,
+            IsContinentalPlate(seed, nearest.PrimaryIndex),
+            IsContinentalPlate(seed, nearest.SecondaryIndex), belt, boundaryNoise);
 
-        // Geomorphic hierarchy: ranges are broad envelopes cut by finer ridges/valleys instead of plate-sized slabs.
-        var rangeEnvelope = Math.Max(0.0, RidgedNoise(provinceDirection, seed ^ UplandSeedSalt, 2.1, 3, 2.03, 0.50));
-        var ridgeSystem = RidgedNoise(provinceDirection, seed ^ UplandSeedSalt, 7.5, 3, 2.08, 0.48);
-        var drainage = FractalNoise(provinceDirection, seed ^ BasinSeedSalt, 13.0, 3, 2.05, 0.48);
-        var mountainMask = continentalWeight * SmoothStep(0.18, 0.72, rangeEnvelope + (boundaryInfluence * 0.65));
-        var ridges = Math.Max(0.0, ridgeSystem) * mountainMask;
-        var valleys = Math.Max(0.0, -drainage) * mountainMask;
-        normalized += ridges * 0.095;
-        normalized -= valleys * 0.040;
+        // Old ranges are broad provinces; active ranges follow narrow tectonic belts.
+        // Finer ridges modulate those envelopes but cannot define the continents.
+        var rangeEnvelope = RidgedNoise(macroDirection, seed ^ UplandSeedSalt, 2.85, 3, 2.09, 0.50);
+        var oldRange = SmoothStep(0.06, 0.56, rangeEnvelope) * SmoothStep(-0.12, 0.38, province);
+        var mountainBelt = Math.Max(oldRange * 0.62, belt * 0.90);
+        var narrowRidges = RidgedNoise(direction, seed ^ DetailSeedSalt, 10.0, 3, 2.12, 0.47);
+        var ridgedStrength = Math.Max(0.0, narrowRidges);
+        var uplift = landMask * ((plateUplift * 0.62) + (mountainBelt * (0.15 + ridgedStrength * 0.24)));
+        var rolling = FractalNoise(direction, seed ^ DetailSeedSalt, 5.2, 3, 2.1, 0.48);
+        var terrain = landMask * ((province * 0.083) + (rolling * 0.036) - (Math.Max(0.0, -basin) * 0.055));
 
-        // Sea level intersects the already-built terrain. Near-shore variation is subtle and cannot create stair-step coasts.
-        var coastEnvelope = 1.0 - SmoothStep(0.0, 0.10, Math.Abs(normalized));
-        var coastDetail = FractalNoise(direction, seed ^ CoastSeedSalt, 9.0, 3, 2.13, 0.47);
-        normalized += coastDetail * coastEnvelope * 0.018;
+        // Connected drainage and transported sediment belong to the later erosion stage.
+        // These subdued valley incisions are pre-erosion bedrock shape, not simulated rivers.
+        var valleyField = RidgedNoise(direction, seed ^ BasinSeedSalt, 14.0, 3, 2.05, 0.49);
+        var incisions = Math.Pow(Math.Max(0.0, valleyField), 2.0) * mountainBelt * landMask * 0.049;
+        var impacts = SampleImpactRelief(direction, seed);
+        var coastFine = FractalNoise(direction, seed ^ CoastSeedSalt, 13.0, 2, 2.11, 0.48);
+        var shoreMask = 1.0 - SmoothStep(0.015, 0.10, Math.Abs(crust));
+        var normalized = crust + uplift + terrain - incisions + impacts + (coastFine * shoreMask * 0.024);
 
         if (normalized < 0.0)
         {
-            var shelf = 1.0 - SmoothStep(0.0, 0.18, -normalized);
-            var abyssal = FractalNoise(direction, seed ^ ShelfSeedSalt, 3.1, 3, 2.09, 0.48);
-            normalized += abyssal * Lerp(0.018, 0.006, shelf);
-            normalized -= (1.0 - shelf) * 0.035;
+            // Continental shelves grade into abyssal plains without plate-shaped walls.
+            var shelf = 1.0 - SmoothStep(0.0, 0.19, -normalized);
+            var seafloor = FractalNoise(direction, seed ^ ShelfSeedSalt, 5.5, 2, 2.07, 0.48);
+            normalized += (seafloor * 0.025) - ((1.0 - shelf) * 0.045);
         }
 
-        return Math.Clamp(normalized, -1.0, 1.0);
+        normalized = Math.Clamp(normalized, -1.0, 1.0);
+        var elevation = normalized >= 0.0 ? normalized * MaximumLandElevationMeters : normalized * MaximumOceanDepthMeters;
+        return new PlanetTerrainFieldSample(continental, plateUplift * belt, mountainBelt, elevation);
     }
 
-    private static double SampleContinentalPotential(PlanetVector direction, int seed)
+    private static double SampleImpactRelief(PlanetVector direction, int seed)
     {
-        var strongest = -1.0;
-        var second = -1.0;
-
-        for (var index = 0; index < PlateCount; index++)
+        var relief = 0.0;
+        for (var index = 0; index < 9; index++)
         {
-            if (!IsContinentalPlate(seed, index))
+            var center = SeedDirection(seed ^ RegionalSeedSalt, index, 303_019 + (index * 911));
+            var dot = Math.Clamp(PlanetVector.Dot(direction, center), -1.0, 1.0);
+            var radius = Lerp(0.045, 0.18, ToUnitRange(HashValue(index, seed, CrustSeedSalt, 3_571)));
+            if (dot < Math.Cos(radius * 1.30))
             {
                 continue;
             }
 
-            var center = PlateCenter(seed, index);
-            var dot = PlanetVector.Dot(direction, center);
-            var size = Lerp(0.28, 0.54, ToUnitRange(HashValue(index, seed ^ CrustSeedSalt, PlateSeedSalt, seed)));
-            var edge = Lerp(0.82, 0.46, size);
-            var influence = SmoothStep(edge - 0.18, edge + 0.12, dot);
-            if (influence > strongest)
-            {
-                second = strongest;
-                strongest = influence;
-            }
-            else if (influence > second)
-            {
-                second = influence;
-            }
+            var distance = Math.Acos(dot) / radius;
+            var floor = 1.0 - SmoothStep(0.15, 0.95, distance);
+            var rim = 1.0 - SmoothStep(0.0, 0.17, Math.Abs(distance - 1.0));
+            relief += (rim * 0.022) - (floor * 0.045);
         }
 
-        var merged = strongest + (Math.Max(0.0, second) * 0.42);
-        return (merged * 2.0) - 1.0;
-    }
-
-    private static double SampleNaturalTerrain(PlanetVector direction, int seed, double elevation, double continentalWeight, double boundaryInfluence)
-    {
-        if (continentalWeight <= 0.001)
-        {
-            var abyssal = FractalNoise(direction, seed ^ BasinSeedSalt, 3.4, 3, 2.05, 0.48);
-            return abyssal * 0.022;
-        }
-
-        var provinceDirection = WarpDirection(direction, seed ^ ProvinceSeedSalt, 0.11, 2.4);
-        var province = FractalNoise(provinceDirection, seed ^ ProvinceSeedSalt, 1.35, 4, 2.01, 0.54);
-        var uplands = RidgedNoise(provinceDirection, seed ^ UplandSeedSalt, 3.8, 4, 2.07, 0.49);
-        var basinField = FractalNoise(provinceDirection, seed ^ BasinSeedSalt, 2.7, 4, 2.09, 0.50);
-        var oldHighlands = Math.Max(0.0, uplands) * SmoothStep(0.02, 0.55, province);
-        var basins = Math.Max(0.0, -basinField) * SmoothStep(-0.45, 0.25, province);
-        var plains = 1.0 - Math.Clamp(Math.Abs(province) * 1.7, 0.0, 1.0);
-        var coastDistance = Math.Abs(elevation);
-        var coastalEnvelope = 1.0 - SmoothStep(0.015, 0.18, coastDistance);
-        var coastDetail = FractalNoise(direction, seed ^ CoastSeedSalt, 7.0, 4, 2.17, 0.48);
-
-        var relief = province * 0.075;
-        relief += oldHighlands * 0.105;
-        relief -= basins * 0.085;
-        relief += plains * basinField * 0.018;
-        relief += coastDetail * coastalEnvelope * 0.045;
-        relief *= Lerp(0.82, 1.0, 1.0 - boundaryInfluence);
-        return relief * continentalWeight;
+        return relief;
     }
 
     private static double SampleTectonicRelief(
@@ -266,18 +227,6 @@ public sealed class ProceduralPlanetElevationSource : IPlanetElevationSource
     {
         var rankedIndex = PositiveModulo((plateIndex * 11) + PositiveModulo(seed ^ CrustSeedSalt, PlateCount), PlateCount);
         return rankedIndex < ContinentalPlateCount;
-    }
-
-    private static double ContinentalBase(int seed, int plateIndex)
-    {
-        var variation = ToUnitRange(HashValue(plateIndex, CrustSeedSalt, seed, seed ^ RegionalSeedSalt));
-        return Lerp(0.075, 0.235, variation);
-    }
-
-    private static double OceanicBase(int seed, int plateIndex)
-    {
-        var variation = ToUnitRange(HashValue(plateIndex, seed, CrustSeedSalt, seed ^ DetailSeedSalt));
-        return -Lerp(0.25, 0.56, variation);
     }
 
     private static PlanetVector SeedDirection(int seed, int index, int salt)

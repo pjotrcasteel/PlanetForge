@@ -1,0 +1,162 @@
+@using PlanetForge.Domain.Surface
+@using PlanetForge.Domain.WorldGeneration
+@using PlanetForge.Infrastructure.Surface
+@implements IAsyncDisposable
+@inject ProceduralPlanetElevationSource Elevation
+@inject IJSRuntime Js
+
+<div class="terrain-lab">
+    <header class="lab-top">
+        <div>
+            <small>PLANETFORGE / RESEARCH TOOLING</small>
+            <h1>Terrain Lab <span>0.0.34</span></h1>
+            <p>One canonical spherical generator, four observable geological layers. No ice, atmosphere, oceans or orbital exaggeration hiding the terrain.</p>
+        </div>
+        <a class="lab-back" href="./">← Return to planet</a>
+    </header>
+    <section class="lab-controls" aria-label="Terrain lab controls">
+        <label for="lab-seed">World seed</label>
+        <select id="lab-seed" @bind="selectedSeed" disabled="@working">
+            @foreach (var seed in PlanetSeedCatalog.IntegritySeeds)
+            {
+                <option value="@seed">@seed@(seed == PlanetSeedCatalog.ShowcaseSeed ? " / showcase" : "")</option>
+            }
+        </select>
+        <button @onclick="RegenerateAsync" disabled="@working">@(working ? "GENERATING…" : "REGENERATE")</button>
+        <span role="status">@status</span>
+    </section>
+    <section class="lab-grid">
+        <article>
+            <h2>01 / Crust potential</h2>
+            <p>Multiscale continental substrate, before uplift. Irregularity should originate here.</p>
+            <canvas id="lab-crust" width="256" height="128" aria-label="Crust potential global map"></canvas>
+        </article>
+        <article>
+            <h2>02 / Tectonic uplift</h2>
+            <p>Plate interaction drives regional relief, not continent silhouettes.</p>
+            <canvas id="lab-tectonic" width="256" height="128" aria-label="Tectonic uplift global map"></canvas>
+        </article>
+        <article>
+            <h2>03 / Mountain provinces</h2>
+            <p>Connected highland envelopes; future drainage and erosion will cut these.</p>
+            <canvas id="lab-mountains" width="256" height="128" aria-label="Mountain belts global map"></canvas>
+        </article>
+        <article>
+            <h2>04 / Canonical terrain</h2>
+            <p>Elevation plus terrain-aware hillshading. Blue marks elevation below datum, not simulated water.</p>
+            <canvas id="lab-elevation" width="256" height="128" aria-label="Canonical planetary elevation global map"></canvas>
+        </article>
+    </section>
+    <footer class="lab-footer">Equirectangular projections are diagnostic maps only. Gameplay and local terrain sample these exact same elevation fields. The current generator does not yet simulate hydraulic erosion.</footer>
+</div>
+
+@code {
+    private const int MapWidth = 256;
+    private const int MapHeight = 128;
+    private readonly CancellationTokenSource cancellation = new();
+    private IJSObjectReference? module;
+    private int selectedSeed = PlanetSeedCatalog.ShowcaseSeed;
+    private bool working;
+    private string status = "Initializing laboratory…";
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+        {
+            return;
+        }
+
+        try
+        {
+            module = await Js.InvokeAsync<IJSObjectReference>("import", cancellation.Token, "./js/terrainLab.js");
+            await RegenerateAsync();
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            status = $"Terrain lab initialization failed: {ex.Message}";
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task RegenerateAsync()
+    {
+        if (working || module is null)
+        {
+            return;
+        }
+
+        working = true;
+        status = $"Sampling seed {selectedSeed}…";
+        await InvokeAsync(StateHasChanged);
+        await Task.Yield();
+
+        try
+        {
+            var crust = new float[MapWidth * MapHeight];
+            var tectonic = new float[MapWidth * MapHeight];
+            var mountains = new float[MapWidth * MapHeight];
+            var elevations = new float[MapWidth * MapHeight];
+            var land = 0;
+            var minimum = double.MaxValue;
+            var maximum = double.MinValue;
+
+            for (var y = 0; y < MapHeight; y++)
+            {
+                cancellation.Token.ThrowIfCancellationRequested();
+                var latitude = Math.PI * (0.5 - (y + 0.5) / MapHeight);
+                var cosLatitude = Math.Cos(latitude);
+
+                for (var x = 0; x < MapWidth; x++)
+                {
+                    var longitude = Math.PI * 2.0 * ((x + 0.5) / MapWidth);
+                    var direction = new PlanetVector(cosLatitude * Math.Cos(longitude), Math.Sin(latitude), cosLatitude * Math.Sin(longitude));
+                    var fields = Elevation.SampleTerrainFields(direction, selectedSeed);
+                    var index = (y * MapWidth) + x;
+                    crust[index] = (float)fields.ContinentalPotential;
+                    tectonic[index] = (float)fields.TectonicUplift;
+                    mountains[index] = (float)fields.MountainBelt;
+                    elevations[index] = (float)fields.ElevationMeters;
+                    if (fields.ElevationMeters > 0.0) land++;
+                    minimum = Math.Min(minimum, fields.ElevationMeters);
+                    maximum = Math.Max(maximum, fields.ElevationMeters);
+                }
+
+                if (y % 8 == 0)
+                {
+                    status = $"Sampling seed {selectedSeed} • {100 * (y + 1) / MapHeight}%";
+                    await InvokeAsync(StateHasChanged);
+                    await Task.Delay(1, cancellation.Token);
+                }
+            }
+
+            await module.InvokeVoidAsync("drawTerrainLab", cancellation.Token, MapWidth, MapHeight, crust, tectonic, mountains, elevations);
+            status = $"Seed {selectedSeed} • above datum {land * 100.0 / elevations.Length:0.0}% • range {minimum:0} to {maximum:0} m";
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            status = $"Generation failed: {ex.Message}";
+        }
+        finally
+        {
+            working = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        cancellation.Cancel();
+        if (module is not null)
+        {
+            try
+            {
+                await module.DisposeAsync();
+            }
+            catch (JSDisconnectedException)
+            {
+            }
+        }
+
+        cancellation.Dispose();
+    }
+}
