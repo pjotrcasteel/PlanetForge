@@ -69,6 +69,24 @@ public sealed class PlanetHeroRegionBuilderTests
     }
 
     [TestMethod]
+    public void FindIncisedChannelFocus_PreservesGlobalIdentityForNestedLocalGeology()
+    {
+        var anchor = PlanetVector.Normalize(new PlanetVector(0.55, 0.3, 0.78));
+        var builder = new PlanetHeroRegionBuilder(new ProceduralPlanetElevationSource());
+        var regional = builder.Build(anchor, 24061984, 33, 32_000, 3);
+        var focus = PlanetHeroRegionBuilder.FindIncisedChannelFocus(regional, anchor);
+        var again = PlanetHeroRegionBuilder.FindIncisedChannelFocus(regional, anchor);
+
+        Assert.AreEqual(1.0, focus.Length, 1e-12);
+        Assert.IsGreaterThan(0.999, PlanetVector.Dot(anchor, focus));
+        Assert.AreEqual(focus, again);
+
+        var local = builder.Build(focus, 24061984, 17, 4_000, 3);
+        Assert.AreEqual(250.0, local.CellSpacingMeters);
+        Assert.IsGreaterThan(0.0, local.OriginalElevationMeters.Max() - local.OriginalElevationMeters.Min());
+    }
+
+    [TestMethod]
     public void Build_CancelledBeforeSampling_DoesNotStartGeologicalWork()
     {
         var builder = new PlanetHeroRegionBuilder(new FlatRockElevationSource());
