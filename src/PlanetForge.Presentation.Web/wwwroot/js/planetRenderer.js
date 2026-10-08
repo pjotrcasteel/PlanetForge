@@ -17,6 +17,8 @@ const placeholderTreeHeightMeters = 15.0;
 const placeholderTreeHalfWidthMeters = 3.0;
 const minimumLocalViewPitchRadians = 0.24;
 const maximumLocalViewPitchRadians = 1.48;
+// Temporary research presentation: allow geology to pass visual acceptance before reintroducing climate overlays.
+const geologicalPreviewMode = true;
 const landReliefExaggeration = 8.0;
 const oceanReliefExaggeration = 4.0;
 const iceVisualExaggeration = 4.0;
@@ -144,6 +146,7 @@ function createState(canvas, gl, dotNetReference) {
             seaIceFraction: gl.getUniformLocation(globeProgram, 'uSeaIceFraction'),
             landIceFraction: gl.getUniformLocation(globeProgram, 'uLandIceFraction'),
             snowCoverFraction: gl.getUniformLocation(globeProgram, 'uSnowCoverFraction'),
+            seedPhase: gl.getUniformLocation(globeProgram, 'uSeedPhase'),
             mode: gl.getUniformLocation(globeProgram, 'uMode')
         },
         localAttributes: {
@@ -579,25 +582,28 @@ function renderGlobe(s) {
     gl.uniform1f(s.globeUniforms.seaIceFraction, s.seaIceFraction);
     gl.uniform1f(s.globeUniforms.landIceFraction, s.landIceFraction);
     gl.uniform1f(s.globeUniforms.snowCoverFraction, s.snowCoverFraction);
+    gl.uniform1f(s.globeUniforms.seedPhase, (((s.seed % 10007) + 10007) % 10007) / 10007);
 
     gl.disable(gl.BLEND);
     gl.depthMask(true);
-    gl.uniform1i(s.globeUniforms.mode, isPreBiologicalSurface(s) ? 2 : 0);
+    gl.uniform1i(s.globeUniforms.mode, geologicalPreviewMode ? 5 : (isPreBiologicalSurface(s) ? 2 : 0));
     drawTerrain(s);
 
-    if (s.liquidFraction > 0.001) {
-        gl.uniform1i(s.globeUniforms.mode, 3);
-        drawSurface(s);
-    }
+    if (!geologicalPreviewMode) {
+        if (s.liquidFraction > 0.001) {
+            gl.uniform1i(s.globeUniforms.mode, 3);
+            drawSurface(s);
+        }
 
-    gl.enable(gl.BLEND);
-    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
-    gl.depthMask(true);
-    gl.enable(gl.POLYGON_OFFSET_FILL);
-    gl.polygonOffset(-4.0, -8.0);
-    gl.uniform1i(s.globeUniforms.mode, 4);
-    drawSurface(s);
-    gl.disable(gl.POLYGON_OFFSET_FILL);
+        gl.enable(gl.BLEND);
+        gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+        gl.depthMask(true);
+        gl.enable(gl.POLYGON_OFFSET_FILL);
+        gl.polygonOffset(-4.0, -8.0);
+        gl.uniform1i(s.globeUniforms.mode, 4);
+        drawSurface(s);
+        gl.disable(gl.POLYGON_OFFSET_FILL);
+    }
 
     gl.depthMask(false);
     gl.disable(gl.CULL_FACE);
@@ -804,7 +810,7 @@ void main() {
     float elevationAboveSeaLevel = elevationMeters - uSeaLevelMeters;
     float visualRadius = physicalRadius;
 
-    if (uMode == 0 || uMode == 2) {
+    if (uMode == 0 || uMode == 2 || uMode == 5) {
         float exaggeration = elevationAboveSeaLevel >= 0.0 ? 8.0 : 2.0;
         visualRadius = 1.0 + ((elevationMeters * exaggeration) / uPlanetRadiusMeters);
     } else if (uMode == 3) {
@@ -858,6 +864,7 @@ uniform float uSeaIceFraction;
 uniform float uLandIceFraction;
 uniform float uSnowCoverFraction;
 uniform int uMode;
+uniform float uSeedPhase;
 out vec4 outColor;
 
 float hash31(vec3 p) {
@@ -929,6 +936,37 @@ vec3 terrainMaterial(vec3 radial, vec3 normal, float elevationAboveSeaLevel, boo
     float illumination = clamp(0.34 + (0.72 * smoothstep(0.0, 0.94, direct)) + (faceDelta * 0.24), 0.28, 1.10);
     illumination *= 1.0 - (steep * 0.08) - (cliff * 0.14);
     return material * illumination;
+}
+
+vec3 barrenRockMaterial(vec3 radial, vec3 terrainNormal, float elevationMeters) {
+    // Material scale follows actual spherical directions and canonical elevation.
+    // The noise below changes mineral colour and apparent roughness, not coastline or terrain shape.
+    vec3 offset = vec3(uSeedPhase * 17.1, uSeedPhase * 11.3, uSeedPhase * -13.7);
+    float province = fbm(radial * 7.5 + offset);
+    float strata = fbm(radial * 28.0 + offset * 1.37);
+    float regolith = valueNoise(radial * 112.0 + offset * 3.1);
+    float basalt = smoothstep(0.48, 0.68, province) * (1.0 - smoothstep(1100.0, 3800.0, elevationMeters));
+    float dusty = smoothstep(0.29, 0.71, province * 0.55 + strata * 0.45);
+    float cliff = smoothstep(0.015, 0.17, vPhysicalSlope);
+    float highland = smoothstep(800.0, 5100.0, elevationMeters);
+
+    vec3 ironOxide = vec3(0.53, 0.265, 0.163);
+    vec3 oxidizedDust = vec3(0.72, 0.435, 0.285);
+    vec3 exposedRock = vec3(0.40, 0.285, 0.235);
+    vec3 darkVolcanic = vec3(0.25, 0.215, 0.205);
+    vec3 minerals = mix(ironOxide, oxidizedDust, dusty * 0.70 + regolith * 0.15);
+    minerals = mix(minerals, exposedRock, clamp(highland * 0.33 + cliff * 0.50, 0.0, 0.72));
+    minerals = mix(minerals, darkVolcanic, basalt * 0.65);
+    float layeredVariation = (strata - 0.5) * 0.32 + (regolith - 0.5) * 0.12;
+    minerals *= 1.0 + layeredVariation;
+
+    vec3 lightDir = normalize(uLightDirection);
+    float diffuse = max(dot(normalize(terrainNormal), lightDir), 0.0);
+    float radialLight = max(dot(radial, lightDir), 0.0);
+    float reliefShading = clamp(diffuse - radialLight, -0.48, 0.48);
+    float illumination = clamp(0.32 + diffuse * 0.77 + reliefShading * 0.35, 0.23, 1.13);
+    illumination *= 1.0 - cliff * 0.12;
+    return clamp(minerals * illumination, 0.0, 1.0);
 }
 
 vec4 oceanMaterial(vec3 radial, vec3 normal, float elevationAboveSeaLevel) {
@@ -1045,6 +1083,11 @@ void main() {
         float steam = clamp(uVaporFraction * 0.7, 0.0, 0.7);
         vec3 atmosphereColor = mix(vec3(0.20, 0.72, 0.72), vec3(0.72, 0.78, 0.72), steam);
         outColor = vec4(atmosphereColor, rim * 0.24 * uAtmosphere * fluxGlow);
+        return;
+    }
+
+    if (uMode == 5) {
+        outColor = vec4(barrenRockMaterial(radial, normal, vElevationMeters), 1.0);
         return;
     }
 
