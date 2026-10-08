@@ -34,8 +34,7 @@ public static class PlanetRegionalGeologyEvolution
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(regionKey);
         ArgumentNullException.ThrowIfNull(canonicalBedrockMeters);
-        // Reuse watershed input validation instead of maintaining a subtly different grid contract.
-        _ = PlanetRegionalWatershed.Build(width, height, cellSpacingMeters, canonicalBedrockMeters);
+        ValidateGrid(width, height, cellSpacingMeters, canonicalBedrockMeters);
         return new PlanetRegionalGeologySnapshot(CurrentSchemaVersion, seed, regionKey, width, height,
             cellSpacingMeters, 0, canonicalBedrockMeters.ToArray(), 0.0, 0.0, 0.0);
     }
@@ -60,7 +59,7 @@ public static class PlanetRegionalGeologyEvolution
             throw new ArgumentException("Snapshot sediment volumes must be finite and non-negative.", nameof(snapshot));
         }
 
-        _ = PlanetRegionalWatershed.Build(snapshot.Width, snapshot.Height, snapshot.CellSpacingMeters, snapshot.ElevationMeters);
+        ValidateGrid(snapshot.Width, snapshot.Height, snapshot.CellSpacingMeters, snapshot.ElevationMeters);
         var balance = snapshot.CumulativeErodedVolumeCubicMeters -
             snapshot.CumulativeDepositedVolumeCubicMeters - snapshot.CumulativeExportedVolumeCubicMeters;
         if (Math.Abs(balance) > Math.Max(1.0, snapshot.CumulativeErodedVolumeCubicMeters * 1e-5))
@@ -69,6 +68,24 @@ public static class PlanetRegionalGeologyEvolution
         }
 
         return snapshot with { ElevationMeters = (float[])snapshot.ElevationMeters.Clone() };
+    }
+
+    private static void ValidateGrid(int width, int height, double spacing, IReadOnlyList<float> elevations)
+    {
+        if (width is < 8 or > 512 || height is < 8 or > 512 || (long)width * height != elevations.Count)
+        {
+            throw new ArgumentException("Invalid regional geological grid dimensions or elevation count.");
+        }
+
+        if (!double.IsFinite(spacing) || spacing <= 0.0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(spacing));
+        }
+
+        if (elevations.Any(value => !float.IsFinite(value)))
+        {
+            throw new ArgumentException("Geological elevations must be finite.", nameof(elevations));
+        }
     }
 
     public static PlanetRegionalGeologySnapshot Advance(
