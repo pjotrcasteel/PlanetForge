@@ -839,7 +839,11 @@ void main() {
     float elevationAboveSeaLevel = elevationMeters - uSeaLevelMeters;
     float visualRadius = physicalRadius;
 
-    if (uMode == 0 || uMode == 2 || uMode == 5) {
+    if (uMode == 5) {
+        // At orbital scales height is negligible relative to planetary radius.
+        // Use canonical elevation for colour and shading, not exaggerated polygon displacement.
+        visualRadius = 1.0;
+    } else if (uMode == 0 || uMode == 2) {
         float exaggeration = elevationAboveSeaLevel >= 0.0 ? 8.0 : 2.0;
         visualRadius = 1.0 + ((elevationMeters * exaggeration) / uPlanetRadiusMeters);
     } else if (uMode == 3) {
@@ -978,8 +982,6 @@ vec3 barrenRockMaterial(vec3 radial, vec3 terrainNormal, float elevationMeters) 
     float plateau = smoothstep(450.0, 2400.0, elevationMeters);
     float highland = smoothstep(2100.0, 5400.0, elevationMeters);
     float physicalCliff = smoothstep(0.000004, 0.0015, vPhysicalSlope);
-    float screenRelief = length(vec2(dFdx(elevationMeters), dFdy(elevationMeters)));
-    float incised = smoothstep(18.0, 230.0, screenRelief);
 
     vec3 lowland = vec3(0.365, 0.215, 0.168);
     vec3 dustyPlains = vec3(0.635, 0.350, 0.231);
@@ -988,7 +990,7 @@ vec3 barrenRockMaterial(vec3 radial, vec3 terrainNormal, float elevationMeters) 
     vec3 material = mix(dustyPlains, lowland, basin * 0.67);
     material = mix(material, upliftedRock, plateau * 0.75);
     material = mix(material, ancientBedrock, highland * 0.56);
-    material = mix(material, vec3(0.36, 0.290, 0.255), physicalCliff * 0.26 + incised * 0.17);
+    material = mix(material, vec3(0.36, 0.290, 0.255), physicalCliff * 0.38);
 
     float mineralVariation = (minerals - 0.5) * 0.16 + (grains - 0.5) * 0.095;
     material *= 1.0 + mineralVariation;
@@ -997,7 +999,7 @@ vec3 barrenRockMaterial(vec3 radial, vec3 terrainNormal, float elevationMeters) 
     float radialLight = max(dot(radial, normalize(uLightDirection)), 0.0);
     float reliefContrast = clamp((light - radialLight) * 1.2, -0.40, 0.40);
     float illumination = clamp(0.39 + (0.64 * light) + reliefContrast, 0.25, 1.15);
-    illumination *= 1.0 - incised * 0.17;
+    illumination *= 1.0 - physicalCliff * 0.12;
     return clamp(material * illumination, 0.0, 1.0);
 }
 
