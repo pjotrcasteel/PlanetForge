@@ -255,6 +255,107 @@ public sealed class PlanetRegionalWatershed
             accumulation.Select(value => (float)value).ToArray(), incision, deposition, evolved, eroded, deposited, exported);
     }
 
+    private static readonly (int X, int Y)[] Compass =
+    [
+        (1, 0), (1, 1), (0, 1), (-1, 1),
+        (-1, 0), (-1, -1), (0, -1), (1, -1),
+    ];
+
+    private static void CalculateDirectionalReceivers(
+        int width, int height, float[] filled, double[] distance, int[] priorityOrder,
+        int[] primary, int[] secondary, float[] secondaryFractions)
+    {
+        // Priority-flood provides a valid downhill, acyclic fallback receiver tree.
+        // Flow direction follows the continuous local height gradient, with runoff split
+        // between the two adjacent D-infinity octants (not forced into a single 45° line).
+        for (var i = 0; i < primary.Length; i++)
+        {
+            if (primary[i] < 0)
+            {
+                continue;
+            }
+
+            var x = i % width;
+            var y = i / width;
+            var left = RoutingPotential(y * width + Math.Max(0, x - 1), filled, distance);
+            var right = RoutingPotential(y * width + Math.Min(width - 1, x + 1), filled, distance);
+            var up = RoutingPotential(Math.Max(0, y - 1) * width + x, filled, distance);
+            var down = RoutingPotential(Math.Min(height - 1, y + 1) * width + x, filled, distance);
+            var gradientX = right - left;
+            var gradientY = down - up;
+            if (Math.Abs(gradientX) + Math.Abs(gradientY) <= 1e-10)
+            {
+                continue;
+            }
+
+            var angle = Math.Atan2(-gradientY, -gradientX);
+            if (angle < 0.0)
+            {
+                angle += Math.PI * 2.0;
+            }
+
+            var sector = angle / (Math.PI / 4.0);
+            var lowerDirection = (int)Math.Floor(sector) % 8;
+            var upperDirection = (lowerDirection + 1) % 8;
+            var lower = DownhillNeighbor(i, lowerDirection, width, height, filled, distance, priorityOrder);
+            var upper = DownhillNeighbor(i, upperDirection, width, height, filled, distance, priorityOrder);
+
+            if (lower < 0 && upper < 0)
+            {
+                continue;
+            }
+
+            var upperWeight = sector - Math.Floor(sector);
+            if (lower < 0 || upperWeight >= 0.999999)
+            {
+                primary[i] = upper >= 0 ? upper : primary[i];
+                continue;
+            }
+
+            if (upper < 0 || upperWeight <= 0.000001)
+            {
+                primary[i] = lower;
+                continue;
+            }
+
+            if (upperWeight <= 0.5)
+            {
+                primary[i] = lower;
+                secondary[i] = upper;
+                secondaryFractions[i] = (float)upperWeight;
+            }
+            else
+            {
+                primary[i] = upper;
+                secondary[i] = lower;
+                secondaryFractions[i] = (float)(1.0 - upperWeight);
+            }
+        }
+    }
+
+    private static int DownhillNeighbor(
+        int index, int direction, int width, int height, float[] filled, double[] distance, int[] priorityOrder)
+    {
+        var nextX = index % width + Compass[direction].X;
+        var nextY = index / width + Compass[direction].Y;
+        if (nextX < 0 || nextX >= width || nextY < 0 || nextY >= height)
+        {
+            return -1;
+        }
+
+        var next = nextY * width + nextX;
+        if (priorityOrder[next] >= priorityOrder[index] ||
+            RoutingPotential(next, filled, distance) >= RoutingPotential(index, filled, distance))
+        {
+            return -1;
+        }
+
+        return next;
+    }
+
+    private static double RoutingPotential(int index, float[] filled, double[] distance) =>
+        filled[index] + (distance[index] * 0.00001);
+
     private static bool IsBoundarySpillway(int x, int y, int width, int height, IReadOnlyList<float> elevation)
     {
         var value = elevation[y * width + x];
