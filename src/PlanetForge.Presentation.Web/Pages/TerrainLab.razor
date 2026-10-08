@@ -94,8 +94,9 @@
             <div>
                 <small>PF 0.0.36 / WORLD MACHINE-INSPIRED RESEARCH</small>
                 <h2>Hero region / multiscale geological relief</h2>
-                <p>First generate the 128 km watershed, then refine a 32 km region
-                    centered on its actual incised channels. The child inherits the parent's eroded heights and geological rock fabric. Both use 129×129 physical height samples,
+                <p>Generate the 128 km watershed, refine its incised valley at 32 km, then inspect an 8 km
+                    nested local terrain. Each level inherits its parent geology at fixed spherical locations.
+                    Every level uses 129×129 physical height samples,
                     six hydraulic erosion passes and eight conservative bank-relaxation passes. No vertical exaggeration.</p>
             </div>
             <button id="lab-hero-generate" @onclick="GenerateHeroRegionAsync" disabled="@(working || heroAnchor is null)">
@@ -107,11 +108,12 @@
             <select id="lab-hero-scale" @bind="heroSpanKilometers" disabled="@working">
                 <option value="128">128 km regional geology</option>
                 <option value="32" disabled="@(!heroFocusAnchor.HasValue)">32 km nested valley detail</option>
+                <option value="8" disabled="@(!heroMicroAnchor.HasValue)">8 km local erosion detail</option>
             </select>
             <label for="lab-hero-mode">Compare terrain</label>
             <select id="lab-hero-mode" @bind="heroMode" @bind:after="UpdateHeroModeAsync" disabled="@(heroRegion is null || working)">
                 <option value="after">Eroded geological terrain</option>
-                <option value="before">@(heroSpanKilometers == 32 ? "Inherited regional terrain" : "Pre-erosion structural bedrock")</option>
+                <option value="before">@(heroSpanKilometers == 8 ? "Inherited regional + valley terrain" : heroSpanKilometers == 32 ? "Inherited regional terrain" : "Pre-erosion structural bedrock")</option>
             </select>
             <span>Generate after changing scale · Drag to orbit · Scroll to zoom · physical elevation scale</span>
         </div>
@@ -134,6 +136,8 @@
     private readonly CancellationTokenSource cancellation = new();
     private PlanetVector? heroAnchor;
     private PlanetVector? heroFocusAnchor;
+    private PlanetVector? heroMicroAnchor;
+    private PlanetRegionalGeologyOverlay? heroNestedOverlay;
     private PlanetRegionalGeologyOverlay? heroParentOverlay;
     private IPlanetElevationSource? heroStructuralSource;
     private int heroSpanKilometers = 128;
@@ -175,7 +179,9 @@
         working = true;
         heroAnchor = null;
         heroFocusAnchor = null;
+        heroMicroAnchor = null;
         heroParentOverlay = null;
+        heroNestedOverlay = null;
         heroStructuralSource = null;
         heroSpanKilometers = 128;
         heroRegion = null;
@@ -384,18 +390,35 @@
         try
         {
             heroModule ??= await Js.InvokeAsync<IJSObjectReference>("import", cancellation.Token, "./js/heroRegion.js");
-            var anchor = heroSpanKilometers == 32 ? heroFocusAnchor ?? heroAnchor.Value : heroAnchor.Value;
-            if (heroSpanKilometers == 32 && heroParentOverlay is null)
+            var anchor = heroSpanKilometers switch
             {
-                throw new InvalidOperationException("Generate the 128 km parent geology before refining to 32 km.");
+                8 => heroMicroAnchor ?? heroAnchor.Value,
+                32 => heroFocusAnchor ?? heroAnchor.Value,
+                _ => heroAnchor.Value
+            };
+            if (heroSpanKilometers != 128 && heroParentOverlay is null)
+            {
+                throw new InvalidOperationException("Generate the 128 km parent geology before refining locally.");
             }
 
-            // Structural rock fabric follows the parent mountain strike at both scales.
-            // The child then inherits actual parent erosion before developing local valleys.
+            if (heroSpanKilometers == 8 && heroNestedOverlay is null)
+            {
+                throw new InvalidOperationException("Generate the 32 km nested geology before refining to 8 km.");
+            }
+
+            // Every finer region inherits the full geological history of its
+            // ancestors at identical spherical locations, before adding local cuts.
             heroStructuralSource ??= new PlanetHeroStructuralBedrockSource(Elevation, heroAnchor.Value, selectedSeed);
-            IPlanetElevationSource inputElevation = heroSpanKilometers == 32
-                ? new PlanetRegionalEvolvedElevationSource(heroStructuralSource, heroParentOverlay!)
-                : heroStructuralSource;
+            IPlanetElevationSource inputElevation = heroStructuralSource;
+            if (heroSpanKilometers != 128)
+            {
+                inputElevation = new PlanetRegionalEvolvedElevationSource(inputElevation, heroParentOverlay!);
+            }
+
+            if (heroSpanKilometers == 8)
+            {
+                inputElevation = new PlanetRegionalEvolvedElevationSource(inputElevation, heroNestedOverlay!);
+            }
             var result = new PlanetHeroRegionBuilder(inputElevation).Build(
                 anchor, selectedSeed, regionSpanMeters: heroSpanKilometers * 1000.0,
                 cancellationToken: cancellation.Token);
@@ -403,7 +426,15 @@
             {
                 heroFocusAnchor = PlanetHeroRegionBuilder.FindIncisedChannelFocus(result, anchor);
                 heroParentOverlay = PlanetHeroRegionBuilder.CreateParentOverlay(result, anchor);
+                heroMicroAnchor = null;
+                heroNestedOverlay = null;
             }
+            else if (heroSpanKilometers == 32)
+            {
+                heroMicroAnchor = PlanetHeroRegionBuilder.FindIncisedChannelFocus(result, anchor);
+                heroNestedOverlay = PlanetHeroRegionBuilder.CreateParentOverlay(result, anchor);
+            }
+
             heroMode = "after";
             await heroModule.InvokeVoidAsync("drawHeroRegion", cancellation.Token, result, heroMode);
             heroRegion = result;
