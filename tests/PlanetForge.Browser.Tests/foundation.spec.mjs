@@ -130,6 +130,8 @@ test('BedrockQualityGate_ThreeSeeds_RegionalAndLocalZoomRemainVisible', async ({
     const local = await page.evaluate(() => window.__planetForgeSurfaceTest.getLodStats());
     expect(local.altitudeMeters).toBeGreaterThan(1000);
     expect(local.altitudeMeters).toBeLessThan(10000);
+    expect(local.localElevationRangeMeters).toBeGreaterThan(25);
+    expect(local.localCellSpacingMeters).toBeGreaterThan(0);
     expect(await page.locator('#planet-canvas').evaluate(canvas => canvas.getContext('webgl2').getError())).toBe(0);
     await page.screenshot({ path: testInfo.outputPath('bedrock-' + seed + '-local.png'), fullPage: true });
   }
