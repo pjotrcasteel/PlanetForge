@@ -9,7 +9,7 @@ namespace PlanetForge.Infrastructure.Surface;
 public sealed class PlanetRegionalWatershed
 {
     private PlanetRegionalWatershed(
-        int width, int height, double cellSpacingMeters, int[] receivers, float[] filled,
+        int width, int height, double cellSpacingMeters, int[] receivers, int[] secondaryReceivers, float[] secondaryFractions, float[] filled,
         float[] accumulatedRunoff, float[] incision, float[] deposition, float[] evolved,
         double erodedVolume, double depositedVolume, double exportedVolume)
     {
@@ -17,6 +17,8 @@ public sealed class PlanetRegionalWatershed
         Height = height;
         CellSpacingMeters = cellSpacingMeters;
         DownstreamIndices = receivers;
+        SecondaryDownstreamIndices = secondaryReceivers;
+        SecondaryFlowFractions = secondaryFractions;
         FilledRoutingElevationMeters = filled;
         AccumulatedRunoffCells = accumulatedRunoff;
         IncisionMeters = incision;
@@ -31,6 +33,8 @@ public sealed class PlanetRegionalWatershed
     public int Height { get; }
     public double CellSpacingMeters { get; }
     public int[] DownstreamIndices { get; }
+    public int[] SecondaryDownstreamIndices { get; }
+    public float[] SecondaryFlowFractions { get; }
     public float[] FilledRoutingElevationMeters { get; }
     public float[] AccumulatedRunoffCells { get; }
     public float[] IncisionMeters { get; }
@@ -149,6 +153,18 @@ public sealed class PlanetRegionalWatershed
             throw new InvalidOperationException("Watershed routing failed to connect every cell to an outlet.");
         }
 
+        var secondaryReceivers = new int[count];
+        var secondaryFractions = new float[count];
+        Array.Fill(secondaryReceivers, -1);
+        var priorityOrder = new int[count];
+        for (var position = 0; position < count; position++)
+        {
+            priorityOrder[visitOrder[position]] = position;
+        }
+
+        CalculateDirectionalReceivers(width, height, filled, distance, priorityOrder, receivers,
+            secondaryReceivers, secondaryFractions);
+
         var accumulation = new double[count];
         for (var i = 0; i < count; i++)
         {
@@ -166,7 +182,12 @@ public sealed class PlanetRegionalWatershed
             var index = visitOrder[order];
             if (receivers[index] >= 0)
             {
-                accumulation[receivers[index]] += accumulation[index];
+                var secondaryPart = secondaryFractions[index];
+                accumulation[receivers[index]] += accumulation[index] * (1.0 - secondaryPart);
+                if (secondaryReceivers[index] >= 0)
+                {
+                    accumulation[secondaryReceivers[index]] += accumulation[index] * secondaryPart;
+                }
             }
         }
 
@@ -186,9 +207,15 @@ public sealed class PlanetRegionalWatershed
             var index = visitOrder[order];
             var downstream = receivers[index];
             var runoff = accumulation[index];
-            var slope = downstream < 0 ? 0.0 : Math.Max(0.0,
+            var secondary = secondaryReceivers[index];
+            var secondaryPart = secondaryFractions[index];
+            var primarySlope = downstream < 0 ? 0.0 : Math.Max(0.0,
                 (filled[index] - filled[downstream]) /
                 (cellSpacingMeters * (IsDiagonal(index, downstream, width) ? Math.Sqrt(2.0) : 1.0)));
+            var alternateSlope = secondary < 0 ? 0.0 : Math.Max(0.0,
+                (filled[index] - filled[secondary]) /
+                (cellSpacingMeters * (IsDiagonal(index, secondary, width) ? Math.Sqrt(2.0) : 1.0)));
+            var slope = (primarySlope * (1.0 - secondaryPart)) + (alternateSlope * secondaryPart);
 
             if (downstream >= 0 && runoff >= 6.0 && slope > 0.00001)
             {
@@ -216,11 +243,15 @@ public sealed class PlanetRegionalWatershed
             }
             else
             {
-                sedimentLoad[downstream] += sedimentLoad[index];
+                sedimentLoad[downstream] += sedimentLoad[index] * (1.0 - secondaryPart);
+                if (secondary >= 0)
+                {
+                    sedimentLoad[secondary] += sedimentLoad[index] * secondaryPart;
+                }
             }
         }
 
-        return new PlanetRegionalWatershed(width, height, cellSpacingMeters, receivers, filled,
+        return new PlanetRegionalWatershed(width, height, cellSpacingMeters, receivers, secondaryReceivers, secondaryFractions, filled,
             accumulation.Select(value => (float)value).ToArray(), incision, deposition, evolved, eroded, deposited, exported);
     }
 
