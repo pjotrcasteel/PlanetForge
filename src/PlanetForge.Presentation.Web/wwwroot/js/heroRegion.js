@@ -155,3 +155,13 @@ export function drawHeroRegion(region,mode='after'){
 export function setHeroRegionMode(mode){
     if(mode==='before'||mode==='after')useMode(mode);
 }
+
+export function resetHeroRegion() {
+    window.__planetForgeHeroRegionReady = false;
+    window.__planetForgeHeroRegionStats = null;
+    if (!scene) return;
+    scene.gl.viewport(0, 0, scene.canvas.width, scene.canvas.height);
+    scene.gl.clearColor(0.07, 0.09, 0.10, 1);
+    scene.gl.clear(scene.gl.COLOR_BUFFER_BIT | scene.gl.DEPTH_BUFFER_BIT);
+    scene.region = null;
+}
