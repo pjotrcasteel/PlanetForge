@@ -113,6 +113,28 @@ for (const seed of [24061984, 346147916, 579460630]) {
   });
 }
 
+test('BedrockQualityGate_ThreeSeeds_RegionalAndLocalZoomRemainVisible', async ({ page }, testInfo) => {
+  test.setTimeout(300_000);
+  for (const seed of [24061984, 346147916, 579460630]) {
+    await page.goto('/?visualTest=1&seed=' + seed);
+    await page.waitForFunction(() => Boolean(window.__planetForgeSurfaceTest), null, { timeout: 45_000 });
+    await page.evaluate(() => window.__planetForgeSurfaceTest.setDistance(1.010));
+    await page.waitForFunction(() => !window.__planetForgeSurfaceTest.getLodStats().refining, null, { timeout: 75_000 });
+    const regional = await page.evaluate(() => window.__planetForgeSurfaceTest.getLodStats());
+    expect(regional.maximumLevel).toBeGreaterThanOrEqual(5);
+    await page.screenshot({ path: testInfo.outputPath('bedrock-' + seed + '-regional.png'), fullPage: true });
+
+    await page.evaluate(() => window.__planetForgeSurfaceTest.setDistance(1.001));
+    await page.waitForFunction(() => window.__planetForgeSurfaceTest.getLodStats().mode === 'local', null, { timeout: 75_000 });
+    await page.waitForFunction(() => !window.__planetForgeSurfaceTest.getLodStats().refining, null, { timeout: 75_000 });
+    const local = await page.evaluate(() => window.__planetForgeSurfaceTest.getLodStats());
+    expect(local.altitudeMeters).toBeGreaterThan(1000);
+    expect(local.altitudeMeters).toBeLessThan(10000);
+    expect((await page.evaluate(() => window.__planetForgeSurfaceTest.measure())).glError).toBe(0);
+    await page.screenshot({ path: testInfo.outputPath('bedrock-' + seed + '-local.png'), fullPage: true });
+  }
+});
+
 test('OrbitalZoom_RequestsHigherLodAndRestoresCoarseGlobe', async ({ page }, testInfo) => {
   await page.goto('/?visualTest=1');
   await page.waitForFunction(() => Boolean(window.__planetForgeSurfaceTest), null, { timeout: 30_000 });
