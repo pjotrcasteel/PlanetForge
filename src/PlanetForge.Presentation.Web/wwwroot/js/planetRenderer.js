@@ -48,6 +48,7 @@ export function initialize(canvasId, snapshot, dotNetReference, generatorPreview
 export function setPlanet(snapshot) {
     if (!state) return;
     state.dirty = true;
+    if (state.seed !== snapshot.seed) state.orbitalAtlasSeed = null;
     state.seed = snapshot.seed;
     state.seaLevelMeters = state.generatorPreview ? 0.0 : snapshot.seaLevelMeters;
     state.planetRadiusMeters = snapshot.physicalParameters.radiusMeters;
@@ -95,6 +96,26 @@ export function setPlanet(snapshot) {
     }
 }
 
+export function setOrbitalAtlas(seed, width, height, pixels) {
+    if (!state || state.seed !== seed) return;
+    const gl = state.gl;
+    const data = pixels instanceof Uint8Array ? pixels : new Uint8Array(pixels);
+    if (data.length !== width * height * 4) throw new Error('Invalid orbital atlas dimensions');
+    if (state.orbitalAtlasTexture) gl.deleteTexture(state.orbitalAtlasTexture);
+    const texture = gl.createTexture();
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, texture);
+    gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, width, height, 0, gl.RGBA, gl.UNSIGNED_BYTE, data);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    state.orbitalAtlasTexture = texture;
+    state.orbitalAtlasSeed = seed;
+    state.dirty = true;
+}
+
 export function dispose() {
     if (!state) return;
     if (state.lodTimer !== null) clearTimeout(state.lodTimer);
@@ -104,6 +125,7 @@ export function dispose() {
     clearSurfaceBufferCache(state);
     clearLocalSurfaceBuffer(state);
     state.scaleHud?.remove();
+    if (state.orbitalAtlasTexture) state.gl.deleteTexture(state.orbitalAtlasTexture);
     state.gl.deleteProgram(state.globeProgram);
     state.gl.deleteProgram(state.localProgram);
     clearRetainedSurfaceGeometry();
@@ -127,6 +149,7 @@ function createState(canvas, gl, dotNetReference) {
     return {
         canvas, gl, dotNetReference, globeProgram, localProgram, generatorPreview: false, renderMode: 'globe', geometryKey: null,
         surfaceKey: null, tileBufferCache: new Map(), tiles: [], localSurface: null,
+        orbitalAtlasTexture: null, orbitalAtlasSeed: null,
         yaw: -0.65, pitch: 0.24, distance: initialOrbitDistance(canvas), localYaw: -0.65, localPitch: 0.72,
         localCameraAltitudeMeters: null, scaleHud: createLocalScaleHud(canvas),
         dragging: false, lastX: 0, lastY: 0,
@@ -156,6 +179,8 @@ function createState(canvas, gl, dotNetReference) {
             landIceFraction: gl.getUniformLocation(globeProgram, 'uLandIceFraction'),
             snowCoverFraction: gl.getUniformLocation(globeProgram, 'uSnowCoverFraction'),
             seedPhase: gl.getUniformLocation(globeProgram, 'uSeedPhase'),
+            orbitalAtlas: gl.getUniformLocation(globeProgram, 'uOrbitalAtlas'),
+            atlasReady: gl.getUniformLocation(globeProgram, 'uAtlasReady'),
             mode: gl.getUniformLocation(globeProgram, 'uMode')
         },
         localAttributes: {
@@ -508,6 +533,7 @@ function installVisualTestApi() {
             state.dirty = false;
         },
         getDistance() { return state?.distance ?? 0.0; },
+        getAtlasReady() { return Boolean(state?.orbitalAtlasTexture && state.orbitalAtlasSeed === state.seed); },
         getSeed() { return state?.seed ?? null; },
         measure() {
             if (!state) return null;
@@ -608,6 +634,10 @@ function renderGlobe(s) {
     gl.uniform1f(s.globeUniforms.landIceFraction, s.landIceFraction);
     gl.uniform1f(s.globeUniforms.snowCoverFraction, s.snowCoverFraction);
     gl.uniform1f(s.globeUniforms.seedPhase, (((s.seed % 10007) + 10007) % 10007) / 10007);
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, s.orbitalAtlasTexture);
+    gl.uniform1i(s.globeUniforms.orbitalAtlas, 0);
+    gl.uniform1i(s.globeUniforms.atlasReady, s.orbitalAtlasSeed === s.seed ? 1 : 0);
 
     gl.disable(gl.BLEND);
     gl.depthMask(true);
@@ -898,6 +928,8 @@ uniform float uLandIceFraction;
 uniform float uSnowCoverFraction;
 uniform int uMode;
 uniform float uSeedPhase;
+uniform sampler2D uOrbitalAtlas;
+uniform int uAtlasReady;
 out vec4 outColor;
 
 float hash31(vec3 p) {
@@ -971,7 +1003,7 @@ vec3 terrainMaterial(vec3 radial, vec3 normal, float elevationAboveSeaLevel, boo
     return material * illumination;
 }
 
-vec3 barrenRockMaterial(vec3 radial, vec3 terrainNormal, float elevationMeters) {
+vec3 barrenRockMaterial(vec3 radial, vec3 terrainNormal, float elevationMeters, float physicalSlope) {
     // Canonical elevation and physical slope define the geological provinces.
     // Low-frequency noise contributes subtle mineral differences, never fake continents.
     vec3 offset = vec3(uSeedPhase * 17.1, uSeedPhase * 11.3, uSeedPhase * -13.7);
@@ -981,7 +1013,7 @@ vec3 barrenRockMaterial(vec3 radial, vec3 terrainNormal, float elevationMeters) 
     float basin = 1.0 - smoothstep(-2600.0, 400.0, elevationMeters);
     float plateau = smoothstep(450.0, 2400.0, elevationMeters);
     float highland = smoothstep(2100.0, 5400.0, elevationMeters);
-    float physicalCliff = smoothstep(0.000004, 0.0015, vPhysicalSlope);
+    float physicalCliff = smoothstep(0.000004, 0.0015, physicalSlope);
 
     vec3 lowland = vec3(0.365, 0.215, 0.168);
     vec3 dustyPlains = vec3(0.635, 0.350, 0.231);
@@ -1121,7 +1153,19 @@ void main() {
     }
 
     if (uMode == 5) {
-        outColor = vec4(barrenRockMaterial(radial, normal, vElevationMeters), 1.0);
+        vec3 rockNormal = normal;
+        float rockElevation = vElevationMeters;
+        float rockSlope = vPhysicalSlope;
+        if (uAtlasReady == 1) {
+            vec2 uv = vec2(fract(atan(radial.z, radial.x) / 6.28318530718),
+                0.5 - asin(clamp(radial.y, -1.0, 1.0)) / 3.14159265359);
+            vec4 atlas = texture(uOrbitalAtlas, uv);
+            vec3 physical = normalize(atlas.rgb * 2.0 - 1.0);
+            rockNormal = normalize(radial + (physical - radial) * 18.0);
+            rockElevation = atlas.a * 16000.0 - 7600.0;
+            rockSlope = max(0.0, 1.0 - dot(physical, radial));
+        }
+        outColor = vec4(barrenRockMaterial(radial, rockNormal, rockElevation, rockSlope), 1.0);
         return;
     }
 
