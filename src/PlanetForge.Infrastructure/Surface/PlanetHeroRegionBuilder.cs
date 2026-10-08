@@ -70,15 +70,19 @@ public sealed class PlanetHeroRegionBuilder(IPlanetElevationSource elevationSour
         var key = $"hero/{seed}/{center.X:R}/{center.Y:R}/{center.Z:R}/{gridWidth}/{regionSpanMeters:R}";
         var initial = PlanetRegionalGeologyEvolution.Initialize(seed, key, gridWidth, gridWidth, spacing, original);
         var evolved = PlanetRegionalGeologyEvolution.Advance(initial, erosionIterations, cancellationToken: cancellationToken);
-        var finalWatershed = PlanetRegionalWatershed.Build(gridWidth, gridWidth, spacing, evolved.ElevationMeters);
+        // Hydraulic flow is discrete at the research grid resolution. Redistributing
+        // its already-computed cut/fill field conservatively approximates lateral
+        // bank retreat without applying fake shader displacement to the preview.
+        var relaxedElevation = PlanetLateralErosionRelaxation.Apply(original, evolved.ElevationMeters, gridWidth, gridWidth);
+        var finalWatershed = PlanetRegionalWatershed.Build(gridWidth, gridWidth, spacing, relaxedElevation);
         var cut = new float[original.Length];
 
         for (var index = 0; index < cut.Length; index++)
         {
-            cut[index] = original[index] - evolved.ElevationMeters[index];
+            cut[index] = original[index] - relaxedElevation[index];
         }
 
-        return new PlanetHeroRegion(seed, gridWidth, spacing, original, evolved.ElevationMeters, cut,
+        return new PlanetHeroRegion(seed, gridWidth, spacing, original, relaxedElevation, cut,
             finalWatershed.AccumulatedRunoffCells, erosionIterations, evolved.CumulativeErodedVolumeCubicMeters,
             evolved.CumulativeDepositedVolumeCubicMeters, evolved.CumulativeExportedVolumeCubicMeters);
     }
