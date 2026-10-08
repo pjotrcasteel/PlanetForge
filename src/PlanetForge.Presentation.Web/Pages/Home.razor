@@ -1,9 +1,11 @@
 @using PlanetForge.Application.Missions
 @using PlanetForge.Application.Runs
 @using PlanetForge.Domain.WorldGeneration
+@using PlanetForge.Domain.Surface
 @implements IAsyncDisposable
 @inject PlanetExperience Experience
 @inject PlanetRun Run
+@inject IPlanetElevationSource ElevationSource
 @inject IJSRuntime JsRuntime
 @inject NavigationManager Navigation
 
@@ -70,6 +72,7 @@
         waterRendererModule = await JsRuntime.InvokeAsync<IJSObjectReference>("import", disposeCancellationTokenSource.Token, "./js/waterOverlay.js");
         await waterRendererModule.InvokeVoidAsync("initialize", disposeCancellationTokenSource.Token, "water-overlay-canvas", "planet-canvas", snapshot.PhysicalParameters.RadiusMeters);
         await waterRendererModule.InvokeVoidAsync("clearWaterCycle", disposeCancellationTokenSource.Token);
+        await RebuildOrbitalAtlasAsync();
     }
 
     private int? GetVisualTestSeed()
@@ -109,6 +112,7 @@
             currentStage = FoundationStage.FrozenWorld;
             elapsedYears = 0.0;
             await SyncPlanetAsync();
+            await RebuildOrbitalAtlasAsync();
 
             if (waterRendererModule is not null)
             {
