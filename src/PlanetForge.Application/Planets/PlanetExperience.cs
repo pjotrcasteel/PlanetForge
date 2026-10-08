@@ -20,7 +20,7 @@ public sealed class PlanetExperience(
     private const int SurfaceCellsPerAxis = 32;
     private const int AdaptiveSurfaceCellsPerAxis = 20;
     private const double OrbitalRefinementStartDistance = 1.35;
-    private const int CoarseLocalSurfaceCellsPerAxis = 8;
+    private const int CoarseLocalSurfaceCellsPerAxis = 16;
     private const int MediumLocalSurfaceCellsPerAxis = 16;
     private const int DetailedLocalSurfaceCellsPerAxis = 24;
     private const int FineLocalSurfaceCellsPerAxis = 32;
@@ -30,7 +30,7 @@ public sealed class PlanetExperience(
     private const double DetailedLocalResolutionAltitudeMeters = 800.0;
     private const double FineLocalResolutionAltitudeMeters = 60.0;
     private const double MaximumLocalPatchRadiusFraction = 0.18;
-    private const double LocalPatchMarginFactor = 1.5;
+    private const double LocalPatchMarginFactor = 2.4;
     private const double MinimumOrbitalDistanceAu = 0.25;
     private const double MaximumOrbitalDistanceAu = 3.0;
     private const double MinimumStellarLuminositySolar = 0.2;
