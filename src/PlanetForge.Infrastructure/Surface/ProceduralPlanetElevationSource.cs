@@ -67,11 +67,11 @@ public sealed class ProceduralPlanetElevationSource : IPlanetElevationSource
         // Spatially connected, curved orogenic belts span thousands of kilometres.
         // Unlike isolated noise peaks, these arcs have longitudinal continuity and finite widths.
         var orogeny = SampleOrogenicSystems(macroDirection, seed, boundaryNoise);
-        var mountainBelt = Math.Max(orogeny, Math.Max(oldRange * 0.43, belt * 0.48));
+        var mountainBelt = Math.Max(orogeny, Math.Max(oldRange * 0.68, belt * 0.78));
         var narrowRidges = RidgedNoise(direction, seed ^ DetailSeedSalt, 13.0, 4, 2.09, 0.47);
         var ridgeStrength = Math.Max(0.0, narrowRidges);
         var summitStructure = ridgeStrength * ridgeStrength;
-        var uplift = landMask * ((plateUplift * 0.52) + (mountainBelt * (0.12 + summitStructure * 0.37)));
+        var uplift = landMask * ((plateUplift * 0.62) + (mountainBelt * (0.16 + ridgeStrength * 0.33)) + (orogeny * summitStructure * 0.16));
         var rolling = FractalNoise(direction, seed ^ DetailSeedSalt, 5.2, 3, 2.1, 0.48);
         var terrain = landMask * ((province * 0.083) + (rolling * 0.036) - (Math.Max(0.0, -basin) * 0.055));
 
