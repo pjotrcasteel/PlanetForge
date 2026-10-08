@@ -22,7 +22,9 @@ public sealed class PlanetSurfaceLodSelector(PlanetSurfaceLodOptions options)
             >= 1.14 => 3,
             >= 1.045 => 4,
             >= 1.012 => 5,
-            _ => 6,
+            >= 1.007 => 6,
+            >= 1.004 => 7,
+            _ => 8,
         });
 
         // Best-first subdivision concentrates geometry under the camera instead of refining
