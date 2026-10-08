@@ -30,7 +30,7 @@ public sealed class PlanetExperience(
     private const double DetailedLocalResolutionAltitudeMeters = 800.0;
     private const double FineLocalResolutionAltitudeMeters = 60.0;
     private const double MaximumLocalPatchRadiusFraction = 0.18;
-    private const double LocalPatchMarginFactor = 2.4;
+    private const double LocalPatchMarginFactor = 2.2;
     private const double MinimumOrbitalDistanceAu = 0.25;
     private const double MaximumOrbitalDistanceAu = 3.0;
     private const double MinimumStellarLuminositySolar = 0.2;
