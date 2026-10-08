@@ -41,7 +41,7 @@ public sealed class PlanetExperienceSurfaceLodTests
         Assert.IsNull(first.LocalSurface);
         Assert.IsNull(second.LocalSurface);
         Assert.IsTrue(first.SurfaceTiles.Any(tile => tile.Id.Level >= 3));
-        CollectionAssert.AreNotEqual(first.SurfaceTiles.Select(tile => tile.Id).ToArray(), second.SurfaceTiles.Select(tile => tile.Id).ToArray());
+        Assert.IsFalse(first.SurfaceTiles.Select(tile => tile.Id).SequenceEqual(second.SurfaceTiles.Select(tile => tile.Id)));
     }
 
     [TestMethod]
