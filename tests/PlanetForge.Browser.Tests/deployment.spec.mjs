@@ -7,7 +7,7 @@ test('DeployedPlanetForge_BootsAndRendersPlanet', async ({ page }) => {
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
 
-  const deployedUrl = process.env.PLANETFORGE_BASE_URL.replace(/\\/+$/, '') + '/?visualTest=1';
+  const deployedUrl = process.env.PLANETFORGE_BASE_URL + '/?visualTest=1';
   await page.goto(deployedUrl, { waitUntil: 'domcontentloaded' });
   await expect(page.getByTestId('planet-seed')).toBeVisible({ timeout: 90_000 });
   await expect(page.getByRole('button', { name: 'NEXT' })).toBeVisible();
