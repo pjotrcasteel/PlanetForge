@@ -29,7 +29,7 @@ public sealed class PlanetValleyBankCarverTests
         for (var i = 0; i < original.Length; i++)
         {
             Assert.IsLessThanOrEqualTo(eroded[i], result.ElevationMeters[i], "Bank erosion must never raise bedrock.");
-            volume += (eroded[i] - result.ElevationMeters[i]) * 250 * 250;
+            volume += ((double)eroded[i] - result.ElevationMeters[i]) * 250 * 250;
         }
 
         Assert.AreEqual(volume, result.AdditionalExportedSedimentCubicMeters, Math.Max(1.0, volume * 1e-8));
