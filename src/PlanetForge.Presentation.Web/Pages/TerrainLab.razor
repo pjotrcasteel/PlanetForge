@@ -49,6 +49,16 @@
     </section>
     <section class="lab-regional" aria-label="Regional watershed diagnostics">
         <h2>Regional hydrology / experimental</h2>
+        <div class="lab-evolution">
+            <label for="lab-erosion-iterations">Geological erosion iterations</label>
+            <select id="lab-erosion-iterations" @bind="selectedIterations" @bind:after="AdvanceRegionAsync" disabled="@(working || baselineRegion is null)">
+                <option value="0">0 / original bedrock</option>
+                <option value="1">1 / first pass</option>
+                <option value="5">5 / repeated erosion</option>
+                <option value="12">12 / evolved preview</option>
+            </select>
+            <span>Numerical passes, not calibrated geological years</span>
+        </div>
         <p>One deterministic high-relief location per seed. The regional model samples canonical bedrock at approximately 6 km spacing and routes runoff toward real low points and open boundaries. These maps do not yet alter gameplay elevation.</p>
         <div class="lab-grid">
             <article>
@@ -69,8 +79,13 @@
             </article>
             <article>
                 <h2>08 / Eroded elevation</h2>
-                <p>Height after one bounded geological erosion iteration, not a shader texture.</p>
+                <p>Actual evolved height after the selected numerical passes. No visual vertical exaggeration.</p>
                 <canvas id="lab-regional-evolved" width="96" height="96" aria-label="Regional eroded geological elevation map"></canvas>
+            </article>
+            <article>
+                <h2>09 / Cumulative elevation change</h2>
+                <p>Diagnostic only: orange is rock removed, turquoise is deposited material. Color shows physical metres of change, not exaggerated terrain.</p>
+                <canvas id="lab-regional-difference" width="96" height="96" aria-label="Regional erosion and deposition height difference map"></canvas>
             </article>
         </div>
     </section>
@@ -83,6 +98,10 @@
     private const int RegionSize = 96;
     private const double RegionSpanMeters = 576_000.0;
     private const double ReferencePlanetRadiusMeters = 6_371_000.0;
+    private PlanetRegionalGeologySnapshot? baselineRegion;
+    private PlanetRegionalGeologySnapshot? evolvedRegion;
+    private float[]? regionalBedrock;
+    private int selectedIterations;
     private readonly CancellationTokenSource cancellation = new();
     private IJSObjectReference? module;
     private int selectedSeed = PlanetSeedCatalog.ShowcaseSeed;
@@ -216,15 +235,80 @@
                 }
             }
 
+            var regionKey = $"seed/{selectedSeed}/region/{centerX}/{centerY}/96";
+            baselineRegion = PlanetRegionalGeologyEvolution.Initialize(selectedSeed, regionKey, RegionSize, RegionSize,
+                cellSizeMeters, regionalElevation);
+            regionalBedrock = regionalElevation;
+            evolvedRegion = baselineRegion;
+            selectedIterations = 0;
             var watershed = PlanetRegionalWatershed.Build(RegionSize, RegionSize, cellSizeMeters, regionalElevation);
             await module.InvokeVoidAsync("drawRegionalWatershed", cancellation.Token, RegionSize, RegionSize,
                 regionalElevation, watershed.AccumulatedRunoffCells, watershed.IncisionMeters,
-                watershed.SedimentDepositionMeters, watershed.EvolvedElevationMeters);
-            status = $"Seed {selectedSeed} • above datum {land * 100.0 / elevations.Length:0.0}% • range {minimum:0}–{maximum:0} m • sediment exported {watershed.ExportedVolumeCubicMeters / 1e9:0.0} km³";
+                watershed.SedimentDepositionMeters, regionalElevation, regionalElevation);
+            status = $"Seed {selectedSeed} • above datum {land * 100.0 / elevations.Length:0.0}% • range {minimum:0}–{maximum:0} m • 0 erosion iterations";
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             status = $"Generation failed: {ex.Message}";
+        }
+        finally
+        {
+            working = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task AdvanceRegionAsync()
+    {
+        if (working || baselineRegion is null || regionalBedrock is null || module is null)
+        {
+            return;
+        }
+
+        working = true;
+        status = $"Advancing regional geology • {selectedIterations} iterations…";
+        await InvokeAsync(StateHasChanged);
+        await Task.Yield();
+
+        try
+        {
+            // Advance the existing state when moving forward; restore the baseline only
+            // when scrubbing backward. Both paths produce the same deterministic result.
+            var state = evolvedRegion is not null && evolvedRegion.Iteration <= selectedIterations
+                ? evolvedRegion : baselineRegion;
+            var lastInput = state.ElevationMeters;
+            for (var iteration = state.Iteration; iteration < selectedIterations; iteration++)
+            {
+                cancellation.Token.ThrowIfCancellationRequested();
+                lastInput = state.ElevationMeters;
+                state = PlanetRegionalGeologyEvolution.Advance(state, 1, cancellationToken: cancellation.Token);
+                if (iteration % 2 == 0)
+                {
+                    await Task.Delay(1, cancellation.Token);
+                }
+            }
+
+            evolvedRegion = state;
+            // The display shows the actual most recent erosion step, not invented rivers
+            // painted over the evolved surface. At iteration zero it is a potential first pass.
+            var watershed = PlanetRegionalWatershed.Build(state.Width, state.Height, state.CellSpacingMeters, lastInput);
+            await module.InvokeVoidAsync("drawRegionalWatershed", cancellation.Token, state.Width, state.Height,
+                regionalBedrock, watershed.AccumulatedRunoffCells, watershed.IncisionMeters,
+                watershed.SedimentDepositionMeters, state.ElevationMeters, regionalBedrock);
+            var maxRemovedMeters = 0.0;
+            var maxDepositedMeters = 0.0;
+            for (var i = 0; i < regionalBedrock.Length; i++)
+            {
+                var difference = regionalBedrock[i] - state.ElevationMeters[i];
+                maxRemovedMeters = Math.Max(maxRemovedMeters, difference);
+                maxDepositedMeters = Math.Max(maxDepositedMeters, -difference);
+            }
+
+            status = $"Seed {selectedSeed} • {state.Iteration} erosion iterations • max cut {maxRemovedMeters:0.0} m • max fill {maxDepositedMeters:0.0} m • sediment exported {state.CumulativeExportedVolumeCubicMeters / 1e9:0.00} km³";
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            status = $"Geological evolution failed: {ex.Message}";
         }
         finally
         {

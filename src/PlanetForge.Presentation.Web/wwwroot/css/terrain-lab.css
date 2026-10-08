@@ -27,6 +27,11 @@
 .lab-grid canvas { width: 100%; height: auto; aspect-ratio: 2/1; display: block; border-radius: 7px; background: #273638; }
 .lab-regional { max-width: 1400px; margin: 26px auto 0; }
 .lab-regional > h2 { font-size: 1.45rem; margin: 0 0 8px; color: #dce6db; }
+.lab-evolution { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; background: #182625; border: 1px solid #496358; border-radius: 10px; padding: 12px; margin: 12px 0; }
+.lab-evolution label { color: #deebe3; font-size: .88rem; font-weight: 700; }
+.lab-evolution select { background: #243e36; border: 1px solid #81aa91; border-radius: 7px; color: #e9f6e8; padding: 9px 11px; }
+.lab-evolution select:disabled { opacity: .6; }
+.lab-evolution span { color: #9bb4a8; font: 500 .75rem ui-monospace, monospace; }
 .lab-regional > p { max-width: 950px; line-height: 1.5; color: #a8bcb2; margin: 0 0 16px; }
 .lab-regional .lab-grid canvas { aspect-ratio: 1 / 1; }
 .lab-regional .lab-grid canvas + canvas { margin-top: 12px; }

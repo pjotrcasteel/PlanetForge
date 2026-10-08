@@ -72,11 +72,37 @@ export function drawTerrainLab(width, height, crust, tectonic, mountains, elevat
 }
 
 
-export function drawRegionalWatershed(width, height, bedrock, accumulation, incision, sediment, evolved) {
+function drawElevationDifference(width, height, original, evolved) {
+    const canvas = document.getElementById('lab-regional-difference');
+    if (!canvas) throw new Error('Missing erosion difference canvas.');
+    canvas.width = width;
+    canvas.height = height;
+    const context = canvas.getContext('2d', { alpha: false });
+    if (!context) throw new Error('Erosion difference requires Canvas 2D.');
+    const pixels = context.createImageData(width, height);
+
+    for (let i = 0; i < original.length; i++) {
+        const differenceMeters = original[i] - evolved[i];
+        const magnitude = Math.sqrt(clamp(Math.abs(differenceMeters) / 120, 0, 1));
+        const color = differenceMeters >= 0
+            ? blend([30, 40, 43], [239, 143, 73], magnitude)
+            : blend([30, 40, 43], [84, 217, 207], magnitude);
+        const offset = i * 4;
+        pixels.data[offset] = Math.round(color[0]);
+        pixels.data[offset + 1] = Math.round(color[1]);
+        pixels.data[offset + 2] = Math.round(color[2]);
+        pixels.data[offset + 3] = 255;
+    }
+
+    context.putImageData(pixels, 0, 0);
+}
+
+export function drawRegionalWatershed(width, height, bedrock, accumulation, incision, sediment, evolved, original = bedrock) {
     drawLayer('lab-regional-bedrock', width, height, bedrock, 'regional-elevation', bedrock);
     drawLayer('lab-regional-flow', width, height, accumulation, 'flow', bedrock);
     drawLayer('lab-regional-incision', width, height, incision, 'incision', bedrock);
     drawLayer('lab-regional-sediment', width, height, sediment, 'sediment', bedrock);
     drawLayer('lab-regional-evolved', width, height, evolved, 'regional-elevation', evolved);
+    drawElevationDifference(width, height, original, evolved);
     window.__planetForgeRegionalWatershedReady = true;
 }
