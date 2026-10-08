@@ -8,8 +8,9 @@ function perspective(fov, aspect, near, far) {
     const f = 1/Math.tan(fov/2);
     return new Float32Array([f/aspect,0,0,0,0,f,0,0,0,0,(far+near)/(near-far),-1,0,0,2*far*near/(near-far),0]);
 }
-function lookAt(eye) {
-    const forward = unit(eye.map(x => -x)), side = unit(cross(forward,[0,1,0])), up = cross(side,forward);
+function lookAt(eye,target) {
+    const forward = unit(eye.map((value,index) => target[index]-value));
+    const side = unit(cross(forward,[0,1,0])), up = cross(side,forward);
     return new Float32Array([side[0],up[0],-forward[0],0,side[1],up[1],-forward[1],0,side[2],up[2],-forward[2],0,
         -dot(side,eye),-dot(up,eye),dot(forward,eye),1]);
 }
@@ -32,7 +33,7 @@ const fragmentShader = [
     'in vec3 vNormal; in vec3 vGeology; in vec3 vPosition; out vec4 outColor;',
     'uniform float uLowest; uniform float uHighest;',
     'void main(){',
-    'vec3 n=normalize(vNormal); vec3 sun=normalize(vec3(0.83,0.38,0.42));',
+    'vec3 n=normalize(vNormal); vec3 sun=normalize(vec3(0.88,0.24,0.41));',
     'float altitude=smoothstep(uLowest,uHighest,vGeology.x);',
     'float exposed=smoothstep(0.012,0.17,1.0-n.y);',
     'vec3 mineral=mix(vec3(0.51,0.32,0.21),vec3(0.66,0.50,0.37),altitude*0.72);',
@@ -41,7 +42,8 @@ const fragmentShader = [
     'float deposit=smoothstep(0.0,55.0,max(-vGeology.y,0.0));',
     'mineral=mix(mineral,vec3(0.41,0.31,0.26),wear*0.17);',
     'mineral=mix(mineral,vec3(0.70,0.53,0.36),deposit*0.12);',
-    'float light=clamp(0.24+0.93*max(dot(n,sun),0.0),0.22,1.16);',
+    'float angle=dot(n,sun); float raking=clamp((angle-sun.y)*3.45,-0.43,0.43);',
+    'float light=clamp(0.52+0.43*max(angle,0.0)+raking,0.24,1.22);',
     'float fog=smoothstep(65.0,155.0,length(vPosition.xz))*0.15;',
     'outColor=vec4(mix(mineral*light,vec3(0.32,0.32,0.31),fog),1.0); }'
 ].join('\n');
@@ -93,11 +95,13 @@ function render() {
     const height=Math.min(640,Math.max(1,Math.round(rect.height*scale)));
     if(canvas.width!==width||canvas.height!==height){canvas.width=width;canvas.height=height;}
     const span=(region.width-1)*region.cellSpacingMeters/1000,d=span*scene.zoom;
-    const eye=[Math.sin(scene.yaw)*Math.cos(scene.pitch)*d,Math.sin(scene.pitch)*d,Math.cos(scene.yaw)*Math.cos(scene.pitch)*d];
+    const eye=[scene.focus[0]+Math.sin(scene.yaw)*Math.cos(scene.pitch)*d,
+        scene.focus[1]+Math.sin(scene.pitch)*d,
+        scene.focus[2]+Math.cos(scene.yaw)*Math.cos(scene.pitch)*d];
     gl.viewport(0,0,width,height);gl.clearColor(0.07,0.09,0.10,1.0);gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);
     gl.useProgram(p);
     gl.uniformMatrix4fv(gl.getUniformLocation(p,'uProjection'),false,perspective(Math.PI/3.3,width/height,0.1,d*5));
-    gl.uniformMatrix4fv(gl.getUniformLocation(p,'uView'),false,lookAt(eye));
+    gl.uniformMatrix4fv(gl.getUniformLocation(p,'uView'),false,lookAt(eye,scene.focus));
     gl.uniform1f(gl.getUniformLocation(p,'uLowest'),scene.min);
     gl.uniform1f(gl.getUniformLocation(p,'uHighest'),scene.max);
     gl.bindVertexArray(scene.vao);gl.drawElements(gl.TRIANGLES,scene.indices,gl.UNSIGNED_SHORT,0);gl.bindVertexArray(null);
@@ -144,12 +148,27 @@ export function drawHeroRegion(region,mode='after'){
         gl.bindVertexArray(vao);gl.bindBuffer(gl.ARRAY_BUFFER,vbo);
         for(let i=0;i<3;i++){gl.enableVertexAttribArray(i);gl.vertexAttribPointer(i,3,gl.FLOAT,false,36,i*12);}
         gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,ibo);gl.enable(gl.DEPTH_TEST);
-        scene={canvas,gl,program:p,vao,vbo,ibo,yaw:0.65,pitch:0.46,zoom:1.14,indices:0};
+        scene={canvas,gl,program:p,vao,vbo,ibo,yaw:0.65,pitch:0.23,zoom:0.79,indices:0,focus:[0,0,0]};
         controls(canvas);
     }
     const indices=buildIndices(region.width);
     gl.bindVertexArray(scene.vao);gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,scene.ibo);
     gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,indices,gl.STATIC_DRAW);
+    // Focus the inspection camera on a real, strongly incised interior catchment.
+    // This changes the framing, never the geological height or its vertical scale.
+    const margin=Math.floor(region.width*0.22),middle=(region.width-1)*0.5;
+    let strongest=-1,focusIndex=Math.floor(middle)*region.width+Math.floor(middle);
+    for(let y=margin;y<region.width-margin;y++){
+        for(let x=margin;x<region.width-margin;x++){
+            const index=y*region.width+x;
+            const cut=Math.max(0,region.cumulativeCutMeters[index]);
+            if(cut>strongest){strongest=cut;focusIndex=index;}
+        }
+    }
+    const fx=focusIndex%region.width,fy=Math.floor(focusIndex/region.width);
+    const base=(Math.min(...region.originalElevationMeters)+Math.max(...region.originalElevationMeters))*0.5;
+    const km=region.cellSpacingMeters/1000;
+    scene.focus=[(fx-middle)*km,(region.evolvedElevationMeters[focusIndex]-base)/1000,-(fy-middle)*km];
     scene.region=region;scene.indices=indices.length;useMode(mode);
 }
 export function setHeroRegionMode(mode){
