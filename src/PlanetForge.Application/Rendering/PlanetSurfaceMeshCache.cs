@@ -32,7 +32,18 @@ public sealed class PlanetSurfaceMeshCache(PlanetSurfaceMeshBuilder meshBuilder)
             return CreateReferences(ids, cellsPerAxis, planetRadiusMeters);
         }
 
-        var result = GetFullGeometry(ids, cellsPerAxis, seed, planetRadiusMeters);
+        // GPU buffers from the immediately preceding view are still resident in the browser.
+        // Send only genuinely new meshes; retransmitting every existing tile after a small
+        // rotation or zoom can cost megabytes and causes visible stalls on mobile.
+        var canReusePrevious = lastRequestedIds is not null && lastCellsPerAxis == cellsPerAxis && lastPlanetRadiusMeters == planetRadiusMeters;
+        var previousIds = canReusePrevious ? lastRequestedIds!.ToHashSet() : [];
+        var result = new PlanetSurfaceTileMesh[ids.Count];
+        for (var index = 0; index < ids.Count; index++)
+        {
+            var mesh = GetOrBuild(ids[index], cellsPerAxis, seed, planetRadiusMeters);
+            result[index] = previousIds.Contains(ids[index]) ? mesh.AsReference() : mesh;
+        }
+
         RememberRequest(ids, cellsPerAxis, planetRadiusMeters);
         return result;
     }
