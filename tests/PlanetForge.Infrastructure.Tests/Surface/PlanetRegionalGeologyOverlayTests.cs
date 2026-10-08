@@ -60,6 +60,20 @@ public sealed class PlanetRegionalGeologyOverlayTests
     }
 
     [TestMethod]
+    public void SampleDeltaMeters_PolarCapCoordinates_DoNotIntroduceLongitudeSeams()
+    {
+        var original = CreateOriginal();
+        var evolved = PlanetRegionalGeologyEvolution.Advance(original, 5);
+        var region = PlanetRegionalGeologyOverlay.Create(original, evolved, PlanetVector.UnitY, PlanetRadiusMeters);
+        var left = DirectionAt(PlanetVector.UnitY, 19.40, 18.20);
+        var right = DirectionAt(PlanetVector.UnitY, 19.40001, 18.20);
+
+        Assert.IsTrue(double.IsFinite(region.SampleDeltaMeters(left, original.Seed)));
+        Assert.IsLessThan(0.01, Math.Abs(region.SampleDeltaMeters(left, original.Seed) -
+            region.SampleDeltaMeters(right, original.Seed)));
+    }
+
+    [TestMethod]
     public void Create_MutatingSnapshotAfterCreation_DoesNotChangeSampledWorld()
     {
         var original = CreateOriginal();
