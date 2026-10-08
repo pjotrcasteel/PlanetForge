@@ -88,6 +88,40 @@ test('TerrainLab_DisplaysCanonicalGeologicalLayers', async ({ page }, testInfo) 
 });
 
 
+test('TerrainLab_ErosionIterations_AdvanceRewindReplayDeterministically', async ({ page }, testInfo) => {
+  test.setTimeout(270_000);
+  await page.goto('/?terrainLab=1');
+  await page.waitForFunction(() => window.__planetForgeRegionalWatershedReady === true, null, { timeout: 180_000 });
+  const select = page.locator('#lab-erosion-iterations');
+  const canvas = page.locator('#lab-regional-evolved');
+  const checksum = () => canvas.evaluate(element => {
+    const pixels = element.getContext('2d').getImageData(0, 0, element.width, element.height).data;
+    let hash = 2166136261;
+    for (let i = 0; i < pixels.length; i += 4) {
+      hash = Math.imul(hash ^ pixels[i], 16777619) >>> 0;
+      hash = Math.imul(hash ^ pixels[i + 1], 16777619) >>> 0;
+    }
+    return hash;
+  });
+
+  const original = await checksum();
+  await select.selectOption('5');
+  await expect(page.getByRole('status')).toContainText('5 erosion iterations', { timeout: 120_000 });
+  const fivePasses = await checksum();
+  expect(fivePasses, 'Five physical erosion passes did not change the rendered canonical height map').not.toBe(original);
+  await page.screenshot({ path: testInfo.outputPath('evolution-five-passes.png'), fullPage: true });
+
+  await select.selectOption('1');
+  await expect(page.getByRole('status')).toContainText('1 erosion iterations', { timeout: 120_000 });
+  await select.selectOption('5');
+  await expect(page.getByRole('status')).toContainText('5 erosion iterations', { timeout: 120_000 });
+  expect(await checksum()).toBe(fivePasses);
+  await select.selectOption('12');
+  await expect(page.getByRole('status')).toContainText('12 erosion iterations', { timeout: 120_000 });
+  expect(await checksum()).not.toBe(fivePasses);
+  await page.screenshot({ path: testInfo.outputPath('evolution-twelve-passes.png'), fullPage: true });
+});
+
 test('TerrainLab_RegionalWatersheds_ThreeSeeds_ShowConnectedRealDrainage', async ({ page }, testInfo) => {
   test.setTimeout(360_000);
   await page.goto('/?terrainLab=1');
