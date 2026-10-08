@@ -18,6 +18,7 @@ public sealed class PlanetLocalSurfaceMeshBuilder
         var elevations = new float[triangleCount * 3];
         var positionOffset = 0;
         var elevationOffset = 0;
+        var vertexNormals = CalculateVertexNormals(patch);
 
         for (var y = 0; y < patch.CellsPerAxis; y++)
         {
@@ -27,8 +28,12 @@ public sealed class PlanetLocalSurfaceMeshBuilder
                 var b = patch.GetPoint(x + 1, y);
                 var c = patch.GetPoint(x, y + 1);
                 var d = patch.GetPoint(x + 1, y + 1);
-                WriteTriangle(positions, normals, elevations, ref positionOffset, ref elevationOffset, a, b, c);
-                WriteTriangle(positions, normals, elevations, ref positionOffset, ref elevationOffset, b, d, c);
+                var row = y * (patch.CellsPerAxis + 1);
+                var nextRow = row + patch.CellsPerAxis + 1;
+                WriteTriangle(positions, normals, elevations, ref positionOffset, ref elevationOffset, a, b, c,
+                    vertexNormals[row + x], vertexNormals[row + x + 1], vertexNormals[nextRow + x]);
+                WriteTriangle(positions, normals, elevations, ref positionOffset, ref elevationOffset, b, d, c,
+                    vertexNormals[row + x + 1], vertexNormals[nextRow + x + 1], vertexNormals[nextRow + x]);
             }
         }
 
@@ -54,32 +59,57 @@ public sealed class PlanetLocalSurfaceMeshBuilder
         ref int elevationOffset,
         PlanetLocalSurfacePoint first,
         PlanetLocalSurfacePoint second,
-        PlanetLocalSurfacePoint third)
+        PlanetLocalSurfacePoint third,
+        Vector3 firstNormal,
+        Vector3 secondNormal,
+        Vector3 thirdNormal)
     {
         var a = ToRenderVector(first.LocalPosition);
         var b = ToRenderVector(second.LocalPosition);
         var c = ToRenderVector(third.LocalPosition);
-        var normal = Vector3.Cross(b - a, c - a);
+        var faceNormal = Vector3.Cross(b - a, c - a);
 
-        if (normal.Y < 0f)
+        if (faceNormal.Y < 0f)
         {
             (b, c) = (c, b);
             (second, third) = (third, second);
-            normal = -normal;
+            (secondNormal, thirdNormal) = (thirdNormal, secondNormal);
         }
-
-        normal = Vector3.Normalize(normal);
         WriteVector(positions, positionOffset, a);
         WriteVector(positions, positionOffset + 3, b);
         WriteVector(positions, positionOffset + 6, c);
-        WriteVector(normals, positionOffset, normal);
-        WriteVector(normals, positionOffset + 3, normal);
-        WriteVector(normals, positionOffset + 6, normal);
+        WriteVector(normals, positionOffset, firstNormal);
+        WriteVector(normals, positionOffset + 3, secondNormal);
+        WriteVector(normals, positionOffset + 6, thirdNormal);
         elevations[elevationOffset] = (float)first.ElevationMeters;
         elevations[elevationOffset + 1] = (float)second.ElevationMeters;
         elevations[elevationOffset + 2] = (float)third.ElevationMeters;
         positionOffset += 9;
         elevationOffset += 3;
+    }
+
+    private static Vector3[] CalculateVertexNormals(PlanetLocalSurfacePatch patch)
+    {
+        var cells = patch.CellsPerAxis;
+        var width = cells + 1;
+        var normals = new Vector3[width * width];
+
+        for (var y = 0; y <= cells; y++)
+        {
+            for (var x = 0; x <= cells; x++)
+            {
+                // Derive shared vertex normals from the same canonical mesh geometry.
+                // This avoids a visibly faceted normal discontinuity along each cell diagonal.
+                var left = ToRenderVector(patch.GetPoint(Math.Max(0, x - 1), y).LocalPosition);
+                var right = ToRenderVector(patch.GetPoint(Math.Min(cells, x + 1), y).LocalPosition);
+                var south = ToRenderVector(patch.GetPoint(x, Math.Max(0, y - 1)).LocalPosition);
+                var north = ToRenderVector(patch.GetPoint(x, Math.Min(cells, y + 1)).LocalPosition);
+                var normal = Vector3.Normalize(Vector3.Cross(right - left, north - south));
+                normals[(y * width) + x] = normal.Y >= 0f ? normal : -normal;
+            }
+        }
+
+        return normals;
     }
 
     private static Vector3 ToRenderVector(PlanetLocalPosition position) =>
