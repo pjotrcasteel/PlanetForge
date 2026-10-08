@@ -668,11 +668,11 @@ function renderLocal(s) {
     gl.uniform1f(s.localUniforms.liquidFraction, s.liquidFraction);
     gl.uniform1f(s.localUniforms.vaporFraction, s.vaporFraction);
 
-    gl.uniform1i(s.localUniforms.objectMode, preBiological ? 2 : 0);
+    gl.uniform1i(s.localUniforms.objectMode, geologicalPreviewMode ? 3 : (preBiological ? 2 : 0));
     bindLocalAttributes(s, localSurface.positionBuffer, localSurface.normalBuffer, localSurface.elevationBuffer);
     gl.drawArrays(gl.TRIANGLES, 0, localSurface.vertexCount);
 
-    if (!preBiological && cameraHeightMeters <= treeVisibilityAltitudeMeters && localSurface.treeVertexCount > 0) {
+    if (!geologicalPreviewMode && !preBiological && cameraHeightMeters <= treeVisibilityAltitudeMeters && localSurface.treeVertexCount > 0) {
         gl.uniform1i(s.localUniforms.objectMode, 1);
         gl.disable(gl.CULL_FACE);
         bindLocalAttributes(s, localSurface.treePositionBuffer, localSurface.treeNormalBuffer, localSurface.treeElevationBuffer);
@@ -1178,6 +1178,21 @@ void main() {
     if (uObjectMode == 1) {
         vec3 treeColor = vec3(0.055, 0.30, 0.12);
         outColor = vec4(treeColor * (0.35 + 0.65 * light), 1.0);
+        return;
+    }
+
+    if (uObjectMode == 3) {
+        float elevation = vElevationMeters;
+        float elevationBand = smoothstep(300.0, 2800.0, elevation);
+        float highlandBand = smoothstep(2500.0, 6500.0, elevation);
+        float cliff = smoothstep(0.07, 0.62, 1.0 - max(normalize(vNormal).y, 0.0));
+        vec3 dustyPlains = vec3(0.60, 0.34, 0.22);
+        vec3 upliftedRock = vec3(0.71, 0.45, 0.31);
+        vec3 exposedBedrock = vec3(0.33, 0.27, 0.24);
+        vec3 material = mix(dustyPlains, upliftedRock, elevationBand * 0.75);
+        material = mix(material, exposedBedrock, clamp(cliff * 0.60 + highlandBand * 0.22, 0.0, 0.88));
+        float illumination = clamp(0.34 + (0.76 * light), 0.23, 1.13);
+        outColor = vec4(material * illumination, 1.0);
         return;
     }
 
