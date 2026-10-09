@@ -17,6 +17,7 @@ public sealed class PlanetHillslopeMassWastingTests
 
         var result = PlanetHillslopeMassWasting.Apply(bedrock, lithology, width, width, 62.5);
 
+        Assert.IsGreaterThan(0, result.InitiallyUnstableEdges);
         Assert.IsTrue(result.ElevationMeters[center] < 1600f, "Unstable bedrock must collapse downhill.");
         Assert.IsTrue(result.ElevationMeters[center - 1] > 1000f, "Rockfall must accumulate as local talus.");
         Assert.IsTrue(result.ElevationMeters[center + width] > 1000f, "Routed material must reach other downhill neighbors.");
@@ -45,6 +46,7 @@ public sealed class PlanetHillslopeMassWastingTests
         CollectionAssert.AreEqual(stableSlope, result.ElevationMeters);
         Assert.AreEqual(0.0, result.AdditionalErodedVolumeCubicMeters);
         Assert.AreEqual(0.0, result.AdditionalDepositedVolumeCubicMeters);
+        Assert.AreEqual(0, result.InitiallyUnstableEdges);
     }
 
     [TestMethod]
