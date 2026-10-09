@@ -141,8 +141,8 @@ test('TerrainLab_HeroRegion_RendersPhysical3DLandscapeAndComparesErosion', async
 
   // A physically smaller, geographically anchored region must reveal more local structure,
   // not merely magnify the same coarse 128 km height raster or add a sharper shader.
-  await page.locator('#lab-hero-scale').selectOption('32');
-  await page.locator('#lab-hero-generate').click();
+  await expect(page.locator('#lab-hero-refine')).toHaveText('REFINE TO 32 KM');
+  await page.locator('#lab-hero-refine').click();
   await page.waitForFunction(() => window.__planetForgeHeroRegionReady === true &&
     window.__planetForgeHeroRegionStats?.regionSpanKilometers === 32, null, { timeout: 180_000 });
   const detailed = await page.evaluate(() => window.__planetForgeHeroRegionStats);
@@ -175,14 +175,22 @@ test('TerrainLab_HeroRegion_RendersPhysical3DLandscapeAndComparesErosion', async
 
   // Third scale: 8 km at 62.5 m per physical sample, with both earlier
   // geological erosion histories inherited. Capture mobile and large views.
-  await page.locator('#lab-hero-scale').selectOption('8');
-  await page.locator('#lab-hero-generate').click();
+  await expect(page.locator('#lab-hero-refine')).toHaveText('REFINE TO 8 KM');
+  await page.locator('#lab-hero-refine').click();
   await page.waitForFunction(() => window.__planetForgeHeroRegionReady === true &&
     window.__planetForgeHeroRegionStats?.regionSpanKilometers === 8, null, { timeout: 180_000 });
   const micro = await page.evaluate(() => window.__planetForgeHeroRegionStats);
   expect(micro.gridWidth).toBe(129);
   expect(micro.glError).toBe(0);
   expect(micro.triangles).toBe(128 * 128 * 2);
+  const originalCameraDistance = micro.cameraDistanceKm;
+  await page.locator('#lab-hero-zoom-in').click();
+  const nearCameraDistance = await page.evaluate(() => window.__planetForgeHeroRegionStats.cameraDistanceKm);
+  expect(nearCameraDistance).toBeLessThan(originalCameraDistance);
+  await page.locator('#lab-hero-zoom-out').click();
+  const restoredDistance = await page.evaluate(() => window.__planetForgeHeroRegionStats.cameraDistanceKm);
+  expect(Math.abs(restoredDistance - originalCameraDistance)).toBeLessThan(originalCameraDistance * 0.01);
+  await expect(page.locator('#lab-hero-refine')).toBeDisabled();
   await page.locator('#lab-hero-render').screenshot({
     path: testInfo.outputPath('hero-nested-8km-eroded-mobile.png')
   });
