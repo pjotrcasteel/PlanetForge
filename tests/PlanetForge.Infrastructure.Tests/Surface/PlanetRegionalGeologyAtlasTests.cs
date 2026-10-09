@@ -80,7 +80,7 @@ public sealed class PlanetRegionalGeologyAtlasTests
 
         Assert.ThrowsExactly<ArgumentException>(() => new PlanetRegionalGeologyAtlas(new FlatBedrock(), [regional, duplicate]));
         Assert.ThrowsExactly<ArgumentException>(() => new PlanetRegionalGeologyAtlas(new FlatBedrock(), [regional, different]));
-        Assert.ThrowsExactly<ArgumentException>(() => new PlanetRegionalGeologyAtlas(new FlatBedrock(), []));
+        Assert.ThrowsExactly<ArgumentException>(() => new PlanetRegionalGeologyAtlas(new FlatBedrock(), Array.Empty<PlanetRegionalGeologyOverlay>()));
     }
 
     private static PlanetRegionalGeologyOverlay Region(string key, PlanetVector anchor, double spacing, float cut)
