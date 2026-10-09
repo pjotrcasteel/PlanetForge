@@ -109,7 +109,7 @@ function render() {
     window.__planetForgeHeroRegionStats={seed:region.seed,mode:scene.mode,gridWidth:region.width,
         triangles:scene.indices/3,regionSpanKilometers:(region.width-1)*region.cellSpacingMeters/1000,
         minElevationMeters:scene.min,maxElevationMeters:scene.max,
-        erosionIterations:region.erosionIterations,glError:error};
+        erosionIterations:region.erosionIterations,cameraDistanceKm:d,glError:error};
     window.__planetForgeHeroRegionReady=error===gl.NO_ERROR;
 }
 function useMode(mode){
@@ -121,22 +121,49 @@ function useMode(mode){
     render();
 }
 function controls(canvas){
-    let last=null;
+    const pointers = new Map();
+    let lastPinchDistance = 0;
+    const pinchDistance = () => {
+        const values = [...pointers.values()];
+        return values.length < 2 ? 0 : Math.hypot(values[0][0]-values[1][0],values[0][1]-values[1][1]);
+    };
     canvas.style.touchAction='none';
-    canvas.addEventListener('pointerdown',event=>{last=[event.clientX,event.clientY];canvas.setPointerCapture(event.pointerId);});
-    canvas.addEventListener('pointermove',event=>{
-        if(!last||!scene)return;
-        scene.yaw+=(event.clientX-last[0])*0.008;
-        scene.pitch=clamp(scene.pitch-(event.clientY-last[1])*0.007,0.13,1.20);
-        last=[event.clientX,event.clientY];render();
+    canvas.addEventListener('pointerdown',event=>{
+        pointers.set(event.pointerId,[event.clientX,event.clientY]);
+        canvas.setPointerCapture(event.pointerId);
+        lastPinchDistance=pinchDistance();
     });
-    canvas.addEventListener('pointerup',()=>last=null);
-    canvas.addEventListener('pointercancel',()=>last=null);
+    canvas.addEventListener('pointermove',event=>{
+        if(!scene || !pointers.has(event.pointerId))return;
+        const previous=pointers.get(event.pointerId);
+        pointers.set(event.pointerId,[event.clientX,event.clientY]);
+        if(pointers.size>1){
+            const distance=pinchDistance();
+            if(lastPinchDistance>0 && distance>0){
+                scene.zoom=clamp(scene.zoom*lastPinchDistance/distance,0.13,2.35);
+            }
+            lastPinchDistance=distance;
+        }else{
+            scene.yaw+=(event.clientX-previous[0])*0.008;
+            scene.pitch=clamp(scene.pitch-(event.clientY-previous[1])*0.007,0.13,1.20);
+        }
+        render();
+    });
+    const remove=event=>{pointers.delete(event.pointerId);lastPinchDistance=pinchDistance();};
+    canvas.addEventListener('pointerup',remove);
+    canvas.addEventListener('pointercancel',remove);
+    canvas.addEventListener('lostpointercapture',remove);
     canvas.addEventListener('wheel',event=>{
         if(!scene)return;
-        event.preventDefault();scene.zoom=clamp(scene.zoom*(event.deltaY>0?1.13:0.89),0.48,2.35);render();
+        event.preventDefault();scene.zoom=clamp(scene.zoom*(event.deltaY>0?1.13:0.89),0.13,2.35);render();
     },{passive:false});
 }
+export function zoomHeroRegion(zoomIn){
+    if(!scene || !scene.region)return;
+    scene.zoom=clamp(scene.zoom*(zoomIn?0.78:1.28),0.13,2.35);
+    render();
+}
+
 export function drawHeroRegion(region,mode='after'){
     const canvas=document.getElementById('lab-hero-render');
     if(!canvas)throw Error('Missing hero region viewport');
