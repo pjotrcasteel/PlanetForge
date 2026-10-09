@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { PNG } from 'pngjs';
 
 test.setTimeout(120_000);
 
@@ -87,6 +88,142 @@ test('TerrainLab_DisplaysCanonicalGeologicalLayers', async ({ page }, testInfo) 
   await page.screenshot({ path: testInfo.outputPath('terrain-lab-showcase.png'), fullPage: true });
 });
 
+
+test('TerrainLab_HeroRegion_RendersPhysical3DLandscapeAndComparesErosion', async ({ page }, testInfo) => {
+  test.setTimeout(420_000);
+  await page.goto('/?terrainLab=1');
+  await page.waitForFunction(() => window.__planetForgeRegionalWatershedReady === true, null, { timeout: 180_000 });
+
+  await expect(page.locator('#lab-hero-generate')).toBeEnabled();
+  await page.locator('#lab-hero-generate').click();
+  await page.waitForFunction(() => window.__planetForgeHeroRegionReady === true, null, { timeout: 180_000 });
+  const hero = page.locator('#lab-hero-render');
+
+  const stats = await page.evaluate(() => window.__planetForgeHeroRegionStats);
+  expect(stats.seed).toBe(24061984);
+  expect(stats.mode).toBe('after');
+  expect(stats.gridWidth).toBe(129);
+  expect(stats.triangles).toBe(128 * 128 * 2);
+  expect(stats.glError).toBe(0);
+  expect(stats.maxElevationMeters - stats.minElevationMeters).toBeGreaterThan(50);
+  await expect(page.locator('.lab-hero-status')).toContainText('deepest cut');
+
+  const afterScreenshot = await hero.screenshot({ path: testInfo.outputPath('hero-eroded-seed-24061984.png') });
+  const after = PNG.sync.read(afterScreenshot);
+  const variation = new Set();
+  let planetPixels = 0;
+  for (let i = 0; i < after.data.length; i += 16) {
+    const red = after.data[i], green = after.data[i + 1], blue = after.data[i + 2];
+    if (red > green * 1.13 && red > blue * 1.18) {
+      planetPixels++;
+      variation.add((red >> 3) + '-' + (green >> 3) + '-' + (blue >> 3));
+    }
+  }
+  expect(planetPixels, 'The 3D terrain mesh is absent or outside the camera view').toBeGreaterThan(1200);
+  // Orbital-scale coverage should exist and contain real relief; the finer nested
+  // region below carries the strict texture/geometry visibility gate.
+  expect(stats.regionSpanKilometers).toBe(128);
+  expect(stats.maxElevationMeters - stats.minElevationMeters).toBeGreaterThan(1000);
+
+  await page.locator('#lab-hero-mode').selectOption('before');
+  await page.waitForFunction(() => window.__planetForgeHeroRegionStats?.mode === 'before');
+  const beforeScreenshot = await hero.screenshot({ path: testInfo.outputPath('hero-original-seed-24061984.png') });
+  const before = PNG.sync.read(beforeScreenshot);
+  let changedPixels = 0;
+  for (let i = 0; i < after.data.length; i += 4) {
+    if (Math.abs(after.data[i] - before.data[i]) +
+        Math.abs(after.data[i + 1] - before.data[i + 1]) +
+        Math.abs(after.data[i + 2] - before.data[i + 2]) > 2) {
+      changedPixels++;
+    }
+  }
+  expect(changedPixels, 'The simulated erosion produced no visible 3D mesh change').toBeGreaterThan(100);
+
+  // A physically smaller, geographically anchored region must reveal more local structure,
+  // not merely magnify the same coarse 128 km height raster or add a sharper shader.
+  await expect(page.locator('#lab-hero-refine')).toHaveText('REFINE TO 32 KM');
+  await page.locator('#lab-hero-refine').click();
+  await page.waitForFunction(() => window.__planetForgeHeroRegionReady === true &&
+    window.__planetForgeHeroRegionStats?.regionSpanKilometers === 32, null, { timeout: 180_000 });
+  const detailed = await page.evaluate(() => window.__planetForgeHeroRegionStats);
+  expect(detailed.gridWidth).toBe(129);
+  expect(detailed.glError).toBe(0);
+  expect(detailed.maxElevationMeters - detailed.minElevationMeters).toBeGreaterThan(30);
+  const nestedAfter = PNG.sync.read(await hero.screenshot({ path: testInfo.outputPath('hero-nested-32km-eroded.png') }));
+  const materialColors = new Set();
+  let nestedPixels = 0;
+  for (let i = 0; i < nestedAfter.data.length; i += 16) {
+    const r = nestedAfter.data[i], g = nestedAfter.data[i + 1], b = nestedAfter.data[i + 2];
+    if (r > g * 1.13 && r > b * 1.18) {
+      nestedPixels++;
+      materialColors.add((r >> 3) + '-' + (g >> 3) + '-' + (b >> 3));
+    }
+  }
+  expect(nestedPixels).toBeGreaterThan(1200);
+  expect(materialColors.size, 'Nested 32 km erosion still renders as a featureless brown plane').toBeGreaterThan(35);
+  await page.locator('#lab-hero-mode').selectOption('before');
+  await page.waitForFunction(() => window.__planetForgeHeroRegionStats?.mode === 'before');
+  const nestedBefore = PNG.sync.read(await hero.screenshot({ path: testInfo.outputPath('hero-nested-32km-original.png') }));
+  let physicalChanges = 0;
+  for (let i = 0; i < nestedBefore.data.length; i += 4) {
+    const rgbDifference = Math.abs(nestedBefore.data[i] - nestedAfter.data[i]) +
+      Math.abs(nestedBefore.data[i + 1] - nestedAfter.data[i + 1]) +
+      Math.abs(nestedBefore.data[i + 2] - nestedAfter.data[i + 2]);
+    if (rgbDifference > 2) physicalChanges++;
+  }
+  expect(physicalChanges, 'Nested elevation geometry did not change after erosion').toBeGreaterThan(100);
+
+  // Third scale: 8 km at 62.5 m per physical sample, with both earlier
+  // geological erosion histories inherited. Capture mobile and large views.
+  await expect(page.locator('#lab-hero-refine')).toHaveText('REFINE TO 8 KM');
+  await page.locator('#lab-hero-refine').click();
+  await page.waitForFunction(() => window.__planetForgeHeroRegionReady === true &&
+    window.__planetForgeHeroRegionStats?.regionSpanKilometers === 8, null, { timeout: 180_000 });
+  const micro = await page.evaluate(() => window.__planetForgeHeroRegionStats);
+  expect(micro.gridWidth).toBe(129);
+  expect(micro.glError).toBe(0);
+  expect(micro.triangles).toBe(128 * 128 * 2);
+  const originalCameraDistance = micro.cameraDistanceKm;
+  await page.locator('#lab-hero-zoom-in').click();
+  const nearCameraDistance = await page.evaluate(() => window.__planetForgeHeroRegionStats.cameraDistanceKm);
+  expect(nearCameraDistance).toBeLessThan(originalCameraDistance);
+  await page.locator('#lab-hero-zoom-out').click();
+  const restoredDistance = await page.evaluate(() => window.__planetForgeHeroRegionStats.cameraDistanceKm);
+  expect(Math.abs(restoredDistance - originalCameraDistance)).toBeLessThan(originalCameraDistance * 0.01);
+  await expect(page.locator('#lab-hero-refine')).toBeDisabled();
+  await page.locator('#lab-hero-render').screenshot({
+    path: testInfo.outputPath('hero-nested-8km-eroded-mobile.png')
+  });
+  await page.setViewportSize({ width: 1280, height: 900 });
+  const microCanvas = page.locator('#lab-hero-render');
+  const microBefore = PNG.sync.read(await microCanvas.screenshot({
+    path: testInfo.outputPath('hero-nested-8km-eroded-desktop.png')
+  }));
+  const visibleRock = new Set();
+  let rockPixels = 0;
+  for (let i = 0; i < microBefore.data.length; i += 16) {
+    const r = microBefore.data[i], g = microBefore.data[i + 1], b = microBefore.data[i + 2];
+    if (r > g * 1.13 && r > b * 1.18) {
+      rockPixels++;
+      visibleRock.add((r >> 3) + '-' + (g >> 3) + '-' + (b >> 3));
+    }
+  }
+  expect(rockPixels).toBeGreaterThan(6000);
+  expect(visibleRock.size, '8km terrain still has no resolved material or slope structure').toBeGreaterThan(35);
+  await page.locator('#lab-hero-mode').selectOption('before');
+  await page.waitForFunction(() => window.__planetForgeHeroRegionStats?.mode === 'before');
+  const microOriginal = PNG.sync.read(await microCanvas.screenshot({
+    path: testInfo.outputPath('hero-nested-8km-original-desktop.png')
+  }));
+  let changedGeometryPixels = 0;
+  for (let i = 0; i < microBefore.data.length; i += 4) {
+    const delta = Math.abs(microBefore.data[i] - microOriginal.data[i]) +
+      Math.abs(microBefore.data[i + 1] - microOriginal.data[i + 1]) +
+      Math.abs(microBefore.data[i + 2] - microOriginal.data[i + 2]);
+    if (delta > 2) changedGeometryPixels++;
+  }
+  expect(changedGeometryPixels).toBeGreaterThan(100);
+});
 
 test('TerrainLab_ErosionIterations_AdvanceRewindReplayDeterministically', async ({ page }, testInfo) => {
   test.setTimeout(270_000);

@@ -1,0 +1,219 @@
+// World Machine-inspired 3D geological research renderer. All vertex heights
+// come from canonical and evolved physical bedrock, without shader displacement.
+const clamp = (value, a, b) => Math.max(a, Math.min(b, value));
+const dot = (a, b) => a[0]*b[0] + a[1]*b[1] + a[2]*b[2];
+const cross = (a, b) => [a[1]*b[2]-a[2]*b[1], a[2]*b[0]-a[0]*b[2], a[0]*b[1]-a[1]*b[0]];
+function unit(v) { const d = Math.hypot(...v) || 1; return v.map(n => n/d); }
+function perspective(fov, aspect, near, far) {
+    const f = 1/Math.tan(fov/2);
+    return new Float32Array([f/aspect,0,0,0,0,f,0,0,0,0,(far+near)/(near-far),-1,0,0,2*far*near/(near-far),0]);
+}
+function lookAt(eye,target) {
+    const forward = unit(eye.map((value,index) => target[index]-value));
+    const side = unit(cross(forward,[0,1,0])), up = cross(side,forward);
+    return new Float32Array([side[0],up[0],-forward[0],0,side[1],up[1],-forward[1],0,side[2],up[2],-forward[2],0,
+        -dot(side,eye),-dot(up,eye),dot(forward,eye),1]);
+}
+function shader(gl,type,source) {
+    const value = gl.createShader(type);
+    gl.shaderSource(value,source); gl.compileShader(value);
+    if (!gl.getShaderParameter(value,gl.COMPILE_STATUS)) throw Error(gl.getShaderInfoLog(value));
+    return value;
+}
+const vertexShader = [
+    '#version 300 es','precision highp float;',
+    'layout(location=0) in vec3 aPosition; layout(location=1) in vec3 aNormal; layout(location=2) in vec3 aGeology;',
+    'uniform mat4 uProjection; uniform mat4 uView;',
+    'out vec3 vNormal; out vec3 vGeology; out vec3 vPosition;',
+    'void main(){ vNormal=aNormal; vGeology=aGeology; vPosition=aPosition;',
+    'gl_Position=uProjection*uView*vec4(aPosition,1.0); }'
+].join('\n');
+const fragmentShader = [
+    '#version 300 es','precision highp float;',
+    'in vec3 vNormal; in vec3 vGeology; in vec3 vPosition; out vec4 outColor;',
+    'uniform float uLowest; uniform float uHighest;',
+    'void main(){',
+    'vec3 n=normalize(vNormal); vec3 sun=normalize(vec3(0.88,0.24,0.41));',
+    'float altitude=smoothstep(uLowest,uHighest,vGeology.x);',
+    'float slope=length(n.xz); float exposed=smoothstep(0.025,0.26,slope);',
+    'vec3 mineral=mix(vec3(0.51,0.32,0.21),vec3(0.66,0.50,0.37),altitude*0.72);',
+    'mineral=mix(mineral,vec3(0.34,0.30,0.28),exposed*0.72);',
+    'float wear=smoothstep(0.0,75.0,max(vGeology.y,0.0));',
+    'float deposit=smoothstep(0.0,55.0,max(-vGeology.y,0.0));',
+    'mineral=mix(mineral,vec3(0.41,0.31,0.26),wear*0.17);',
+    'mineral=mix(mineral,vec3(0.70,0.53,0.36),deposit*0.12);',
+    'float angle=dot(n,sun); float raking=clamp((angle-sun.y)*3.45,-0.43,0.43);',
+    'float light=clamp(0.52+0.43*max(angle,0.0)+raking,0.24,1.22);',
+    'float fog=smoothstep(65.0,155.0,length(vPosition.xz))*0.15;',
+    'outColor=vec4(mix(mineral*light,vec3(0.32,0.32,0.31),fog),1.0); }'
+].join('\n');
+function program(gl) {
+    const p=gl.createProgram(), vs=shader(gl,gl.VERTEX_SHADER,vertexShader), fs=shader(gl,gl.FRAGMENT_SHADER,fragmentShader);
+    gl.attachShader(p,vs);gl.attachShader(p,fs);gl.linkProgram(p);
+    gl.deleteShader(vs);gl.deleteShader(fs);
+    if(!gl.getProgramParameter(p,gl.LINK_STATUS)) throw Error(gl.getProgramInfoLog(p));
+    return p;
+}
+function buildMesh(region,mode) {
+    const size=region.width, heights=mode==='before'?region.originalElevationMeters:region.evolvedElevationMeters;
+    const minOriginal=Math.min(...region.originalElevationMeters),maxOriginal=Math.max(...region.originalElevationMeters);
+    const origin=(minOriginal+maxOriginal)*0.5, spacing=region.cellSpacingMeters, positionStep=spacing/1000;
+    const vertices=new Float32Array(size*size*9);
+    let min=Infinity,max=-Infinity;
+    for(let y=0;y<size;y++)for(let x=0;x<size;x++){
+        const i=y*size+x,h=heights[i],west=heights[y*size+Math.max(0,x-1)],east=heights[y*size+Math.min(size-1,x+1)];
+        const south=heights[Math.max(0,y-1)*size+x],north=heights[Math.min(size-1,y+1)*size+x];
+        const dhdx=(east-west)/((Math.min(size-1,x+1)-Math.max(0,x-1))*spacing);
+        const dhdn=(north-south)/((Math.min(size-1,y+1)-Math.max(0,y-1))*spacing);
+        const normal=unit([-dhdx,1,dhdn]),base=i*9;
+        vertices[base]=(x-(size-1)*0.5)*positionStep;
+        vertices[base+1]=(h-origin)/1000;
+        vertices[base+2]=-(y-(size-1)*0.5)*positionStep;
+        vertices.set(normal,base+3);
+        vertices[base+6]=h;
+        vertices[base+7]=mode==='before'?0:region.cumulativeCutMeters[i];
+        vertices[base+8]=region.accumulatedRunoffCells[i];
+        min=Math.min(min,h);max=Math.max(max,h);
+    }
+    return {vertices,min,max};
+}
+function buildIndices(size){
+    const result=new Uint16Array((size-1)*(size-1)*6);
+    let i=0;
+    for(let y=0;y<size-1;y++)for(let x=0;x<size-1;x++){
+        const a=y*size+x,b=a+1,c=a+size,d=c+1;
+        result.set([a,b,c,b,d,c],i);i+=6;
+    }
+    return result;
+}
+let scene=null;
+function render() {
+    if(!scene || !scene.region)return;
+    const {gl,canvas,program:p,region}=scene;
+    const rect=canvas.getBoundingClientRect(),scale=Math.min(window.devicePixelRatio||1,1.35);
+    const width=Math.min(1024,Math.max(1,Math.round(rect.width*scale)));
+    const height=Math.min(640,Math.max(1,Math.round(rect.height*scale)));
+    if(canvas.width!==width||canvas.height!==height){canvas.width=width;canvas.height=height;}
+    const span=(region.width-1)*region.cellSpacingMeters/1000,d=span*scene.zoom;
+    const eye=[scene.focus[0]+Math.sin(scene.yaw)*Math.cos(scene.pitch)*d,
+        scene.focus[1]+Math.sin(scene.pitch)*d,
+        scene.focus[2]+Math.cos(scene.yaw)*Math.cos(scene.pitch)*d];
+    gl.viewport(0,0,width,height);gl.clearColor(0.07,0.09,0.10,1.0);gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);
+    gl.useProgram(p);
+    gl.uniformMatrix4fv(gl.getUniformLocation(p,'uProjection'),false,perspective(Math.PI/3.3,width/height,0.1,d*5));
+    gl.uniformMatrix4fv(gl.getUniformLocation(p,'uView'),false,lookAt(eye,scene.focus));
+    gl.uniform1f(gl.getUniformLocation(p,'uLowest'),scene.min);
+    gl.uniform1f(gl.getUniformLocation(p,'uHighest'),scene.max);
+    gl.bindVertexArray(scene.vao);gl.drawElements(gl.TRIANGLES,scene.indices,gl.UNSIGNED_SHORT,0);gl.bindVertexArray(null);
+    const error=gl.getError();
+    window.__planetForgeHeroRegionStats={seed:region.seed,mode:scene.mode,gridWidth:region.width,
+        triangles:scene.indices/3,regionSpanKilometers:(region.width-1)*region.cellSpacingMeters/1000,
+        minElevationMeters:scene.min,maxElevationMeters:scene.max,
+        erosionIterations:region.erosionIterations,cameraDistanceKm:d,glError:error};
+    window.__planetForgeHeroRegionReady=error===gl.NO_ERROR;
+}
+function useMode(mode){
+    if(!scene) return;
+    const {vertices,min,max}=buildMesh(scene.region,mode);
+    scene.mode=mode;scene.min=min;scene.max=max;
+    scene.gl.bindBuffer(scene.gl.ARRAY_BUFFER,scene.vbo);
+    scene.gl.bufferData(scene.gl.ARRAY_BUFFER,vertices,scene.gl.STATIC_DRAW);
+    render();
+}
+function controls(canvas){
+    const pointers = new Map();
+    let lastPinchDistance = 0;
+    const pinchDistance = () => {
+        const values = [...pointers.values()];
+        return values.length < 2 ? 0 : Math.hypot(values[0][0]-values[1][0],values[0][1]-values[1][1]);
+    };
+    canvas.style.touchAction='none';
+    canvas.addEventListener('pointerdown',event=>{
+        pointers.set(event.pointerId,[event.clientX,event.clientY]);
+        canvas.setPointerCapture(event.pointerId);
+        lastPinchDistance=pinchDistance();
+    });
+    canvas.addEventListener('pointermove',event=>{
+        if(!scene || !pointers.has(event.pointerId))return;
+        const previous=pointers.get(event.pointerId);
+        pointers.set(event.pointerId,[event.clientX,event.clientY]);
+        if(pointers.size>1){
+            const distance=pinchDistance();
+            if(lastPinchDistance>0 && distance>0){
+                scene.zoom=clamp(scene.zoom*lastPinchDistance/distance,0.13,2.35);
+            }
+            lastPinchDistance=distance;
+        }else{
+            scene.yaw+=(event.clientX-previous[0])*0.008;
+            scene.pitch=clamp(scene.pitch-(event.clientY-previous[1])*0.007,0.13,1.20);
+        }
+        render();
+    });
+    const remove=event=>{pointers.delete(event.pointerId);lastPinchDistance=pinchDistance();};
+    canvas.addEventListener('pointerup',remove);
+    canvas.addEventListener('pointercancel',remove);
+    canvas.addEventListener('lostpointercapture',remove);
+    canvas.addEventListener('wheel',event=>{
+        if(!scene)return;
+        event.preventDefault();scene.zoom=clamp(scene.zoom*(event.deltaY>0?1.13:0.89),0.13,2.35);render();
+    },{passive:false});
+}
+export function zoomHeroRegion(zoomIn){
+    if(!scene || !scene.region)return;
+    scene.zoom=clamp(scene.zoom*(zoomIn?0.78:1.28),0.13,2.35);
+    render();
+}
+
+export function drawHeroRegion(region,mode='after'){
+    const canvas=document.getElementById('lab-hero-render');
+    if(!canvas)throw Error('Missing hero region viewport');
+    if(region.width*region.width>65535)throw Error('Hero region exceeds 16-bit WebGL index budget');
+    const gl=scene?.gl??canvas.getContext('webgl2',{antialias:true,depth:true,preserveDrawingBuffer:true});
+    if(!gl)throw Error('Hero region requires WebGL2');
+    window.__planetForgeHeroRegionReady=false;
+    if(!scene){
+        const p=program(gl),vao=gl.createVertexArray(),vbo=gl.createBuffer(),ibo=gl.createBuffer();
+        gl.bindVertexArray(vao);gl.bindBuffer(gl.ARRAY_BUFFER,vbo);
+        for(let i=0;i<3;i++){gl.enableVertexAttribArray(i);gl.vertexAttribPointer(i,3,gl.FLOAT,false,36,i*12);}
+        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,ibo);gl.enable(gl.DEPTH_TEST);
+        scene={canvas,gl,program:p,vao,vbo,ibo,yaw:0.65,pitch:0.23,zoom:0.79,indices:0,focus:[0,0,0]};
+        controls(canvas);
+    }
+    const indices=buildIndices(region.width);
+    gl.bindVertexArray(scene.vao);gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,scene.ibo);
+    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,indices,gl.STATIC_DRAW);
+    // Focus the inspection camera on a real, strongly incised interior catchment.
+    // This changes the framing, never the geological height or its vertical scale.
+    const margin=Math.floor(region.width*0.22),middle=(region.width-1)*0.5;
+    let strongest=-1,focusIndex=Math.floor(middle)*region.width+Math.floor(middle);
+    for(let y=margin;y<region.width-margin;y++){
+        for(let x=margin;x<region.width-margin;x++){
+            const index=y*region.width+x;
+            const cut=Math.max(0,region.cumulativeCutMeters[index]);
+            if(cut>strongest){strongest=cut;focusIndex=index;}
+        }
+    }
+    const fx=focusIndex%region.width,fy=Math.floor(focusIndex/region.width);
+    const base=(Math.min(...region.originalElevationMeters)+Math.max(...region.originalElevationMeters))*0.5;
+    const km=region.cellSpacingMeters/1000;
+    scene.focus=[(fx-middle)*km,(region.evolvedElevationMeters[focusIndex]-base)/1000,-(fy-middle)*km];
+    // Frame actual valleys close enough to resolve physical slopes on mobile.
+    // Previously nested terrain inherited the overview camera framing.
+    const regionSpanKm = (region.width - 1) * region.cellSpacingMeters / 1000;
+    scene.pitch = regionSpanKm <= 8 ? 0.68 : regionSpanKm <= 32 ? 0.55 : 0.33;
+    scene.zoom = regionSpanKm <= 8 ? 0.63 : regionSpanKm <= 32 ? 0.53 : 0.70;
+    scene.region=region;scene.indices=indices.length;useMode(mode);
+}
+export function setHeroRegionMode(mode){
+    if(mode==='before'||mode==='after')useMode(mode);
+}
+
+export function resetHeroRegion() {
+    window.__planetForgeHeroRegionReady = false;
+    window.__planetForgeHeroRegionStats = null;
+    if (!scene) return;
+    scene.gl.viewport(0, 0, scene.canvas.width, scene.canvas.height);
+    scene.gl.clearColor(0.07, 0.09, 0.10, 1);
+    scene.gl.clear(scene.gl.COLOR_BUFFER_BIT | scene.gl.DEPTH_BUFFER_BIT);
+    scene.region = null;
+}

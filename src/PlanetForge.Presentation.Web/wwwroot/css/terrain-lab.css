@@ -35,6 +35,23 @@
 .lab-regional > p { max-width: 950px; line-height: 1.5; color: #a8bcb2; margin: 0 0 16px; }
 .lab-regional .lab-grid canvas { aspect-ratio: 1 / 1; }
 .lab-regional .lab-grid canvas + canvas { margin-top: 12px; }
+.lab-hero { max-width: 1400px; margin: 28px auto 0; padding: 20px; background: #172323; border: 1px solid #465a4e; border-radius: 16px; }
+.lab-hero-heading { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 18px; margin-bottom: 13px; }
+.lab-hero-heading > div { flex: 1 1 350px; }
+.lab-hero-heading small { color: #a0bcaa; letter-spacing: .13em; font: 700 .7rem ui-monospace, monospace; }
+.lab-hero-heading h2 { font-size: clamp(1.2rem, 3vw, 1.8rem); margin: 7px 0; color: #e5ede1; }
+.lab-hero-heading p { max-width: 750px; color: #acbcb5; line-height: 1.5; margin: 0; }
+.lab-hero-heading button { border: 1px solid #8fc6a7; border-radius: 10px; background: #215044; color: #effcf0; font-weight: 700; padding: 13px 17px; cursor: pointer; }
+.lab-hero-heading button:disabled { opacity: .5; cursor: default; }
+.lab-hero-toolbar { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; padding: 9px 0 14px; color: #b3c5b8; font-size: .85rem; }
+.lab-hero-toolbar select { background: #253e36; color: #e8f5e9; border: 1px solid #7c9c8b; padding: 8px 12px; border-radius: 8px; }
+.lab-hero-toolbar button { min-height: 44px; min-width: 44px; padding: 8px 14px; border: 1px solid #85ad93; border-radius: 10px; background: #234237; color: #ecf5ec; cursor: pointer; font-weight: 750; }
+.lab-hero-toolbar button:disabled { opacity: .45; cursor: default; }
+.lab-hero-disclaimer { margin: 8px 0 0; color: #a7b6b0; font-size: .75rem; line-height: 1.45; }
+.lab-hero-toolbar span { color: #91a99c; font: 500 .75rem ui-monospace, monospace; }
+#lab-hero-render { display: block; width: 100%; height: auto; aspect-ratio: 16 / 9; border-radius: 10px; background: #12191c; cursor: grab; }
+#lab-hero-render:active { cursor: grabbing; }
+.lab-hero-status { margin: 14px 0 0; color: #b6d2c1; font: 500 .78rem/1.5 ui-monospace, monospace; }
 .lab-footer { max-width: 1400px; margin: 20px auto; color: #9db4ab; font-size: .8rem; line-height: 1.5; }
 @media (max-width: 700px) {
     .lab-top { flex-direction: column; }
