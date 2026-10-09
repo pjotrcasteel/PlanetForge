@@ -129,6 +129,9 @@
             <button id="lab-hero-framing" type="button" @onclick="ToggleHeroFramingAsync" disabled="@(heroRegion is null || working)">
                 @(heroShowFullRegion ? "INSPECT VALLEY" : "SHOW FULL REGION")
             </button>
+            <button id="lab-hero-drainage" type="button" @onclick="ToggleHeroDrainageAsync" disabled="@(heroRegion is null || working)">
+                @(heroShowDrainage ? "HIDE ROUTED FLOW" : "SHOW ROUTED FLOW")
+            </button>
             <button id="lab-hero-zoom-in" type="button" aria-label="Zoom in on 3D terrain"
                     @onclick="() => ZoomHeroAsync(true)" disabled="@(heroRegion is null || working)">+</button>
             <button id="lab-hero-zoom-out" type="button" aria-label="Zoom out from 3D terrain"
@@ -137,7 +140,8 @@
         </div>
         <p class="lab-hero-status" aria-live="polite">@heroStatus</p>
         <canvas id="lab-hero-render" width="960" height="540" aria-label="Interactive 3D landscape from eroded geological height data"></canvas>
-        <p class="lab-hero-disclaimer">Research preview only. Valleys and materials are still being developed; this is not yet the gameplay planet.</p>
+        <p class="lab-hero-disclaimer">Turquoise highlights actual routed runoff where the simulated terrain is incised, not decorative rivers or rendered water.
+            Toggle it off to evaluate the rock geometry. Research preview only; this is not yet the gameplay planet.</p>
     </section>
     <footer class="lab-footer">Equirectangular projections are diagnostic maps only. Gameplay and local terrain sample these exact same elevation fields. The experimental 3D Hero Region applies hydraulic erosion on demand; the ordinary gameplay renderer does not yet use these new fields.</footer>
 </div>
@@ -154,6 +158,7 @@
     private int selectedIterations;
     private string regionalChangeSummary = "Sampling erosion history…";
     private bool heroShowFullRegion;
+    private bool heroShowDrainage = true;
     private readonly CancellationTokenSource cancellation = new();
     private PlanetVector? heroAnchor;
     private PlanetVector? heroFocusAnchor;
@@ -207,6 +212,7 @@
         heroSpanKilometers = 128;
         heroLocalHighResolution = false;
         heroShowFullRegion = false;
+        heroShowDrainage = true;
         regionalChangeSummary = "Sampling erosion history…";
         heroRegion = null;
         heroMode = "after";
@@ -431,6 +437,17 @@
         regionalChangeSummary = $"{changedCells * 100.0 / regionalBedrock.Length:0.0}% of cells changed • max erosion {maximumCut:0.0} m • max deposition {maximumFill:0.0} m";
     }
 
+    private async Task ToggleHeroDrainageAsync()
+    {
+        if (heroRegion is null || working || heroModule is null)
+        {
+            return;
+        }
+
+        heroShowDrainage = !heroShowDrainage;
+        await heroModule.InvokeVoidAsync("setHeroDrainageOverlay", cancellation.Token, heroShowDrainage);
+    }
+
     private async Task ToggleHeroFramingAsync()
     {
         if (heroRegion is null || working || heroModule is null)
@@ -504,6 +521,7 @@
 
             heroMode = "after";
             heroShowFullRegion = false;
+            heroShowDrainage = true;
             await heroModule.InvokeVoidAsync("drawHeroRegion", cancellation.Token, result, heroMode);
             heroRegion = result;
             var relief = result.EvolvedElevationMeters.Max() - result.EvolvedElevationMeters.Min();
