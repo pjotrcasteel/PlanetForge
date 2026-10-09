@@ -151,12 +151,12 @@ test('TerrainLab_HeroRegion_RendersPhysical3DLandscapeAndComparesErosion', async
   await page.locator('#lab-hero-detail').click();
   await page.waitForFunction(() => window.__planetForgeHeroRegionReady === true &&
     window.__planetForgeHeroRegionStats?.gridWidth === 257, null, { timeout: 180_000 });
-  const highDetail = await page.evaluate(() => window.__planetForgeHeroRegionStats);
-  expect(highDetail.cellSpacingMeters).toBe(500);
-  expect(highDetail.triangles).toBe(256 * 256 * 2);
-  expect(highDetail.indexBits).toBe(32);
-  expect(highDetail.glError).toBe(0);
-  expect(highDetail.maximumCutMeters).toBeGreaterThan(0);
+  const regionalDetail = await page.evaluate(() => window.__planetForgeHeroRegionStats);
+  expect(regionalDetail.cellSpacingMeters).toBe(500);
+  expect(regionalDetail.triangles).toBe(256 * 256 * 2);
+  expect(regionalDetail.indexBits).toBe(32);
+  expect(regionalDetail.glError).toBe(0);
+  expect(regionalDetail.maximumCutMeters).toBeGreaterThan(0);
   await hero.screenshot({ path: testInfo.outputPath('hero-128km-500m-physical-grid.png') });
   await page.locator('#lab-hero-detail').click();
   await page.waitForFunction(() => window.__planetForgeHeroRegionReady === true &&
