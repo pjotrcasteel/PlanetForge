@@ -42,6 +42,8 @@ jobs:
         run: |
           INDEX=./artifacts/web/wwwroot/index.html
           SHORT_SHA="${GITHUB_SHA::7}"
+          BUILD_VERSION="$(awk -F "'" '/^const buildVersion = / {print $2}' src/PlanetForge.Presentation.Web/wwwroot/js/buildVersion.js)"
+          test -n "$BUILD_VERSION"
           sed -i 's#<base href="/" />#<base href="/PlanetForge/" />#' "$INDEX"
           sed -i "s#css/app.css\"#css/app.css?v=${GITHUB_SHA}\"#" "$INDEX"
           sed -i "s#css/mission-clarity.css\"#css/mission-clarity.css?v=${GITHUB_SHA}\"#" "$INDEX"
@@ -50,14 +52,15 @@ jobs:
           sed -i "s#css/foundation-simulator.css\"#css/foundation-simulator.css?v=${GITHUB_SHA}\"#" "$INDEX"
           sed -i "s#js/buildVersion.js\"#js/buildVersion.js?v=${GITHUB_SHA}\"#" "$INDEX"
           sed -i "s#__BUILD_SHA_SHORT__#${SHORT_SHA}#g" "$INDEX"
+          sed -i "s#__BUILD_VERSION__#${BUILD_VERSION}#g" "$INDEX"
           touch ./artifacts/web/wwwroot/.nojekyll
           test -f ./artifacts/web/wwwroot/_framework/blazor.webassembly.js
           grep -q '<base href="/PlanetForge/" />' "$INDEX"
           grep -q "hydrology-foundation.css?v=${GITHUB_SHA}" "$INDEX"
           grep -q "foundation-simulator.css?v=${GITHUB_SHA}" "$INDEX"
-          grep -Eq "PF [0-9]+\.[0-9]+\.[0-9]+(\.[0-9]+)? · ${SHORT_SHA}" "$INDEX"
-          if grep -q '__BUILD_SHA_SHORT__' "$INDEX"; then
-            echo 'Build SHA placeholder was not replaced.'
+          grep -Fq "PF ${BUILD_VERSION} · ${SHORT_SHA}" "$INDEX"
+          if grep -Eq '__BUILD_SHA_SHORT__|__BUILD_VERSION__' "$INDEX"; then
+            echo 'Build identity placeholders were not replaced.'
             exit 1
           fi
 

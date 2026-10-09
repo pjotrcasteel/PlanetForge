@@ -11,6 +11,10 @@ test('DeployedPlanetForge_BootsAndRendersPlanet', async ({ page }) => {
   await page.goto(deployedUrl, { waitUntil: 'domcontentloaded' });
   await expect(page.getByTestId('planet-seed')).toBeVisible({ timeout: 90_000 });
   await expect(page.getByRole('button', { name: 'NEXT' })).toBeVisible();
+  const badge = page.locator('#planetforge-build-badge');
+  await expect(badge).toHaveText(/^PF \d+\.\d+\.\d+(?:\.\d+)? · [a-f0-9]{7}$/);
+  const visibleVersion = (await badge.textContent()).match(/^PF ([\d.]+) · /)[1];
+  await expect(page).toHaveTitle(`PlanetForge ${visibleVersion} — Geological Terrain Research`);
   await page.waitForFunction(() => Boolean(window.__planetForgeSurfaceTest) || Boolean(window.__planetForgeSurfaceError), null, { timeout: 60_000 });
 
   const runtimeError = await page.evaluate(() => window.__planetForgeSurfaceError ?? null);
