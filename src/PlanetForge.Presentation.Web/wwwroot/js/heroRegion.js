@@ -70,13 +70,14 @@ function buildMesh(region,mode) {
     const {min:minOriginal,max:maxOriginal}=elevationRange(region.originalElevationMeters);
     const origin=(minOriginal+maxOriginal)*0.5, spacing=region.cellSpacingMeters, positionStep=spacing/1000;
     const vertices=new Float32Array(size*size*9);
-    let min=Infinity,max=-Infinity;
+    let min=Infinity,max=-Infinity,slopeSquaredSum=0;
     for(let y=0;y<size;y++)for(let x=0;x<size;x++){
         const i=y*size+x,h=heights[i],west=heights[y*size+Math.max(0,x-1)],east=heights[y*size+Math.min(size-1,x+1)];
         const south=heights[Math.max(0,y-1)*size+x],north=heights[Math.min(size-1,y+1)*size+x];
         const dhdx=(east-west)/((Math.min(size-1,x+1)-Math.max(0,x-1))*spacing);
         const dhdn=(north-south)/((Math.min(size-1,y+1)-Math.max(0,y-1))*spacing);
         const normal=unit([-dhdx,1,dhdn]),base=i*9;
+        slopeSquaredSum+=dhdx*dhdx+dhdn*dhdn;
         vertices[base]=(x-(size-1)*0.5)*positionStep;
         vertices[base+1]=(h-origin)/1000;
         vertices[base+2]=-(y-(size-1)*0.5)*positionStep;
@@ -88,7 +89,7 @@ function buildMesh(region,mode) {
         vertices[base+8]=region.accumulatedRunoffCells[i]*spacing*spacing/1_000_000;
         min=Math.min(min,h);max=Math.max(max,h);
     }
-    return {vertices,min,max};
+    return {vertices,min,max,rmsSlope:Math.sqrt(slopeSquaredSum/(size*size))};
 }
 function buildIndices(size){
     // A 257² mesh has 66,049 vertices: the last vertex index does not fit in
@@ -128,6 +129,7 @@ function render() {
         triangles:scene.indices/3,indexBits:scene.indexType===gl.UNSIGNED_INT?32:16,
         cellSpacingMeters:region.cellSpacingMeters,regionSpanKilometers:(region.width-1)*region.cellSpacingMeters/1000,
         minElevationMeters:scene.min,maxElevationMeters:scene.max,actualReliefMeters:scene.max-scene.min,
+        rmsPhysicalSlope:scene.rmsSlope,
         maximumCutMeters:scene.maximumCutMeters,framing:scene.fullRegion?'full':'valley',
         drainageOverlay:scene.drainageOverlay,
         hillslopeTransportedVolumeCubicMeters:region.hillslopeTransportedVolumeCubicMeters??0,
@@ -137,8 +139,8 @@ function render() {
 }
 function useMode(mode){
     if(!scene) return;
-    const {vertices,min,max}=buildMesh(scene.region,mode);
-    scene.mode=mode;scene.min=min;scene.max=max;
+    const {vertices,min,max,rmsSlope}=buildMesh(scene.region,mode);
+    scene.mode=mode;scene.min=min;scene.max=max;scene.rmsSlope=rmsSlope;
     scene.gl.bindBuffer(scene.gl.ARRAY_BUFFER,scene.vbo);
     scene.gl.bufferData(scene.gl.ARRAY_BUFFER,vertices,scene.gl.STATIC_DRAW);
     render();
