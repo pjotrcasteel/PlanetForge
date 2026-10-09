@@ -218,6 +218,10 @@ public sealed class PlanetRegionalWatershed
             var index = visitOrder[order];
             var downstream = receivers[index];
             var runoff = accumulation[index];
+            // Water routed through a catchment is an area, not a number of
+            // pixels. Refining 1 km cells to 500 m cells must not quadruple
+            // physical stream power for the same mountain basin.
+            var drainageAreaSquareKilometers = runoff * cellArea / 1_000_000.0;
             var secondary = secondaryReceivers[index];
             var secondaryPart = secondaryFractions[index];
             var primarySlope = downstream < 0 ? 0.0 : Math.Max(0.0,
@@ -228,11 +232,15 @@ public sealed class PlanetRegionalWatershed
                 (cellSpacingMeters * (IsDiagonal(index, secondary, width) ? Math.Sqrt(2.0) : 1.0)));
             var slope = (primarySlope * (1.0 - secondaryPart)) + (alternateSlope * secondaryPart);
 
-            if (downstream >= 0 && runoff >= 6.0 && slope > 0.00001)
+            if (downstream >= 0 && drainageAreaSquareKilometers >= 6.0 && slope > 0.00001)
             {
-                var streamPower = Math.Pow((runoff - 5.0) / 8.0, 0.43) * Math.Pow(slope / 0.06, 0.42);
+                var streamPower = Math.Pow((drainageAreaSquareKilometers - 5.0) / 8.0, 0.43) *
+                    Math.Pow(slope / 0.06, 0.42);
                 var erodibility = erodibilityCellWeights is null ? 1.0f : erodibilityCellWeights[index];
-                incision[index] = (float)Math.Min(180.0, 24.0 * streamPower * erodibility);
+                // One pass is an uncalibrated numerical iteration, not a
+                // geological era. A 180 m incision per pass generated 100 m
+                // of region-wide sediment export and grid-aligned cliffs.
+                incision[index] = (float)Math.Min(12.0, 24.0 * streamPower * erodibility);
             }
 
             var removedVolume = incision[index] * cellArea;
@@ -246,10 +254,10 @@ public sealed class PlanetRegionalWatershed
             // deposited up to 80 m per numerical pass across entire catchments.
             // Only a connected, low-gradient reach can accumulate a floodplain.
             // Keep the remaining sediment in transit until another reach or outlet.
-            var capacity = 12.0 * Math.Pow(runoff, 0.65) * Math.Sqrt(slope) * cellArea;
+            var capacity = 12.0 * Math.Pow(drainageAreaSquareKilometers, 0.65) * Math.Sqrt(slope) * cellArea;
             var floodplainFactor = Math.Clamp((0.035 - slope) / 0.035, 0.0, 1.0);
-            var depositionalCapacityMeters = Math.Min(24.0, 0.7 * Math.Sqrt(runoff));
-            var depositedHere = downstream < 0 || runoff < 8.0 ? 0.0 :
+            var depositionalCapacityMeters = Math.Min(6.0, 0.35 * Math.Sqrt(drainageAreaSquareKilometers));
+            var depositedHere = downstream < 0 || drainageAreaSquareKilometers < 8.0 ? 0.0 :
                 Math.Min(Math.Max(0.0, sedimentLoad[index] - capacity) * 0.25 * floodplainFactor,
                     depositionalCapacityMeters * cellArea);
             deposition[index] = (float)(depositedHere / cellArea);
