@@ -14,7 +14,7 @@ test('DeployedPlanetForge_BootsAndRendersPlanet', async ({ page }) => {
   const badge = page.locator('#planetforge-build-badge');
   await expect(badge).toHaveText(/^PF \d+\.\d+\.\d+(?:\.\d+)? · [a-f0-9]{7}$/);
   const visibleVersion = (await badge.textContent()).match(/^PF ([\d.]+) · /)[1];
-  await expect(page).toHaveTitle(new RegExp(`^PlanetForge ${visibleVersion.replaceAll('.', '\\\\.')} — `));
+  await expect(page).toHaveTitle(`PlanetForge ${visibleVersion} — Geological Terrain Research`);
   await page.waitForFunction(() => Boolean(window.__planetForgeSurfaceTest) || Boolean(window.__planetForgeSurfaceError), null, { timeout: 60_000 });
 
   const runtimeError = await page.evaluate(() => window.__planetForgeSurfaceError ?? null);
