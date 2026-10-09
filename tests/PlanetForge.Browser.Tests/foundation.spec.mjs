@@ -223,6 +223,22 @@ test('TerrainLab_HeroRegion_RendersPhysical3DLandscapeAndComparesErosion', async
     if (delta > 2) changedGeometryPixels++;
   }
   expect(changedGeometryPixels).toBeGreaterThan(100);
+
+  // The optional high-detail solve uses real 31.25 m height samples, not
+  // pixel upscaling. It requires 32-bit indices because 257² > 65,536.
+  await expect(page.locator('#lab-hero-detail')).toHaveText('RESOLVE 257² DETAIL');
+  await page.locator('#lab-hero-detail').click();
+  await page.waitForFunction(() => window.__planetForgeHeroRegionReady === true &&
+    window.__planetForgeHeroRegionStats?.gridWidth === 257, null, { timeout: 180_000 });
+  const highDetail = await page.evaluate(() => window.__planetForgeHeroRegionStats);
+  expect(highDetail.regionSpanKilometers).toBe(8);
+  expect(highDetail.cellSpacingMeters).toBe(31.25);
+  expect(highDetail.triangles).toBe(256 * 256 * 2);
+  expect(highDetail.indexBits).toBe(32);
+  expect(highDetail.glError).toBe(0);
+  await expect(page.locator('.lab-hero-status')).toContainText('31.25 m cells');
+  await expect(page.locator('#lab-hero-detail')).toHaveText('USE FAST 129² GRID');
+  await microCanvas.screenshot({ path: testInfo.outputPath('hero-nested-8km-257-detail.png') });
 });
 
 test('TerrainLab_ErosionIterations_AdvanceRewindReplayDeterministically', async ({ page }, testInfo) => {

@@ -54,9 +54,16 @@ function program(gl) {
     if(!gl.getProgramParameter(p,gl.LINK_STATUS)) throw Error(gl.getProgramInfoLog(p));
     return p;
 }
+function elevationRange(heights) {
+    let min=Infinity,max=-Infinity;
+    // Do not spread 257² elevation samples into Math.min/Math.max: Safari has
+    // a lower argument limit than desktop Chromium and throws RangeError.
+    for(const height of heights){min=Math.min(min,height);max=Math.max(max,height);}
+    return {min,max};
+}
 function buildMesh(region,mode) {
     const size=region.width, heights=mode==='before'?region.originalElevationMeters:region.evolvedElevationMeters;
-    const minOriginal=Math.min(...region.originalElevationMeters),maxOriginal=Math.max(...region.originalElevationMeters);
+    const {min:minOriginal,max:maxOriginal}=elevationRange(region.originalElevationMeters);
     const origin=(minOriginal+maxOriginal)*0.5, spacing=region.cellSpacingMeters, positionStep=spacing/1000;
     const vertices=new Float32Array(size*size*9);
     let min=Infinity,max=-Infinity;
@@ -78,7 +85,11 @@ function buildMesh(region,mode) {
     return {vertices,min,max};
 }
 function buildIndices(size){
-    const result=new Uint16Array((size-1)*(size-1)*6);
+    // A 257² mesh has 66,049 vertices: the last vertex index does not fit in
+    // UNSIGNED_SHORT. WebGL2 supports UNSIGNED_INT without an extension.
+    const result=size*size>65536
+        ?new Uint32Array((size-1)*(size-1)*6)
+        :new Uint16Array((size-1)*(size-1)*6);
     let i=0;
     for(let y=0;y<size-1;y++)for(let x=0;x<size-1;x++){
         const a=y*size+x,b=a+1,c=a+size,d=c+1;
@@ -104,10 +115,11 @@ function render() {
     gl.uniformMatrix4fv(gl.getUniformLocation(p,'uView'),false,lookAt(eye,scene.focus));
     gl.uniform1f(gl.getUniformLocation(p,'uLowest'),scene.min);
     gl.uniform1f(gl.getUniformLocation(p,'uHighest'),scene.max);
-    gl.bindVertexArray(scene.vao);gl.drawElements(gl.TRIANGLES,scene.indices,gl.UNSIGNED_SHORT,0);gl.bindVertexArray(null);
+    gl.bindVertexArray(scene.vao);gl.drawElements(gl.TRIANGLES,scene.indices,scene.indexType,0);gl.bindVertexArray(null);
     const error=gl.getError();
     window.__planetForgeHeroRegionStats={seed:region.seed,mode:scene.mode,gridWidth:region.width,
-        triangles:scene.indices/3,regionSpanKilometers:(region.width-1)*region.cellSpacingMeters/1000,
+        triangles:scene.indices/3,indexBits:scene.indexType===gl.UNSIGNED_INT?32:16,
+        cellSpacingMeters:region.cellSpacingMeters,regionSpanKilometers:(region.width-1)*region.cellSpacingMeters/1000,
         minElevationMeters:scene.min,maxElevationMeters:scene.max,
         erosionIterations:region.erosionIterations,cameraDistanceKm:d,glError:error};
     window.__planetForgeHeroRegionReady=error===gl.NO_ERROR;
@@ -167,7 +179,7 @@ export function zoomHeroRegion(zoomIn){
 export function drawHeroRegion(region,mode='after'){
     const canvas=document.getElementById('lab-hero-render');
     if(!canvas)throw Error('Missing hero region viewport');
-    if(region.width*region.width>65535)throw Error('Hero region exceeds 16-bit WebGL index budget');
+    if(!Number.isInteger(region.width)||region.width<9||region.width>257)throw Error('Unsupported hero region grid width');
     const gl=scene?.gl??canvas.getContext('webgl2',{antialias:true,depth:true,preserveDrawingBuffer:true});
     if(!gl)throw Error('Hero region requires WebGL2');
     window.__planetForgeHeroRegionReady=false;
@@ -182,6 +194,7 @@ export function drawHeroRegion(region,mode='after'){
     const indices=buildIndices(region.width);
     gl.bindVertexArray(scene.vao);gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,scene.ibo);
     gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,indices,gl.STATIC_DRAW);
+    scene.indexType=indices instanceof Uint32Array?gl.UNSIGNED_INT:gl.UNSIGNED_SHORT;
     // Focus the inspection camera on a real, strongly incised interior catchment.
     // This changes the framing, never the geological height or its vertical scale.
     const margin=Math.floor(region.width*0.22),middle=(region.width-1)*0.5;
@@ -194,7 +207,8 @@ export function drawHeroRegion(region,mode='after'){
         }
     }
     const fx=focusIndex%region.width,fy=Math.floor(focusIndex/region.width);
-    const base=(Math.min(...region.originalElevationMeters)+Math.max(...region.originalElevationMeters))*0.5;
+    const {min:baseMin,max:baseMax}=elevationRange(region.originalElevationMeters);
+    const base=(baseMin+baseMax)*0.5;
     const km=region.cellSpacingMeters/1000;
     scene.focus=[(fx-middle)*km,(region.evolvedElevationMeters[focusIndex]-base)/1000,-(fy-middle)*km];
     // Frame actual valleys close enough to resolve physical slopes on mobile.
