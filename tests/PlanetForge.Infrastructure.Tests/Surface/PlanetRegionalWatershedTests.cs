@@ -178,6 +178,30 @@ public sealed class PlanetRegionalWatershedTests
     }
 
     [TestMethod]
+    public void Build_SteepConnectedChannel_TransportsSedimentInsteadOfBlanketingHillsides()
+    {
+        const int width = 32;
+        const int height = 32;
+        const double spacing = 500.0;
+        var bedrock = new float[width * height];
+        for (var y = 0; y < height; y++)
+        {
+            for (var x = 0; x < width; x++)
+            {
+                bedrock[y * width + x] = 9000f - 175f * y + 0.1f * x;
+            }
+        }
+
+        var watershed = PlanetRegionalWatershed.Build(width, height, spacing, bedrock);
+
+        Assert.IsGreaterThan(0.0, watershed.ErodedVolumeCubicMeters);
+        Assert.IsTrue(watershed.SedimentDepositionMeters.All(value => value == 0f),
+            "Sediment should be transported down a steep reach, not build a 100 m blanket.");
+        Assert.AreEqual(watershed.ErodedVolumeCubicMeters, watershed.ExportedVolumeCubicMeters,
+            Math.Max(1.0, watershed.ErodedVolumeCubicMeters * 1e-5));
+    }
+
+    [TestMethod]
     public void Build_InvalidRainfall_RejectsNegativeAndNonFiniteWeights()
     {
         var heights = Enumerable.Repeat(100f, 10 * 10).ToArray();
