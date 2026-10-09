@@ -13,7 +13,8 @@ public static class PlanetHillslopeMassWasting
     public sealed record Result(
         float[] ElevationMeters,
         double AdditionalErodedVolumeCubicMeters,
-        double AdditionalDepositedVolumeCubicMeters);
+        double AdditionalDepositedVolumeCubicMeters,
+        int InitiallyUnstableEdges = 0);
 
     public static Result Apply(
         IReadOnlyList<float> elevations, IReadOnlyList<float> erodibility,
@@ -48,10 +49,13 @@ public static class PlanetHillslopeMassWasting
         var original = elevations.ToArray();
         var working = (float[])original.Clone();
         var change = new double[working.Length];
+        var initiallyUnstableEdges = 0;
+        var trackInitialPass = false;
 
         for (var pass = 0; pass < passes; pass++)
         {
             cancellationToken.ThrowIfCancellationRequested();
+            trackInitialPass = pass == 0;
             Array.Clear(change);
             for (var y = 1; y < height - 1; y++)
             {
@@ -87,7 +91,7 @@ public static class PlanetHillslopeMassWasting
             fill += Math.Max(0.0, -difference);
         }
 
-        return new Result(working, cut * cellArea, fill * cellArea);
+        return new Result(working, cut * cellArea, fill * cellArea, initiallyUnstableEdges);
 
         void Transfer(int first, int second, double distanceMeters, double relaxationRate)
         {
@@ -110,6 +114,14 @@ public static class PlanetHillslopeMassWasting
             }
 
             var movedHeight = excessHeight * relaxationRate;
+            // The first pass measures meaningful *physical* slope failures.
+            // Subsequent passes may still transport talus, but must not
+            // redefine whether the initial geological surface was unstable.
+            if (trackInitialPass && movedHeight >= 0.01)
+            {
+                initiallyUnstableEdges++;
+            }
+
             change[uphill] -= movedHeight;
             change[downhill] += movedHeight;
         }

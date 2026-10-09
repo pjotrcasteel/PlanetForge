@@ -37,6 +37,52 @@ public sealed class ProceduralPlanetElevationSourceTests
     }
 
     [TestMethod]
+    public void SampleOrogenicFoldReliefMeters_SameWorldLocation_IsBoundedDeterministicAndGeographicallyContinuous()
+    {
+        var source = new ProceduralPlanetElevationSource();
+        foreach (var seed in new[] { 24061984, 346147916, 579460630 })
+        {
+            var directions = FibonacciDirections(2_048).ToArray();
+            var foldHeights = directions.Select(direction => source.SampleOrogenicFoldReliefMeters(direction, seed)).ToArray();
+            Assert.IsGreaterThan(45.0, foldHeights.Max(Math.Abs),
+                $"Seed {seed} should contain physically sized orogenic fold crests and troughs.");
+            Assert.IsTrue(foldHeights.All(fold => double.IsFinite(fold) && Math.Abs(fold) <= 230.001));
+
+            var index = Enumerable.Range(0, foldHeights.Length).MaxBy(index => Math.Abs(foldHeights[index]));
+            var focus = directions[index];
+            var replay = source.SampleOrogenicFoldReliefMeters(focus, seed);
+            Assert.AreEqual(foldHeights[index], replay);
+
+            // Twenty metres along a fixed planetary direction is a tiny
+            // displacement compared with the physical 55–95 km folding band.
+            var nearby = PlanetVector.Normalize(focus + (PlanetVector.UnitY * (20.0 / 6_371_000.0)));
+            Assert.IsLessThan(4.0, Math.Abs(replay - source.SampleOrogenicFoldReliefMeters(nearby, seed)),
+                "A continuous tectonic fold must not jump across nearby vertices or local LODs.");
+        }
+    }
+
+    [TestMethod]
+    public void SampleTerrainFields_OrientedFoldRelief_IsSharedByAlignedPhysicalHeroSamples()
+    {
+        var source = new ProceduralPlanetElevationSource();
+        var anchor = PlanetVector.Normalize(new PlanetVector(0.2, 0.7, 0.6));
+        var builder = new PlanetHeroRegionBuilder(source);
+        const int seed = 24061984;
+        var coarse = builder.Build(anchor, seed, 17, 16_000, 1);
+        var fine = builder.Build(anchor, seed, 33, 16_000, 1);
+
+        for (var y = 0; y < coarse.Width; y++)
+        {
+            for (var x = 0; x < coarse.Width; x++)
+            {
+                Assert.AreEqual(coarse.OriginalElevationMeters[y * coarse.Width + x],
+                    fine.OriginalElevationMeters[(2 * y) * fine.Width + 2 * x],
+                    "LOD refinement must preserve exact canonical fold and bedrock identity at aligned locations.");
+            }
+        }
+    }
+
+    [TestMethod]
     public void SampleElevationMeters_DifferentSeed_ProducesDifferentElevation()
     {
         var source = new ProceduralPlanetElevationSource();
