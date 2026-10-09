@@ -44,6 +44,28 @@ public sealed class PlanetLateralErosionRelaxationTests
     }
 
     [TestMethod]
+    public void Apply_ProtectedChannelEdges_RetainsSteepBedrockBanksAndConservesExcavation()
+    {
+        const int size = 17;
+        var original = Enumerable.Repeat(2500f, size * size).ToArray();
+        var eroded = (float[])original.Clone();
+        var channel = 8 * size + 8;
+        eroded[channel] -= 200f;
+        eroded[channel + size] -= 160f;
+
+        var broad = PlanetLateralErosionRelaxation.Apply(original, eroded, size, size);
+        var protectedBanks = PlanetLateralErosionRelaxation.Apply(original, eroded, size, size, preserveIncisionEdges: true);
+
+        Assert.AreEqual(original[channel - 1], protectedBanks[channel - 1],
+            "Uncut bank rock should not be blurred by diffusion.");
+        Assert.IsLessThan(protectedBanks[channel - 1], broad[channel - 1],
+            "The unprotected relaxation should diffuse cut beyond the channel.");
+        Assert.IsGreaterThan(broad[channel], protectedBanks[channel],
+            "The protected channel should remain more strongly incised.");
+        Assert.AreEqual(360.0, original.Zip(protectedBanks, (a, b) => (double)a - b).Sum(), 0.02);
+    }
+
+    [TestMethod]
     public void Apply_ZeroPassesAndFlatGeology_PreserveExactElevations()
     {
         var original = Enumerable.Repeat(1200f, 9 * 9).ToArray();
