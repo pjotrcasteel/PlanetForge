@@ -105,6 +105,8 @@ test('TerrainLab_HeroRegion_RendersPhysical3DLandscapeAndComparesErosion', async
   expect(stats.gridWidth).toBe(129);
   expect(stats.triangles).toBe(128 * 128 * 2);
   expect(stats.glError).toBe(0);
+  expect(stats.focusCellIndex).toBeGreaterThanOrEqual(0);
+  expect(stats.focusCellIndex).toBeLessThan(stats.gridWidth * stats.gridWidth);
   expect(stats.maxElevationMeters - stats.minElevationMeters).toBeGreaterThan(50);
   await expect(page.locator('.lab-hero-status')).toContainText('deepest cut');
 
