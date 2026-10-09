@@ -220,6 +220,8 @@ test('TerrainLab_HeroRegion_RendersPhysical3DLandscapeAndComparesErosion', async
   expect(micro.gridWidth).toBe(129);
   expect(micro.glError).toBe(0);
   expect(micro.triangles).toBe(128 * 128 * 2);
+  expect(micro.hillslopeTransportedVolumeCubicMeters).toBeGreaterThan(0);
+  await expect(page.locator('.lab-hero-status')).toContainText('talus relocated locally');
   const originalCameraDistance = micro.cameraDistanceKm;
   await page.locator('#lab-hero-zoom-in').click();
   const nearCameraDistance = await page.evaluate(() => window.__planetForgeHeroRegionStats.cameraDistanceKm);

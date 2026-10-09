@@ -20,7 +20,8 @@ public sealed record PlanetHeroRegion(
     double ErodedVolumeCubicMeters,
     double DepositedVolumeCubicMeters,
     double ExportedVolumeCubicMeters,
-    int FocusCellIndex = -1);
+    int FocusCellIndex = -1,
+    double HillslopeTransportedVolumeCubicMeters = 0);
 
 public sealed class PlanetHeroRegionBuilder(IPlanetElevationSource elevationSource)
 {
@@ -165,17 +166,25 @@ public sealed class PlanetHeroRegionBuilder(IPlanetElevationSource elevationSour
         var valleys = PlanetValleyBankCarver.Apply(
             original, relaxedElevation, finalWatershed.AccumulatedRunoffCells, gridWidth, gridWidth, spacing,
             finalWatershed.DownstreamIndices, cancellationToken);
+        // Resolve unstable bedrock faces with local, conservative hillslope
+        // transport. This stage reworks material into downhill talus, not
+        // another export from an isolated region.
+        var hillslopes = PlanetHillslopeMassWasting.Apply(
+            valleys.ElevationMeters, erodibility, gridWidth, gridWidth, spacing,
+            cancellationToken: cancellationToken);
         var cut = new float[original.Length];
         for (var index = 0; index < cut.Length; index++)
         {
-            cut[index] = original[index] - valleys.ElevationMeters[index];
+            cut[index] = original[index] - hillslopes.ElevationMeters[index];
         }
 
-        var region = new PlanetHeroRegion(seed, gridWidth, spacing, original, valleys.ElevationMeters, cut,
+        var region = new PlanetHeroRegion(seed, gridWidth, spacing, original, hillslopes.ElevationMeters, cut,
             finalWatershed.AccumulatedRunoffCells, erosionIterations, PlanetLateralErosionRelaxation.DefaultPasses,
-            evolved.CumulativeErodedVolumeCubicMeters + valleys.AdditionalExportedSedimentCubicMeters,
-            evolved.CumulativeDepositedVolumeCubicMeters,
-            evolved.CumulativeExportedVolumeCubicMeters + valleys.AdditionalExportedSedimentCubicMeters);
+            evolved.CumulativeErodedVolumeCubicMeters + valleys.AdditionalExportedSedimentCubicMeters +
+                hillslopes.AdditionalErodedVolumeCubicMeters,
+            evolved.CumulativeDepositedVolumeCubicMeters + hillslopes.AdditionalDepositedVolumeCubicMeters,
+            evolved.CumulativeExportedVolumeCubicMeters + valleys.AdditionalExportedSedimentCubicMeters,
+            HillslopeTransportedVolumeCubicMeters: hillslopes.AdditionalDepositedVolumeCubicMeters);
         return region with { FocusCellIndex = FindIncisedChannelCell(region) };
     }
 }

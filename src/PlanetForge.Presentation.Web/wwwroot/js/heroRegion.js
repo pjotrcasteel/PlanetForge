@@ -130,6 +130,7 @@ function render() {
         minElevationMeters:scene.min,maxElevationMeters:scene.max,actualReliefMeters:scene.max-scene.min,
         maximumCutMeters:scene.maximumCutMeters,framing:scene.fullRegion?'full':'valley',
         drainageOverlay:scene.drainageOverlay,
+        hillslopeTransportedVolumeCubicMeters:region.hillslopeTransportedVolumeCubicMeters??0,
         erosionIterations:region.erosionIterations,focusCellIndex:region.focusCellIndex,cameraDistanceKm:d,glError:error};
     window.__planetForgeHeroRegionReady=error===gl.NO_ERROR;
 }
