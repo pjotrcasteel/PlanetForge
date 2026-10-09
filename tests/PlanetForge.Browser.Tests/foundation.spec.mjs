@@ -146,6 +146,22 @@ test('TerrainLab_HeroRegion_RendersPhysical3DLandscapeAndComparesErosion', async
   expect(stats.regionSpanKilometers).toBe(128);
   expect(stats.maxElevationMeters - stats.minElevationMeters).toBeGreaterThan(1000);
 
+  // Do a second *physical* 128 km erosion solve at 500 m spacing rather
+  // than simply upsampling the GPU triangles of the coarse 1 km grid.
+  await page.locator('#lab-hero-detail').click();
+  await page.waitForFunction(() => window.__planetForgeHeroRegionReady === true &&
+    window.__planetForgeHeroRegionStats?.gridWidth === 257, null, { timeout: 180_000 });
+  const highDetail = await page.evaluate(() => window.__planetForgeHeroRegionStats);
+  expect(highDetail.cellSpacingMeters).toBe(500);
+  expect(highDetail.triangles).toBe(256 * 256 * 2);
+  expect(highDetail.indexBits).toBe(32);
+  expect(highDetail.glError).toBe(0);
+  expect(highDetail.maximumCutMeters).toBeGreaterThan(0);
+  await hero.screenshot({ path: testInfo.outputPath('hero-128km-500m-physical-grid.png') });
+  await page.locator('#lab-hero-detail').click();
+  await page.waitForFunction(() => window.__planetForgeHeroRegionReady === true &&
+    window.__planetForgeHeroRegionStats?.gridWidth === 129, null, { timeout: 180_000 });
+
   await page.locator('#lab-hero-mode').selectOption('before');
   await page.waitForFunction(() => window.__planetForgeHeroRegionStats?.mode === 'before');
   const beforeScreenshot = await hero.screenshot({ path: testInfo.outputPath('hero-original-seed-24061984.png') });
@@ -247,7 +263,7 @@ test('TerrainLab_HeroRegion_RendersPhysical3DLandscapeAndComparesErosion', async
 
   // The optional high-detail solve uses real 31.25 m height samples, not
   // pixel upscaling. It requires 32-bit indices because 257² > 65,536.
-  await expect(page.locator('#lab-hero-detail')).toHaveText('RESOLVE 257² DETAIL');
+  await expect(page.locator('#lab-hero-detail')).toHaveText('SIMULATE 257² DETAIL');
   await page.locator('#lab-hero-detail').click();
   await page.waitForFunction(() => window.__planetForgeHeroRegionReady === true &&
     window.__planetForgeHeroRegionStats?.gridWidth === 257, null, { timeout: 180_000 });
