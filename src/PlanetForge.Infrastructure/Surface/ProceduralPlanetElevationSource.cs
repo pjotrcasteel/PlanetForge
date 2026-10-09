@@ -7,6 +7,7 @@ public sealed class ProceduralPlanetElevationSource : IPlanetElevationSource
 {
     private const double MaximumLandElevationMeters = 8_400.0;
     private const double MaximumOceanDepthMeters = 7_600.0;
+    private const double PlanetRadiusMeters = 6_371_000.0;
     private const int PlateCount = 18;
     private const int ContinentalPlateCount = 7;
     private const int PlateSeedSalt = 0x13579BDF;
@@ -66,7 +67,8 @@ public sealed class ProceduralPlanetElevationSource : IPlanetElevationSource
         var oldRange = SmoothStep(0.06, 0.56, rangeEnvelope) * SmoothStep(-0.12, 0.38, province);
         // Spatially connected, curved orogenic belts span thousands of kilometres.
         // Unlike isolated noise peaks, these arcs have longitudinal continuity and finite widths.
-        var orogeny = SampleOrogenicSystems(macroDirection, seed, boundaryNoise);
+        var orogenicStructure = SampleOrogenicSystems(macroDirection, seed, boundaryNoise);
+        var orogeny = orogenicStructure.Envelope;
         var mountainBelt = Math.Max(orogeny, Math.Max(oldRange * 0.68, belt * 0.78));
         var narrowRidges = RidgedNoise(direction, seed ^ DetailSeedSalt, 13.0, 4, 2.09, 0.47);
         var ridgeStrength = Math.Max(0.0, narrowRidges);
@@ -82,7 +84,11 @@ public sealed class ProceduralPlanetElevationSource : IPlanetElevationSource
         var impacts = SampleImpactRelief(direction, seed);
         var coastFine = FractalNoise(direction, seed ^ CoastSeedSalt, 13.0, 2, 2.11, 0.48);
         var shoreMask = 1.0 - SmoothStep(0.015, 0.10, Math.Abs(crust));
-        var normalized = crust + uplift + terrain - incisions + impacts + (coastFine * shoreMask * 0.024);
+        // Fold crests and intervening troughs follow the already established
+        // orogenic arcs over tens of kilometres. They are real canonical
+        // elevation in metres, not an independent local Hero detail shader.
+        var foldRelief = orogenicStructure.FoldReliefMeters * landMask / MaximumLandElevationMeters;
+        var normalized = crust + uplift + terrain - incisions + impacts + foldRelief + (coastFine * shoreMask * 0.024);
 
         if (normalized < 0.0)
         {
@@ -97,7 +103,18 @@ public sealed class ProceduralPlanetElevationSource : IPlanetElevationSource
         return new PlanetTerrainFieldSample(continental, plateUplift * belt, mountainBelt, elevation);
     }
 
-    private double SampleOrogenicSystems(PlanetVector direction, int seed, double distortion)
+    /// <summary>
+    /// Diagnostic physical height of the tectonically aligned bedrock folds,
+    /// before the continental land mask is applied.
+    /// </summary>
+    public double SampleOrogenicFoldReliefMeters(PlanetVector direction, int seed)
+    {
+        var macroDirection = WarpDirection(direction, seed ^ WarpSeedSalt, 0.29, 1.16);
+        var boundaryNoise = FractalNoise(direction, seed ^ BoundarySeedSalt, 4.2, 3, 2.05, 0.49);
+        return SampleOrogenicSystems(macroDirection, seed, boundaryNoise).FoldReliefMeters;
+    }
+
+    private OrogenicStructure SampleOrogenicSystems(PlanetVector direction, int seed, double distortion)
     {
         // The arc geometry is immutable for a seed; calculating it once avoids hundreds of
         // thousands of repeated SeedDirection and trigonometric operations per planet.
@@ -108,10 +125,13 @@ public sealed class ProceduralPlanetElevationSource : IPlanetElevationSource
 
         var arcs = orogenicArcs.GetOrAdd(seed, BuildOrogenicArcs);
         var strongest = 0.0;
+        var foldSum = 0.0;
+        var foldWeight = 0.0;
 
         foreach (var arc in arcs)
         {
-            var arcDistance = Math.Asin(Math.Clamp(Math.Abs(PlanetVector.Dot(direction, arc.Normal)), 0.0, 1.0));
+            var signedArcDistance = Math.Asin(Math.Clamp(PlanetVector.Dot(direction, arc.Normal), -1.0, 1.0));
+            var arcDistance = Math.Abs(signedArcDistance);
             var warpedDistance = Math.Max(0.0, arcDistance + (distortion * arc.Breadth * 0.35));
             var crossSection = 1.0 - SmoothStep(arc.Breadth * 0.10, arc.Breadth, warpedDistance);
             if (crossSection <= 0.0)
@@ -121,10 +141,32 @@ public sealed class ProceduralPlanetElevationSource : IPlanetElevationSource
 
             var along = PlanetVector.Dot(direction, arc.Center);
             var lengthMask = SmoothStep(arc.StartAlong, arc.FullAlong, along);
-            strongest = Math.Max(strongest, crossSection * lengthMask);
+            var envelope = crossSection * lengthMask;
+            strongest = Math.Max(strongest, envelope);
+            if (envelope < 0.02)
+            {
+                continue;
+            }
+
+            // Compression creates coherent anticline/syncline trains roughly
+            // 55–95 km apart, parallel to each long tectonic belt. Slow
+            // along-belt curvature prevents mechanically straight stripes.
+            // The phase is evaluated in physical metres in the canonical
+            // spherical frame, independent of the raster / mesh resolution.
+            var crossMeters = signedArcDistance * PlanetRadiusMeters;
+            var alongMeters = Math.Atan2(PlanetVector.Dot(direction, arc.Tangent),
+                PlanetVector.Dot(direction, arc.Start)) * PlanetRadiusMeters;
+            var phase = crossMeters * (2.0 * Math.PI / arc.FoldWavelengthMeters) +
+                (0.72 * Math.Sin(alongMeters / 145_000.0 + arc.FoldPhase)) +
+                (0.23 * Math.Sin(alongMeters / 61_000.0 - arc.FoldPhase * 0.7));
+            var alongStrength = 0.82 + 0.18 * Math.Cos(alongMeters / 210_000.0 + arc.FoldPhase);
+            foldSum += Math.Cos(phase) * 230.0 * alongStrength * envelope * envelope;
+            foldWeight += envelope;
         }
 
-        return strongest;
+        // Multiple intersecting belts blend rather than adding crests or
+        // jumping at the winning-arc boundary. Magnitude stays <=230 m.
+        return new OrogenicStructure(strongest, foldSum / Math.Max(1.0, foldWeight));
     }
 
     private static OrogenicArc[] BuildOrogenicArcs(int seed)
@@ -147,7 +189,12 @@ public sealed class ProceduralPlanetElevationSource : IPlanetElevationSource
             var halfSpan = Lerp(0.28, 0.71, ToUnitRange(HashValue(index, seed, UplandSeedSalt, ProvinceSeedSalt)));
             var center = PlanetVector.Normalize((start * Math.Cos(halfSpan * 0.5)) + (tangent * Math.Sin(halfSpan * 0.5)));
             var breadth = Lerp(0.035, 0.085, ToUnitRange(HashValue(index, BasinSeedSalt, seed, DetailSeedSalt)));
-            arcs[index] = new OrogenicArc(normal, center, breadth, Math.Cos(halfSpan), Math.Cos(halfSpan * 0.70));
+            var wavelengthMeters = Lerp(55_000.0, 95_000.0,
+                ToUnitRange(HashValue(index, seed, BoundarySeedSalt, UplandSeedSalt)));
+            var foldPhase = Math.PI * (1.0 +
+                HashValue(index, seed, DetailSeedSalt, RegionalSeedSalt));
+            arcs[index] = new OrogenicArc(normal, center, start, tangent, breadth,
+                Math.Cos(halfSpan), Math.Cos(halfSpan * 0.70), wavelengthMeters, foldPhase);
         }
 
         return arcs;
@@ -385,7 +432,11 @@ public sealed class ProceduralPlanetElevationSource : IPlanetElevationSource
         return t * t * (3.0 - (2.0 * t));
     }
 
-    private readonly record struct OrogenicArc(PlanetVector Normal, PlanetVector Center, double Breadth, double StartAlong, double FullAlong);
+    private readonly record struct OrogenicStructure(double Envelope, double FoldReliefMeters);
+
+    private readonly record struct OrogenicArc(
+        PlanetVector Normal, PlanetVector Center, PlanetVector Start, PlanetVector Tangent,
+        double Breadth, double StartAlong, double FullAlong, double FoldWavelengthMeters, double FoldPhase);
 
     private readonly record struct NearestPlatePair(int PrimaryIndex, int SecondaryIndex, double PrimaryDot, double SecondaryDot);
 }
