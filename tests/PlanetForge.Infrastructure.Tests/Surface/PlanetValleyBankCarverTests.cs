@@ -127,6 +127,35 @@ public sealed class PlanetValleyBankCarverTests
     }
 
     [TestMethod]
+    public void Apply_SteepReach_HeadwardRetreatIsBoundedByExistingCutAndActualCellSize()
+    {
+        const int width = 41;
+        const int center = 20 * width + 20;
+        const int receiver = center + 1;
+        var original = Enumerable.Repeat(1400f, width * width).ToArray();
+        var eroded = (float[])original.Clone();
+        eroded[center] = 1300f;
+        eroded[receiver] = 1000f;
+        var runoff = new float[original.Length];
+        runoff[center] = 300f;
+        var downstream = Enumerable.Repeat(-1, original.Length).ToArray();
+        downstream[center] = receiver;
+
+        foreach (var spacing in new[] { 31.25, 100.0, 1_000.0 })
+        {
+            var result = PlanetValleyBankCarver.Apply(original, eroded, runoff, width, width, spacing, downstream);
+            var additional = eroded[center] - result.ElevationMeters[center];
+            var reachLimit = Math.Min((original[center] - eroded[center]) * 0.28, spacing * 0.06);
+
+            Assert.IsGreaterThan(0f, additional, "Steep connected reaches must still erode.");
+            Assert.IsLessThanOrEqualTo((float)(reachLimit + 0.01), additional,
+                "One coarse routing step must not excavate an implausible deep vertical terrace.");
+            Assert.IsGreaterThan(result.ElevationMeters[receiver], result.ElevationMeters[center],
+                "The updated headcut must remain above the receiving channel.");
+        }
+    }
+
+    [TestMethod]
     public void Apply_ConnectedGentleRiver_DoesNotInventSteepHeadwardIncision()
     {
         const int width = 41;
