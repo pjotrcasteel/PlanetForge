@@ -45,6 +45,9 @@
 .lab-hero-heading button:disabled { opacity: .5; cursor: default; }
 .lab-hero-toolbar { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; padding: 9px 0 14px; color: #b3c5b8; font-size: .85rem; }
 .lab-hero-toolbar select { background: #253e36; color: #e8f5e9; border: 1px solid #7c9c8b; padding: 8px 12px; border-radius: 8px; }
+.lab-hero-toolbar button { min-height: 44px; min-width: 44px; padding: 8px 14px; border: 1px solid #85ad93; border-radius: 10px; background: #234237; color: #ecf5ec; cursor: pointer; font-weight: 750; }
+.lab-hero-toolbar button:disabled { opacity: .45; cursor: default; }
+.lab-hero-disclaimer { margin: 8px 0 0; color: #a7b6b0; font-size: .75rem; line-height: 1.45; }
 .lab-hero-toolbar span { color: #91a99c; font: 500 .75rem ui-monospace, monospace; }
 #lab-hero-render { display: block; width: 100%; height: auto; aspect-ratio: 16 / 9; border-radius: 10px; background: #12191c; cursor: grab; }
 #lab-hero-render:active { cursor: grabbing; }
