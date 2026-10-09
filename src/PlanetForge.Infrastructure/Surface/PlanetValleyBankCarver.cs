@@ -78,8 +78,8 @@ public static class PlanetValleyBankCarver
                 {
                     // Headward erosion deepens only an existing, connected,
                     // steep-water channel. The local bed cannot cut through
-                    // the downstream bed: limiting incision to 55% of the
-                    // head drop preserves downstream hydraulic ordering.
+                    // the downstream bed: incision follows a bounded fraction
+                    // of that reach's head drop and existing physical cut.
                     var receiverDx = receiver % width - x;
                     var receiverDy = receiver / width - y;
                     var reachMeters = Math.Sqrt(receiverDx * receiverDx + receiverDy * receiverDy) * spacingMeters;
@@ -87,8 +87,15 @@ public static class PlanetValleyBankCarver
                     var streamSlope = headDrop / reachMeters;
                     var streamEnergy = Math.Clamp((streamSlope - 0.04) / 0.08, 0.0, 1.0);
                     var routedRunoff = Math.Clamp(Math.Sqrt(runoff / 80.0), 0.0, 1.0);
-                    var headwardCut = Math.Min(300.0, headDrop * 0.55 * streamEnergy * routedRunoff);
-                    channelDepth = Math.Min(560.0, channelDepth + headwardCut);
+                    // The former 55%-of-one-cell head-drop rule could excavate
+                    // hundreds of metres at a single 1 km raster vertex and
+                    // form visible stair-steps. A reach can only retreat a small
+                    // fraction of its already physically incised channel depth
+                    // and of its own length in one geological solve.
+                    // Smaller cells consequently evolve smaller headward steps.
+                    var incrementalLimit = Math.Min(existingCut * 0.28, reachMeters * 0.06);
+                    var headwardCut = Math.Min(incrementalLimit, headDrop * 0.2 * streamEnergy * routedRunoff);
+                    channelDepth = Math.Min(340.0, channelDepth + headwardCut);
                     deepestCut[center] = Math.Max(deepestCut[center], channelDepth);
                 }
                 var directionX = receiver < 0 ? 0.0 : receiver % width - x;
