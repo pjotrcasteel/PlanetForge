@@ -195,9 +195,33 @@ public sealed class PlanetRegionalWatershedTests
         var watershed = PlanetRegionalWatershed.Build(width, height, spacing, bedrock);
 
         Assert.IsGreaterThan(0.0, watershed.ErodedVolumeCubicMeters);
-        Assert.IsTrue(watershed.SedimentDepositionMeters.All(value => value == 0f),
-            "Sediment should be transported down a steep reach, not build a 100 m blanket.");
-        Assert.AreEqual(watershed.ErodedVolumeCubicMeters, watershed.ExportedVolumeCubicMeters,
+        Assert.IsLessThanOrEqualTo(24.01f, watershed.SedimentDepositionMeters.Max(),
+            "One numerical pass must never deposit an unbounded 100 m material blanket.");
+        for (var index = 0; index < bedrock.Length; index++)
+        {
+            if (watershed.SedimentDepositionMeters[index] <= 0f)
+            {
+                continue;
+            }
+
+            var primary = watershed.DownstreamIndices[index];
+            Assert.IsGreaterThanOrEqualTo(0, primary);
+            Assert.IsGreaterThanOrEqualTo(8f, watershed.AccumulatedRunoffCells[index]);
+            var secondary = watershed.SecondaryDownstreamIndices[index];
+            var fraction = watershed.SecondaryFlowFractions[index];
+            var primarySlope = Math.Max(0.0, watershed.FilledRoutingElevationMeters[index] -
+                watershed.FilledRoutingElevationMeters[primary]) /
+                (spacing * (index % width != primary % width && index / width != primary / width ? Math.Sqrt(2) : 1));
+            var secondarySlope = secondary < 0 ? 0.0 : Math.Max(0.0,
+                watershed.FilledRoutingElevationMeters[index] - watershed.FilledRoutingElevationMeters[secondary]) /
+                (spacing * (index % width != secondary % width && index / width != secondary / width ? Math.Sqrt(2) : 1));
+            var effectiveSlope = primarySlope * (1.0 - fraction) + secondarySlope * fraction;
+            Assert.IsLessThanOrEqualTo(0.03501, effectiveSlope,
+                "Sediment may settle in flat floodplain reaches, not on steep moving channels.");
+        }
+
+        Assert.AreEqual(watershed.ErodedVolumeCubicMeters,
+            watershed.DepositedVolumeCubicMeters + watershed.ExportedVolumeCubicMeters,
             Math.Max(1.0, watershed.ErodedVolumeCubicMeters * 1e-5));
     }
 
