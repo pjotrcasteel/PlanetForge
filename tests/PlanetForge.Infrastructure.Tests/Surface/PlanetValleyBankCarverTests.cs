@@ -36,6 +36,69 @@ public sealed class PlanetValleyBankCarverTests
     }
 
     [TestMethod]
+    public void Apply_EastwardRiver_CutsAcrossItsBanksMoreThanAlongItsFlow()
+    {
+        const int width = 41;
+        const int centerX = 20;
+        const int centerY = 20;
+        var center = centerY * width + centerX;
+        var original = Enumerable.Repeat(1800f, width * width).ToArray();
+        var eroded = (float[])original.Clone();
+        eroded[center] -= 110f;
+        var runoff = new float[original.Length];
+        runoff[center] = 1000f;
+        var receivers = Enumerable.Repeat(-1, original.Length).ToArray();
+        receivers[center] = center + 1;
+
+        var result = PlanetValleyBankCarver.Apply(original, eroded, runoff, width, width, 100.0, receivers);
+        var acrossBank = (centerY + 1) * width + centerX;
+        var alongBank = centerY * width + centerX + 1;
+        var acrossCut = original[acrossBank] - result.ElevationMeters[acrossBank];
+        var alongCut = original[alongBank] - result.ElevationMeters[alongBank];
+
+        Assert.IsGreaterThan(0.0, acrossCut, "Real runoff should excavate streamside banks.");
+        Assert.IsGreaterThan(alongCut, acrossCut, "Cross-stream retreat must exceed isolated upstream/downstream erosion.");
+        Assert.AreEqual(result.ElevationMeters[centerY * width + centerX - 1],
+            result.ElevationMeters[centerY * width + centerX + 1], 0.00001);
+        Assert.IsGreaterThan(0.0, result.AdditionalExportedSedimentCubicMeters);
+    }
+
+    [TestMethod]
+    public void Apply_PhysicalCatchmentArea_ControlsWideningAtEveryGridResolution()
+    {
+        const int width = 41;
+        var center = 20 * width + 20;
+        var original = Enumerable.Repeat(1500f, width * width).ToArray();
+        var eroded = (float[])original.Clone();
+        eroded[center] -= 120f;
+        var narrowFlow = new float[original.Length];
+        narrowFlow[center] = 100f;
+        var broadFlow = new float[original.Length];
+        broadFlow[center] = 1600f;
+
+        var narrow = PlanetValleyBankCarver.Apply(original, eroded, narrowFlow, width, width, 50.0);
+        var broad = PlanetValleyBankCarver.Apply(original, eroded, broadFlow, width, width, 50.0);
+        var bank = 21 * width + 22;
+        Assert.IsGreaterThan(original[bank] - narrow.ElevationMeters[bank],
+            original[bank] - broad.ElevationMeters[bank], "A larger catchment must carve broader banks.");
+        Assert.IsGreaterThan(narrow.AdditionalExportedSedimentCubicMeters,
+            broad.AdditionalExportedSedimentCubicMeters);
+    }
+
+    [TestMethod]
+    public void Apply_AlreadyCancelled_DoesNotBeginExpensiveBankExcavation()
+    {
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+        var bedrock = Enumerable.Repeat(1000f, 33 * 33).ToArray();
+        var runoff = Enumerable.Repeat(100f, 33 * 33).ToArray();
+
+        Assert.ThrowsExactly<OperationCanceledException>(() =>
+            PlanetValleyBankCarver.Apply(bedrock, bedrock, runoff, 33, 33, 100.0,
+                cancellationToken: cancellation.Token));
+    }
+
+    [TestMethod]
     public void Apply_WithoutBothRunoffAndHydraulicCut_DoesNotInventRiverGeometry()
     {
         const int width = 33;
