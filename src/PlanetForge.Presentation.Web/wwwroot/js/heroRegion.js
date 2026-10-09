@@ -83,7 +83,9 @@ function buildMesh(region,mode) {
         vertices.set(normal,base+3);
         vertices[base+6]=h;
         vertices[base+7]=mode==='before'?0:region.cumulativeCutMeters[i];
-        vertices[base+8]=region.accumulatedRunoffCells[i];
+        // Diagnostic flow color represents physical upstream catchment area,
+        // not how many raster pixels contributed to that catchment.
+        vertices[base+8]=region.accumulatedRunoffCells[i]*spacing*spacing/1_000_000;
         min=Math.min(min,h);max=Math.max(max,h);
     }
     return {vertices,min,max};

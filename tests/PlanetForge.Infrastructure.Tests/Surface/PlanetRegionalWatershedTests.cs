@@ -226,6 +226,66 @@ public sealed class PlanetRegionalWatershedTests
     }
 
     [TestMethod]
+    public void Build_SamePhysicalCatchmentAtTwoResolutions_ProducesComparableStreamIncision()
+    {
+        // A 1 km cell fed by seven units of rainfall and a 500 m cell fed by
+        // 28 units drain the same 7 km² catchment. Stream power must use
+        // physical area, not raw cell-count units.
+        var coarse = OneWetHillslopeSource(33, 1_000.0, 7f);
+        var fine = OneWetHillslopeSource(65, 500.0, 28f);
+        var coarseCenter = 16 * 33 + 16;
+        var fineCenter = 32 * 65 + 32;
+
+        Assert.IsGreaterThan(0f, coarse.IncisionMeters[coarseCenter]);
+        Assert.AreEqual(coarse.IncisionMeters[coarseCenter], fine.IncisionMeters[fineCenter], 0.5f,
+            "Doubling grid resolution must not change erosion strength on the same physically sized catchment.");
+        Assert.IsLessThanOrEqualTo(12.0f, coarse.IncisionMeters.Max());
+        Assert.IsLessThanOrEqualTo(12.0f, fine.IncisionMeters.Max());
+    }
+
+    [TestMethod]
+    public void Build_SteepLargeCatchment_CapsNumericalIncisionAndDepositionAndConservesMass()
+    {
+        const int width = 48;
+        var heights = new float[width * width];
+        for (var y = 0; y < width; y++)
+        {
+            for (var x = 0; x < width; x++)
+            {
+                heights[y * width + x] = 2_500f + 90f * (width - y) + 24f * (width - x);
+            }
+        }
+
+        var watershed = PlanetRegionalWatershed.Build(width, width, 500.0, heights);
+        Assert.IsGreaterThan(0.0, watershed.ErodedVolumeCubicMeters);
+        Assert.IsLessThanOrEqualTo(12.001f, watershed.IncisionMeters.Max(),
+            "A numerical pass must not gouge 180 m into a single coarse raster cell.");
+        Assert.IsLessThanOrEqualTo(6.001f, watershed.SedimentDepositionMeters.Max(),
+            "Floodplains must not accumulate 24 m of material in one numerical pass.");
+        Assert.AreEqual(watershed.ErodedVolumeCubicMeters,
+            watershed.DepositedVolumeCubicMeters + watershed.ExportedVolumeCubicMeters,
+            Math.Max(1.0, watershed.ErodedVolumeCubicMeters * 1e-5));
+    }
+
+    private static PlanetRegionalWatershed OneWetHillslopeSource(int width, double spacingMeters, float rainfall)
+    {
+        var heights = new float[width * width];
+        var precipitation = new float[width * width];
+        for (var y = 0; y < width; y++)
+        {
+            for (var x = 0; x < width; x++)
+            {
+                heights[y * width + x] = (float)(2_000.0 +
+                    (width - 1 - y) * spacingMeters * 0.02 +
+                    (width - 1 - x) * spacingMeters * 0.002);
+            }
+        }
+
+        precipitation[(width / 2) * width + width / 2] = rainfall;
+        return PlanetRegionalWatershed.Build(width, width, spacingMeters, heights, precipitation);
+    }
+
+    [TestMethod]
     public void Build_InvalidRainfall_RejectsNegativeAndNonFiniteWeights()
     {
         var heights = Enumerable.Repeat(100f, 10 * 10).ToArray();
