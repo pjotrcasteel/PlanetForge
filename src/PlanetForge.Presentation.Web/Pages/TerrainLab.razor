@@ -425,16 +425,15 @@
             // No synthetic rock ridges: variable lithology controls physical
             // hydraulic incision instead. Finer regions inherit their ancestors'
             // eroded elevations at identical spherical locations.
-            IPlanetElevationSource inputElevation = Elevation;
-            if (heroSpanKilometers != 128)
+            // Build one shared physical elevation source for every inspection scale.
+            // Nested solves inherit all previous cuts; overlapping peer regions can
+            // later be supplied as a single atlas layer without changing samplers.
+            IPlanetElevationSource inputElevation = heroSpanKilometers switch
             {
-                inputElevation = new PlanetRegionalEvolvedElevationSource(inputElevation, heroParentOverlay!);
-            }
-
-            if (heroSpanKilometers == 8)
-            {
-                inputElevation = new PlanetRegionalEvolvedElevationSource(inputElevation, heroNestedOverlay!);
-            }
+                8 => new PlanetRegionalGeologyAtlas(Elevation, [heroParentOverlay!], [heroNestedOverlay!]),
+                32 => new PlanetRegionalGeologyAtlas(Elevation, [heroParentOverlay!]),
+                _ => Elevation
+            };
             var gridWidth = heroSpanKilometers == 8 && heroLocalHighResolution ? 257 : PlanetHeroRegionBuilder.DefaultGridWidth;
             var result = new PlanetHeroRegionBuilder(inputElevation).Build(
                 anchor, selectedSeed, gridWidth: gridWidth, regionSpanMeters: heroSpanKilometers * 1000.0,

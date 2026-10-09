@@ -38,6 +38,9 @@ public sealed class PlanetRegionalGeologyOverlay
 
     public int Seed { get; }
     public string RegionKey { get; }
+    public int Width => width;
+    public int Height => height;
+    public double CellSpacingMeters => cellSpacingMeters;
 
     public static PlanetRegionalGeologyOverlay Create(
         PlanetRegionalGeologySnapshot original, PlanetRegionalGeologySnapshot evolved,
@@ -72,16 +75,27 @@ public sealed class PlanetRegionalGeologyOverlay
 
     public double SampleDeltaMeters(PlanetVector surfaceDirection, int seed)
     {
+        var sample = SampleWeightedDeltaMeters(surfaceDirection, seed);
+        return sample.DeltaMeters * sample.Weight;
+    }
+
+    /// <summary>
+    /// Returns the unattenuated physical height delta and a smooth support weight.
+    /// A geological atlas can blend overlapping peers before applying boundary fade;
+    /// isolated regions retain the old zero-at-the-edge behavior.
+    /// </summary>
+    public (double DeltaMeters, double Weight) SampleWeightedDeltaMeters(PlanetVector surfaceDirection, int seed)
+    {
         if (seed != Seed)
         {
-            return 0.0;
+            return (0.0, 0.0);
         }
 
         var direction = PlanetVector.Normalize(surfaceDirection);
         var facing = PlanetVector.Dot(direction, center);
         if (facing <= 0.0)
         {
-            return 0.0;
+            return (0.0, 0.0);
         }
 
         // Gnomonic projection exactly inverts the projection used to sample Terrain Lab:
@@ -91,7 +105,7 @@ public sealed class PlanetRegionalGeologyOverlay
         var y = PlanetVector.Dot(tangent, north) / cellSpacingMeters + ((height - 1) * 0.5);
         if (x <= 0.0 || y <= 0.0 || x >= width - 1.0 || y >= height - 1.0)
         {
-            return 0.0;
+            return (0.0, 0.0);
         }
 
         var x0 = (int)Math.Floor(x);
@@ -107,7 +121,7 @@ public sealed class PlanetRegionalGeologyOverlay
         var marginX = Math.Min(x, width - 1.0 - x);
         var marginY = Math.Min(y, height - 1.0 - y);
         var fade = SmoothStep(marginX / BoundaryFadeCells) * SmoothStep(marginY / BoundaryFadeCells);
-        return Lerp(top, bottom, ty) * fade;
+        return (Lerp(top, bottom, ty), fade);
     }
 
     private static double Lerp(double left, double right, double weight) => left + ((right - left) * weight);
