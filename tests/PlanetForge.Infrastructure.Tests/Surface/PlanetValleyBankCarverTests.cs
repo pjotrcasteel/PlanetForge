@@ -99,6 +99,53 @@ public sealed class PlanetValleyBankCarverTests
     }
 
     [TestMethod]
+    public void Apply_ConnectedSteepRiver_DeepensItsPhysicalChannelWithoutReversingDownstreamHead()
+    {
+        const int width = 41;
+        const int center = 20 * width + 20;
+        var original = Enumerable.Repeat(1400f, width * width).ToArray();
+        var eroded = (float[])original.Clone();
+        var runoff = new float[original.Length];
+        var downstream = Enumerable.Repeat(-1, original.Length).ToArray();
+        var receiver = center + 1;
+        eroded[center] = 1300f;
+        eroded[receiver] = 1050f;
+        runoff[center] = 150f;
+        downstream[center] = receiver;
+
+        var result = PlanetValleyBankCarver.Apply(original, eroded, runoff, width, width, 100, downstream);
+
+        Assert.IsLessThan(eroded[center], result.ElevationMeters[center],
+            "A connected steep reach must deepen beyond the ordinary valley-bank shoulder.");
+        Assert.IsGreaterThan(result.ElevationMeters[receiver], result.ElevationMeters[center],
+            "Headward excavation must not cut a channel below its receiver.");
+        Assert.IsGreaterThan(0.0, result.AdditionalExportedSedimentCubicMeters);
+
+        var replay = PlanetValleyBankCarver.Apply(original, eroded, runoff, width, width, 100, downstream);
+        CollectionAssert.AreEqual(result.ElevationMeters, replay.ElevationMeters);
+        Assert.AreEqual(result.AdditionalExportedSedimentCubicMeters, replay.AdditionalExportedSedimentCubicMeters);
+    }
+
+    [TestMethod]
+    public void Apply_ConnectedGentleRiver_DoesNotInventSteepHeadwardIncision()
+    {
+        const int width = 41;
+        const int center = 20 * width + 20;
+        var original = Enumerable.Repeat(1400f, width * width).ToArray();
+        var eroded = (float[])original.Clone();
+        var runoff = new float[original.Length];
+        var downstream = Enumerable.Repeat(-1, original.Length).ToArray();
+        eroded[center] = 1350f;
+        eroded[center + 1] = 1349f;
+        runoff[center] = 150f;
+        downstream[center] = center + 1;
+
+        var result = PlanetValleyBankCarver.Apply(original, eroded, runoff, width, width, 100, downstream);
+
+        Assert.AreEqual(eroded[center], result.ElevationMeters[center]);
+    }
+
+    [TestMethod]
     public void Apply_WithoutBothRunoffAndHydraulicCut_DoesNotInventRiverGeometry()
     {
         const int width = 33;
