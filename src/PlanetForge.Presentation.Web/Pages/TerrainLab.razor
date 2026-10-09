@@ -96,8 +96,10 @@
                 <h2>Explore the evolving terrain — experimental</h2>
                 <p>Generate the 128 km watershed, refine its incised valley at 32 km, then inspect an 8 km
                     nested local terrain. Each level inherits its parent geology at fixed spherical locations.
-                    Every level uses 129×129 physical height samples and variable rock resistance,
-                    six hydraulic erosion passes and eight conservative bank-relaxation passes. No vertical exaggeration.</p>
+                    Every level starts with 129×129 physical height samples and variable rock resistance.
+                    At 8 km, optionally resolve 257×257 samples (31.25 m spacing) for finer real geometry;
+                    this extra calculation is slower on mobile. Six hydraulic erosion passes and eight
+                    conservative bank-relaxation passes; no vertical exaggeration.</p>
             </div>
             <button id="lab-hero-generate" @onclick="GenerateHeroRegionAsync" disabled="@(working || heroAnchor is null)">
                 @(working ? "WORKING…" : "GENERATE 3D TERRAIN")
@@ -118,6 +120,10 @@
             <button id="lab-hero-refine" type="button" @onclick="RefineHeroRegionAsync"
                     disabled="@(working || heroRegion is null || heroRenderedSpanKm == 8)">
                 @(heroRenderedSpanKm == 32 ? "REFINE TO 8 KM" : "REFINE TO 32 KM")
+            </button>
+            <button id="lab-hero-detail" type="button" @onclick="ToggleHeroDetailAsync"
+                    disabled="@(working || heroRegion is null || heroRenderedSpanKm != 8)">
+                @(heroLocalHighResolution ? "USE FAST 129² GRID" : "RESOLVE 257² DETAIL")
             </button>
             <button id="lab-hero-zoom-in" type="button" aria-label="Zoom in on 3D terrain"
                     @onclick="() => ZoomHeroAsync(true)" disabled="@(heroRegion is null || working)">+</button>
@@ -149,6 +155,7 @@
     private PlanetRegionalGeologyOverlay? heroNestedOverlay;
     private PlanetRegionalGeologyOverlay? heroParentOverlay;
     private int heroSpanKilometers = 128;
+    private bool heroLocalHighResolution;
     private int heroRenderedSpanKm => heroRegion is null ? 0 : (int)Math.Round((heroRegion.Width - 1) * heroRegion.CellSpacingMeters / 1000.0);
     private PlanetHeroRegion? heroRegion;
     private IJSObjectReference? heroModule;
@@ -192,6 +199,7 @@
         heroParentOverlay = null;
         heroNestedOverlay = null;
         heroSpanKilometers = 128;
+        heroLocalHighResolution = false;
         heroRegion = null;
         heroMode = "after";
         heroStatus = "Select Generate 3D Terrain after the canonical region finishes sampling.";
@@ -427,8 +435,9 @@
             {
                 inputElevation = new PlanetRegionalEvolvedElevationSource(inputElevation, heroNestedOverlay!);
             }
+            var gridWidth = heroSpanKilometers == 8 && heroLocalHighResolution ? 257 : PlanetHeroRegionBuilder.DefaultGridWidth;
             var result = new PlanetHeroRegionBuilder(inputElevation).Build(
-                anchor, selectedSeed, regionSpanMeters: heroSpanKilometers * 1000.0,
+                anchor, selectedSeed, gridWidth: gridWidth, regionSpanMeters: heroSpanKilometers * 1000.0,
                 cancellationToken: cancellation.Token);
             if (heroSpanKilometers == 128)
             {
@@ -447,7 +456,7 @@
             await heroModule.InvokeVoidAsync("drawHeroRegion", cancellation.Token, result, heroMode);
             heroRegion = result;
             var relief = result.EvolvedElevationMeters.Max() - result.EvolvedElevationMeters.Min();
-            heroStatus = $"Seed {selectedSeed} • {heroSpanKilometers} km region • {result.Width}² vertices • {relief:0} m actual relief • " +
+            heroStatus = $"Seed {selectedSeed} • {heroSpanKilometers} km region • {result.Width}² vertices • {result.CellSpacingMeters:0.##} m cells • {relief:0} m actual relief • " +
                 $"{result.ErosionIterations} hydraulic + {result.LateralRelaxationPasses} bank passes • " +
                 $"deepest cut {result.CumulativeCutMeters.Max():0} m • " +
                 $"sediment exported {result.ExportedVolumeCubicMeters / 1e9:0.00} km³";
@@ -472,6 +481,23 @@
 
         heroSpanKilometers = heroRenderedSpanKm == 128 ? 32 : 8;
         await GenerateHeroRegionAsync();
+    }
+
+    private async Task ToggleHeroDetailAsync()
+    {
+        if (working || heroRegion is null || heroRenderedSpanKm != 8)
+        {
+            return;
+        }
+
+        var previousResolution = heroLocalHighResolution;
+        heroLocalHighResolution = !previousResolution;
+        await GenerateHeroRegionAsync();
+        // On a failed render retain the resolution associated with the visible mesh.
+        if (heroRegion.Width != (heroLocalHighResolution ? 257 : PlanetHeroRegionBuilder.DefaultGridWidth))
+        {
+            heroLocalHighResolution = previousResolution;
+        }
     }
 
     private async Task ZoomHeroAsync(bool zoomIn)
