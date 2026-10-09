@@ -98,8 +98,9 @@
                 <p>Generate the 128 km watershed, refine its incised valley at 32 km, then inspect an 8 km
                     nested local terrain. Each level inherits its parent geology at fixed spherical locations.
                     Every level starts with 129×129 physical height samples and variable rock resistance.
-                    At 8 km, optionally resolve 257×257 samples (31.25 m spacing) for finer real geometry;
-                    this extra calculation is slower on mobile. Six hydraulic erosion passes and eight
+                    Optionally run a new 257×257 physical erosion solve at each scale: 500 m, 125 m
+                    or 31.25 m cells, respectively. This is considerably slower on mobile.
+                    Six hydraulic erosion passes and eight
                     conservative bank-relaxation passes; no vertical exaggeration.</p>
             </div>
             <button id="lab-hero-generate" @onclick="GenerateHeroRegionAsync" disabled="@(working || heroAnchor is null)">
@@ -123,8 +124,8 @@
                 @(heroRenderedSpanKm == 32 ? "REFINE TO 8 KM" : "REFINE TO 32 KM")
             </button>
             <button id="lab-hero-detail" type="button" @onclick="ToggleHeroDetailAsync"
-                    disabled="@(working || heroRegion is null || heroRenderedSpanKm != 8)">
-                @(heroLocalHighResolution ? "USE FAST 129² GRID" : "RESOLVE 257² DETAIL")
+                    disabled="@(working || heroRegion is null)">
+                @(heroHighResolution ? "USE FAST 129² GRID" : "SIMULATE 257² DETAIL")
             </button>
             <button id="lab-hero-framing" type="button" @onclick="ToggleHeroFramingAsync" disabled="@(heroRegion is null || working)">
                 @(heroShowFullRegion ? "INSPECT VALLEY" : "SHOW FULL REGION")
@@ -166,7 +167,7 @@
     private PlanetRegionalGeologyOverlay? heroNestedOverlay;
     private PlanetRegionalGeologyOverlay? heroParentOverlay;
     private int heroSpanKilometers = 128;
-    private bool heroLocalHighResolution;
+    private bool heroHighResolution;
     private int heroRenderedSpanKm => heroRegion is null ? 0 : (int)Math.Round((heroRegion.Width - 1) * heroRegion.CellSpacingMeters / 1000.0);
     private PlanetHeroRegion? heroRegion;
     private IJSObjectReference? heroModule;
@@ -210,7 +211,7 @@
         heroParentOverlay = null;
         heroNestedOverlay = null;
         heroSpanKilometers = 128;
-        heroLocalHighResolution = false;
+        heroHighResolution = false;
         heroShowFullRegion = false;
         heroShowDrainage = true;
         regionalChangeSummary = "Sampling erosion history…";
@@ -502,7 +503,9 @@
                 32 => new PlanetRegionalGeologyAtlas(Elevation, [heroParentOverlay!]),
                 _ => Elevation
             };
-            var gridWidth = heroSpanKilometers == 8 && heroLocalHighResolution ? 257 : PlanetHeroRegionBuilder.DefaultGridWidth;
+            // At all three scales a detail request reruns the real erosion solver
+            // on a denser physical grid; it must never merely subdivide the GPU mesh.
+            var gridWidth = heroHighResolution ? 257 : PlanetHeroRegionBuilder.DefaultGridWidth;
             var result = new PlanetHeroRegionBuilder(inputElevation).Build(
                 anchor, selectedSeed, gridWidth: gridWidth, regionSpanMeters: heroSpanKilometers * 1000.0,
                 cancellationToken: cancellation.Token);
@@ -525,10 +528,12 @@
             await heroModule.InvokeVoidAsync("drawHeroRegion", cancellation.Token, result, heroMode);
             heroRegion = result;
             var relief = result.EvolvedElevationMeters.Max() - result.EvolvedElevationMeters.Min();
+            var averageExportDepth = result.ExportedVolumeCubicMeters /
+                (result.Width * result.Width * result.CellSpacingMeters * result.CellSpacingMeters);
             heroStatus = $"Seed {selectedSeed} • {heroSpanKilometers} km region • {result.Width}² vertices • {result.CellSpacingMeters:0.##} m cells • {relief:0} m actual relief • " +
                 $"{result.ErosionIterations} hydraulic + {result.LateralRelaxationPasses} bank passes • " +
                 $"deepest cut {result.CumulativeCutMeters.Max():0} m • " +
-                $"sediment exported {result.ExportedVolumeCubicMeters / 1e9:0.00} km³";
+                $"sediment exported {result.ExportedVolumeCubicMeters / 1e9:0.00} km³ ({averageExportDepth:0.0} m equivalent depth)";
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -549,23 +554,24 @@
         }
 
         heroSpanKilometers = heroRenderedSpanKm == 128 ? 32 : 8;
+        heroHighResolution = false; // Refinements default to the fast mobile-safe solve.
         await GenerateHeroRegionAsync();
     }
 
     private async Task ToggleHeroDetailAsync()
     {
-        if (working || heroRegion is null || heroRenderedSpanKm != 8)
+        if (working || heroRegion is null)
         {
             return;
         }
 
-        var previousResolution = heroLocalHighResolution;
-        heroLocalHighResolution = !previousResolution;
+        var previousResolution = heroHighResolution;
+        heroHighResolution = !previousResolution;
         await GenerateHeroRegionAsync();
         // On a failed render retain the resolution associated with the visible mesh.
-        if (heroRegion.Width != (heroLocalHighResolution ? 257 : PlanetHeroRegionBuilder.DefaultGridWidth))
+        if (heroRegion.Width != (heroHighResolution ? 257 : PlanetHeroRegionBuilder.DefaultGridWidth))
         {
-            heroLocalHighResolution = previousResolution;
+            heroHighResolution = previousResolution;
         }
     }
 
