@@ -187,3 +187,27 @@ Gameplay and deeper terraforming remain intentionally paused while the surface f
 5. representative browser performance hardening across globe, local terrain and generated detail.
 
 Only then do we resume climate-feedback/game-loop work on top of this surface model.
+
+
+## PF 0.0.37.6 — Canonical intermediate-scale orogenic folds
+
+The existing seeded tectonic arcs now generate spatially coherent bedrock anticlines
+and synclines with physically expressed wavelengths of approximately 55–95 km
+and bounded elevation amplitude (within ±230 m before land masking). Fold trains
+run along the tectonic arc rather than following the render grid or applying
+isotropic high-frequency terrain noise. Their slowly curved crests remain
+continuous across the 128 / 32 / 8 km laboratory scale changes.
+
+This is a deterministic, uncalibrated structural-geology approximation, not
+a plate-tectonic mechanical solver. The same canonical double-precision
+spherical direction is used by the globe, local patch and laboratory; the
+fold height enters **bedrock before erosion**, and hydrology can then modify
+it. Existing coastline, ocean and broad tectonic relief remain governed by
+the base geological fields. The raster solver is not allowed to add random
+detail solely because the view requested extra mesh resolution.
+
+Acceptance checks include bounded fold height, same-seed replay,
+geographic continuity across nearby planetary directions, and exact
+coarse/fine canonical bedrock identity at shared vertices. Further steps
+must assess multiseed ridgeline quality and calibrated drainage morphology
+before the research Hero geology is enabled across the live planet.
