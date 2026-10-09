@@ -50,10 +50,12 @@ public static class PlanetHillslopeMassWasting
         var working = (float[])original.Clone();
         var change = new double[working.Length];
         var initiallyUnstableEdges = 0;
+        var trackInitialPass = false;
 
         for (var pass = 0; pass < passes; pass++)
         {
             cancellationToken.ThrowIfCancellationRequested();
+            trackInitialPass = pass == 0;
             Array.Clear(change);
             for (var y = 1; y < height - 1; y++)
             {
@@ -115,7 +117,7 @@ public static class PlanetHillslopeMassWasting
             // The first pass measures meaningful *physical* slope failures.
             // Subsequent passes may still transport talus, but must not
             // redefine whether the initial geological surface was unstable.
-            if (pass == 0 && movedHeight >= 0.01)
+            if (trackInitialPass && movedHeight >= 0.01)
             {
                 initiallyUnstableEdges++;
             }
