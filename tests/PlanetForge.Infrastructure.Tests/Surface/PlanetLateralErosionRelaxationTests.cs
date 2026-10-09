@@ -60,7 +60,7 @@ public sealed class PlanetLateralErosionRelaxationTests
             "Uncut bank rock should not be blurred by diffusion.");
         Assert.IsLessThan(protectedBanks[channel - 1], broad[channel - 1],
             "The unprotected relaxation should diffuse cut beyond the channel.");
-        Assert.IsGreaterThan(broad[channel], protectedBanks[channel],
+        Assert.IsLessThan(broad[channel], protectedBanks[channel],
             "The protected channel should remain more strongly incised.");
         Assert.AreEqual(360.0, original.Zip(protectedBanks, (a, b) => (double)a - b).Sum(), 0.02);
     }
