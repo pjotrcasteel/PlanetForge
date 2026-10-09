@@ -31,7 +31,7 @@ const vertexShader = [
 const fragmentShader = [
     '#version 300 es','precision highp float;',
     'in vec3 vNormal; in vec3 vGeology; in vec3 vPosition; out vec4 outColor;',
-    'uniform float uLowest; uniform float uHighest;',
+    'uniform float uLowest; uniform float uHighest; uniform float uDrainageOverlay;',
     'void main(){',
     'vec3 n=normalize(vNormal); vec3 sun=normalize(vec3(0.88,0.19,0.41));',
     'float altitude=smoothstep(uLowest,uHighest,vGeology.x);',
@@ -42,6 +42,10 @@ const fragmentShader = [
     'float deposit=smoothstep(0.0,55.0,max(-vGeology.y,0.0));',
     'mineral=mix(mineral,vec3(0.41,0.31,0.26),wear*0.17);',
     'mineral=mix(mineral,vec3(0.70,0.53,0.36),deposit*0.12);',
+    // Diagnostic coloration comes only from actual routed runoff and cut
+    // sampled on the physical 3D mesh. It does not add fake water geometry.
+    'float stream=smoothstep(12.0,110.0,vGeology.z)*smoothstep(8.0,90.0,max(vGeology.y,0.0));',
+    'mineral=mix(mineral,vec3(0.18,0.63,0.64),stream*uDrainageOverlay*0.78);',
     'float angle=dot(n,sun); float raking=clamp((angle-sun.y)*3.45,-0.43,0.43);',
     'float light=clamp(0.43+0.62*max(angle,0.0)+raking,0.17,1.26);',
     'float fog=smoothstep(65.0,155.0,length(vPosition.xz))*0.15;',
@@ -115,6 +119,7 @@ function render() {
     gl.uniformMatrix4fv(gl.getUniformLocation(p,'uView'),false,lookAt(eye,scene.focus));
     gl.uniform1f(gl.getUniformLocation(p,'uLowest'),scene.min);
     gl.uniform1f(gl.getUniformLocation(p,'uHighest'),scene.max);
+    gl.uniform1f(gl.getUniformLocation(p,'uDrainageOverlay'),scene.drainageOverlay?1.0:0.0);
     gl.bindVertexArray(scene.vao);gl.drawElements(gl.TRIANGLES,scene.indices,scene.indexType,0);gl.bindVertexArray(null);
     const error=gl.getError();
     window.__planetForgeHeroRegionStats={seed:region.seed,mode:scene.mode,gridWidth:region.width,
@@ -122,6 +127,7 @@ function render() {
         cellSpacingMeters:region.cellSpacingMeters,regionSpanKilometers:(region.width-1)*region.cellSpacingMeters/1000,
         minElevationMeters:scene.min,maxElevationMeters:scene.max,actualReliefMeters:scene.max-scene.min,
         maximumCutMeters:scene.maximumCutMeters,framing:scene.fullRegion?'full':'valley',
+        drainageOverlay:scene.drainageOverlay,
         erosionIterations:region.erosionIterations,focusCellIndex:region.focusCellIndex,cameraDistanceKm:d,glError:error};
     window.__planetForgeHeroRegionReady=error===gl.NO_ERROR;
 }
@@ -179,6 +185,12 @@ export function zoomHeroRegion(zoomIn){
 
 // Both views use exactly the same physical vertex positions and metres of
 // elevation; only the inspection camera changes. Default to real channel relief.
+export function setHeroDrainageOverlay(enabled){
+    if(!scene || !scene.region)return;
+    scene.drainageOverlay=Boolean(enabled);
+    render();
+}
+
 export function setHeroRegionFraming(fullRegion){
     if(!scene || !scene.region)return;
     scene.fullRegion=Boolean(fullRegion);
@@ -228,6 +240,7 @@ export function drawHeroRegion(region,mode='after'){
     scene.maximumCutMeters=0;
     for(const cut of region.cumulativeCutMeters)scene.maximumCutMeters=Math.max(scene.maximumCutMeters,cut);
     scene.fullRegion=false;
+    scene.drainageOverlay=true;
     // Keep actual elevation metres. A close camera, not artificial vertical
     // exaggeration, is needed to see a few-hundred-metre valley in a 128 km tile.
     scene.zoom=regionSpanKm<=8?0.40:regionSpanKm<=32?0.35:0.27;

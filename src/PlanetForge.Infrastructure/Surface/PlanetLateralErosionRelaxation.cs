@@ -13,7 +13,7 @@ public static class PlanetLateralErosionRelaxation
 
     public static float[] Apply(
         IReadOnlyList<float> originalElevation, IReadOnlyList<float> hydraulicallyErodedElevation,
-        int width, int height, int passes = DefaultPasses)
+        int width, int height, int passes = DefaultPasses, bool preserveIncisionEdges = false)
     {
         ArgumentNullException.ThrowIfNull(originalElevation);
         ArgumentNullException.ThrowIfNull(hydraulicallyErodedElevation);
@@ -52,12 +52,12 @@ public static class PlanetLateralErosionRelaxation
                     var i = y * width + x;
                     if (x + 1 < width)
                     {
-                        Exchange(delta, updates, i, i + 1);
+                        Exchange(delta, updates, i, i + 1, preserveIncisionEdges);
                     }
 
                     if (y + 1 < height)
                     {
-                        Exchange(delta, updates, i, i + width);
+                        Exchange(delta, updates, i, i + width, preserveIncisionEdges);
                     }
                 }
             }
@@ -77,8 +77,20 @@ public static class PlanetLateralErosionRelaxation
         return result;
     }
 
-    private static void Exchange(double[] elevations, double[] changes, int first, int second)
+    private static void Exchange(double[] elevations, double[] changes, int first, int second, bool preserveIncisionEdges)
     {
+        // A stream-cut bedrock boundary must not be smoothed into an uncut
+        // hillside just because eight numerical passes were requested. The
+        // following bank-carving solve handles lateral erosion from real flow.
+        // Exchanges inside existing erosional or depositional reaches remain
+        // conservative and smooth stair-stepped routing artifacts.
+        if (preserveIncisionEdges &&
+            (Math.Sign(elevations[first]) != Math.Sign(elevations[second]) ||
+             Math.Min(Math.Abs(elevations[first]), Math.Abs(elevations[second])) < 0.25))
+        {
+            return;
+        }
+
         // Every transfer is symmetric: one cell's cut/fill is exactly balanced
         // by the adjacent cell's inverse change (up to final float quantization).
         var transfer = (elevations[second] - elevations[first]) * LateralTransfer;

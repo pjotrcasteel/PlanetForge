@@ -72,8 +72,25 @@ public static class PlanetValleyBankCarver
                 var physicalHalfWidth = 55.0 * Math.Pow(drainageAreaSquareKilometers, 0.38) + spacingMeters * 0.2;
                 var halfWidth = Math.Clamp(physicalHalfWidth, spacingMeters * 1.35, Math.Max(spacingMeters * 1.35, 1_400.0));
                 var radius = Math.Min(12, (int)Math.Ceiling(halfWidth * 1.8 / spacingMeters));
-                var channelDepth = Math.Min(260.0, existingCut);
                 var receiver = downstreamIndices is null ? -1 : downstreamIndices[center];
+                var channelDepth = Math.Min(260.0, existingCut);
+                if (receiver >= 0)
+                {
+                    // Headward erosion deepens only an existing, connected,
+                    // steep-water channel. The local bed cannot cut through
+                    // the downstream bed: limiting incision to 55% of the
+                    // head drop preserves downstream hydraulic ordering.
+                    var receiverDx = receiver % width - x;
+                    var receiverDy = receiver / width - y;
+                    var reachMeters = Math.Sqrt(receiverDx * receiverDx + receiverDy * receiverDy) * spacingMeters;
+                    var headDrop = Math.Max(0.0, eroded[center] - eroded[receiver]);
+                    var streamSlope = headDrop / reachMeters;
+                    var streamEnergy = Math.Clamp((streamSlope - 0.04) / 0.08, 0.0, 1.0);
+                    var routedRunoff = Math.Clamp(Math.Sqrt(runoff / 80.0), 0.0, 1.0);
+                    var headwardCut = Math.Min(300.0, headDrop * 0.55 * streamEnergy * routedRunoff);
+                    channelDepth = Math.Min(560.0, channelDepth + headwardCut);
+                    deepestCut[center] = Math.Max(deepestCut[center], channelDepth);
+                }
                 var directionX = receiver < 0 ? 0.0 : receiver % width - x;
                 var directionY = receiver < 0 ? 0.0 : receiver / width - y;
                 var directionLength = Math.Sqrt(directionX * directionX + directionY * directionY);

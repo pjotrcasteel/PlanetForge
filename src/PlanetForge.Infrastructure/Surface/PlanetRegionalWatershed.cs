@@ -241,9 +241,17 @@ public sealed class PlanetRegionalWatershed
 
             // Sediment can settle on low-gradient reaches; material not deposited is
             // carried downstream or explicitly exported across this region's boundary.
-            var capacity = 10.0 * Math.Pow(runoff, 0.65) * slope * cellArea;
-            var depositedHere = downstream < 0 ? 0.0 :
-                Math.Min(Math.Max(0.0, sedimentLoad[index] - capacity) * 0.3, 80.0 * cellArea);
+            // Sediment is advected by moving water. The previous linear-slope
+            // capacity severely underestimated transport on active hillslopes and
+            // deposited up to 80 m per numerical pass across entire catchments.
+            // Only a connected, low-gradient reach can accumulate a floodplain.
+            // Keep the remaining sediment in transit until another reach or outlet.
+            var capacity = 12.0 * Math.Pow(runoff, 0.65) * Math.Sqrt(slope) * cellArea;
+            var floodplainFactor = Math.Clamp((0.035 - slope) / 0.035, 0.0, 1.0);
+            var depositionalCapacityMeters = Math.Min(24.0, 0.7 * Math.Sqrt(runoff));
+            var depositedHere = downstream < 0 || runoff < 8.0 ? 0.0 :
+                Math.Min(Math.Max(0.0, sedimentLoad[index] - capacity) * 0.25 * floodplainFactor,
+                    depositionalCapacityMeters * cellArea);
             deposition[index] = (float)(depositedHere / cellArea);
             sedimentLoad[index] -= depositedHere;
             deposited += depositedHere;

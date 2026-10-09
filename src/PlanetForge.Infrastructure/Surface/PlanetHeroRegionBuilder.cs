@@ -156,7 +156,8 @@ public sealed class PlanetHeroRegionBuilder(IPlanetElevationSource elevationSour
         // Hydraulic flow is discrete at the research grid resolution. Redistributing
         // its already-computed cut/fill field conservatively approximates lateral
         // bank retreat without applying fake shader displacement to the preview.
-        var relaxedElevation = PlanetLateralErosionRelaxation.Apply(original, evolved.ElevationMeters, gridWidth, gridWidth);
+        var relaxedElevation = PlanetLateralErosionRelaxation.Apply(original, evolved.ElevationMeters, gridWidth, gridWidth,
+            preserveIncisionEdges: true);
         var finalWatershed = PlanetRegionalWatershed.Build(gridWidth, gridWidth, spacing, relaxedElevation);
         // Hydraulically routed tributaries excavate lateral bank shoulders into the
         // actual mesh. Excavated material is currently exported at this research
