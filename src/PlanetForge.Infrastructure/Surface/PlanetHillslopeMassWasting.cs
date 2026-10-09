@@ -98,7 +98,11 @@ public static class PlanetHillslopeMassWasting
             // Resistant rock supports steeper cliffs; weaker rock falls at a
             // lower angle. These thresholds are numerical stability limits,
             // not a claim of experimentally calibrated material parameters.
-            var criticalSlope = Math.Clamp(1.12 - 0.25 * meanErodibility, 0.55, 1.10);
+            // These are tan(angle of repose) style slope bounds:
+            // weaker lithology ~23-31°, resistant rock up to ~40°.
+            // The earlier >45° threshold overlooked the visibly unstable
+            // 8 km Hero faces entirely.
+            var criticalSlope = Math.Clamp(0.90 - 0.25 * meanErodibility, 0.42, 0.86);
             var excessHeight = Math.Abs(difference) - criticalSlope * distanceMeters;
             if (excessHeight <= 0.0)
             {
