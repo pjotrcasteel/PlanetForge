@@ -111,6 +111,13 @@ test('TerrainLab_HeroRegion_RendersPhysical3DLandscapeAndComparesErosion', async
   expect(stats.actualReliefMeters).toBeGreaterThan(50);
   expect(stats.maximumCutMeters).toBeGreaterThan(0);
   expect(stats.framing).toBe('valley');
+  expect(stats.drainageOverlay).toBe(true);
+  await expect(page.locator('#lab-hero-drainage')).toHaveText('HIDE ROUTED FLOW');
+  await page.locator('#lab-hero-drainage').click();
+  expect((await page.evaluate(() => window.__planetForgeHeroRegionStats)).drainageOverlay).toBe(false);
+  await expect(page.locator('#lab-hero-drainage')).toHaveText('SHOW ROUTED FLOW');
+  await page.locator('#lab-hero-drainage').click();
+  expect((await page.evaluate(() => window.__planetForgeHeroRegionStats)).drainageOverlay).toBe(true);
   expect(stats.cameraDistanceKm).toBeLessThan(stats.regionSpanKilometers * 0.5);
   await expect(page.locator('.lab-hero-status')).toContainText('deepest cut');
   await page.locator('#lab-hero-framing').click();
