@@ -19,7 +19,8 @@ public sealed record PlanetHeroRegion(
     int LateralRelaxationPasses,
     double ErodedVolumeCubicMeters,
     double DepositedVolumeCubicMeters,
-    double ExportedVolumeCubicMeters);
+    double ExportedVolumeCubicMeters,
+    int FocusCellIndex = -1);
 
 public sealed class PlanetHeroRegionBuilder(IPlanetElevationSource elevationSource)
 {
@@ -37,6 +38,25 @@ public sealed class PlanetHeroRegionBuilder(IPlanetElevationSource elevationSour
         ArgumentNullException.ThrowIfNull(region);
         var center = PlanetVector.Normalize(regionCenter);
         var width = region.Width;
+        var selected = region.FocusCellIndex >= 0 && region.FocusCellIndex < width * width
+            ? region.FocusCellIndex
+            : FindIncisedChannelCell(region);
+        var frame = PlanetLocalFrame.Create(center, ReferencePlanetRadiusMeters, 0.0);
+        var offsetX = ((selected % width) - (width - 1) * 0.5) * region.CellSpacingMeters;
+        var offsetY = ((selected / width) - (width - 1) * 0.5) * region.CellSpacingMeters;
+        return PlanetVector.Normalize((center * ReferencePlanetRadiusMeters) +
+            (frame.East * offsetX) + (frame.North * offsetY));
+    }
+
+    /// <summary>
+    /// Finds a real incised catchment with connected upstream runoff, rather than
+    /// favoring an isolated deep pixel that fails to reveal a tributary valley.
+    /// The renderer and the nested geological solve share this exact focus cell.
+    /// </summary>
+    public static int FindIncisedChannelCell(PlanetHeroRegion region)
+    {
+        ArgumentNullException.ThrowIfNull(region);
+        var width = region.Width;
         var margin = Math.Max(1, width / 5);
         var selected = (width / 2) * width + (width / 2);
         var best = double.NegativeInfinity;
@@ -46,22 +66,20 @@ public sealed class PlanetHeroRegionBuilder(IPlanetElevationSource elevationSour
             for (var x = margin; x < width - margin; x++)
             {
                 var index = y * width + x;
-                var cut = region.CumulativeCutMeters[index];
-                if (cut <= best)
+                var cut = Math.Max(0.0f, region.CumulativeCutMeters[index]);
+                var runoff = Math.Max(0.0f, region.AccumulatedRunoffCells[index]);
+                var score = cut * (1.0 + 0.25 * Math.Log2(1.0 + runoff));
+                if (score <= best)
                 {
                     continue;
                 }
 
-                best = cut;
+                best = score;
                 selected = index;
             }
         }
 
-        var frame = PlanetLocalFrame.Create(center, ReferencePlanetRadiusMeters, 0.0);
-        var offsetX = ((selected % width) - (width - 1) * 0.5) * region.CellSpacingMeters;
-        var offsetY = ((selected / width) - (width - 1) * 0.5) * region.CellSpacingMeters;
-        return PlanetVector.Normalize((center * ReferencePlanetRadiusMeters) +
-            (frame.East * offsetX) + (frame.North * offsetY));
+        return selected;
     }
 
     /// <summary>
@@ -144,17 +162,19 @@ public sealed class PlanetHeroRegionBuilder(IPlanetElevationSource elevationSour
         // actual mesh. Excavated material is currently exported at this research
         // region's boundary; downstream inter-region deposition is future work.
         var valleys = PlanetValleyBankCarver.Apply(
-            original, relaxedElevation, finalWatershed.AccumulatedRunoffCells, gridWidth, gridWidth, spacing);
+            original, relaxedElevation, finalWatershed.AccumulatedRunoffCells, gridWidth, gridWidth, spacing,
+            finalWatershed.DownstreamIndices, cancellationToken);
         var cut = new float[original.Length];
         for (var index = 0; index < cut.Length; index++)
         {
             cut[index] = original[index] - valleys.ElevationMeters[index];
         }
 
-        return new PlanetHeroRegion(seed, gridWidth, spacing, original, valleys.ElevationMeters, cut,
+        var region = new PlanetHeroRegion(seed, gridWidth, spacing, original, valleys.ElevationMeters, cut,
             finalWatershed.AccumulatedRunoffCells, erosionIterations, PlanetLateralErosionRelaxation.DefaultPasses,
             evolved.CumulativeErodedVolumeCubicMeters + valleys.AdditionalExportedSedimentCubicMeters,
             evolved.CumulativeDepositedVolumeCubicMeters,
             evolved.CumulativeExportedVolumeCubicMeters + valleys.AdditionalExportedSedimentCubicMeters);
+        return region with { FocusCellIndex = FindIncisedChannelCell(region) };
     }
 }

@@ -121,7 +121,7 @@ function render() {
         triangles:scene.indices/3,indexBits:scene.indexType===gl.UNSIGNED_INT?32:16,
         cellSpacingMeters:region.cellSpacingMeters,regionSpanKilometers:(region.width-1)*region.cellSpacingMeters/1000,
         minElevationMeters:scene.min,maxElevationMeters:scene.max,
-        erosionIterations:region.erosionIterations,cameraDistanceKm:d,glError:error};
+        erosionIterations:region.erosionIterations,focusCellIndex:region.focusCellIndex,cameraDistanceKm:d,glError:error};
     window.__planetForgeHeroRegionReady=error===gl.NO_ERROR;
 }
 function useMode(mode){
@@ -195,17 +195,14 @@ export function drawHeroRegion(region,mode='after'){
     gl.bindVertexArray(scene.vao);gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,scene.ibo);
     gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,indices,gl.STATIC_DRAW);
     scene.indexType=indices instanceof Uint32Array?gl.UNSIGNED_INT:gl.UNSIGNED_SHORT;
-    // Focus the inspection camera on a real, strongly incised interior catchment.
-    // This changes the framing, never the geological height or its vertical scale.
-    const margin=Math.floor(region.width*0.22),middle=(region.width-1)*0.5;
-    let strongest=-1,focusIndex=Math.floor(middle)*region.width+Math.floor(middle);
-    for(let y=margin;y<region.width-margin;y++){
-        for(let x=margin;x<region.width-margin;x++){
-            const index=y*region.width+x;
-            const cut=Math.max(0,region.cumulativeCutMeters[index]);
-            if(cut>strongest){strongest=cut;focusIndex=index;}
-        }
-    }
+    // The same watershed-selected focus is used to sample the nested geological
+    // solve. This keeps the player camera on the actual downstream tributaries.
+    // View framing never displaces or exaggerates the underlying physical mesh.
+    const middle=(region.width-1)*0.5;
+    const focusIndex=Number.isInteger(region.focusCellIndex)
+        && region.focusCellIndex>=0 && region.focusCellIndex<region.width*region.width
+        ?region.focusCellIndex
+        :Math.floor(middle)*region.width+Math.floor(middle);
     const fx=focusIndex%region.width,fy=Math.floor(focusIndex/region.width);
     const {min:baseMin,max:baseMax}=elevationRange(region.originalElevationMeters);
     const base=(baseMin+baseMax)*0.5;

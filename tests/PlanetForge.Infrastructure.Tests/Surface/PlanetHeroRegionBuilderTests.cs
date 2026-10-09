@@ -80,6 +80,11 @@ public sealed class PlanetHeroRegionBuilderTests
         Assert.AreEqual(1.0, focus.Length, 1e-12);
         Assert.IsGreaterThan(0.999, PlanetVector.Dot(anchor, focus));
         Assert.AreEqual(focus, again);
+        Assert.IsGreaterThanOrEqualTo(0, regional.FocusCellIndex);
+        Assert.IsLessThan(regional.Width * regional.Width, regional.FocusCellIndex);
+        Assert.AreEqual(regional.FocusCellIndex, PlanetHeroRegionBuilder.FindIncisedChannelCell(regional));
+        Assert.IsGreaterThan(0f, regional.AccumulatedRunoffCells[regional.FocusCellIndex]);
+        Assert.AreEqual(regional.FocusCellIndex, builder.Build(anchor, 24061984, 33, 32_000, 3).FocusCellIndex);
 
         var local = builder.Build(focus, 24061984, 17, 4_000, 3);
         Assert.AreEqual(250.0, local.CellSpacingMeters);

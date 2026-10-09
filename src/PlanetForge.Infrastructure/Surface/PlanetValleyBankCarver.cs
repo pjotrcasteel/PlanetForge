@@ -1,11 +1,11 @@
 namespace PlanetForge.Infrastructure.Surface;
 
 /// <summary>
-/// Experimental stream-adjacent bank excavation driven by the watershed's real
-/// flow accumulation and existing hydraulic incision. This modifies the physical
-/// elevation grid, never a shader or material mask. Material cut from the banks
-/// is explicitly exported by this isolated research region pending downstream
-/// depositional coupling.
+/// Experimental physical bank retreat derived from the regional watershed.
+/// Channel width follows upstream drainage area in square metres, not grid-cell
+/// count. Where a downstream receiver is known, bank retreat acts chiefly
+/// across the stream, preserving a connected, direction-following valley.
+/// This modifies the heightfield; there is no shader-only river displacement.
 /// </summary>
 public static class PlanetValleyBankCarver
 {
@@ -13,7 +13,8 @@ public static class PlanetValleyBankCarver
 
     public static Result Apply(
         IReadOnlyList<float> original, IReadOnlyList<float> eroded, IReadOnlyList<float> accumulatedRunoff,
-        int width, int height, double spacingMeters)
+        int width, int height, double spacingMeters, IReadOnlyList<int>? downstreamIndices = null,
+        CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(original);
         ArgumentNullException.ThrowIfNull(eroded);
@@ -25,11 +26,19 @@ public static class PlanetValleyBankCarver
             throw new ArgumentException("Bank carving requires three matching geological raster fields.");
         }
 
-        if (!double.IsFinite(spacingMeters) || spacingMeters <= 0)
+        if (!double.IsFinite(spacingMeters) || spacingMeters <= 0.0)
         {
             throw new ArgumentOutOfRangeException(nameof(spacingMeters));
         }
 
+        if (downstreamIndices is not null &&
+            (downstreamIndices.Count != original.Count ||
+             downstreamIndices.Any(index => index < -1 || index >= original.Count)))
+        {
+            throw new ArgumentException("Downstream receiver indices must match the elevation grid.", nameof(downstreamIndices));
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
         var length = original.Count;
         var deepestCut = new double[length];
         for (var i = 0; i < length; i++)
@@ -43,23 +52,33 @@ public static class PlanetValleyBankCarver
             deepestCut[i] = Math.Max(0, original[i] - eroded[i]);
         }
 
-        // A tributary must have real drainage accumulation AND pre-existing
-        // hydraulic incision. We never invent a stream through un-eroded rock.
+        // River sources require both routed water and existing physical erosion.
+        // Drainage area = accumulated runoff cells * cell area. The same physical
+        // catchment should form roughly the same width on a finer nested raster.
         for (var y = 0; y < height; y++)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             for (var x = 0; x < width; x++)
             {
                 var center = y * width + x;
                 var runoff = accumulatedRunoff[center];
                 var existingCut = original[center] - eroded[center];
-                if (runoff < 14 || existingCut < 4.0)
+                if (runoff < 14.0f || existingCut < 4.0f)
                 {
                     continue;
                 }
 
-                var halfWidth = Math.Clamp(230.0 + 85.0 * Math.Sqrt(runoff), 350.0, 1_400.0);
+                var drainageAreaSquareKilometers = runoff * spacingMeters * spacingMeters / 1_000_000.0;
+                var physicalHalfWidth = 55.0 * Math.Pow(drainageAreaSquareKilometers, 0.38) + spacingMeters * 0.2;
+                var halfWidth = Math.Clamp(physicalHalfWidth, spacingMeters * 1.35, Math.Max(spacingMeters * 1.35, 1_400.0));
                 var radius = Math.Min(12, (int)Math.Ceiling(halfWidth * 1.8 / spacingMeters));
                 var channelDepth = Math.Min(260.0, existingCut);
+                var receiver = downstreamIndices is null ? -1 : downstreamIndices[center];
+                var directionX = receiver < 0 ? 0.0 : receiver % width - x;
+                var directionY = receiver < 0 ? 0.0 : receiver / width - y;
+                var directionLength = Math.Sqrt(directionX * directionX + directionY * directionY);
+                var alongHalfWidth = Math.Max(spacingMeters * 0.9, Math.Min(halfWidth * 0.65, spacingMeters * 2.0));
+
                 for (var dy = -radius; dy <= radius; dy++)
                 {
                     var ny = y + dy;
@@ -76,17 +95,21 @@ public static class PlanetValleyBankCarver
                             continue;
                         }
 
-                        var distance = Math.Sqrt(dx * dx + dy * dy) * spacingMeters;
-                        if (distance > halfWidth * 1.8)
+                        var east = dx * spacingMeters;
+                        var north = dy * spacingMeters;
+                        var normalizedDistanceSquared = directionLength > 0.0
+                            ? DirectionalDistanceSquared(east, north, directionX / directionLength,
+                                directionY / directionLength, halfWidth, alongHalfWidth)
+                            : (east * east + north * north) / (halfWidth * halfWidth);
+                        if (normalizedDistanceSquared > 3.24)
                         {
                             continue;
                         }
 
-                        var fraction = distance / halfWidth;
-                        var shoulderCut = channelDepth * Math.Exp(-1.8 * fraction * fraction);
+                        var shoulderCut = channelDepth * Math.Exp(-1.8 * normalizedDistanceSquared);
                         var neighbor = ny * width + nx;
-                        // A stream can excavate neighboring bank material but cannot
-                        // fill a pre-existing channel or create a higher streambed.
+                        // Never raise an existing riverbed, erase sediment deposition
+                        // unless actually excavated, or invent a channel without runoff.
                         deepestCut[neighbor] = Math.Max(deepestCut[neighbor], shoulderCut);
                     }
                 }
@@ -97,12 +120,19 @@ public static class PlanetValleyBankCarver
         var extraRemoved = 0.0;
         for (var i = 0; i < length; i++)
         {
-            // Preserve any pre-existing deposition when the widening effect is
-            // absent, and never raise the existing hydraulic riverbed.
             output[i] = (float)Math.Min(eroded[i], original[i] - deepestCut[i]);
             extraRemoved += Math.Max(0.0, eroded[i] - (double)output[i]);
         }
 
         return new Result(output, extraRemoved * spacingMeters * spacingMeters);
+    }
+
+    private static double DirectionalDistanceSquared(
+        double east, double north, double eastFlow, double northFlow,
+        double acrossHalfWidth, double alongHalfWidth)
+    {
+        var across = (north * eastFlow - east * northFlow) / acrossHalfWidth;
+        var along = (east * eastFlow + north * northFlow) / alongHalfWidth;
+        return across * across + along * along;
     }
 }
