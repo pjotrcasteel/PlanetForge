@@ -89,11 +89,11 @@
             </article>
         </div>
     </section>
-    <section class="lab-hero" aria-label="Three-dimensional geological hero region">
+    <section id="hero-region" class="lab-hero" aria-label="Three-dimensional geological hero region">
         <div class="lab-hero-heading">
             <div>
-                <small>PF 0.0.36 / WORLD MACHINE-INSPIRED RESEARCH</small>
-                <h2>Hero region / multiscale geological relief</h2>
+                <small>PF 0.0.36 / INTERACTIVE 3D GEOLOGY EXPERIMENT</small>
+                <h2>Explore the evolving terrain — experimental</h2>
                 <p>Generate the 128 km watershed, refine its incised valley at 32 km, then inspect an 8 km
                     nested local terrain. Each level inherits its parent geology at fixed spherical locations.
                     Every level uses 129×129 physical height samples and variable rock resistance,
@@ -115,12 +115,21 @@
                 <option value="after">Eroded geological terrain</option>
                 <option value="before">@(heroSpanKilometers == 8 ? "Inherited regional + valley terrain" : heroSpanKilometers == 32 ? "Inherited regional terrain" : "Canonical bedrock before erosion")</option>
             </select>
-            <span>Generate after changing scale · Drag to orbit · Scroll to zoom · physical elevation scale</span>
+            <button id="lab-hero-refine" type="button" @onclick="RefineHeroRegionAsync"
+                    disabled="@(working || heroRegion is null || heroRenderedSpanKm == 8)">
+                @(heroRenderedSpanKm == 32 ? "REFINE TO 8 KM" : "REFINE TO 32 KM")
+            </button>
+            <button id="lab-hero-zoom-in" type="button" aria-label="Zoom in on 3D terrain"
+                    @onclick="() => ZoomHeroAsync(true)" disabled="@(heroRegion is null || working)">+</button>
+            <button id="lab-hero-zoom-out" type="button" aria-label="Zoom out from 3D terrain"
+                    @onclick="() => ZoomHeroAsync(false)" disabled="@(heroRegion is null || working)">−</button>
+            <span>Drag to orbit · Pinch or use + / − to zoom · physical elevation scale</span>
         </div>
         <canvas id="lab-hero-render" width="960" height="540" aria-label="Interactive 3D landscape from eroded geological height data"></canvas>
         <p class="lab-hero-status" aria-live="polite">@heroStatus</p>
+        <p class="lab-hero-disclaimer">Research preview only. Valleys and materials are still being developed; this is not yet the gameplay planet.</p>
     </section>
-    <footer class="lab-footer">Equirectangular projections are diagnostic maps only. Gameplay and local terrain sample these exact same elevation fields. The current generator does not yet simulate hydraulic erosion.</footer>
+    <footer class="lab-footer">Equirectangular projections are diagnostic maps only. Gameplay and local terrain sample these exact same elevation fields. The experimental 3D Hero Region applies hydraulic erosion on demand; the ordinary gameplay renderer does not yet use these new fields.</footer>
 </div>
 
 @code {
@@ -140,6 +149,7 @@
     private PlanetRegionalGeologyOverlay? heroNestedOverlay;
     private PlanetRegionalGeologyOverlay? heroParentOverlay;
     private int heroSpanKilometers = 128;
+    private int heroRenderedSpanKm => heroRegion is null ? 0 : (int)Math.Round((heroRegion.Width - 1) * heroRegion.CellSpacingMeters / 1000.0);
     private PlanetHeroRegion? heroRegion;
     private IJSObjectReference? heroModule;
     private string heroMode = "after";
@@ -450,6 +460,25 @@
         {
             working = false;
             await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task RefineHeroRegionAsync()
+    {
+        if (working || heroRegion is null || heroRenderedSpanKm == 8)
+        {
+            return;
+        }
+
+        heroSpanKilometers = heroRenderedSpanKm == 128 ? 32 : 8;
+        await GenerateHeroRegionAsync();
+    }
+
+    private async Task ZoomHeroAsync(bool zoomIn)
+    {
+        if (heroRegion is not null && heroModule is not null && !working)
+        {
+            await heroModule.InvokeVoidAsync("zoomHeroRegion", cancellation.Token, zoomIn);
         }
     }
 
