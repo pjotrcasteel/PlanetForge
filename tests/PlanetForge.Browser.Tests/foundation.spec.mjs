@@ -108,7 +108,19 @@ test('TerrainLab_HeroRegion_RendersPhysical3DLandscapeAndComparesErosion', async
   expect(stats.focusCellIndex).toBeGreaterThanOrEqual(0);
   expect(stats.focusCellIndex).toBeLessThan(stats.gridWidth * stats.gridWidth);
   expect(stats.maxElevationMeters - stats.minElevationMeters).toBeGreaterThan(50);
+  expect(stats.actualReliefMeters).toBeGreaterThan(50);
+  expect(stats.maximumCutMeters).toBeGreaterThan(0);
+  expect(stats.framing).toBe('valley');
+  expect(stats.cameraDistanceKm).toBeLessThan(stats.regionSpanKilometers * 0.5);
   await expect(page.locator('.lab-hero-status')).toContainText('deepest cut');
+  await page.locator('#lab-hero-framing').click();
+  const fullView = await page.evaluate(() => window.__planetForgeHeroRegionStats);
+  expect(fullView.framing).toBe('full');
+  expect(fullView.cameraDistanceKm).toBeGreaterThan(fullView.regionSpanKilometers);
+  await expect(page.locator('#lab-hero-framing')).toHaveText('INSPECT VALLEY');
+  await page.locator('#lab-hero-framing').click();
+  await expect(page.locator('#lab-hero-framing')).toHaveText('SHOW FULL REGION');
+  expect((await page.evaluate(() => window.__planetForgeHeroRegionStats)).framing).toBe('valley');
 
   const afterScreenshot = await hero.screenshot({ path: testInfo.outputPath('hero-eroded-seed-24061984.png') });
   const after = PNG.sync.read(afterScreenshot);
@@ -269,14 +281,25 @@ test('TerrainLab_ErosionIterations_AdvanceRewindReplayDeterministically', async 
     }
     return maximum - minimum;
   });
+  // A newly opened lab should show a useful geological result, not a dark
+  // empty change panel caused by starting at 0 erosion iterations.
+  await expect(select).toHaveValue('5');
+  await expect(page.getByTestId('lab-change-summary')).toContainText('max erosion');
+  const initialFivePasses = await checksum();
+  expect(await contrastOfDifference(), 'The initial geological comparison must be visible').toBeGreaterThan(18);
+  await page.screenshot({ path: testInfo.outputPath('evolution-five-passes.png'), fullPage: true });
+
+  await select.selectOption('0');
+  await expect(page.getByRole('status')).toContainText('0 erosion iterations', { timeout: 120_000 });
+  await expect(page.getByTestId('lab-change-summary')).toContainText('No erosion yet');
   const original = await checksum();
   expect(await contrastOfDifference()).toBe(0);
   await select.selectOption('5');
   await expect(page.getByRole('status')).toContainText('5 erosion iterations', { timeout: 120_000 });
   const fivePasses = await checksum();
   expect(fivePasses, 'Five physical erosion passes did not change the rendered canonical height map').not.toBe(original);
+  expect(fivePasses, 'Initial erosion and replay must be deterministic').toBe(initialFivePasses);
   expect(await contrastOfDifference(), 'Erosion-height difference must show actual nonzero cuts or deposits').toBeGreaterThan(18);
-  await page.screenshot({ path: testInfo.outputPath('evolution-five-passes.png'), fullPage: true });
 
   await select.selectOption('1');
   await expect(page.getByRole('status')).toContainText('1 erosion iterations', { timeout: 120_000 });

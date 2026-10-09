@@ -52,7 +52,7 @@
         <div class="lab-evolution">
             <label for="lab-erosion-iterations">Geological erosion iterations</label>
             <select id="lab-erosion-iterations" @bind="selectedIterations" @bind:after="AdvanceRegionAsync" disabled="@(working || baselineRegion is null)">
-                <option value="0">0 / original bedrock</option>
+                <option value="0">0 / original bedrock (no change yet)</option>
                 <option value="1">1 / first pass</option>
                 <option value="5">5 / repeated erosion</option>
                 <option value="12">12 / evolved preview</option>
@@ -86,13 +86,14 @@
                 <h2>09 / Cumulative elevation change</h2>
                 <p>Diagnostic only: orange is rock removed, turquoise is deposited material. Color shows physical metres of change, not exaggerated terrain.</p>
                 <canvas id="lab-regional-difference" width="96" height="96" aria-label="Regional erosion and deposition height difference map"></canvas>
+                <p class="lab-change-summary" data-testid="lab-change-summary">@regionalChangeSummary</p>
             </article>
         </div>
     </section>
     <section id="hero-region" class="lab-hero" aria-label="Three-dimensional geological hero region">
         <div class="lab-hero-heading">
             <div>
-                <small>PF 0.0.36 / INTERACTIVE 3D GEOLOGY EXPERIMENT</small>
+                <small>INTERACTIVE 3D GEOLOGY / HERO REGION</small>
                 <h2>Explore the evolving terrain — experimental</h2>
                 <p>Generate the 128 km watershed, refine its incised valley at 32 km, then inspect an 8 km
                     nested local terrain. Each level inherits its parent geology at fixed spherical locations.
@@ -125,14 +126,17 @@
                     disabled="@(working || heroRegion is null || heroRenderedSpanKm != 8)">
                 @(heroLocalHighResolution ? "USE FAST 129² GRID" : "RESOLVE 257² DETAIL")
             </button>
+            <button id="lab-hero-framing" type="button" @onclick="ToggleHeroFramingAsync" disabled="@(heroRegion is null || working)">
+                @(heroShowFullRegion ? "INSPECT VALLEY" : "SHOW FULL REGION")
+            </button>
             <button id="lab-hero-zoom-in" type="button" aria-label="Zoom in on 3D terrain"
                     @onclick="() => ZoomHeroAsync(true)" disabled="@(heroRegion is null || working)">+</button>
             <button id="lab-hero-zoom-out" type="button" aria-label="Zoom out from 3D terrain"
                     @onclick="() => ZoomHeroAsync(false)" disabled="@(heroRegion is null || working)">−</button>
             <span>Drag to orbit · Pinch or use + / − to zoom · physical elevation scale</span>
         </div>
-        <canvas id="lab-hero-render" width="960" height="540" aria-label="Interactive 3D landscape from eroded geological height data"></canvas>
         <p class="lab-hero-status" aria-live="polite">@heroStatus</p>
+        <canvas id="lab-hero-render" width="960" height="540" aria-label="Interactive 3D landscape from eroded geological height data"></canvas>
         <p class="lab-hero-disclaimer">Research preview only. Valleys and materials are still being developed; this is not yet the gameplay planet.</p>
     </section>
     <footer class="lab-footer">Equirectangular projections are diagnostic maps only. Gameplay and local terrain sample these exact same elevation fields. The experimental 3D Hero Region applies hydraulic erosion on demand; the ordinary gameplay renderer does not yet use these new fields.</footer>
@@ -148,6 +152,8 @@
     private PlanetRegionalGeologySnapshot? evolvedRegion;
     private float[]? regionalBedrock;
     private int selectedIterations;
+    private string regionalChangeSummary = "Sampling erosion history…";
+    private bool heroShowFullRegion;
     private readonly CancellationTokenSource cancellation = new();
     private PlanetVector? heroAnchor;
     private PlanetVector? heroFocusAnchor;
@@ -200,6 +206,8 @@
         heroNestedOverlay = null;
         heroSpanKilometers = 128;
         heroLocalHighResolution = false;
+        heroShowFullRegion = false;
+        regionalChangeSummary = "Sampling erosion history…";
         heroRegion = null;
         heroMode = "after";
         heroStatus = "Select Generate 3D Terrain after the canonical region finishes sampling.";
@@ -313,13 +321,19 @@
             baselineRegion = PlanetRegionalGeologyEvolution.Initialize(selectedSeed, regionKey, RegionSize, RegionSize,
                 cellSizeMeters, regionalElevation);
             regionalBedrock = regionalElevation;
-            evolvedRegion = baselineRegion;
-            selectedIterations = 0;
-            var watershed = PlanetRegionalWatershed.Build(RegionSize, RegionSize, cellSizeMeters, regionalElevation);
+            // Begin with an evolved geological example: zero iterations legitimately
+            // produces a completely blank change map and looks like a broken panel.
+            // Preserve the zero option as an explicit before-erosion comparison.
+            selectedIterations = 5;
+            var beforeFinalPass = PlanetRegionalGeologyEvolution.Advance(baselineRegion, selectedIterations - 1,
+                cancellationToken: cancellation.Token);
+            evolvedRegion = PlanetRegionalGeologyEvolution.Advance(beforeFinalPass, 1, cancellationToken: cancellation.Token);
+            var watershed = PlanetRegionalWatershed.Build(RegionSize, RegionSize, cellSizeMeters, beforeFinalPass.ElevationMeters);
             await module.InvokeVoidAsync("drawRegionalWatershed", cancellation.Token, RegionSize, RegionSize,
                 regionalElevation, watershed.AccumulatedRunoffCells, watershed.IncisionMeters,
-                watershed.SedimentDepositionMeters, regionalElevation, regionalElevation);
-            status = $"Seed {selectedSeed} • above datum {land * 100.0 / elevations.Length:0.0}% • range {minimum:0}–{maximum:0} m • 0 erosion iterations";
+                watershed.SedimentDepositionMeters, evolvedRegion.ElevationMeters, regionalElevation);
+            UpdateRegionalChangeSummary(evolvedRegion);
+            status = $"Seed {selectedSeed} • above datum {land * 100.0 / elevations.Length:0.0}% • range {minimum:0}–{maximum:0} m • 5 erosion iterations";
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -378,6 +392,7 @@
                 maxDepositedMeters = Math.Max(maxDepositedMeters, -difference);
             }
 
+            UpdateRegionalChangeSummary(state);
             status = $"Seed {selectedSeed} • {state.Iteration} erosion iterations • max cut {maxRemovedMeters:0.0} m • max fill {maxDepositedMeters:0.0} m • sediment exported {state.CumulativeExportedVolumeCubicMeters / 1e9:0.00} km³";
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
@@ -389,6 +404,42 @@
             working = false;
             await InvokeAsync(StateHasChanged);
         }
+    }
+
+    private void UpdateRegionalChangeSummary(PlanetRegionalGeologySnapshot evolved)
+    {
+        if (evolved.Iteration == 0 || regionalBedrock is null)
+        {
+            regionalChangeSummary = "No erosion yet — select 1, 5 or 12 passes to reveal measured cut and deposition.";
+            return;
+        }
+
+        var maximumCut = 0.0;
+        var maximumFill = 0.0;
+        var changedCells = 0;
+        for (var index = 0; index < regionalBedrock.Length; index++)
+        {
+            var delta = regionalBedrock[index] - evolved.ElevationMeters[index];
+            maximumCut = Math.Max(maximumCut, delta);
+            maximumFill = Math.Max(maximumFill, -delta);
+            if (Math.Abs(delta) > 0.05)
+            {
+                changedCells++;
+            }
+        }
+
+        regionalChangeSummary = $"{changedCells * 100.0 / regionalBedrock.Length:0.0}% of cells changed • max erosion {maximumCut:0.0} m • max deposition {maximumFill:0.0} m";
+    }
+
+    private async Task ToggleHeroFramingAsync()
+    {
+        if (heroRegion is null || working || heroModule is null)
+        {
+            return;
+        }
+
+        heroShowFullRegion = !heroShowFullRegion;
+        await heroModule.InvokeVoidAsync("setHeroRegionFraming", cancellation.Token, heroShowFullRegion);
     }
 
     private async Task GenerateHeroRegionAsync()
@@ -452,6 +503,7 @@
             }
 
             heroMode = "after";
+            heroShowFullRegion = false;
             await heroModule.InvokeVoidAsync("drawHeroRegion", cancellation.Token, result, heroMode);
             heroRegion = result;
             var relief = result.EvolvedElevationMeters.Max() - result.EvolvedElevationMeters.Min();

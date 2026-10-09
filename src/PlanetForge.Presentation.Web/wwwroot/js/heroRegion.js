@@ -33,7 +33,7 @@ const fragmentShader = [
     'in vec3 vNormal; in vec3 vGeology; in vec3 vPosition; out vec4 outColor;',
     'uniform float uLowest; uniform float uHighest;',
     'void main(){',
-    'vec3 n=normalize(vNormal); vec3 sun=normalize(vec3(0.88,0.24,0.41));',
+    'vec3 n=normalize(vNormal); vec3 sun=normalize(vec3(0.88,0.19,0.41));',
     'float altitude=smoothstep(uLowest,uHighest,vGeology.x);',
     'float slope=length(n.xz); float exposed=smoothstep(0.025,0.26,slope);',
     'vec3 mineral=mix(vec3(0.51,0.32,0.21),vec3(0.66,0.50,0.37),altitude*0.72);',
@@ -43,7 +43,7 @@ const fragmentShader = [
     'mineral=mix(mineral,vec3(0.41,0.31,0.26),wear*0.17);',
     'mineral=mix(mineral,vec3(0.70,0.53,0.36),deposit*0.12);',
     'float angle=dot(n,sun); float raking=clamp((angle-sun.y)*3.45,-0.43,0.43);',
-    'float light=clamp(0.52+0.43*max(angle,0.0)+raking,0.24,1.22);',
+    'float light=clamp(0.43+0.62*max(angle,0.0)+raking,0.17,1.26);',
     'float fog=smoothstep(65.0,155.0,length(vPosition.xz))*0.15;',
     'outColor=vec4(mix(mineral*light,vec3(0.32,0.32,0.31),fog),1.0); }'
 ].join('\n');
@@ -120,7 +120,8 @@ function render() {
     window.__planetForgeHeroRegionStats={seed:region.seed,mode:scene.mode,gridWidth:region.width,
         triangles:scene.indices/3,indexBits:scene.indexType===gl.UNSIGNED_INT?32:16,
         cellSpacingMeters:region.cellSpacingMeters,regionSpanKilometers:(region.width-1)*region.cellSpacingMeters/1000,
-        minElevationMeters:scene.min,maxElevationMeters:scene.max,
+        minElevationMeters:scene.min,maxElevationMeters:scene.max,actualReliefMeters:scene.max-scene.min,
+        maximumCutMeters:scene.maximumCutMeters,framing:scene.fullRegion?'full':'valley',
         erosionIterations:region.erosionIterations,focusCellIndex:region.focusCellIndex,cameraDistanceKm:d,glError:error};
     window.__planetForgeHeroRegionReady=error===gl.NO_ERROR;
 }
@@ -176,6 +177,17 @@ export function zoomHeroRegion(zoomIn){
     render();
 }
 
+// Both views use exactly the same physical vertex positions and metres of
+// elevation; only the inspection camera changes. Default to real channel relief.
+export function setHeroRegionFraming(fullRegion){
+    if(!scene || !scene.region)return;
+    scene.fullRegion=Boolean(fullRegion);
+    const span=(scene.region.width-1)*scene.region.cellSpacingMeters/1000;
+    scene.zoom=scene.fullRegion?1.08:span<=8?0.40:span<=32?0.35:0.27;
+    scene.pitch=scene.fullRegion?0.62:span<=8?0.62:span<=32?0.56:0.46;
+    render();
+}
+
 export function drawHeroRegion(region,mode='after'){
     const canvas=document.getElementById('lab-hero-render');
     if(!canvas)throw Error('Missing hero region viewport');
@@ -211,9 +223,16 @@ export function drawHeroRegion(region,mode='after'){
     // Frame actual valleys close enough to resolve physical slopes on mobile.
     // Previously nested terrain inherited the overview camera framing.
     const regionSpanKm = (region.width - 1) * region.cellSpacingMeters / 1000;
-    scene.pitch = regionSpanKm <= 8 ? 0.68 : regionSpanKm <= 32 ? 0.55 : 0.33;
-    scene.zoom = regionSpanKm <= 8 ? 0.63 : regionSpanKm <= 32 ? 0.53 : 0.70;
-    scene.region=region;scene.indices=indices.length;useMode(mode);
+    scene.region=region;
+    scene.indices=indices.length;
+    scene.maximumCutMeters=0;
+    for(const cut of region.cumulativeCutMeters)scene.maximumCutMeters=Math.max(scene.maximumCutMeters,cut);
+    scene.fullRegion=false;
+    // Keep actual elevation metres. A close camera, not artificial vertical
+    // exaggeration, is needed to see a few-hundred-metre valley in a 128 km tile.
+    scene.zoom=regionSpanKm<=8?0.40:regionSpanKm<=32?0.35:0.27;
+    scene.pitch=regionSpanKm<=8?0.62:regionSpanKm<=32?0.56:0.46;
+    useMode(mode);
 }
 export function setHeroRegionMode(mode){
     if(mode==='before'||mode==='after')useMode(mode);
