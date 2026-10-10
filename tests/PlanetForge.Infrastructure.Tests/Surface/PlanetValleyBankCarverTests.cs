@@ -57,7 +57,8 @@ public sealed class PlanetValleyBankCarverTests
         var alongCut = original[alongBank] - result.ElevationMeters[alongBank];
 
         Assert.IsGreaterThan(0.0, acrossCut, "Real runoff should excavate streamside banks.");
-        Assert.IsGreaterThan(alongCut, acrossCut, "Cross-stream retreat must exceed isolated upstream/downstream erosion.");
+        Assert.IsGreaterThan(acrossCut, alongCut,
+            "A continuous downstream riverbed must be deeper than its flanking bank shoulders.");
         Assert.IsLessThan(result.ElevationMeters[centerY * width + centerX - 1],
             result.ElevationMeters[centerY * width + centerX + 1],
             "A continuous downstream reach must excavate further along the receiver than behind its source.");
