@@ -276,6 +276,12 @@ public sealed class PlanetExperience(
             ? CreateGlobalSurfaceTiles(includeFullGlobalGeometry, radiusMeters)
             : Array.Empty<PlanetSurfaceTileMesh>();
 
+        var deformationRevision = terrainDeformationStore?.GetRevision(state.Seed) ?? 0;
+        var geologyRevision = localSurfacePatchSampler.ElevationSource is IPlanetElevationRevisionSource source ? source.Revision : 0;
+        // Existing gameplay revision identities stay unchanged until opt-in
+        // regional geology is published. A new atlas forces GPU water and rock
+        // overlays to observe a different physical terrain generation.
+        var terrainRevision = geologyRevision == 0 ? deformationRevision : HashCode.Combine(deformationRevision, geologyRevision);
         return new PlanetRenderSnapshot(
             surfaceTiles,
             seaLevelMeters,
@@ -290,7 +296,7 @@ public sealed class PlanetExperience(
             state.WaterParameters,
             climateResult.Water,
             localSurface,
-            terrainDeformationStore?.GetRevision(state.Seed) ?? 0);
+            terrainRevision);
     }
 
     private IReadOnlyList<PlanetSurfaceTileMesh> CreateGlobalSurfaceTiles(bool fullGeometry, double radiusMeters)
@@ -320,7 +326,8 @@ public sealed class PlanetExperience(
         var cellsPerAxis = CalculateLocalCellsPerAxis(cameraAltitudeMeters);
         var anchorDirection = localAnchorDirection ?? surfaceView.CameraDirection;
         var anchorAddress = PlanetSurfaceAddressing.Encode(anchorDirection);
-        var cacheKey = new LocalSurfaceCacheKey(anchorAddress, patchSizeMeters, cellsPerAxis, state.Seed, radiusMeters);
+        var revision = localSurfacePatchSampler.ElevationSource is IPlanetElevationRevisionSource source ? source.Revision : 0;
+        var cacheKey = new LocalSurfaceCacheKey(anchorAddress, patchSizeMeters, cellsPerAxis, state.Seed, radiusMeters, revision);
 
         if (cachedLocalSurfaceKey == cacheKey && cachedLocalSurface is not null)
         {
@@ -453,5 +460,6 @@ public sealed class PlanetExperience(
         double PatchSizeMeters,
         int CellsPerAxis,
         int Seed,
-        double PlanetRadiusMeters);
+        double PlanetRadiusMeters,
+        long GeologyRevision);
 }

@@ -16,7 +16,12 @@ public static class ServiceCollectionExtensions
     {
         services.AddSingleton<IPlanetTerrainDeformationStore, PlanetTerrainDeformationStore>();
         services.AddSingleton<ProceduralPlanetElevationSource>();
-        services.AddSingleton<IPlanetElevationSource>(provider => provider.GetRequiredService<ProceduralPlanetElevationSource>());
+        // Both orbital cube-sphere tiles and the ground sampler resolve the
+        // same geological planet. Research regions are opt-in publications;
+        // until one is published this forwards the original canonical source.
+        services.AddSingleton<PlanetTerrainRegionProvider>(provider =>
+            new PlanetTerrainRegionProvider(provider.GetRequiredService<ProceduralPlanetElevationSource>()));
+        services.AddSingleton<IPlanetElevationSource>(provider => provider.GetRequiredService<PlanetTerrainRegionProvider>());
         services.AddSingleton(PlanetSurfaceLodOptions.Default);
         services.AddSingleton<PlanetSurfaceTileSampler>();
         services.AddSingleton<PlanetSurfaceLodSelector>();
