@@ -593,3 +593,12 @@ cardinal reaches excluding only the centrepoint. Two-direction continuity
 suffices for a through-channel, with three/four directions providing a small
 branching bonus. This preserves physically plausible straight tributaries
 without allowing runoff quantity to outweigh pre-existing rock structure.
+
+### Consistent geological residuals
+
+A focused test caught a subtle bug in the bedrock-first revision: the first
+5×5 sampling loop fitted its plane to inherited `OriginalElevationMeters`, but
+the second loop still computed residuals from `EvolvedElevationMeters`. The
+mismatch makes simulated erosion itself appear as enormous rock ruggedness.
+Both passes now use the identical original geological field, while hydraulic
+cut/runoff remain separate qualification inputs.
