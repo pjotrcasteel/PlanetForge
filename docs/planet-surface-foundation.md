@@ -634,3 +634,16 @@ the physical 8 km before/after images must have recognizable intersecting
 ridges, realistic scale and no isolated industrial-looking trenches. Rivers,
 lakes, oceans and climate remain separate physical models, to integrate
 after credible exposed geology.
+
+ 
+### Canonical ridge sampling performance gate
+
+The first mountain-detail candidate passed 280 C# regressions and 12/13
+browser tests, but the first-world boot test exceeded its 15 second
+readiness check. Rather than increasing the timeout, the source now skips
+the expensive sub-kilometre ridge calculations outside a smoothly gated
+tectonic mountain envelope (including oceans) and uses one coordinated
+low-frequency spatial warp instead of three independent 3D noise samples.
+This reduces the number of expensive sampled noise gradients while keeping
+canonical deterministic LOD identity. The visual and boot-performance
+gates both remain blocking until the new CI run and screenshot audit pass.
