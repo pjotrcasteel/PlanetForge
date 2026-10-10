@@ -44,12 +44,21 @@
 .lab-hero-heading p { max-width: 750px; color: #acbcb5; line-height: 1.5; margin: 0; }
 .lab-hero-heading button { border: 1px solid #8fc6a7; border-radius: 10px; background: #215044; color: #effcf0; font-weight: 700; padding: 13px 17px; cursor: pointer; }
 .lab-hero-heading button:disabled { opacity: .5; cursor: default; }
-.lab-hero-toolbar { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; padding: 9px 0 14px; color: #b3c5b8; font-size: .85rem; }
-.lab-hero-toolbar select { background: #253e36; color: #e8f5e9; border: 1px solid #7c9c8b; padding: 8px 12px; border-radius: 8px; }
+.lab-hero-toolbar { display: grid; gap: 10px; padding: 9px 0; color: #b3c5b8; font-size: .85rem; }
+.lab-hero-fields, .lab-hero-actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.lab-hero-field { display: flex; gap: 8px; align-items: center; min-width: 0; }
+.lab-hero-field label { flex-shrink: 0; }
+.lab-hero-toolbar select { min-width: 0; max-width: 100%; background: #253e36; color: #e8f5e9; border: 1px solid #7c9c8b; padding: 8px 12px; border-radius: 8px; }
 .lab-hero-toolbar button { min-height: 44px; min-width: 44px; padding: 8px 14px; border: 1px solid #85ad93; border-radius: 10px; background: #234237; color: #ecf5ec; cursor: pointer; font-weight: 750; }
 .lab-hero-toolbar button:disabled { opacity: .45; cursor: default; }
+.lab-hero-zoom { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.lab-hero-zoom button { min-width: 48px; }
+.lab-hero-hint { color: #91a99c; font: 500 .75rem ui-monospace, monospace; }
+.lab-hero-summary { margin: 5px 0 10px; color: #c4dfd0; font: 600 .78rem/1.5 ui-monospace, monospace; }
+.lab-hero-diagnostics { margin: 0 0 12px; color: #a7bfb0; font: 500 .75rem/1.5 ui-monospace, monospace; }
+.lab-hero-diagnostics summary { display: list-item; cursor: pointer; width: fit-content; }
+.lab-hero-status { margin: 8px 0 0; color: #b6d2c1; font: 500 .78rem/1.5 ui-monospace, monospace; }
 .lab-hero-disclaimer { margin: 8px 0 0; color: #a7b6b0; font-size: .75rem; line-height: 1.45; }
-.lab-hero-toolbar span { color: #91a99c; font: 500 .75rem ui-monospace, monospace; }
 #lab-hero-render { display: block; width: 100%; height: auto; aspect-ratio: 16 / 9; border-radius: 10px; background: #12191c; cursor: grab; }
 #lab-hero-render:active { cursor: grabbing; }
 .lab-hero-status { margin: 14px 0 0; color: #b6d2c1; font: 500 .78rem/1.5 ui-monospace, monospace; }
@@ -64,10 +73,17 @@
     .lab-hero-heading { gap: 8px; margin-bottom: 7px; }
     .lab-hero-heading > div { flex-basis: 100%; }
     .lab-hero-heading p { font-size: .78rem; }
-    .lab-hero-toolbar { gap: 6px; padding: 7px 0; font-size: .78rem; }
-    .lab-hero-toolbar button { min-height: 44px; min-width: 44px; padding: 6px 10px; font-size: .78rem; }
-    .lab-hero-toolbar select { max-width: 100%; min-height: 44px; padding: 6px 8px; }
-    .lab-hero-toolbar span { flex-basis: 100%; }
+    .lab-hero-toolbar { gap: 8px; padding: 7px 0; font-size: .78rem; }
+    .lab-hero-fields, .lab-hero-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+    .lab-hero-field { flex-direction: column; align-items: stretch; gap: 4px; }
+    .lab-hero-field label { font-size: .73rem; }
+    .lab-hero-toolbar select { width: 100%; min-height: 42px; padding: 5px; font-size: .73rem; }
+    .lab-hero-actions > button { width: 100%; min-height: 44px; padding: 7px 5px; font-size: .72rem; }
+    .lab-hero-zoom { grid-column: 1 / -1; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; width: 100%; }
+    .lab-hero-zoom button { min-height: 44px; font-size: 1.15rem; }
+    .lab-hero-hint { font-size: .69rem; }
+    .lab-hero-summary { margin: 5px 0; font-size: .72rem; }
+    .lab-hero-diagnostics { margin-bottom: 10px; font-size: .7rem; }
     .lab-hero-status { margin: 7px 0; font-size: .7rem; }
     #lab-hero-render { aspect-ratio: 4 / 3; }
 }

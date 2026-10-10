@@ -7,6 +7,48 @@ namespace PlanetForge.Infrastructure.Tests.Surface;
 [TestClass]
 public sealed class ProceduralPlanetElevationSourceTests
 {
+
+    [TestMethod]
+    [DataRow(24061984)]
+    [DataRow(346147916)]
+    [DataRow(579460630)]
+    public void SampleTectonicRelief_SwappedPlateOrder_HasNoContactHeightDiscontinuity(int seed)
+    {
+        // A Voronoi contact reverses the nearest-plate order. Its physical
+        // height must not depend on which plate appears first.
+        var direction = PlanetVector.Normalize(new PlanetVector(0.42242678262485306, 0.4821837720791227, -0.7674988099435489));
+        foreach (var firstIndex in Enumerable.Range(0, 18))
+        {
+            for (var secondIndex = firstIndex + 1; secondIndex < 18; secondIndex++)
+            {
+                foreach (var firstContinental in new[] { false, true })
+                {
+                    foreach (var secondContinental in new[] { false, true })
+                    {
+                        var atContact = new ProceduralPlanetElevationSource.NearestPlatePair(firstIndex, secondIndex, 0.91, 0.91);
+                        var reversed = new ProceduralPlanetElevationSource.NearestPlatePair(secondIndex, firstIndex, 0.91, 0.91);
+                        var left = ProceduralPlanetElevationSource.SampleTectonicRelief(
+                            direction, seed, atContact, firstContinental, secondContinental, 0.8, 0.15);
+                        var right = ProceduralPlanetElevationSource.SampleTectonicRelief(
+                            direction, seed, reversed, secondContinental, firstContinental, 0.8, 0.15);
+                        Assert.AreEqual(left, right, 1e-12,
+                            $"Seed {seed}, plates {firstIndex}/{secondIndex}: the same contact must have the same height.");
+
+                        const double epsilon = 1e-8;
+                        var firstSide = atContact with { SecondaryDot = 0.91 - epsilon };
+                        var oppositeSide = reversed with { SecondaryDot = 0.91 - epsilon };
+                        var before = ProceduralPlanetElevationSource.SampleTectonicRelief(
+                            direction, seed, firstSide, firstContinental, secondContinental, 0.8, 0.15);
+                        var after = ProceduralPlanetElevationSource.SampleTectonicRelief(
+                            direction, seed, oppositeSide, secondContinental, firstContinental, 0.8, 0.15);
+                        Assert.IsLessThan(0.002, Math.Abs(after - before) * 8_400.0,
+                            "Nearby samples crossing a contact must not acquire metre-scale rock steps.");
+                    }
+                }
+            }
+        }
+    }
+
     [TestMethod]
     [DataRow(24061984)]
     [DataRow(346147916)]

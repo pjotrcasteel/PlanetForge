@@ -108,38 +108,52 @@
             </button>
         </div>
         <div class="lab-hero-toolbar">
-            <label for="lab-hero-scale">Region scale</label>
-            <select id="lab-hero-scale" @bind="heroSpanKilometers" disabled="@working">
-                <option value="128">128 km regional geology</option>
-                <option value="32" disabled="@(!heroFocusAnchor.HasValue)">32 km nested valley detail</option>
-                <option value="8" disabled="@(!heroMicroAnchor.HasValue)">8 km local erosion detail</option>
-            </select>
-            <label for="lab-hero-mode">Compare terrain</label>
-            <select id="lab-hero-mode" @bind="heroMode" @bind:after="UpdateHeroModeAsync" disabled="@(heroRegion is null || working)">
-                <option value="after">Eroded geological terrain</option>
-                <option value="before">@(heroSpanKilometers == 8 ? "Inherited regional + valley terrain" : heroSpanKilometers == 32 ? "Inherited regional terrain" : "Canonical bedrock before erosion")</option>
-            </select>
-            <button id="lab-hero-refine" type="button" @onclick="RefineHeroRegionAsync"
-                    disabled="@(working || heroRegion is null || heroRenderedSpanKm == 8)">
-                @(heroRenderedSpanKm == 32 ? "REFINE TO 8 KM" : "REFINE TO 32 KM")
-            </button>
-            <button id="lab-hero-detail" type="button" @onclick="ToggleHeroDetailAsync"
-                    disabled="@(working || heroRegion is null)">
-                @(heroHighResolution ? "USE FAST 129² GRID" : "SIMULATE 257² DETAIL")
-            </button>
-            <button id="lab-hero-framing" type="button" @onclick="ToggleHeroFramingAsync" disabled="@(heroRegion is null || working)">
-                @(heroShowFullRegion ? "INSPECT VALLEY" : "SHOW FULL REGION")
-            </button>
-            <button id="lab-hero-drainage" type="button" @onclick="ToggleHeroDrainageAsync" disabled="@(heroRegion is null || working)">
-                @(heroShowDrainage ? "HIDE ROUTED FLOW" : "SHOW ROUTED FLOW")
-            </button>
-            <button id="lab-hero-zoom-in" type="button" aria-label="Zoom in on 3D terrain"
-                    @onclick="() => ZoomHeroAsync(true)" disabled="@(heroRegion is null || working)">+</button>
-            <button id="lab-hero-zoom-out" type="button" aria-label="Zoom out from 3D terrain"
-                    @onclick="() => ZoomHeroAsync(false)" disabled="@(heroRegion is null || working)">−</button>
-            <span>Drag to orbit · Pinch or use + / − to zoom · physical elevation scale</span>
+            <div class="lab-hero-fields">
+                <div class="lab-hero-field">
+                    <label for="lab-hero-scale">Region scale</label>
+                    <select id="lab-hero-scale" @bind="heroSpanKilometers" disabled="@working">
+                        <option value="128">128 km regional geology</option>
+                        <option value="32" disabled="@(!heroFocusAnchor.HasValue)">32 km nested valley detail</option>
+                        <option value="8" disabled="@(!heroMicroAnchor.HasValue)">8 km local erosion detail</option>
+                    </select>
+                </div>
+                <div class="lab-hero-field">
+                    <label for="lab-hero-mode">Compare terrain</label>
+                    <select id="lab-hero-mode" @bind="heroMode" @bind:after="UpdateHeroModeAsync" disabled="@(heroRegion is null || working)">
+                        <option value="after">Eroded geological terrain</option>
+                        <option value="before">@(heroSpanKilometers == 8 ? "Inherited regional + valley terrain" : heroSpanKilometers == 32 ? "Inherited regional terrain" : "Canonical bedrock before erosion")</option>
+                    </select>
+                </div>
+            </div>
+            <div class="lab-hero-actions">
+                <button id="lab-hero-refine" type="button" @onclick="RefineHeroRegionAsync"
+                        disabled="@(working || heroRegion is null || heroRenderedSpanKm == 8)">
+                    @(heroRenderedSpanKm == 32 ? "REFINE TO 8 KM" : "REFINE TO 32 KM")
+                </button>
+                <button id="lab-hero-detail" type="button" @onclick="ToggleHeroDetailAsync"
+                        disabled="@(working || heroRegion is null)">
+                    @(heroHighResolution ? "USE FAST 129² GRID" : "SIMULATE 257² DETAIL")
+                </button>
+                <button id="lab-hero-framing" type="button" @onclick="ToggleHeroFramingAsync" disabled="@(heroRegion is null || working)">
+                    @(heroShowFullRegion ? "INSPECT VALLEY" : "SHOW FULL REGION")
+                </button>
+                <button id="lab-hero-drainage" type="button" @onclick="ToggleHeroDrainageAsync" disabled="@(heroRegion is null || working)">
+                    @(heroShowDrainage ? "HIDE ROUTED FLOW" : "SHOW ROUTED FLOW")
+                </button>
+                <div class="lab-hero-zoom" aria-label="Terrain zoom controls">
+                    <button id="lab-hero-zoom-in" type="button" aria-label="Zoom in on 3D terrain"
+                            @onclick="() => ZoomHeroAsync(true)" disabled="@(heroRegion is null || working)">+</button>
+                    <button id="lab-hero-zoom-out" type="button" aria-label="Zoom out from 3D terrain"
+                            @onclick="() => ZoomHeroAsync(false)" disabled="@(heroRegion is null || working)">−</button>
+                </div>
+            </div>
+            <span class="lab-hero-hint">Drag to orbit · Pinch or use + / − to zoom · physical elevation scale</span>
         </div>
-        <p class="lab-hero-status" aria-live="polite">@heroStatus</p>
+        <p class="lab-hero-summary" aria-live="polite">@heroSummary</p>
+        <details class="lab-hero-diagnostics">
+            <summary>Simulation diagnostics</summary>
+            <p class="lab-hero-status">@heroStatus</p>
+        </details>
         <canvas id="lab-hero-render" width="960" height="540" aria-label="Interactive 3D landscape from eroded geological height data"></canvas>
         <p class="lab-hero-disclaimer">Turquoise highlights actual routed runoff where the simulated terrain is incised, not decorative rivers or rendered water.
             Toggle it off to evaluate the rock geometry. Research preview only; this is not yet the gameplay planet.</p>
@@ -174,6 +188,7 @@
     private IJSObjectReference? heroModule;
     private string heroMode = "after";
     private string heroStatus = "Generate the hero region to inspect real eroded 3D terrain.";
+    private string heroSummary = "Generate a region to inspect physical rock relief.";
     private IJSObjectReference? module;
     private int selectedSeed = PlanetSeedCatalog.ShowcaseSeed;
     private bool working;
@@ -219,6 +234,7 @@
         heroRegion = null;
         heroMode = "after";
         heroStatus = "Select Generate 3D Terrain after the canonical region finishes sampling.";
+        heroSummary = heroStatus;
         if (heroModule is not null)
         {
             await heroModule.InvokeVoidAsync("resetHeroRegion", cancellation.Token);
@@ -496,6 +512,7 @@
 
         working = true;
         heroStatus = $"Building physical 3D terrain for seed {selectedSeed}. Erosion runs only when requested…";
+        heroSummary = heroStatus;
         await InvokeAsync(StateHasChanged);
         await Task.Yield();
 
@@ -555,6 +572,8 @@
             await heroModule.InvokeVoidAsync("drawHeroRegion", cancellation.Token, result, heroMode);
             heroRegion = result;
             var relief = result.EvolvedElevationMeters.Max() - result.EvolvedElevationMeters.Min();
+            heroSummary = $"Seed {selectedSeed} · {heroSpanKilometers} km · {result.Width}² vertices · " +
+                $"{relief:0} m relief · {result.CumulativeCutMeters.Max():0} m max cut";
             var averageExportDepth = result.ExportedVolumeCubicMeters /
                 (result.Width * result.Width * result.CellSpacingMeters * result.CellSpacingMeters);
             heroStatus = $"Seed {selectedSeed} • {heroSpanKilometers} km region • {result.Width}² vertices • {result.CellSpacingMeters:0.##} m cells • {relief:0} m actual relief • " +
@@ -572,6 +591,7 @@
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             heroStatus = $"3D geological preview failed: {ex.Message}";
+            heroSummary = heroStatus;
         }
         finally
         {

@@ -25,8 +25,8 @@ public sealed record PlanetRegionalGeologySnapshot(
 /// </summary>
 public static class PlanetRegionalGeologyEvolution
 {
-    // Version 4 adds continuous floodplain deposition onset for the research solver.
-    public const int CurrentSchemaVersion = 4;
+    // Version 5 invalidates old research histories after canonical plate-contact correction.
+    public const int CurrentSchemaVersion = 5;
     public const int MaximumIterationsPerCall = 64;
 
     public static PlanetRegionalGeologySnapshot Initialize(

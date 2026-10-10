@@ -235,6 +235,18 @@ test('TerrainLab_HeroRegion_RendersPhysical3DLandscapeAndComparesErosion', async
     expect(micro.hillslopeTransportedVolumeCubicMeters).toBeGreaterThan(0);
   }
   await expect(page.locator('.lab-hero-status')).toContainText('talus relocated locally');
+  await expect(page.locator('.lab-hero-summary')).toContainText('8 km');
+  const mobileControls = await Promise.all([
+    page.locator('#lab-hero-zoom-in').boundingBox(),
+    page.locator('#lab-hero-zoom-out').boundingBox()
+  ]);
+  expect(Math.abs(mobileControls[0].y - mobileControls[1].y),
+    'The mobile zoom controls must never wrap onto separate rows').toBeLessThan(3);
+  const viewportFits = await page.locator('.lab-hero-toolbar').evaluate(toolbar =>
+    toolbar.getBoundingClientRect().right <= window.innerWidth + 1 &&
+    toolbar.scrollWidth <= toolbar.clientWidth + 1);
+  expect(viewportFits, 'The terrain toolbar must fit a 390px phone').toBe(true);
+  expect(await page.locator('.lab-hero-diagnostics').evaluate(details => details.open)).toBe(false);
   const originalCameraDistance = micro.cameraDistanceKm;
   await page.locator('#lab-hero-zoom-in').click();
   const nearCameraDistance = await page.evaluate(() => window.__planetForgeHeroRegionStats.cameraDistanceKm);
