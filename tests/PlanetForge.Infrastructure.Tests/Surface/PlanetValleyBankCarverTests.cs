@@ -86,6 +86,31 @@ public sealed class PlanetValleyBankCarverTests
     }
 
     [TestMethod]
+    public void Apply_EquivalentPhysicalDrainageAreas_ActivateChannelsAtDifferentCellSizes()
+    {
+        const int width = 17;
+        const int center = 8 * width + 8;
+        var original = Enumerable.Repeat(1_500f, width * width).ToArray();
+        var eroded = (float[])original.Clone();
+        eroded[center] = 1_400f;
+
+        // Both cells represent 1 km² of contributing watershed despite a
+        // 25-fold difference in contributing raster cell count.
+        var fine = new float[original.Length];
+        fine[center] = 100f; // 100 × 100 m × 100 m
+        var coarse = new float[original.Length];
+        coarse[center] = 4f; // 4 × 500 m × 500 m
+        var narrow = PlanetValleyBankCarver.Apply(original, eroded, fine, width, width, 100.0);
+        var broad = PlanetValleyBankCarver.Apply(original, eroded, coarse, width, width, 500.0);
+
+        Assert.IsGreaterThan(0.0, narrow.AdditionalExportedSedimentCubicMeters);
+        Assert.IsGreaterThan(0.0, broad.AdditionalExportedSedimentCubicMeters,
+            "Physically identical drainage must not disappear only because a coarse grid has fewer cells.");
+        Assert.IsLessThan(original[center + 1], narrow.ElevationMeters[center + 1]);
+        Assert.IsLessThan(original[center + 1], broad.ElevationMeters[center + 1]);
+    }
+
+    [TestMethod]
     public void Apply_AlreadyCancelled_DoesNotBeginExpensiveBankExcavation()
     {
         using var cancellation = new CancellationTokenSource();
@@ -137,7 +162,8 @@ public sealed class PlanetValleyBankCarverTests
         eroded[center] = 1300f;
         eroded[receiver] = 1000f;
         var runoff = new float[original.Length];
-        runoff[center] = 300f;
+        // 31.25 m cells require ~820 contributing cells to exceed 0.8 km².
+        runoff[center] = 1_000f;
         var downstream = Enumerable.Repeat(-1, original.Length).ToArray();
         downstream[center] = receiver;
 
