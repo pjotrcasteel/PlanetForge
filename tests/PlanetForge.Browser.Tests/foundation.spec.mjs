@@ -145,6 +145,8 @@ test('TerrainLab_HeroRegion_RendersPhysical3DLandscapeAndComparesErosion', async
   // region below carries the strict texture/geometry visibility gate.
   expect(stats.regionSpanKilometers).toBe(128);
   expect(stats.maxElevationMeters - stats.minElevationMeters).toBeGreaterThan(1000);
+  await expect(page.locator('.lab-hero-status')).toContainText('non-planar terrain');
+  await expect(page.locator('.lab-hero-status')).toContainText('site rock relief');
 
   // Do a second *physical* 128 km erosion solve at 500 m spacing rather
   // than simply upsampling the GPU triangles of the coarse 1 km grid.

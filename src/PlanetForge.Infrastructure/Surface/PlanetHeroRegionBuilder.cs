@@ -51,26 +51,76 @@ public sealed class PlanetHeroRegionBuilder(IPlanetElevationSource elevationSour
     }
 
     /// <summary>
-    /// Finds a real incised catchment with connected upstream runoff, rather than
-    /// favoring an isolated deep pixel that fails to reveal a tributary valley.
-    /// The renderer and the nested geological solve share this exact focus cell.
+    /// Selects a physical nested catchment rather than the deepest isolated
+    /// eroded pixel. Each potential child center is scored against a 5×5
+    /// sampling of the surrounding quarter-scale landscape. Subtracting the
+    /// best-fit local plane distinguishes actual branching bedrock morphology
+    /// from a uniformly sloping escarpment or a single raster-step scar.
     /// </summary>
     public static int FindIncisedChannelCell(PlanetHeroRegion region)
     {
         ArgumentNullException.ThrowIfNull(region);
         var width = region.Width;
-        var margin = Math.Max(1, width / 5);
+        var margin = Math.Max(2, width / 5);
+        var radius = Math.Max(2, (width - 1) / 8);
+        var step = Math.Max(1, radius / 2);
         var selected = (width / 2) * width + (width / 2);
         var best = double.NegativeInfinity;
+        var areaPerCellKm2 = region.CellSpacingMeters * region.CellSpacingMeters / 1_000_000.0;
 
         for (var y = margin; y < width - margin; y++)
         {
             for (var x = margin; x < width - margin; x++)
             {
                 var index = y * width + x;
-                var cut = Math.Max(0.0f, region.CumulativeCutMeters[index]);
-                var runoff = Math.Max(0.0f, region.AccumulatedRunoffCells[index]);
-                var score = cut * (1.0 + 0.25 * Math.Log2(1.0 + runoff));
+                var cut = Math.Max(0.0, region.CumulativeCutMeters[index]);
+                var contributingKm2 = Math.Max(0.0, region.AccumulatedRunoffCells[index]) * areaPerCellKm2;
+                // Prefer a real drain with water and excavation. A fallback is
+                // still available for a perfectly dry or uneroded research tile.
+                if (cut <= 0.01 || contributingKm2 <= 0.01)
+                {
+                    continue;
+                }
+
+                var min = double.PositiveInfinity;
+                var max = double.NegativeInfinity;
+                var mean = 0.0;
+                var horizontalMoment = 0.0;
+                var verticalMoment = 0.0;
+                for (var dy = -2; dy <= 2; dy++)
+                {
+                    for (var dx = -2; dx <= 2; dx++)
+                    {
+                        var sampleX = Math.Clamp(x + dx * step, 0, width - 1);
+                        var sampleY = Math.Clamp(y + dy * step, 0, width - 1);
+                        var height = region.EvolvedElevationMeters[sampleY * width + sampleX];
+                        min = Math.Min(min, height);
+                        max = Math.Max(max, height);
+                        mean += height;
+                        horizontalMoment += dx * height;
+                        verticalMoment += dy * height;
+                    }
+                }
+
+                mean /= 25.0;
+                var horizontalSlope = horizontalMoment / 50.0;
+                var verticalSlope = verticalMoment / 50.0;
+                var residualSum = 0.0;
+                for (var dy = -2; dy <= 2; dy++)
+                {
+                    for (var dx = -2; dx <= 2; dx++)
+                    {
+                        var sampleX = Math.Clamp(x + dx * step, 0, width - 1);
+                        var sampleY = Math.Clamp(y + dy * step, 0, width - 1);
+                        var height = region.EvolvedElevationMeters[sampleY * width + sampleX];
+                        var residual = height - (mean + horizontalSlope * dx + verticalSlope * dy);
+                        residualSum += residual * residual;
+                    }
+                }
+
+                var nonPlanarRelief = Math.Sqrt(residualSum / 25.0);
+                var score = 2.8 * nonPlanarRelief + 0.25 * (max - min) +
+                    Math.Min(cut, 60.0) * 0.20 + 6.0 * Math.Log2(1.0 + contributingKm2);
                 if (score <= best)
                 {
                     continue;

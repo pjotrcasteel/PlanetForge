@@ -211,3 +211,29 @@ geographic continuity across nearby planetary directions, and exact
 coarse/fine canonical bedrock identity at shared vertices. Further steps
 must assess multiseed ridgeline quality and calibrated drainage morphology
 before the research Hero geology is enabled across the live planet.
+
+
+## PF 0.0.37.7 — Physically qualified mountain/catchment selection
+
+The research Hero formerly picked the steepest point in a coarse 256×128
+diagnostic raster and then drilled into the most incised individual pixel.
+These two choices could select a smooth crater wall followed by an isolated
+raster scar while still reporting thousands of metres of regional relief.
+
+The showcase now evaluates separated candidate highland regions using
+real canonical 9×9 samples spanning 128 km. It removes the best-fit plane
+to measure nonplanar bedrock structure, rather than mistaking a steep but
+uniformly sloping surface for a genuine mountain catchment. Both relief
+and RMS nonplanar structure are reported in the Hero diagnostics.
+
+The next 32 / 8 km geographical anchor is chosen from physically sized
+neighbourhoods with real slope variation, incision and flow. It prioritizes
+coherent terrain morphology over the single deepest incised grid cell.
+The hydraulic bank-carving stage also uses upstream square kilometres
+for activation and headward stream energy, not raw pixel counts. The
+algorithm is deterministic and changes *where* the laboratory inspects
+the one canonical planet, not elevations according to zoom.
+
+Future work: objectively assess ridge/watershed alignment across multiple
+seeds, physically exchange sediment between regional boundaries, and
+use an erosion atlas only when it has seamless global geographical identity.
