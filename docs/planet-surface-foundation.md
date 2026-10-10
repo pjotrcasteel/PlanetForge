@@ -267,3 +267,33 @@ flow-reach regression tests, and the existing 128/32/8 km browser tests
 gate this milestone. Realism, global sediment exchange, seamless erosion
 atlases and mobile budgets remain prerequisites for enabling expensive
 Hero evolution on the gameplay planet.
+
+
+## PF 0.0.37.9 — Finite branching bedrock spurs, not infinite stripes
+
+iPhone screenshots of the 128 km Hero (both 129² and 257²) showed the
+failure of the previous intermediate-scale structure: a series of evenly
+spaced parallel ridges, strongly reminiscent of procedural corrugation.
+The culprit was a pair of fixed-frequency cosine wave trains across
+every tectonic arc. More vertices merely sampled those stripes better.
+
+The secondary and tertiary periodic waves have been **removed**.
+The underlying primary 55–95 km tectonic folds remain. The canonical
+bedrock now has finite, seed-stable rock spurs branching away from the
+existing tectonic axes; each has a bounded geological footprint, unique
+position, strike, length and width. A spur fades smoothly at its ends,
+and overlapping branches share a capped +223 m relief budget. The
+locations are generated in double-precision physical metres relative
+to immutable tectonic arcs, not tied to a grid, viewport or zoom level.
+
+This is a first-pass structurally motivated bedrock hierarchy—not a
+mechanical rock folding model, a complete drainage network, or a
+guarantee of photorealism. Actual watershed routing, hydraulic
+erosion and sediment remain separate processes. Canonical world
+coordinates are preserved across all hero and planetary LODs.
+
+**Remaining issue:** 128 km erosion still changes its exported sediment
+substantially between the 129² and 257² grids. Numerical resolution
+invariance requires a dedicated calibrated physical experiment rather
+than a visual tolerance adjustment; it must pass before region evolution
+can be applied to the main gameplay planet.
