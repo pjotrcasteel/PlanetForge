@@ -349,7 +349,9 @@
                 }
             }
 
-            var regionKey = $"seed/{selectedSeed}/region/{centerX}/{centerY}/96";
+            // The selected site is a canonical direction, no longer a single
+            // coarse diagnostic map pixel. Persist region identity accordingly.
+            var regionKey = $"seed/{selectedSeed}/region/{anchor.X:R}/{anchor.Y:R}/{anchor.Z:R}/96";
             baselineRegion = PlanetRegionalGeologyEvolution.Initialize(selectedSeed, regionKey, RegionSize, RegionSize,
                 cellSizeMeters, regionalElevation);
             regionalBedrock = regionalElevation;
