@@ -6,6 +6,26 @@ namespace PlanetForge.Infrastructure.Tests.Surface;
 public sealed class PlanetRegionalWatershedTests
 {
     [TestMethod]
+    [DataRow(5f)]
+    [DataRow(6f)]
+    [DataRow(12f)]
+    public void Build_RunoffCrossesChannelOnset_IncisionRemainsContinuous(float runoff)
+    {
+        const int center = 16 * 33 + 16;
+        var below = OneWetHillslopeSource(33, 1_000, runoff - 0.001f);
+        var above = OneWetHillslopeSource(33, 1_000, runoff + 0.001f);
+
+        Assert.IsLessThan(0.02f, Math.Abs(above.IncisionMeters[center] - below.IncisionMeters[center]),
+            "An arbitrarily small runoff change must not create a metre-scale channel-head step.");
+        Assert.IsGreaterThanOrEqualTo(below.IncisionMeters[center], above.IncisionMeters[center]);
+        if (runoff == 5f)
+        {
+            Assert.AreEqual(0f, below.IncisionMeters[center]);
+            Assert.IsLessThan(0.0001f, above.IncisionMeters[center]);
+        }
+    }
+
+    [TestMethod]
     public void Build_SameBedrockAndResolution_IsDeterministic()
     {
         var elevations = CreateMountainBasin(32, 24);

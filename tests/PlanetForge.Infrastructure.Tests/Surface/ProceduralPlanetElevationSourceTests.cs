@@ -8,6 +8,40 @@ namespace PlanetForge.Infrastructure.Tests.Surface;
 public sealed class ProceduralPlanetElevationSourceTests
 {
     [TestMethod]
+    [DataRow(24061984)]
+    [DataRow(346147916)]
+    [DataRow(579460630)]
+    public void SampleRegionalRockReliefMeters_NestedPhysicalWindows_ContainBoundedContinuousStructure(int seed)
+    {
+        var source = new ProceduralPlanetElevationSource();
+        var anchor = PlanetVector.Normalize(new PlanetVector(0.42242678262485306, 0.4821837720791227, -0.7674988099435489));
+        var frame = PlanetLocalFrame.Create(anchor, 6_371_000, 0);
+        foreach (var span in new[] { 128_000.0, 32_000.0, 8_000.0 })
+        {
+            var curvature = 0.0;
+            for (var y = -8; y <= 8; y++)
+            {
+                for (var x = -8; x <= 8; x++)
+                {
+                    var point = anchor * 6_371_000 + frame.East * (x * span / 16) + frame.North * (y * span / 16);
+                    double Height(PlanetVector p) => source.SampleRegionalRockReliefMeters(PlanetVector.Normalize(p), seed);
+                    var height = Height(point);
+                    Assert.AreEqual(height, Height(point));
+                    Assert.IsTrue(double.IsFinite(height) && Math.Abs(height) <= 620.001);
+                    Assert.IsLessThan(2.0, Math.Abs(height - Height(point + frame.East)),
+                        "A metre of travel must not cross an artificial bedrock seam.");
+                    var offset = frame.East * (span / 16);
+                    var secondDifference = Height(point - offset) - 2 * height + Height(point + offset);
+                    curvature += secondDifference * secondDifference;
+                }
+            }
+
+            Assert.IsGreaterThan(0.5, Math.Sqrt(curvature / 289),
+                $"The {span / 1_000} km window must contain actual bedrock structure beyond a planar slope.");
+        }
+    }
+
+    [TestMethod]
     public void SampleElevationMeters_SameDirectionAndSeed_IsDeterministic()
     {
         var source = new ProceduralPlanetElevationSource();

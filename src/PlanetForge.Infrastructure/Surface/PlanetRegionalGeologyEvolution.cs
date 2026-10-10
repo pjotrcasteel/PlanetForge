@@ -25,8 +25,8 @@ public sealed record PlanetRegionalGeologySnapshot(
 /// </summary>
 public static class PlanetRegionalGeologyEvolution
 {
-    // Version 2 uses unit-width hydraulic forcing and distance-based sediment settling.
-    public const int CurrentSchemaVersion = 2;
+    // Version 3 adds continuous hydraulic onset and canonical kilometre-scale bedrock.
+    public const int CurrentSchemaVersion = 3;
     public const int MaximumIterationsPerCall = 64;
 
     public static PlanetRegionalGeologySnapshot Initialize(

@@ -232,7 +232,7 @@ public sealed class PlanetRegionalWatershed
                 (cellSpacingMeters * (IsDiagonal(index, secondary, width) ? Math.Sqrt(2.0) : 1.0)));
             var slope = (primarySlope * (1.0 - secondaryPart)) + (alternateSlope * secondaryPart);
 
-            if (downstream >= 0 && specificAreaKilometers >= 6.0 && slope > 0.00001)
+            if (downstream >= 0 && specificAreaKilometers > 5.0 && slope > 0.00001)
             {
                 var streamPower = Math.Pow((specificAreaKilometers - 5.0) / 8.0, 0.43) *
                     Math.Pow(slope / 0.06, 0.42);
@@ -240,7 +240,11 @@ public sealed class PlanetRegionalWatershed
                 // One pass is an uncalibrated numerical iteration, not a
                 // geological era. A 180 m incision per pass generated 100 m
                 // of region-wide sediment export and grid-aligned cliffs.
-                incision[index] = (float)Math.Min(12.0, 24.0 * streamPower * erodibility);
+                // Apply onset AFTER the cap: otherwise even a tiny activation
+                // can immediately saturate and recreate a channel-head ledge.
+                var onset = Math.Clamp((specificAreaKilometers - 5.0) / 7.0, 0.0, 1.0);
+                onset = onset * onset * (3.0 - 2.0 * onset);
+                incision[index] = (float)(onset * Math.Min(12.0, 24.0 * streamPower * erodibility));
             }
 
             var removedVolume = incision[index] * cellArea;
