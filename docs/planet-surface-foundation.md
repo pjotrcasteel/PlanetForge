@@ -483,3 +483,42 @@ heights changed; the gameplay save schema remains unchanged.
 
 Real-world tectonic calibration, hydraulic grid convergence, visual geology
 quality, and neighbouring-region sediment exchange remain open research gates.
+
+ 
+## PF 0.0.37.15 — inherited erosion continuity across regional refinement
+
+The iPhone seed-24061984 captures show broad, nearly planar rock shelves
+bounded by unnatural sharp channel walls at 32 and especially 8 km. Increasing
+the research grid from 129² to 257² vertices samples virtually the same
+shelves because the problem is upstream of WebGL: the 8 km initial bedrock
+inherits physical parent cuts through a bilinear delta atlas at 1 km and
+125 m parent spacing. Bilinear parent interpolation is height-continuous but
+has abrupt slope breaks across every parent cell. Adding more 8 km vertices
+only samples those facets more densely.
+
+Parent erosion overlays now use separable, slope-continuous, shape-preserving
+cubic Hermite interpolation. This reconstruction preserves every exact parent
+height at registered vertices, creates no new extrema between parent samples,
+is independent of GPU mesh density, and retains the original smooth perimeter
+support blending. It does not add arbitrary noise or exaggerate relief.
+
+Within the experimental Hero solve, the conservative lateral-relaxation step
+now transfers existing erosion cuts across numerical cut/no-cut boundaries.
+Previously these edges were entirely protected, leaving one-cell vertical
+walls before valley widening. The existing riverbank solver then reasserts
+actual hydrologically routed valley geometry. The relaxation is conservative
+in signed physical metres, so these transfers add no new sediment export.
+The optional protected-edge mode remains available in the relaxation API.
+
+The canonical world generator and gameplay save formats are unchanged
+(generation identity 18). The research snapshot schema remains 5 because
+the serialized physical state and hydraulic equations have not changed;
+this milestone changes the interpretation of already-evolved *overlay*
+deltas in nested previews and their final Hero bank reconstruction. Expect
+the 128/32/8 km research previews to differ with the same seeds.
+
+Regression coverage requires nodal identity, slope continuity at inherited
+grid boundaries, no spurious ridges or trench overshoots, existing local
+mass accounting, and full mobile WebGL captures. These are numerical terrain
+quality improvements, not yet a validated geological erosion timescale.
+The 8 km realism and resolution-convergence gates remain open.

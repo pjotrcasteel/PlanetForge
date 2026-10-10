@@ -5,7 +5,7 @@ namespace PlanetForge.Infrastructure.Surface;
 /// <summary>
 /// Read-only, geographically anchored sample of a previously evolved regional height grid.
 /// Converts unit sphere directions to the same local tangent plane used when the region was
-/// sampled, then bilinearly interpolates the physical evolved-minus-original elevation.
+/// sampled, then interpolates physical evolved-minus-original elevation with shape-preserving C1 cubics.
 /// No hydrology or erosion computation occurs in SampleDeltaMeters.
 /// </summary>
 public sealed class PlanetRegionalGeologyOverlay
@@ -112,8 +112,24 @@ public sealed class PlanetRegionalGeologyOverlay
         var y0 = (int)Math.Floor(y);
         var tx = x - x0;
         var ty = y - y0;
-        var top = Lerp(elevationDeltaMeters[y0 * width + x0], elevationDeltaMeters[y0 * width + x0 + 1], tx);
-        var bottom = Lerp(elevationDeltaMeters[(y0 + 1) * width + x0], elevationDeltaMeters[(y0 + 1) * width + x0 + 1], tx);
+        // Bilinear delta reconstruction created four-sided planes and abrupt
+        // changes of slope at every inherited 1 km / 125 m grid line. The
+        // 8 km physical solve inherited these facets before routing could
+        // reshape them. A monotone cubic preserves every parent sample while
+        // joining the pieces with continuous tangents and no invented extrema.
+        Span<double> rows = stackalloc double[4];
+        for (var row = -1; row <= 2; row++)
+        {
+            var sampleY = Math.Clamp(y0 + row, 0, height - 1);
+            var offset = sampleY * width;
+            rows[row + 1] = InterpolateMonotone(
+                elevationDeltaMeters[offset + Math.Clamp(x0 - 1, 0, width - 1)],
+                elevationDeltaMeters[offset + x0],
+                elevationDeltaMeters[offset + x0 + 1],
+                elevationDeltaMeters[offset + Math.Clamp(x0 + 2, 0, width - 1)], tx);
+        }
+
+        var inheritedDelta = InterpolateMonotone(rows[0], rows[1], rows[2], rows[3], ty);
 
         // Isolated research regions have no neighbor solution yet. Explicitly fade them
         // to canonical bedrock at the border, preventing hard tile edges while retaining
@@ -121,10 +137,32 @@ public sealed class PlanetRegionalGeologyOverlay
         var marginX = Math.Min(x, width - 1.0 - x);
         var marginY = Math.Min(y, height - 1.0 - y);
         var fade = SmoothStep(marginX / BoundaryFadeCells) * SmoothStep(marginY / BoundaryFadeCells);
-        return (Lerp(top, bottom, ty), fade);
+        return (inheritedDelta, fade);
     }
 
-    private static double Lerp(double left, double right, double weight) => left + ((right - left) * weight);
+    /// <summary>
+    /// Shape-preserving cubic Hermite interpolation over one physical grid
+    /// interval. Harmonic mean tangents do not overshoot a monotone channel
+    /// cut or invent an isolated rock crest, and shared nodal tangents remain
+    /// identical between neighboring cells (C1 except at true extrema).
+    /// </summary>
+    private static double InterpolateMonotone(double before, double start, double end, double after, double fraction)
+    {
+        var previousSlope = start - before;
+        var intervalSlope = end - start;
+        var nextSlope = after - end;
+        var leftTangent = HarmonicTangent(previousSlope, intervalSlope);
+        var rightTangent = HarmonicTangent(intervalSlope, nextSlope);
+        var squared = fraction * fraction;
+        var cubed = squared * fraction;
+        return (2.0 * cubed - 3.0 * squared + 1.0) * start +
+            (cubed - 2.0 * squared + fraction) * leftTangent +
+            (-2.0 * cubed + 3.0 * squared) * end +
+            (cubed - squared) * rightTangent;
+    }
+
+    private static double HarmonicTangent(double first, double second) =>
+        first * second <= 0.0 ? 0.0 : 2.0 * first * second / (first + second);
 
     private static double SmoothStep(double value)
     {
