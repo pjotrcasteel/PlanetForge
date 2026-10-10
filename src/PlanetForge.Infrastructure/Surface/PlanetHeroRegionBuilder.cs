@@ -171,6 +171,18 @@ public sealed class PlanetHeroRegionBuilder(IPlanetElevationSource elevationSour
                     continue;
                 }
 
+                // The inspection camera is centered on this cell, not on the
+                // full quarter-scale neighborhood. A stream confined to the
+                // edge of that neighborhood can otherwise qualify an empty
+                // central shelf, creating the featureless 8 km screenshots.
+                var centralRadius = Math.Max(2, radius / 3);
+                var centralStreamCells = ChannelCount(x - centralRadius, y - centralRadius,
+                    x + centralRadius + 1, y + centralRadius + 1);
+                if (centralStreamCells < 3)
+                {
+                    continue;
+                }
+
                 var quadrants = 0;
                 if (ChannelCount(left, top, x, y) > 0) quadrants++;
                 if (ChannelCount(x + 1, top, right, y) > 0) quadrants++;
@@ -186,10 +198,11 @@ public sealed class PlanetHeroRegionBuilder(IPlanetElevationSource elevationSour
                 // an isolated channel win. Branch spread distinguishes a
                 // catchment from one very steep raster edge.
                 var continuity = Math.Clamp(streamCells / (radius * 2.0), 0.0, 1.0);
+                var centralContinuity = Math.Clamp(centralStreamCells / (centralRadius * 2.0), 0.0, 1.0);
                 var branching = (quadrants - 1) / 3.0;
                 var structure = (1.5 * nonPlanarRelief + 0.15 * (max - min)) *
-                    (0.45 + 0.35 * continuity + 0.20 * branching);
-                var score = structure + 80.0 * continuity + 60.0 * branching +
+                    (0.30 + 0.20 * continuity + 0.30 * centralContinuity + 0.20 * branching);
+                var score = structure + 50.0 * continuity + 100.0 * centralContinuity + 60.0 * branching +
                     Math.Min(cut, 60.0) * 0.25 + 6.0 * Math.Log2(1.0 + contributingKm2);
                 if (score > best)
                 {
