@@ -76,6 +76,20 @@ public sealed class PlanetGeologicalRegionCache
         }
     }
 
+    public bool Remove(PlanetGeologicalRegionId region, PlanetGeologicalEpoch epoch)
+    {
+        lock (gate)
+        {
+            if (!lookup.Remove((region, epoch), out var node))
+            {
+                return false;
+            }
+
+            recent.Remove(node);
+            return true;
+        }
+    }
+
     public void Clear()
     {
         lock (gate)

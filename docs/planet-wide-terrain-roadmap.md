@@ -1,6 +1,6 @@
 # PlanetForge — from Hero research tiles to one planetary terrain
 
-**Status:** A1 completed and deployed. A2 geological identity/checkpoint implementation in progress. The experimental mountain/valley work in draft PR #113 remains separate.
+**Status:** A1 and A2.1 completed and deployed. A2.2 adds IndexedDB archive storage and a conservative spatial index. Unreleased geological realism work remains isolated in draft PR #113.
 
 ## Decision
 
@@ -85,3 +85,19 @@ The first A2 slice keeps geographical identity in `PlanetGeologicalRegionId` (ca
 - Spatial indexing for large numbers of regions; the current atlas still scans each region per sampled vertex.
 - Deterministic edge ownership and neighboring sediment exchange are not implied by overlapping height fades.
 - Epoch simulation physics and actual moving plate/crust state belong to A2.5 and later; the epoch labels alone do not move continents.
+
+ 
+## A2.2 — IndexedDB durability and bounded region lookup
+
+- `IPlanetGeologicalRegionDocumentStore` is the asynchronous checkpoint document contract. `PlanetGeologicalRegionRepository` uses versioned, validated `PlanetGeologicalRegionArchive` JSON and the existing bounded defensive LRU cache. Durability completes **before** a write is inserted into memory. Reload checks that world, fixed region address and geological epoch match the requested key. Deletion removes both the durable document and its cache entry.
+- The browser registers `IndexedDbGeologicalRegionStore` in WebAssembly DI and persists each archive with an atomic IndexedDB transaction, isolated from gameplay saves. Reloading the same region and epoch can reconstruct identical geological heightfields with a newly created repository. The archive remains explicitly opt-in; opening PlanetForge does **not** publish research geology or auto-load every saved region.
+- **Safari Private Browsing may discard IndexedDB when the private session ends**. Browser storage can also be cleared or become quota-limited. Later import/export and explicit user-visible storage controls are required before long-term work is considered reliably backed up.
+- The `PlanetRegionalGeologySpatialIndex` creates immutable, seed-aware conservative buckets around each published region's spherical support cap. Each physical sample now checks the small bucket-specific candidate list instead of scanning every archived region worldwide. The cap includes the entire gnomonic support and perimeter fade, and per-layer source ordering is preserved so weighted overlap blending remains numerically unchanged. The index does not invent shared hydrology.
+- C# tests cover persistence across repository/cache recreation, no cache pollution on corrupt archives or failed writes, deletion by epoch, and index equivalence to a complete brute-force globe-wide scan including near-boundary and polar positions. A browser test writes two epochs to IndexedDB, reloads the page and verifies independent restoration/deletion.
+
+### What remains before A2 can be called complete
+
+- IndexedDB quota management, backup/export, and an explicit UI workflow for inspecting/restoring stored regions.
+- Demand-driven loading/eviction and streaming near the camera, with revision-aware sampling snapshots across asynchronous transitions (A3).
+- Exact edge ownership and inter-region physical sediment conservation (A4).
+- Orbital image sharpness: current reddish globe shows broad features but lacks clearly resolved mountain provinces at full-disc distance. Treat this as a separate **orbital LOD, normals and physical-relief quality gate**, not a reason to apply artificial shader-only mountains.
