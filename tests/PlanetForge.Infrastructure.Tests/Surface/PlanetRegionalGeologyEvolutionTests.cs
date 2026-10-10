@@ -16,7 +16,7 @@ public sealed class PlanetRegionalGeologyEvolutionTests
         heights[85] = 100_000f;
         Assert.AreEqual(original, state.ElevationMeters[85]);
         Assert.AreEqual(0, state.Iteration);
-        Assert.AreEqual(1, state.SchemaVersion);
+        Assert.AreEqual(2, state.SchemaVersion);
     }
 
     [TestMethod]
@@ -84,6 +84,7 @@ public sealed class PlanetRegionalGeologyEvolutionTests
     public void Restore_IncompatibleOrAlteredSnapshot_FailsSafely()
     {
         var original = PlanetRegionalGeologyEvolution.Initialize(1, "stable", 16, 16, 5000, MountainGrid(16, 16));
+        Assert.ThrowsExactly<ArgumentException>(() => PlanetRegionalGeologyEvolution.Restore(original with { SchemaVersion = 1 }));
         Assert.ThrowsExactly<ArgumentException>(() => PlanetRegionalGeologyEvolution.Restore(original with { SchemaVersion = 99 }));
         Assert.ThrowsExactly<ArgumentException>(() => PlanetRegionalGeologyEvolution.Restore(original with { CumulativeErodedVolumeCubicMeters = 9.0 }));
         Assert.ThrowsExactly<ArgumentException>(() => PlanetRegionalGeologyEvolution.Restore(original with { ElevationMeters = [float.NaN, .. original.ElevationMeters[1..]] }));

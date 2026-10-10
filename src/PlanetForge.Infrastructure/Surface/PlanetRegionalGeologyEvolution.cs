@@ -25,7 +25,8 @@ public sealed record PlanetRegionalGeologySnapshot(
 /// </summary>
 public static class PlanetRegionalGeologyEvolution
 {
-    public const int CurrentSchemaVersion = 1;
+    // Version 2 uses unit-width hydraulic forcing and distance-based sediment settling.
+    public const int CurrentSchemaVersion = 2;
     public const int MaximumIterationsPerCall = 64;
 
     public static PlanetRegionalGeologySnapshot Initialize(

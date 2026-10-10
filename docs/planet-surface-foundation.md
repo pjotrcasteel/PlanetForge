@@ -334,3 +334,65 @@ including quadrature at regional boundaries. Do not tune a visual tolerance or
 claim these numerical iterations represent a calibrated geological duration.
 Bedrock realism, multi-seed validation and mobile performance remain separate
 gates before applying evolved Hero terrain to the gameplay planet.
+
+## PF 0.0.37.11 — Unit-width hydraulic forcing and physical settling distance
+
+The hydraulic solve previously used total contributing area at a raster vertex
+to set erosion depth over the entire cell. On a smooth hillslope, halving cell
+width divides an equally supplied flow strip into two strips: each receives
+half the contributing area, but discharge per metre of contour is unchanged.
+Using the strip's total area for an areal erosion depth suppressed erosion on
+the refined grid. Transport capacity also scaled with cell area, and a fixed
+25% settling fraction was applied once per routing step regardless of length.
+
+The revised research model uses specific contributing area A / cell width,
+expressed in kilometres, for hydraulic forcing and activation. Transport
+capacity scales with flow width rather than cell area. Excess-load settling
+uses 1 - 0.75^(reach length / 1000 m × floodplain factor), weighted across the
+actual primary/secondary receiver lengths. For fixed slope and capacity, the
+uncapped attenuation composes over subdivisions of the same physical reach.
+The 1000 m reference keeps coefficients anchored to the original research grid;
+this is an explicit empirical approximation, not calibrated hydraulic time.
+The incision/deposition safety caps and sediment mass accounting remain.
+
+The unit-width approach follows the distinction between contributing area and
+specific catchment area in [GRASS r.watershed](https://grass.osgeo.org/grass85/manuals/r.watershed.html),
+and between area rates and width-integrated transport in
+[Harmon et al. (2019), r.sim.terrain](https://gmd.copernicus.org/articles/12/2837/2019/).
+PlanetForge is not implementing those models or adopting their calibration.
+The square-grid flow width is still approximated by cell spacing, so orientation
+and unresolved channel geometry require further work.
+
+Regression benchmarks sample identical 128 km surfaces at 129² and 257²:
+
+| Six iterations, hydraulic export | 129² km³ | 257² km³ | Difference relative to coarse |
+| --- | ---: | ---: | ---: |
+| Plane z = 1000 + 0.02y | 864.93 | 858.20 | 0.78% |
+| Oblique plane, plus 0.013x | 865.18 | 858.85 | 0.73% |
+| Parabolic catchment, plus 0.0000005(x - 64000)² | 907.79 | 894.38 | 1.48% |
+| Seed 24061984, existing Hero anchor | 794.92 | 742.61 | 6.58% |
+
+Here x and y range from 0 to 128000 metres. The old parabolic benchmark exported
+908.08 versus 784.64 km³ (13.59% difference), and the previous Hero hydraulic
+stage exported 795.34 versus 548.72 km³ (31.01%). Bank export remains separate:
+the revised Hero bank stage exports 28.23 versus 12.19 km³.
+
+Additional 65²/129²/257² tests use erodibility 0.005 to keep every cell below the
+12 m numerical incision cap. They require decreasing refinement error and
+within 5% bulk erosion agreement at the finest pair. This prevents saturation
+from concealing a failed discretization. The normal six-step benchmark requires
+within 3% export agreement and explicit sediment conservation. Equal unit-width
+runoff is tested separately below the cap.
+
+**Remaining limits:** concentrated boundary flows and deposition are not fully
+converged. For example, the uncapped oblique benchmark exports 1.896 versus
+2.102 km³ despite bulk erosion differing by only 2.8%. The Hero difference also
+still exceeds the analytic benchmark tolerance. Therefore the global evolution
+gate is not passed. Physical boundary quadrature, concentrated flow widths,
+regional exchange, multi-seed tests and mobile appearance remain future work.
+The broad bedrock morphology has not been redesigned by this solver change.
+
+Regional geology snapshot version advances to 2 so old numerical histories
+cannot silently resume under different evolution equations. Version 1 research
+snapshots must be regenerated from canonical bedrock. Gameplay save schemas are
+unchanged because the new solver remains in the terrain research workflow.
