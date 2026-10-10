@@ -456,3 +456,30 @@ advances to 4; existing schema 1–3 snapshots must be regenerated. The generato
 identity stays 17 because canonical bedrock is unchanged. The full erosion
 convergence and visual realism gates remain open: capped high-energy flows,
 receiver switching and boundary exchange may still create visible terraces.
+
+
+## PF 0.0.37.14 — continuous plate contacts and compact mobile Hero controls
+
+The iPhone 128 km Hero captures for seed 24061984 exposed a long, unnaturally
+straight dark scar. A verifiable geological discontinuity existed in the
+canonical plate kernel: at a Voronoi contact the two nearest plates swap
+primary/secondary roles, which previously changed the ordered ridge-noise
+seed and instantly switched mixed continental/coastal uplift factors. The
+same contact could therefore have different physical bedrock heights on its
+two sides, independent of erosion or shader effects.
+
+Tectonic relative motion and texture now use an unordered canonical plate
+pair. Continental and oceanic-side relief smoothly transition across signed
+nearest-plate separation in the existing warped tectonic field. Three seeded
+all-pairs regression suites cover all 18 plate identities, all four crust
+classifications, exact contact symmetry and near-contact continuity.
+
+The phone Hero toolbar uses two-column layouts for region/compare fields and
+actions, zoom controls stay paired, and detailed sediment metrics remain
+available behind a collapsed diagnostics control below a short live summary.
+No vertical exaggeration or shader height trick was added. Generation identity
+advances to 18 and regional research snapshots to schema 5 because canonical
+heights changed; the gameplay save schema remains unchanged.
+
+Real-world tectonic calibration, hydraulic grid convergence, visual geology
+quality, and neighbouring-region sediment exchange remain open research gates.
