@@ -62,13 +62,15 @@ public static class PlanetValleyBankCarver
             {
                 var center = y * width + x;
                 var runoff = accumulatedRunoff[center];
+                var drainageAreaSquareKilometers = runoff * spacingMeters * spacingMeters / 1_000_000.0;
                 var existingCut = original[center] - eroded[center];
-                if (runoff < 14.0f || existingCut < 4.0f)
+                // A fixed pixel-count threshold becomes 16x easier to meet
+                // when cell width halves. Tributary width and activation
+                // must respond to contributing *physical* drainage area.
+                if (drainageAreaSquareKilometers < 0.8 || existingCut < 4.0f)
                 {
                     continue;
                 }
-
-                var drainageAreaSquareKilometers = runoff * spacingMeters * spacingMeters / 1_000_000.0;
                 var physicalHalfWidth = 55.0 * Math.Pow(drainageAreaSquareKilometers, 0.38) + spacingMeters * 0.2;
                 var halfWidth = Math.Clamp(physicalHalfWidth, spacingMeters * 1.35, Math.Max(spacingMeters * 1.35, 1_400.0));
                 var radius = Math.Min(12, (int)Math.Ceiling(halfWidth * 1.8 / spacingMeters));
@@ -86,7 +88,7 @@ public static class PlanetValleyBankCarver
                     var headDrop = Math.Max(0.0, eroded[center] - eroded[receiver]);
                     var streamSlope = headDrop / reachMeters;
                     var streamEnergy = Math.Clamp((streamSlope - 0.04) / 0.08, 0.0, 1.0);
-                    var routedRunoff = Math.Clamp(Math.Sqrt(runoff / 80.0), 0.0, 1.0);
+                    var routedRunoff = Math.Clamp(Math.Sqrt(drainageAreaSquareKilometers / 80.0), 0.0, 1.0);
                     // The former 55%-of-one-cell head-drop rule could excavate
                     // hundreds of metres at a single 1 km raster vertex and
                     // form visible stair-steps. A reach can only retreat a small
