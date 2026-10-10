@@ -7,6 +7,7 @@ public sealed class PlanetSurfaceMeshCache(PlanetSurfaceMeshBuilder meshBuilder)
     private readonly Dictionary<CacheKey, PlanetSurfaceTileMesh> cache = [];
     private IReadOnlyList<PlanetTileId>? lastRequestedIds;
     private int? activeSeed;
+    private long? activeTerrainRevision;
     private int lastCellsPerAxis;
     private double lastPlanetRadiusMeters;
 
@@ -64,6 +65,7 @@ public sealed class PlanetSurfaceMeshCache(PlanetSurfaceMeshBuilder meshBuilder)
     {
         cache.Clear();
         activeSeed = null;
+        activeTerrainRevision = null;
         lastRequestedIds = null;
         lastCellsPerAxis = 0;
         lastPlanetRadiusMeters = 0.0;
@@ -142,13 +144,17 @@ public sealed class PlanetSurfaceMeshCache(PlanetSurfaceMeshBuilder meshBuilder)
 
     private void EnsureSeed(int seed)
     {
-        if (activeSeed == seed)
+        var terrainRevision = meshBuilder.TerrainRevision;
+        if (activeSeed == seed && activeTerrainRevision == terrainRevision)
         {
             return;
         }
 
+        // An atlas can change with the same seed. Old orbital meshes (and
+        // GPU reference-only payloads) must never survive a geology publish.
         cache.Clear();
         activeSeed = seed;
+        activeTerrainRevision = terrainRevision;
         lastRequestedIds = null;
         lastCellsPerAxis = 0;
         lastPlanetRadiusMeters = 0.0;

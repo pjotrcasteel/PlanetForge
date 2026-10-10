@@ -144,6 +144,30 @@ public sealed class PlanetExperienceSurfaceLodTests
     }
 
     [TestMethod]
+    public void UpdateSurfaceView_PublishedGeologyRevision_InvalidatesLocalMeshAtSameCameraAndSeed()
+    {
+        var source = new RevisionElevationSource();
+        var experience = CreateExperience(source);
+        var distance = 1.0 + (100.0 / EarthRadiusMeters);
+        var view = new PlanetSurfaceView(PlanetVector.UnitZ, distance, 1080, Math.PI / 4.2);
+        var before = experience.UpdateSurfaceView(view);
+        var reused = experience.UpdateSurfaceView(view);
+
+        Assert.IsNotNull(before.LocalSurface);
+        Assert.IsNotNull(reused.LocalSurface);
+        Assert.AreEqual(0, reused.LocalSurface.ElevationsMeters.Length);
+
+        source.Publish(120.0);
+        var changed = experience.UpdateSurfaceView(view);
+        Assert.IsNotNull(changed.LocalSurface);
+        Assert.IsGreaterThan(0, changed.LocalSurface.ElevationsMeters.Length,
+            "An updated global geology source must rebuild ground geometry even if the camera has not moved.");
+        Assert.AreNotEqual(before.TerrainRevision, changed.TerrainRevision,
+            "Browser layers must receive a new physical terrain revision for published geology.");
+        Assert.AreEqual(120.0, changed.LocalSurface.ElevationsMeters[0], 0.01);
+    }
+
+    [TestMethod]
     public void MoveLocalSurfaceAnchor_ChangesCanonicalAddressAndPreservesTravelDistance()
     {
         var experience = CreateExperience();
@@ -236,6 +260,20 @@ public sealed class PlanetExperienceSurfaceLodTests
         {
             SampleCount++;
             return 0.0;
+        }
+    }
+
+    private sealed class RevisionElevationSource : IPlanetElevationRevisionSource
+    {
+        private double height;
+        public long Revision { get; private set; }
+
+        public double SampleElevationMeters(PlanetVector direction, int seed) => height;
+
+        public void Publish(double elevationMeters)
+        {
+            height = elevationMeters;
+            Revision++;
         }
     }
 

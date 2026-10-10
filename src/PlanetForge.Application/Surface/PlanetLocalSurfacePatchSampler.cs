@@ -4,6 +4,8 @@ namespace PlanetForge.Application.Surface;
 
 public sealed class PlanetLocalSurfacePatchSampler(IPlanetElevationSource elevationSource)
 {
+    public IPlanetElevationSource ElevationSource { get; } = elevationSource;
+
     public PlanetLocalSurfacePatch Sample(
         PlanetVector anchorDirection,
         double patchSizeMeters,

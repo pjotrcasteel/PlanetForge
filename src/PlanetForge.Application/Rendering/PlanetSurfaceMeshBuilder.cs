@@ -13,6 +13,8 @@ public sealed class PlanetSurfaceMeshBuilder(PlanetSurfaceTileSampler tileSample
     {
     }
 
+    public long TerrainRevision => elevationSource is IPlanetElevationRevisionSource source ? source.Revision : 0;
+
     public PlanetSurfaceTileMesh BuildTile(PlanetTileId id, int cellsPerAxis, int seed, double planetRadiusMeters)
     {
         ValidatePlanetRadius(planetRadiusMeters);
