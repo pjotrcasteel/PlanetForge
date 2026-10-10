@@ -568,3 +568,18 @@ captures both full-region 32/8 km morphology and the close valley camera so
 we can audit the same framing used in the iPhone screenshots. Visual quality
 remains a manual release criterion until objective channel-morphology metrics
 are calibrated against independent examples.
+
+### Bedrock-first site ranking
+
+A second full-region visual audit still showed an 8 km tile dominated by
+almost planar rock and a few very steep artificial channels, despite passing
+the spatial channel-support gates. This exposed a more direct error: the
+nonplanar-terrain score sampled the *eroded* field, where artificial numerical
+cliffs appear more interesting than the actual pre-erosion mountain range.
+The site-ranking plane fit and rock relief now use `OriginalElevationMeters`,
+which already includes legitimately inherited parent strata. `CumulativeCutMeters`
+and physically accumulated runoff remain distinct qualifications, not proof
+of original rocky terrain. An adversarial regression with a huge numerical
+scar on flat rock and a separate connected ridge catchment protects the
+ranking against this confusion. Full-frame browser captures remain required
+before deployment; test success alone is not geological acceptance.
