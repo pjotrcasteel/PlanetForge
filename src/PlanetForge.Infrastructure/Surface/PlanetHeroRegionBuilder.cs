@@ -186,12 +186,16 @@ public sealed class PlanetHeroRegionBuilder(IPlanetElevationSource elevationSour
                     continue;
                 }
 
-                var quadrants = 0;
-                if (ChannelCount(left, top, x, y) > 0) quadrants++;
-                if (ChannelCount(x + 1, top, right, y) > 0) quadrants++;
-                if (ChannelCount(left, y + 1, x, bottom) > 0) quadrants++;
-                if (ChannelCount(x + 1, y + 1, right, bottom) > 0) quadrants++;
-                if (quadrants < 2)
+                // Count directional reach around the selected channel
+                // centre, not only diagonal quadrants. A real straight
+                // north-south stream may occupy exactly the centre column;
+                // ignoring that axis wrongly rejected the whole valley.
+                var directions = 0;
+                if (ChannelCount(left, top, right, y) > 0) directions++;
+                if (ChannelCount(left, y + 1, right, bottom) > 0) directions++;
+                if (ChannelCount(left, top, x, bottom) > 0) directions++;
+                if (ChannelCount(x + 1, top, right, bottom) > 0) directions++;
+                if (directions < 2)
                 {
                     continue;
                 }
@@ -209,7 +213,7 @@ public sealed class PlanetHeroRegionBuilder(IPlanetElevationSource elevationSour
 
                 var continuity = Math.Clamp(streamCells / (radius * 2.0), 0.0, 1.0);
                 var centralContinuity = Math.Clamp(centralStreamCells / (centralRadius * 2.0), 0.0, 1.0);
-                var branching = (quadrants - 1) / 3.0;
+                var branching = (directions - 2) / 2.0;
                 var score = rockStructure * (0.50 + 0.20 * continuity + 0.20 * centralContinuity + 0.10 * branching);
                 if (score > best)
                 {
