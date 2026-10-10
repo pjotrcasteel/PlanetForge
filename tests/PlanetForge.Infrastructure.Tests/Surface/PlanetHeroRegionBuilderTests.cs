@@ -131,6 +131,79 @@ public sealed class PlanetHeroRegionBuilderTests
     }
 
     [TestMethod]
+    public void FindIncisedChannelCell_RuggedCraterAndConnectedStream_PrefersLocalCatchment()
+    {
+        const int width = 65;
+        const double spacing = 125.0;
+        const int seed = 24061984;
+        var original = Enumerable.Repeat(1_500f, width * width).ToArray();
+        var after = (float[])original.Clone();
+        var runoff = new float[original.Length];
+
+        // The dry impact rim has substantially greater nonplanar relief and
+        // one deep routed headcut. That must not dominate a whole 8 km
+        // nested camera target when a branching catchment is also present.
+        for (var y = 10; y <= 28; y++)
+        {
+            for (var x = 10; x <= 28; x++)
+            {
+                var distance = Math.Sqrt((x - 19) * (x - 19) + (y - 19) * (y - 19));
+                var rim = 340.0 * Math.Exp(-Math.Pow((distance - 5.0) / 1.3, 2.0));
+                original[y * width + x] += (float)rim;
+                after[y * width + x] = original[y * width + x];
+            }
+        }
+
+        after[19 * width + 19] -= 180f;
+        runoff[19 * width + 19] = 900f;
+
+        // Two intersecting, physically routed reaches occupy the other side
+        // of the same geological region. No screen-space detail is involved.
+        for (var y = 30; y <= 55; y++)
+        {
+            var center = 44 + (int)Math.Round(2.0 * Math.Sin(y * 0.19));
+            for (var dx = -3; dx <= 3; dx++)
+            {
+                var i = y * width + center + dx;
+                original[i] += 55f * (1.0f - (float)Math.Exp(-dx * dx / 3.0));
+                after[i] = original[i];
+            }
+
+            var channel = y * width + center;
+            after[channel] -= 14f;
+            runoff[channel] = 85f;
+        }
+
+        for (var t = 0; t < 17; t++)
+        {
+            var x = 34 + t / 2;
+            var y = 36 + t;
+            var channel = y * width + x;
+            after[channel] = original[channel] - 10f;
+            runoff[channel] = 55f;
+        }
+
+        var cuts = original.Zip(after, (first, second) => first - second).ToArray();
+        var region = new PlanetHeroRegion(seed, width, spacing, original, after, cuts, runoff, 6, 8, 0, 0, 0);
+        var selected = PlanetHeroRegionBuilder.FindIncisedChannelCell(region);
+
+        Assert.IsGreaterThan(32, selected % width, "Select the branching valley, not the isolated crater rim.");
+        Assert.IsGreaterThan(29, selected / width, "The selected 8 km region must include the connected channels.");
+        Assert.AreEqual(selected, PlanetHeroRegionBuilder.FindIncisedChannelCell(region));
+    }
+
+    [TestMethod]
+    public void FindIncisedChannelCell_NoIncisedStreams_UsesStableCentralFallback()
+    {
+        const int width = 65;
+        var values = Enumerable.Repeat(1_500f, width * width).ToArray();
+        var region = new PlanetHeroRegion(24061984, width, 125.0, values, (float[])values.Clone(),
+            new float[values.Length], new float[values.Length], 6, 8, 0, 0, 0);
+
+        Assert.AreEqual(32 * width + 32, PlanetHeroRegionBuilder.FindIncisedChannelCell(region));
+    }
+
+    [TestMethod]
     public void CreateParentOverlay_NestedRegionInheritsPhysicalParentIncision()
     {
         const int width = 17;
