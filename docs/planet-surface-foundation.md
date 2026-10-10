@@ -647,3 +647,17 @@ low-frequency spatial warp instead of three independent 3D noise samples.
 This reduces the number of expensive sampled noise gradients while keeping
 canonical deterministic LOD identity. The visual and boot-performance
 gates both remain blocking until the new CI run and screenshot audit pass.
+
+ 
+### Subregional rock-crest cross-sections
+
+The first optimized CI passed 280 C# tests and all 13 browser tests, and
+the full 8 km render finally showed connected, recognizable landform relief.
+Its identical Gaussian crests at all scales still looked like swollen clay
+ribbons, so the local geological prior now retains its broad 5.5 km
+mountain shoulders but uses finite, more angular crest profiles at
+2.75/1.375/0.6875 km. The profile remains a continuous deterministic
+physical rock surface with a small regularizing radius, bounded heights
+and no vertical shader exaggeration. It is not a replacement for drainage
+geomorphology. Compare the second full-region CI screenshot with the first
+before accepting this milestone.
