@@ -31,6 +31,9 @@ public sealed class PlanetHeroRegionBuilderTests
                     result.CumulativeCutMeters[i]);
             }
 
+            Assert.AreEqual(result.ExportedVolumeCubicMeters,
+                result.HydraulicExportedVolumeCubicMeters + result.BankExportedVolumeCubicMeters,
+                Math.Max(1.0, result.ExportedVolumeCubicMeters * 1e-10));
             var sedimentBalance = result.ErodedVolumeCubicMeters -
                 result.DepositedVolumeCubicMeters - result.ExportedVolumeCubicMeters;
             Assert.IsLessThan(Math.Max(1.0, result.ErodedVolumeCubicMeters * 1e-5), Math.Abs(sedimentBalance));

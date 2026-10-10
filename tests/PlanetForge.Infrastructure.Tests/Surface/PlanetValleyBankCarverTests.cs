@@ -15,7 +15,7 @@ public sealed class PlanetValleyBankCarverTests
         for (var x = 8; x < width - 8; x++)
         {
             var channel = (width / 2) * width + x;
-            flow[channel] = 100;
+            flow[channel] = 1000;
             eroded[channel] -= 95;
         }
 
@@ -117,7 +117,7 @@ public sealed class PlanetValleyBankCarverTests
     }
 
     [TestMethod]
-    public void Apply_EquivalentPhysicalDrainageAreas_ActivateChannelsAtDifferentCellSizes()
+    public void Apply_UnresolvedPhysicalChannel_DoesNotWidenToReachAdjacentVertices()
     {
         const int width = 17;
         const int center = 8 * width + 8;
@@ -134,11 +134,79 @@ public sealed class PlanetValleyBankCarverTests
         var narrow = PlanetValleyBankCarver.Apply(original, eroded, fine, width, width, 100.0);
         var broad = PlanetValleyBankCarver.Apply(original, eroded, coarse, width, width, 500.0);
 
-        Assert.IsGreaterThan(0.0, narrow.AdditionalExportedSedimentCubicMeters);
-        Assert.IsGreaterThan(0.0, broad.AdditionalExportedSedimentCubicMeters,
-            "Physically identical drainage must not disappear only because a coarse grid has fewer cells.");
-        Assert.IsLessThan(original[center + 1], narrow.ElevationMeters[center + 1]);
-        Assert.IsLessThan(original[center + 1], broad.ElevationMeters[center + 1]);
+        // A 1 km² catchment has a 55 m half-width and <100 m shoulder
+        // support. Neither grid resolves an adjacent bank vertex.
+        CollectionAssert.AreEqual(eroded, narrow.ElevationMeters);
+        CollectionAssert.AreEqual(eroded, broad.ElevationMeters);
+        Assert.AreEqual(0.0, narrow.AdditionalExportedSedimentCubicMeters);
+        Assert.AreEqual(0.0, broad.AdditionalExportedSedimentCubicMeters);
+    }
+
+    [TestMethod]
+    public void Apply_SamePhysicalChannelAcrossResolutions_PreservesBankProfile()
+    {
+        foreach (var spacing in new[] { 1000.0, 500.0, 250.0, 125.0 })
+        {
+            var width = (int)(32_000 / spacing) + 1;
+            var original = Enumerable.Repeat(2000f, width * width).ToArray();
+            var eroded = (float[])original.Clone();
+            var runoff = new float[original.Length];
+            for (var y = 0; y < width; y++)
+            {
+                var channel = y * width + width / 2;
+                eroded[channel] -= 80;
+                runoff[channel] = (float)(800_000_000 / (spacing * spacing));
+            }
+
+            var result = PlanetValleyBankCarver.Apply(original, eroded, runoff, width, width, spacing);
+            var bank = (width / 2) * width + width / 2 + (int)(1000 / spacing);
+            var physicalHalfWidth = 55 * Math.Pow(800, 0.38);
+            var expectedCut = 80 * Math.Exp(-1.8 * Math.Pow(1000 / physicalHalfWidth, 2));
+            Assert.AreEqual(expectedCut, 2000 - result.ElevationMeters[bank], 0.001,
+                "The same point one kilometre from the same channel must retain the same bedrock height.");
+        }
+    }
+
+    [TestMethod]
+    public void Apply_ResolvedChannelRefinement_ConvergesToPhysicalCrossSectionVolume()
+    {
+        var volumes = new List<double>();
+        foreach (var width in new[] { 65, 129, 257 })
+        {
+            var spacing = 8000.0 / (width - 1);
+            var original = Enumerable.Repeat(2000f, width * width).ToArray();
+            var eroded = (float[])original.Clone();
+            var runoff = new float[original.Length];
+            for (var y = 0; y < width; y++)
+            {
+                var channel = y * width + width / 2;
+                eroded[channel] -= 80;
+                runoff[channel] = (float)(80_000_000 / (spacing * spacing));
+            }
+
+            var result = PlanetValleyBankCarver.Apply(original, eroded, runoff, width, width, spacing);
+            // Trapezoidal integration over the fixed 8 km region, including
+            // pre-existing incision: its sampled centreline area varies with spacing.
+            var volume = 0.0;
+            for (var y = 0; y < width; y++)
+            {
+                for (var x = 0; x < width; x++)
+                {
+                    var weight = (x == 0 || x == width - 1 ? 0.5 : 1.0) * (y == 0 || y == width - 1 ? 0.5 : 1.0);
+                    volume += (original[y * width + x] - result.ElevationMeters[y * width + x]) * spacing * spacing * weight;
+                }
+            }
+
+            volumes.Add(volume);
+        }
+
+        var analyticVolume = 8000 * 80 * 55 * Math.Pow(80, 0.38) * Math.Sqrt(Math.PI / 1.8);
+        // The shoulder kernel is truncated at 1.8 half-widths, whose omitted
+        // Gaussian tail is <0.1%; allow 1% for spatial quadrature and float heights.
+        foreach (var volume in volumes)
+        {
+            Assert.AreEqual(analyticVolume, volume, analyticVolume * 0.01);
+        }
     }
 
     [TestMethod]
@@ -260,7 +328,7 @@ public sealed class PlanetValleyBankCarverTests
         {
             var index = i * width + i;
             eroded[index] -= 100;
-            flow[index] = 125;
+            flow[index] = 1250;
         }
 
         var first = PlanetValleyBankCarver.Apply(original, eroded, flow, width, width, 250);

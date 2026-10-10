@@ -561,6 +561,7 @@
                 $"{result.ErosionIterations} hydraulic + {result.LateralRelaxationPasses} bank passes • " +
                 $"deepest cut {result.CumulativeCutMeters.Max():0} m • " +
                 $"sediment exported {result.ExportedVolumeCubicMeters / 1e9:0.00} km³ ({averageExportDepth:0.0} m equivalent depth) • " +
+                $"hydraulic export {result.HydraulicExportedVolumeCubicMeters / 1e9:0.00} km³ + bank export {result.BankExportedVolumeCubicMeters / 1e9:0.00} km³ • " +
                 $"talus relocated locally {result.HillslopeTransportedVolumeCubicMeters / 1e6:0.00} million m³ • " +
                 $"{result.HillslopeInitiallyUnstableEdges} unstable slope edges";
             if (heroSpanKilometers == 128)

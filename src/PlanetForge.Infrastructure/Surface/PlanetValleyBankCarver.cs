@@ -71,9 +71,13 @@ public static class PlanetValleyBankCarver
                 {
                     continue;
                 }
-                var physicalHalfWidth = 55.0 * Math.Pow(drainageAreaSquareKilometers, 0.38) + spacingMeters * 0.2;
-                var halfWidth = Math.Clamp(physicalHalfWidth, spacingMeters * 1.35, Math.Max(spacingMeters * 1.35, 1_400.0));
-                var radius = Math.Min(12, (int)Math.Ceiling(halfWidth * 1.8 / spacingMeters));
+                // Width is a property of the physical catchment. A minimum in pixels
+                // artificially broadens every coarse-grid channel; a pixel-radius
+                // cap truncates the same banks when the grid is refined.
+                var halfWidth = Math.Min(55.0 * Math.Pow(drainageAreaSquareKilometers, 0.38), 1_400.0);
+                // Include one receiver reach beyond the source's shoulder support.
+                // Bound the search by grid extent before converting to an integer.
+                var radius = (int)Math.Ceiling(Math.Min(Math.Max(width, height), halfWidth * 1.8 / spacingMeters + 1.0));
                 var receiver = downstreamIndices is null ? -1 : downstreamIndices[center];
                 var channelDepth = Math.Min(260.0, existingCut);
                 if (receiver >= 0)
