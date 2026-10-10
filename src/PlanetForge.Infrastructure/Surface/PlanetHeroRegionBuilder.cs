@@ -123,7 +123,10 @@ public sealed class PlanetHeroRegionBuilder(IPlanetElevationSource elevationSour
                     {
                         var sampleX = Math.Clamp(x + dx * step, 0, width - 1);
                         var sampleY = Math.Clamp(y + dy * step, 0, width - 1);
-                        var height = region.EvolvedElevationMeters[sampleY * width + sampleX];
+                        // Score parent rock structure, not the cliff-like
+                        // numerical erosion field. Routed cuts are used below
+                        // as hydrological evidence, not as a proxy for geology.
+                        var height = region.OriginalElevationMeters[sampleY * width + sampleX];
                         min = Math.Min(min, height);
                         max = Math.Max(max, height);
                         mean += height;
