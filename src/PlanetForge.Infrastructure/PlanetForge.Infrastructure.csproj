@@ -1,5 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <ItemGroup>
     <ProjectReference Include="../PlanetForge.Application/PlanetForge.Application.csproj" />
+    <InternalsVisibleTo Include="PlanetForge.Infrastructure.Tests" />
   </ItemGroup>
 </Project>
