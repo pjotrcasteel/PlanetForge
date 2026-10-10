@@ -115,7 +115,8 @@ public sealed class PlanetHeroRegionBuilderTests
             {
                 var index = y * width + x;
                 var fold = 100f * (float)(Math.Sin((x - 31) * 0.42) * Math.Cos((y - 31) * 0.46));
-                after[index] += fold - 8f;
+                before[index] += fold;
+                after[index] = before[index] - 8f;
                 cuts[index] = 8f;
                 runoff[index] = 15f;
             }
