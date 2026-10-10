@@ -71,7 +71,8 @@ public sealed class ProceduralPlanetElevationSourceTests
             var ridges = directions.Select(direction => source.SampleOrogenicRidgeReliefMeters(direction, seed)).ToArray();
             Assert.IsGreaterThan(30.0, ridges.Max(Math.Abs),
                 $"Seed {seed} lacks the shorter 5–25 km bedrock ridges.");
-            Assert.IsTrue(ridges.All(value => double.IsFinite(value) && Math.Abs(value) <= 223.001));
+            Assert.IsTrue(ridges.All(value => double.IsFinite(value) && value >= 0.0 && value <= 223.001),
+                "Finite rock spurs add only bounded rock mass; troughs belong to tectonic folding and erosion.");
 
             var index = Enumerable.Range(0, ridges.Length).MaxBy(i => Math.Abs(ridges[i]));
             var focus = directions[index];
@@ -80,6 +81,17 @@ public sealed class ProceduralPlanetElevationSourceTests
             var nearby = PlanetVector.Normalize(focus + PlanetVector.UnitY * (20.0 / 6_371_000.0));
             Assert.IsLessThan(8.0, Math.Abs(source.SampleOrogenicRidgeReliefMeters(nearby, seed) - ridges[index]),
                 "Twenty metres along the same mountain ridge cannot jump by several hundred metres.");
+
+            // The old short-wavelength cosine was an endless, evenly spaced
+            // stripe train. A genuine finite spur must vary substantially
+            // over 30–60 km instead of repeating the same profile indefinitely.
+            var transverse = PlanetVector.Normalize(PlanetVector.Cross(focus,
+                Math.Abs(focus.Y) < 0.9 ? PlanetVector.UnitY : PlanetVector.UnitX));
+            var nearbyHeights = new[] { -60_000.0, -30_000.0, 30_000.0, 60_000.0 }
+                .Select(distance => source.SampleOrogenicRidgeReliefMeters(
+                    PlanetVector.Normalize(focus + transverse * (distance / 6_371_000.0)), seed)).ToArray();
+            Assert.IsTrue(nearbyHeights.Any(value => Math.Abs(value - ridges[index]) > 2.0),
+                "A local tectonic spur cannot be uniform along its full surrounding landscape.");
         }
     }
 
