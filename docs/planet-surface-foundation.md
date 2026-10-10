@@ -237,3 +237,33 @@ the one canonical planet, not elevations according to zoom.
 Future work: objectively assess ridge/watershed alignment across multiple
 seeds, physically exchange sediment between regional boundaries, and
 use an erosion atlas only when it has seamless global geographical identity.
+
+
+## PF 0.0.37.8 — Mesoscale canonical mountain ridges and connected river reaches
+
+**Observation:** PF 0.0.37.7's iPhone screenshots showed ~3.6 km total
+elevation variation but an almost planar ridge, and the denser grid revealed
+disconnected grid-aligned tributary cuts. A large global elevation range does
+not guarantee meaningful 8–32 km structural relief.
+
+The same immutable orogenic arcs now produce secondary ~14–25 km and
+tertiary ~4.7–8.1 km physical-wavelength folds, in addition to the
+55–95 km primary fold trains. Local amplitudes are bounded and gradually
+fade with the tectonic envelope; these are approximations of compression
+fold structures, **not** erosion and not a screen-space noise shader.
+Every raster, globe tile and independent renderer samples the same
+canonical spherical location and thus exactly the same bedrock height.
+
+The hydraulic bank carver now excavates a continuous, physical corridor
+from each incised cell to its known downstream receiver. Previously a
+short local ellipse was stamped independently on each raster vertex,
+which formed dotted or stair-stepped cuts. New segment-shaped footprints
+follow diagonal receiver links too. Eroded volumes continue to be
+measured in cubic metres; no water or sediment is invented. The
+numerical hydraulics itself is still a research approximation.
+
+A visible version bump, seeded geographic continuity tests, connected
+flow-reach regression tests, and the existing 128/32/8 km browser tests
+gate this milestone. Realism, global sediment exchange, seamless erosion
+atlases and mobile budgets remain prerequisites for enabling expensive
+Hero evolution on the gameplay planet.
