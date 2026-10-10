@@ -105,8 +105,12 @@ public static class PlanetValleyBankCarver
                     // Smaller cells consequently evolve smaller headward steps.
                     var incrementalLimit = Math.Min(existingCut * 0.28, reachMeters * 0.06);
                     var headwardCut = Math.Min(incrementalLimit, headDrop * 0.2 * streamEnergy * routedRunoff) * activation;
+                    // Bank shoulder geometry is tapered, but the already-incised
+                    // river centreline must keep its original depth as the
+                    // baseline for headward retreat. Otherwise the shoulder
+                    // onset can erase a legitimate small incremental headcut.
+                    deepestCut[center] = Math.Max(deepestCut[center], Math.Min(340.0, existingCut + headwardCut));
                     channelDepth = Math.Min(340.0, channelDepth + headwardCut);
-                    deepestCut[center] = Math.Max(deepestCut[center], channelDepth);
                 }
                 var segmentEast = receiver < 0 ? 0.0 : (receiver % width - x) * spacingMeters;
                 var segmentNorth = receiver < 0 ? 0.0 : (receiver / width - y) * spacingMeters;
