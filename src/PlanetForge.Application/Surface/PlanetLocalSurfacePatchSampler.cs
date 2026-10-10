@@ -17,7 +17,7 @@ public sealed class PlanetLocalSurfacePatchSampler(IPlanetElevationSource elevat
         Validate(patchSizeMeters, cellsPerAxis, planetRadiusMeters);
         cancellationToken.ThrowIfCancellationRequested();
         var normalizedAnchor = PlanetVector.Normalize(anchorDirection);
-        var anchorElevationMeters = elevationSource.SampleElevationMeters(normalizedAnchor, seed);
+        var anchorElevationMeters = ElevationSource.SampleElevationMeters(normalizedAnchor, seed);
         var frame = PlanetLocalFrame.Create(normalizedAnchor, planetRadiusMeters, anchorElevationMeters);
         var pointsPerAxis = cellsPerAxis + 1;
         var points = new PlanetLocalSurfacePoint[pointsPerAxis * pointsPerAxis];
@@ -32,7 +32,7 @@ public sealed class PlanetLocalSurfacePatchSampler(IPlanetElevationSource elevat
             {
                 var eastMeters = ToLocalCoordinate(x, cellsPerAxis, patchSizeMeters, halfSizeMeters);
                 var direction = ProjectToSurfaceDirection(normalizedAnchor, frame, eastMeters, northMeters, planetRadiusMeters);
-                var elevationMeters = elevationSource.SampleElevationMeters(direction, seed);
+                var elevationMeters = ElevationSource.SampleElevationMeters(direction, seed);
                 var worldPositionMeters = direction * (planetRadiusMeters + elevationMeters);
                 var localPosition = frame.ToLocal(worldPositionMeters);
                 points[(y * pointsPerAxis) + x] = new PlanetLocalSurfacePoint(direction, elevationMeters, localPosition);
