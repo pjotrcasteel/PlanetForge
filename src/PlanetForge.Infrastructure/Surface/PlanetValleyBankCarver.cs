@@ -100,10 +100,9 @@ public static class PlanetValleyBankCarver
                     channelDepth = Math.Min(340.0, channelDepth + headwardCut);
                     deepestCut[center] = Math.Max(deepestCut[center], channelDepth);
                 }
-                var directionX = receiver < 0 ? 0.0 : receiver % width - x;
-                var directionY = receiver < 0 ? 0.0 : receiver / width - y;
-                var directionLength = Math.Sqrt(directionX * directionX + directionY * directionY);
-                var alongHalfWidth = Math.Max(spacingMeters * 0.9, Math.Min(halfWidth * 0.65, spacingMeters * 2.0));
+                var segmentEast = receiver < 0 ? 0.0 : (receiver % width - x) * spacingMeters;
+                var segmentNorth = receiver < 0 ? 0.0 : (receiver / width - y) * spacingMeters;
+                var segmentLengthSquared = segmentEast * segmentEast + segmentNorth * segmentNorth;
 
                 for (var dy = -radius; dy <= radius; dy++)
                 {
@@ -123,9 +122,13 @@ public static class PlanetValleyBankCarver
 
                         var east = dx * spacingMeters;
                         var north = dy * spacingMeters;
-                        var normalizedDistanceSquared = directionLength > 0.0
-                            ? DirectionalDistanceSquared(east, north, directionX / directionLength,
-                                directionY / directionLength, halfWidth, alongHalfWidth)
+                        // Rock is cut along the entire upstream-to-downstream
+                        // receiver reach, not as disconnected elliptical scars
+                        // centered on each routed raster vertex. Projection
+                        // onto the segment is continuous across diagonal links.
+                        var normalizedDistanceSquared = segmentLengthSquared > 0.0
+                            ? DistanceToSegmentSquared(east, north, segmentEast, segmentNorth,
+                                segmentLengthSquared, halfWidth)
                             : (east * east + north * north) / (halfWidth * halfWidth);
                         if (normalizedDistanceSquared > 3.24)
                         {
@@ -153,12 +156,13 @@ public static class PlanetValleyBankCarver
         return new Result(output, extraRemoved * spacingMeters * spacingMeters);
     }
 
-    private static double DirectionalDistanceSquared(
-        double east, double north, double eastFlow, double northFlow,
-        double acrossHalfWidth, double alongHalfWidth)
+    private static double DistanceToSegmentSquared(double east, double north,
+        double segmentEast, double segmentNorth, double segmentLengthSquared, double halfWidth)
     {
-        var across = (north * eastFlow - east * northFlow) / acrossHalfWidth;
-        var along = (east * eastFlow + north * northFlow) / alongHalfWidth;
-        return across * across + along * along;
+        var progress = Math.Clamp((east * segmentEast + north * segmentNorth) /
+            segmentLengthSquared, 0.0, 1.0);
+        var acrossEast = (east - progress * segmentEast) / halfWidth;
+        var acrossNorth = (north - progress * segmentNorth) / halfWidth;
+        return acrossEast * acrossEast + acrossNorth * acrossNorth;
     }
 }

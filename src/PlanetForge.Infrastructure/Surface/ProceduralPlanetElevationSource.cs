@@ -87,7 +87,8 @@ public sealed class ProceduralPlanetElevationSource : IPlanetElevationSource
         // Fold crests and intervening troughs follow the already established
         // orogenic arcs over tens of kilometres. They are real canonical
         // elevation in metres, not an independent local Hero detail shader.
-        var foldRelief = orogenicStructure.FoldReliefMeters * landMask / MaximumLandElevationMeters;
+        var foldRelief = (orogenicStructure.FoldReliefMeters + orogenicStructure.RidgeReliefMeters) *
+            landMask / MaximumLandElevationMeters;
         var normalized = crust + uplift + terrain - incisions + impacts + foldRelief + (coastFine * shoreMask * 0.024);
 
         if (normalized < 0.0)
@@ -114,6 +115,17 @@ public sealed class ProceduralPlanetElevationSource : IPlanetElevationSource
         return SampleOrogenicSystems(macroDirection, seed, boundaryNoise).FoldReliefMeters;
     }
 
+    /// <summary>
+    /// Canonical 4–24 km structural ridge relief shared by orbital, regional
+    /// and local sampling; no mesh-dependent displacement.
+    /// </summary>
+    public double SampleOrogenicRidgeReliefMeters(PlanetVector direction, int seed)
+    {
+        var macroDirection = WarpDirection(direction, seed ^ WarpSeedSalt, 0.29, 1.16);
+        var boundaryNoise = FractalNoise(direction, seed ^ BoundarySeedSalt, 4.2, 3, 2.05, 0.49);
+        return SampleOrogenicSystems(macroDirection, seed, boundaryNoise).RidgeReliefMeters;
+    }
+
     private OrogenicStructure SampleOrogenicSystems(PlanetVector direction, int seed, double distortion)
     {
         // The arc geometry is immutable for a seed; calculating it once avoids hundreds of
@@ -126,6 +138,7 @@ public sealed class ProceduralPlanetElevationSource : IPlanetElevationSource
         var arcs = orogenicArcs.GetOrAdd(seed, BuildOrogenicArcs);
         var strongest = 0.0;
         var foldSum = 0.0;
+        var ridgeSum = 0.0;
         var foldWeight = 0.0;
 
         foreach (var arc in arcs)
@@ -161,12 +174,28 @@ public sealed class ProceduralPlanetElevationSource : IPlanetElevationSource
                 (0.23 * Math.Sin(alongMeters / 61_000.0 - arc.FoldPhase * 0.7));
             var alongStrength = 0.82 + 0.18 * Math.Cos(alongMeters / 210_000.0 + arc.FoldPhase);
             foldSum += Math.Cos(phase) * 230.0 * alongStrength * envelope * envelope;
+
+            // The previous finest source ridges varied hundreds of km apart.
+            // These secondary and tertiary fold trains are shorter geological
+            // structures, not detail noise added according to camera distance.
+            // Their cross-belt ridges curve along the same tectonic arc.
+            var secondaryWavelength = arc.FoldWavelengthMeters * 0.26; // 14–25 km
+            var tertiaryWavelength = arc.FoldWavelengthMeters * 0.085; // 4.7–8.1 km
+            var phaseBend = 0.65 * Math.Sin(alongMeters / 52_000.0 + arc.FoldPhase) +
+                0.31 * Math.Sin(alongMeters / 19_000.0 - arc.FoldPhase);
+            var secondaryPhase = 2.0 * Math.PI * crossMeters / secondaryWavelength + phaseBend;
+            var tertiaryPhase = 2.0 * Math.PI * crossMeters / tertiaryWavelength + phaseBend * 1.7;
+            var alongVariation = 0.72 + 0.28 * Math.Cos(alongMeters / 35_000.0 + arc.FoldPhase);
+            ridgeSum += (Math.Cos(secondaryPhase) * 185.0 +
+                Math.Cos(tertiaryPhase) * 38.0) * alongVariation * envelope * envelope;
             foldWeight += envelope;
         }
 
-        // Multiple intersecting belts blend rather than adding crests or
-        // jumping at the winning-arc boundary. Magnitude stays <=230 m.
-        return new OrogenicStructure(strongest, foldSum / Math.Max(1.0, foldWeight));
+        // Multiple intersecting belts blend smoothly; neither elevation
+        // depends on raster resolution. The two envelopes bound canonical
+        // tectonic deformation to 230m + 223m respectively before masking.
+        var normalization = Math.Max(1.0, foldWeight);
+        return new OrogenicStructure(strongest, foldSum / normalization, ridgeSum / normalization);
     }
 
     private static OrogenicArc[] BuildOrogenicArcs(int seed)
@@ -432,7 +461,7 @@ public sealed class ProceduralPlanetElevationSource : IPlanetElevationSource
         return t * t * (3.0 - (2.0 * t));
     }
 
-    private readonly record struct OrogenicStructure(double Envelope, double FoldReliefMeters);
+    private readonly record struct OrogenicStructure(double Envelope, double FoldReliefMeters, double RidgeReliefMeters);
 
     private readonly record struct OrogenicArc(
         PlanetVector Normal, PlanetVector Center, PlanetVector Start, PlanetVector Tangent,

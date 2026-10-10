@@ -62,6 +62,28 @@ public sealed class ProceduralPlanetElevationSourceTests
     }
 
     [TestMethod]
+    public void SampleOrogenicRidgeReliefMeters_MultiscaleMountainsRemainContinuousAndSeedDeterministic()
+    {
+        var source = new ProceduralPlanetElevationSource();
+        foreach (var seed in new[] { 24061984, 346147916, 579460630 })
+        {
+            var directions = FibonacciDirections(2_048).ToArray();
+            var ridges = directions.Select(direction => source.SampleOrogenicRidgeReliefMeters(direction, seed)).ToArray();
+            Assert.IsGreaterThan(30.0, ridges.Max(Math.Abs),
+                $"Seed {seed} lacks the shorter 5–25 km bedrock ridges.");
+            Assert.IsTrue(ridges.All(value => double.IsFinite(value) && Math.Abs(value) <= 223.001));
+
+            var index = Enumerable.Range(0, ridges.Length).MaxBy(i => Math.Abs(ridges[i]));
+            var focus = directions[index];
+            Assert.AreEqual(ridges[index], source.SampleOrogenicRidgeReliefMeters(focus, seed));
+
+            var nearby = PlanetVector.Normalize(focus + PlanetVector.UnitY * (20.0 / 6_371_000.0));
+            Assert.IsLessThan(8.0, Math.Abs(source.SampleOrogenicRidgeReliefMeters(nearby, seed) - ridges[index]),
+                "Twenty metres along the same mountain ridge cannot jump by several hundred metres.");
+        }
+    }
+
+    [TestMethod]
     public void SampleTerrainFields_OrientedFoldRelief_IsSharedByAlignedPhysicalHeroSamples()
     {
         var source = new ProceduralPlanetElevationSource();
