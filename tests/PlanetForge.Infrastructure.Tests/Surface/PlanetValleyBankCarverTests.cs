@@ -5,6 +5,65 @@ namespace PlanetForge.Infrastructure.Tests.Surface;
 [TestClass]
 public sealed class PlanetValleyBankCarverTests
 {
+
+    [TestMethod]
+    [DataRow(0.8)]
+    [DataRow(1.6)]
+    [DataRow(2.4)]
+    public void Apply_DrainageAreaCrossesBankOnset_NoAbruptShoulderShelf(double drainageAreaKm2)
+    {
+        const int width = 33;
+        const int center = 16 * width + 16;
+        const int shoulder = center + 1;
+        const double spacing = 50.0;
+        var original = Enumerable.Repeat(2_000f, width * width).ToArray();
+        var eroded = (float[])original.Clone();
+        eroded[center] -= 100f;
+
+        float ShoulderCut(double area)
+        {
+            var runoff = new float[original.Length];
+            runoff[center] = (float)(area * 1_000_000.0 / (spacing * spacing));
+            var result = PlanetValleyBankCarver.Apply(original, eroded, runoff, width, width, spacing);
+            return original[shoulder] - result.ElevationMeters[shoulder];
+        }
+
+        var before = ShoulderCut(drainageAreaKm2 - 0.0001);
+        var after = ShoulderCut(drainageAreaKm2 + 0.0001);
+        Assert.IsLessThan(0.05f, Math.Abs(after - before),
+            "A sub-hectare change in catchment area must not create a new riverbank ledge.");
+        Assert.IsGreaterThanOrEqualTo(before, after);
+        Assert.IsGreaterThanOrEqualTo(0f, before);
+    }
+
+    [TestMethod]
+    [DataRow(0.0)]
+    [DataRow(4.0)]
+    [DataRow(8.0)]
+    public void Apply_PreexistingCutCrossesBankOnset_NoAbruptShoulderShelf(double channelCutMeters)
+    {
+        const int width = 33;
+        const int center = 16 * width + 16;
+        const int shoulder = center + 1;
+        var original = Enumerable.Repeat(2_000f, width * width).ToArray();
+        var runoff = new float[original.Length];
+        runoff[center] = 2_000f; // 5 km² at 50 m spacing, well above the area onset.
+
+        float ShoulderCut(double cut)
+        {
+            var eroded = (float[])original.Clone();
+            eroded[center] -= (float)Math.Max(0.0, cut);
+            return original[shoulder] -
+                PlanetValleyBankCarver.Apply(original, eroded, runoff, width, width, 50.0).ElevationMeters[shoulder];
+        }
+
+        var before = ShoulderCut(channelCutMeters - 0.001);
+        var after = ShoulderCut(channelCutMeters + 0.001);
+        Assert.IsLessThan(0.05f, Math.Abs(after - before),
+            "An infinitesimal change in existing erosion must not suddenly widen a bank.");
+        Assert.IsGreaterThanOrEqualTo(before, after);
+    }
+
     [TestMethod]
     public void Apply_RoutedIncision_CreatesActualValleyShouldersAndAccountsForAllExcavation()
     {
