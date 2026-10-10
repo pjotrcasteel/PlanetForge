@@ -90,7 +90,12 @@ public sealed class ProceduralPlanetElevationSource : IPlanetElevationSource
         var foldRelief = (orogenicStructure.FoldReliefMeters + orogenicStructure.RidgeReliefMeters) *
             landMask / MaximumLandElevationMeters;
         var regionalRock = SampleRegionalRockReliefMeters(direction, seed) * mountainBelt * landMask / MaximumLandElevationMeters;
-        var normalized = crust + uplift + terrain - incisions + impacts + foldRelief + regionalRock + (coastFine * shoreMask * 0.024);
+        // Distinct 5.5–0.69 km rock ridges are part of the same canonical
+        // geology sampled by the globe, research Hero and gameplay LODs.
+        // They are never a renderer-only detail texture or extra noise per zoom.
+        var localRock = SampleLocalMountainReliefMeters(direction, seed) * mountainBelt * landMask / MaximumLandElevationMeters;
+        var normalized = crust + uplift + terrain - incisions + impacts + foldRelief + regionalRock + localRock +
+            (coastFine * shoreMask * 0.024);
 
         if (normalized < 0.0)
         {
@@ -155,6 +160,42 @@ public sealed class ProceduralPlanetElevationSource : IPlanetElevationSource
             relief += (2.0 * ridge * ridge - 1.0) * amplitude;
             wavelength *= 0.5;
             amplitude *= 0.5;
+        }
+
+        return relief;
+    }
+
+    /// <summary>
+    /// Physical subregional bedrock: finite-amplitude, warped ridge branches
+    /// at 5.5, 2.75, 1.375 and 0.6875 km. The field is deterministic in
+    /// spherical world metres, is bounded independently of mesh density and
+    /// has no 2D tile boundary or periodic fold repetition. Geological uplift
+    /// is gated by the tectonic mountain envelope at the call site.
+    /// </summary>
+    public double SampleLocalMountainReliefMeters(PlanetVector direction, int seed)
+    {
+        var point = PlanetVector.Normalize(direction) * PlanetRadiusMeters;
+        // Low-amplitude 3D warp prevents a visible alignment to integer
+        // lattice axes while retaining physical locality across all LODs.
+        var warped = point + new PlanetVector(
+            ValueNoise(point.X / 11_000.0, point.Y / 11_000.0, point.Z / 11_000.0, seed ^ RegionalSeedSalt),
+            ValueNoise(point.Y / 11_000.0, point.Z / 11_000.0, point.X / 11_000.0, seed ^ ProvinceSeedSalt),
+            ValueNoise(point.Z / 11_000.0, point.X / 11_000.0, point.Y / 11_000.0, seed ^ DetailSeedSalt)) * 650.0;
+
+        var relief = 0.0;
+        var wavelength = 5_500.0;
+        var amplitude = 155.0;
+        for (var octave = 0; octave < 4; octave++)
+        {
+            var signal = ValueNoise(warped.X / wavelength, warped.Y / wavelength, warped.Z / wavelength,
+                unchecked(seed ^ (BasinSeedSalt + octave * 1637)));
+            // A zero contour gives a branching ridge crest, not a rounded
+            // positive noise blob. Smooth narrow rock shoulders add hills and
+            // intervening passes without synthesizing hydrologic channels.
+            var crest = Math.Exp(-signal * signal / 0.055);
+            relief += amplitude * (1.70 * crest - 0.75);
+            amplitude *= 0.51;
+            wavelength *= 0.5;
         }
 
         return relief;
