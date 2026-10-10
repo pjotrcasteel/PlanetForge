@@ -193,11 +193,21 @@ public sealed class ProceduralPlanetElevationSource : IPlanetElevationSource
         {
             var signal = ValueNoise(warped.X / wavelength, warped.Y / wavelength, warped.Z / wavelength,
                 unchecked(seed ^ (BasinSeedSalt + octave * 1637)));
-            // A zero contour gives a branching ridge crest, not a rounded
-            // positive noise blob. Smooth narrow rock shoulders add hills and
-            // intervening passes without synthesizing hydrologic channels.
-            var crest = Math.Exp(-signal * signal / 0.055);
-            relief += amplitude * (1.70 * crest - 0.75);
+            // Broad 5.5 km tectonic shoulders grade into narrower, sharper
+            // rock crests at the next scales. Applying the same Gaussian to
+            // all four levels made valleys look like inflated clay tubes.
+            // A softly regularized absolute-value crest is height-continuous,
+            // has steep flanks and avoids an unbounded mathematical cusp.
+            if (octave == 0)
+            {
+                var shoulder = Math.Exp(-signal * signal / 0.055);
+                relief += amplitude * (1.70 * shoulder - 0.75);
+            }
+            else
+            {
+                var narrowCrest = Math.Max(0.0, 1.0 - Math.Sqrt(signal * signal + 0.0009));
+                relief += amplitude * (1.45 * narrowCrest * narrowCrest * narrowCrest - 0.55);
+            }
             amplitude *= 0.51;
             wavelength *= 0.5;
         }
