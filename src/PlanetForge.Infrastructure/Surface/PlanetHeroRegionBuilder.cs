@@ -196,17 +196,21 @@ public sealed class PlanetHeroRegionBuilder(IPlanetElevationSource elevationSour
                     continue;
                 }
 
-                // Counted length is normalized by the physical window rather
-                // than raw vertex count. Extra mesh samples cannot alone make
-                // an isolated channel win. Branch spread distinguishes a
-                // catchment from one very steep raster edge.
+                // The rock itself must be interesting. Runoff, cut depth,
+                // reach length and quadrant spread prove the site is a useful
+                // catchment but cannot manufacture geological structure.
+                // Large additive flow bonuses used to select flat bedrock with
+                // one numerically excavated cliff over a genuinely varied ridge.
+                var rockStructure = 1.5 * nonPlanarRelief + 0.15 * (max - min);
+                if (rockStructure < 1.0)
+                {
+                    continue;
+                }
+
                 var continuity = Math.Clamp(streamCells / (radius * 2.0), 0.0, 1.0);
                 var centralContinuity = Math.Clamp(centralStreamCells / (centralRadius * 2.0), 0.0, 1.0);
                 var branching = (quadrants - 1) / 3.0;
-                var structure = (1.5 * nonPlanarRelief + 0.15 * (max - min)) *
-                    (0.30 + 0.20 * continuity + 0.30 * centralContinuity + 0.20 * branching);
-                var score = structure + 50.0 * continuity + 100.0 * centralContinuity + 60.0 * branching +
-                    Math.Min(cut, 60.0) * 0.25 + 6.0 * Math.Log2(1.0 + contributingKm2);
+                var score = rockStructure * (0.50 + 0.20 * continuity + 0.20 * centralContinuity + 0.10 * branching);
                 if (score > best)
                 {
                     best = score;
