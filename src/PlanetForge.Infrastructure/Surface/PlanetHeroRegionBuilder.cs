@@ -207,11 +207,14 @@ public sealed class PlanetHeroRegionBuilder(IPlanetElevationSource elevationSour
         var initial = PlanetRegionalGeologyEvolution.Initialize(seed, key, gridWidth, gridWidth, spacing, original);
         var evolved = PlanetRegionalGeologyEvolution.Advance(initial, erosionIterations,
             cancellationToken: cancellationToken, erodibilityCellWeights: erodibility);
-        // Hydraulic flow is discrete at the research grid resolution. Redistributing
-        // its already-computed cut/fill field conservatively approximates lateral
-        // bank retreat without applying fake shader displacement to the preview.
+        // Riverbed routing is discrete, but leaving cut-to-uncut edges entirely
+        // protected turned neighboring 1 km / 125 m physical cells into vertical
+        // escarpments. Redistribute cut and fill conservatively across those
+        // numerical boundaries first; actual routed water then excavates the
+        // channel shoulders in the following bank-carving step. Canonical
+        // bedrock is never smoothed or rendered with shader displacement.
         var relaxedElevation = PlanetLateralErosionRelaxation.Apply(original, evolved.ElevationMeters, gridWidth, gridWidth,
-            preserveIncisionEdges: true);
+            preserveIncisionEdges: false);
         var finalWatershed = PlanetRegionalWatershed.Build(gridWidth, gridWidth, spacing, relaxedElevation);
         // Hydraulically routed tributaries excavate lateral bank shoulders into the
         // actual mesh. Excavated material is currently exported at this research
