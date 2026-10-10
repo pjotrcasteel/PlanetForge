@@ -36,6 +36,21 @@ public sealed class PlanetRegionalGeologyOverlay
         elevationDeltaMeters = deltaMeters;
     }
 
+    // A conservative spherical cap encloses the entire gnomonic rectangle.
+    // Only for spatial prefiltering; the true rectangular support and fade
+    // are still determined by SampleWeightedDeltaMeters.
+    internal PlanetVector CenterDirection => center;
+    internal double SupportChordRadius
+    {
+        get
+        {
+            var halfX = ((width - 1) * 0.5) * cellSpacingMeters / planetRadiusMeters;
+            var halfY = ((height - 1) * 0.5) * cellSpacingMeters / planetRadiusMeters;
+            var radial = Math.Sqrt(1.0 + halfX * halfX + halfY * halfY);
+            return Math.Sqrt(2.0 * (1.0 - 1.0 / radial));
+        }
+    }
+
     public int Seed { get; }
     public string RegionKey { get; }
     public int Width => width;

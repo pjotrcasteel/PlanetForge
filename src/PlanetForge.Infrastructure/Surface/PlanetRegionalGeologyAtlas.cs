@@ -16,7 +16,7 @@ namespace PlanetForge.Infrastructure.Surface;
 public sealed class PlanetRegionalGeologyAtlas : IPlanetElevationSource
 {
     private readonly IPlanetElevationSource canonicalElevation;
-    private readonly PlanetRegionalGeologyOverlay[][] layers;
+    private readonly PlanetRegionalGeologySpatialIndex[] indexes;
 
     public PlanetRegionalGeologyAtlas(IPlanetElevationSource canonicalElevation, params PlanetRegionalGeologyOverlay[][] layers)
     {
@@ -24,7 +24,7 @@ public sealed class PlanetRegionalGeologyAtlas : IPlanetElevationSource
         ArgumentNullException.ThrowIfNull(layers);
 
         this.canonicalElevation = canonicalElevation;
-        this.layers = new PlanetRegionalGeologyOverlay[layers.Length][];
+        indexes = new PlanetRegionalGeologySpatialIndex[layers.Length];
         for (var index = 0; index < layers.Length; index++)
         {
             var regions = layers[index] ?? throw new ArgumentException("Geological layers cannot be null.", nameof(layers));
@@ -49,18 +49,18 @@ public sealed class PlanetRegionalGeologyAtlas : IPlanetElevationSource
                 }
             }
 
-            this.layers[index] = (PlanetRegionalGeologyOverlay[])regions.Clone();
+            indexes[index] = new PlanetRegionalGeologySpatialIndex(regions);
         }
     }
 
     public double SampleElevationMeters(PlanetVector direction, int seed)
     {
         var elevation = canonicalElevation.SampleElevationMeters(direction, seed);
-        foreach (var layer in layers)
+        foreach (var index in indexes)
         {
             var weightedDelta = 0.0;
             var combinedWeight = 0.0;
-            foreach (var region in layer)
+            foreach (var region in index.Candidates(direction, seed))
             {
                 var sample = region.SampleWeightedDeltaMeters(direction, seed);
                 weightedDelta += sample.DeltaMeters * sample.Weight;

@@ -477,3 +477,41 @@ test('OrbitalZoom_RequestsHigherLodAndRestoresCoarseGlobe', async ({ page }, tes
   expect(restored.tileCount).toBe(24);
   await expect(page.locator('.terrain-detail-hud')).toBeHidden();
 });
+
+
+test('GeologicalRegionStore_IndexedDbPersistsPerPlanetEpochAndSurvivesReload', async ({ page }) => {
+  await page.goto('/?visualTest=1');
+  const key = 'planetforge/geology/v1/G18:S24061984:F4:L5:X14:Y18/YBP:50000000';
+  const other = 'planetforge/geology/v1/G18:S24061984:F4:L5:X14:Y18/YBP:0';
+  try {
+    await page.evaluate(async ({ key, other }) => {
+      const storage = await import('./js/geologicalRegionStore.js');
+      await storage.saveArchive(key, '{"region":"past","elevation":1234}');
+      await storage.saveArchive(other, '{"region":"present","elevation":1300}');
+    }, { key, other });
+    await page.reload();
+    const restored = await page.evaluate(async ({ key, other }) => {
+      const storage = await import('./js/geologicalRegionStore.js');
+      return { past: await storage.loadArchive(key), present: await storage.loadArchive(other) };
+    }, { key, other });
+    expect(restored.past).toBe('{"region":"past","elevation":1234}');
+    expect(restored.present).toBe('{"region":"present","elevation":1300}');
+    await page.evaluate(async key => {
+      const storage = await import('./js/geologicalRegionStore.js');
+      await storage.deleteArchive(key);
+    }, key);
+    expect(await page.evaluate(async key => {
+      const storage = await import('./js/geologicalRegionStore.js');
+      return await storage.loadArchive(key);
+    }, key)).toBeNull();
+    expect(await page.evaluate(async key => {
+      const storage = await import('./js/geologicalRegionStore.js');
+      return await storage.loadArchive(key);
+    }, other)).toBe('{"region":"present","elevation":1300}');
+  } finally {
+    await page.evaluate(async keys => {
+      const storage = await import('./js/geologicalRegionStore.js');
+      await Promise.all(keys.map(key => storage.deleteArchive(key)));
+    }, [key, other]).catch(() => {});
+  }
+});
