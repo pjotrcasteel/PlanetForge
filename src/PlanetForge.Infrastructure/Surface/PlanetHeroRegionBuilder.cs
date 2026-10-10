@@ -145,7 +145,10 @@ public sealed class PlanetHeroRegionBuilder(IPlanetElevationSource elevationSour
                     {
                         var sampleX = Math.Clamp(x + dx * step, 0, width - 1);
                         var sampleY = Math.Clamp(y + dy * step, 0, width - 1);
-                        var height = region.EvolvedElevationMeters[sampleY * width + sampleX];
+                        // Keep the residual and fitted plane in the same
+                        // original-rock elevation field. Mixing this with
+                        // evolved heights made a numeric cliff look rugged.
+                        var height = region.OriginalElevationMeters[sampleY * width + sampleX];
                         var residual = height - (mean + horizontalSlope * dx + verticalSlope * dy);
                         residualSum += residual * residual;
                     }
