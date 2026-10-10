@@ -161,6 +161,7 @@
     private bool heroShowFullRegion;
     private bool heroShowDrainage = true;
     private readonly CancellationTokenSource cancellation = new();
+    private string heroSiteSummary = string.Empty;
     private PlanetVector? heroAnchor;
     private PlanetVector? heroFocusAnchor;
     private PlanetVector? heroMicroAnchor;
@@ -268,36 +269,60 @@
 
             await module.InvokeVoidAsync("drawTerrainLab", cancellation.Token, MapWidth, MapHeight, crust, tectonic, mountains, elevations);
 
-            // Select a real high-relief location rather than placing decorative rivers.
-            // This is deterministic for the seed and remains stable through regeneration.
-            var centerX = 0;
-            var centerY = 0;
-            var highestRelief = double.NegativeInfinity;
+            // A global 256×128 pixel contains hundreds of square kilometres.
+            // Its steepest pixel may be a single crater wall or a smooth
+            // escarpment. First shortlist geographically separated highland
+            // candidates, then sample each *real* 128 km canonical surface.
+            var rankedSites = new List<(double Score, int X, int Y)>();
             for (var y = 1; y < MapHeight - 1; y++)
             {
                 for (var x = 1; x < MapWidth - 1; x++)
                 {
                     var i = y * MapWidth + x;
-                    var gradient = Math.Abs(elevations[i + 1] - elevations[i - 1]) +
-                        Math.Abs(elevations[i + MapWidth] - elevations[i - MapWidth]);
-                    var relief = Math.Max(0, elevations[i]) * (gradient + 50.0) *
-                        (0.5 + Math.Max(0.0, mountains[i]));
-                    if (relief <= highestRelief)
+                    if (elevations[i] <= 200f)
                     {
                         continue;
                     }
 
-                    highestRelief = relief;
-                    centerX = x;
-                    centerY = y;
+                    var gradient = Math.Abs(elevations[i + 1] - elevations[i - 1]) +
+                        Math.Abs(elevations[i + MapWidth] - elevations[i - MapWidth]);
+                    var uplift = Math.Max(0.0, mountains[i]);
+                    var broadScore = elevations[i] * (gradient + 50.0) * (0.5 + uplift);
+                    var ridgeScore = elevations[i] * 200.0 * uplift;
+                    rankedSites.Add((Math.Max(broadScore, ridgeScore), x, y));
                 }
             }
 
-            var anchorLatitude = Math.PI * (0.5 - (centerY + 0.5) / MapHeight);
-            var anchorLongitude = 2.0 * Math.PI * (centerX + 0.5) / MapWidth;
-            var anchor = new PlanetVector(Math.Cos(anchorLatitude) * Math.Cos(anchorLongitude),
-                Math.Sin(anchorLatitude), Math.Cos(anchorLatitude) * Math.Sin(anchorLongitude));
+            var selectedCoordinates = new List<(int X, int Y)>();
+            var candidates = new List<PlanetHeroSiteSelector.Candidate>();
+            foreach (var site in rankedSites.OrderByDescending(site => site.Score))
+            {
+                var separated = selectedCoordinates.All(other =>
+                    (Math.Min(Math.Abs(site.X - other.X), MapWidth - Math.Abs(site.X - other.X)) >= 5) ||
+                    (Math.Abs(site.Y - other.Y) >= 4));
+                if (!separated)
+                {
+                    continue;
+                }
+
+                selectedCoordinates.Add((site.X, site.Y));
+                var latitude = Math.PI * (0.5 - (site.Y + 0.5) / MapHeight);
+                var longitude = 2.0 * Math.PI * (site.X + 0.5) / MapWidth;
+                var center = new PlanetVector(Math.Cos(latitude) * Math.Cos(longitude),
+                    Math.Sin(latitude), Math.Cos(latitude) * Math.Sin(longitude));
+                candidates.Add(new PlanetHeroSiteSelector.Candidate(center,
+                    mountains[site.Y * MapWidth + site.X]));
+                if (candidates.Count >= 16)
+                {
+                    break;
+                }
+            }
+
+            var selectedSite = PlanetHeroSiteSelector.Select(Elevation, selectedSeed, candidates,
+                cancellationToken: cancellation.Token);
+            var anchor = selectedSite.Center;
             heroAnchor = anchor;
+            heroSiteSummary = $"site rock relief {selectedSite.ReliefMeters:0} m • non-planar terrain {selectedSite.NonPlanarReliefMeters:0} m RMS";
             var referenceElevation = Elevation.SampleElevationMeters(anchor, selectedSeed);
             var localFrame = PlanetLocalFrame.Create(anchor, ReferencePlanetRadiusMeters, referenceElevation);
             var regionalElevation = new float[RegionSize * RegionSize];
@@ -536,6 +561,10 @@
                 $"sediment exported {result.ExportedVolumeCubicMeters / 1e9:0.00} km³ ({averageExportDepth:0.0} m equivalent depth) • " +
                 $"talus relocated locally {result.HillslopeTransportedVolumeCubicMeters / 1e6:0.00} million m³ • " +
                 $"{result.HillslopeInitiallyUnstableEdges} unstable slope edges";
+            if (heroSpanKilometers == 128)
+            {
+                heroStatus += $" • {heroSiteSummary}";
+            }
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
