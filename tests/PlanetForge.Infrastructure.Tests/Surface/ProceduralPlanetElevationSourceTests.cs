@@ -53,6 +53,68 @@ public sealed class ProceduralPlanetElevationSourceTests
     [DataRow(24061984)]
     [DataRow(346147916)]
     [DataRow(579460630)]
+    public void SampleLocalMountainReliefMeters_AtEightKilometers_HasPhysicalRidgesIndependentOfLod(int seed)
+    {
+        var source = new ProceduralPlanetElevationSource();
+        var anchor = PlanetVector.Normalize(new PlanetVector(0.42242678262485306, 0.4821837720791227, -0.7674988099435489));
+        var frame = PlanetLocalFrame.Create(anchor, 6_371_000.0, 0.0);
+        var min = double.PositiveInfinity;
+        var max = double.NegativeInfinity;
+        var curvature = 0.0;
+        const double spacing = 500.0;
+
+        double Sample(double eastMeters, double northMeters)
+        {
+            var direction = PlanetVector.Normalize(anchor * 6_371_000.0 +
+                frame.East * eastMeters + frame.North * northMeters);
+            return source.SampleLocalMountainReliefMeters(direction, seed);
+        }
+
+        for (var y = -8; y <= 8; y++)
+        {
+            for (var x = -8; x <= 8; x++)
+            {
+                var east = x * spacing;
+                var north = y * spacing;
+                var rock = Sample(east, north);
+                Assert.AreEqual(rock, Sample(east, north), "Canonical bedrock must replay exactly.");
+                Assert.IsTrue(double.IsFinite(rock) && rock >= -222.0 && rock <= 281.0);
+                Assert.IsLessThan(5.0, Math.Abs(rock - Sample(east + 1.0, north)),
+                    "One metre cannot cross a discontinuous rock shelf.");
+                min = Math.Min(min, rock);
+                max = Math.Max(max, rock);
+                var secondDifference = Sample(east - spacing, north) - 2.0 * rock + Sample(east + spacing, north);
+                curvature += secondDifference * secondDifference;
+            }
+        }
+
+        Assert.IsGreaterThan(12.0, max - min,
+            "An 8 km local grid should resolve actual mountain crests, not only a planar inherited slope.");
+        Assert.IsGreaterThan(0.5, Math.Sqrt(curvature / (17 * 17)),
+            "Subregional rock must have meaningful physical curvature at 500 m, without shader displacement.");
+    }
+
+    [TestMethod]
+    public void SampleElevationMeters_LocalMountainRidges_HaveExactCanonicalCoarseFineIdentity()
+    {
+        var source = new ProceduralPlanetElevationSource();
+        var anchor = PlanetVector.Normalize(new PlanetVector(0.42242678262485306, 0.4821837720791227, -0.7674988099435489));
+        var coarse = new PlanetHeroRegionBuilder(source).Build(anchor, 24061984, 17, 8_000.0, 1);
+        var fine = new PlanetHeroRegionBuilder(source).Build(anchor, 24061984, 33, 8_000.0, 1);
+        for (var y = 0; y < coarse.Width; y++)
+        {
+            for (var x = 0; x < coarse.Width; x++)
+            {
+                Assert.AreEqual(coarse.OriginalElevationMeters[y * coarse.Width + x],
+                    fine.OriginalElevationMeters[(2 * y) * fine.Width + 2 * x]);
+            }
+        }
+    }
+
+    [TestMethod]
+    [DataRow(24061984)]
+    [DataRow(346147916)]
+    [DataRow(579460630)]
     public void SampleRegionalRockReliefMeters_NestedPhysicalWindows_ContainBoundedContinuousStructure(int seed)
     {
         var source = new ProceduralPlanetElevationSource();

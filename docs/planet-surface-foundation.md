@@ -522,3 +522,142 @@ grid boundaries, no spurious ridges or trench overshoots, existing local
 mass accounting, and full mobile WebGL captures. These are numerical terrain
 quality improvements, not yet a validated geological erosion timescale.
 The 8 km realism and resolution-convergence gates remain open.
+
+ 
+## PF 0.0.37.16 — nested inspection targets connected catchments
+
+The first PF 0.0.37.15 mobile captures confirm fewer inherited polygonal
+facets at 32 km, but the 8 km region still lands on a large smooth shelf with
+one circular bowl and narrow steep trenches. The physical heightfield was not
+invented by the renderer. Selection from 32 → 8 km was the next root cause:
+the parent focus rewarded high RMS nonplanar rock relief far more heavily than
+the presence of an actual connected fluvial network, so a sharp crater rim
+or single scar could win despite poorly resolved surrounding drainage.
+
+The focus selector now builds an O(n²) summed-area field of physical runoff
+and existing incision. For each candidate, its quarter-scale 8/32 km
+neighborhood must contain a minimum count of actually routed channel cells
+and reach at least two cardinal directions (including channels on the centre axes). A branch-spread score then
+distinguishes branching catchments from one isolated cliff, while a
+multi-kilometre best-fit plane residual retains geological ridge diversity.
+The support threshold uses drainage area in km², not raw runoff-cell counts,
+and the channel-support score is normalized by the chosen physical window.
+
+Synthetic regressions place an unusually rugged dry crater and a connected
+two-tributary channel system in the same regional world. Only the connected
+catchment should be selected for local detail. An entirely dry region retains
+a stable central fallback. Generation identity remains 18; canonical
+elevation, hydraulic sediment volumes, gameplay save schema, and research
+snapshot schema 5 are unchanged. Only the nested research-camera geography
+changes. Browser regressions continue validating 128/32/8 km physical solves.
+
+This does not establish that the underlying 8 km erosion physics is now
+realistic. Remaining gates: high-energy incision caps, raster routing
+convergence, sediment transfer across regional boundaries, and convincing
+multiseed mountain/river morphology.
+
+### Visual audit gate
+
+The first 0.0.37.16 candidate passed 275 C# and 13 browser checks, but
+inspecting its 8 km *close-camera* CI screenshots still showed broad smooth
+rock and isolated cuts. It was not merged on test success alone. The local
+focus now also requires routed channel support within the central third of
+the quarter-scale window, and the evaluation weights this camera-visible
+continuity separately from channels near the outer edge. The browser suite
+captures both full-region 32/8 km morphology and the close valley camera so
+we can audit the same framing used in the iPhone screenshots. Visual quality
+remains a manual release criterion until objective channel-morphology metrics
+are calibrated against independent examples.
+
+### Bedrock-first site ranking
+
+A second full-region visual audit still showed an 8 km tile dominated by
+almost planar rock and a few very steep artificial channels, despite passing
+the spatial channel-support gates. This exposed a more direct error: the
+nonplanar-terrain score sampled the *eroded* field, where artificial numerical
+cliffs appear more interesting than the actual pre-erosion mountain range.
+The site-ranking plane fit and rock relief now use `OriginalElevationMeters`,
+which already includes legitimately inherited parent strata. `CumulativeCutMeters`
+and physically accumulated runoff remain distinct qualifications, not proof
+of original rocky terrain. An adversarial regression with a huge numerical
+scar on flat rock and a separate connected ridge catchment protects the
+ranking against this confusion. Full-frame browser captures remain required
+before deployment; test success alone is not geological acceptance.
+
+### Centreline continuity check
+
+The new bedrock-first adversarial test revealed a qualification bug: a straight
+channel passing directly through the selected centreline is not necessarily
+present in two diagonal quadrants. The focus selector now counts four
+cardinal reaches excluding only the centrepoint. Two-direction continuity
+suffices for a through-channel, with three/four directions providing a small
+branching bonus. This preserves physically plausible straight tributaries
+without allowing runoff quantity to outweigh pre-existing rock structure.
+
+### Consistent geological residuals
+
+A focused test caught a subtle bug in the bedrock-first revision: the first
+5×5 sampling loop fitted its plane to inherited `OriginalElevationMeters`, but
+the second loop still computed residuals from `EvolvedElevationMeters`. The
+mismatch makes simulated erosion itself appear as enormous rock ruggedness.
+Both passes now use the identical original geological field, while hydraulic
+cut/runoff remain separate qualification inputs.
+
+ 
+### PF 0.0.37.16 — canonical 0.69–5.5 km mountain relief
+
+The visual gate on bedrock-first site selection remained failed: full-frame
+8 km tiles still showed mostly smooth hill flanks and isolated deep hydraulic
+trenches. The geological generator produced bounded finite ranges and
+32–2 km rock structure, but did not have a distinctive physical mountain
+network at the 1 km scale. Refining 129² to 257² exposed that absence;
+extra vertices cannot create source morphology.
+
+The canonical spherical elevation source now contains another bounded,
+warped crest-and-pass field at 5.5, 2.75, 1.375 and 0.6875 km. It uses
+nonperiodic continuous three-dimensional world-metre coordinates and the
+existing tectonic mountain envelope. Its ridges are physical source rock,
+not water, shader displacement, grid-cell noise or an LOD-specific layer.
+The field is deliberately amplitude-limited to approximately -221 to
++281 metres **before** tectonic land masking, so it cannot erase global
+land/water separation or create enormous local spikes. Its four octave
+wavelengths describe potential subregional uplift and lithological rock
+structure, not calibrated erosion or river flow.
+
+Changing canonical heights advances generation identity 18 -> 19 and
+research snapshot schema 5 -> 6. Domain/gameplay save schema itself
+remains unchanged. Regression checks cover 8 km local crest structure,
+one-metre continuity, seed determinism, exact shared source-rock vertices
+between 17² and 33² meshes, plus full 128/32/8 km browser visual tests.
+Do not promote this research branch merely for passing build and tests:
+the physical 8 km before/after images must have recognizable intersecting
+ridges, realistic scale and no isolated industrial-looking trenches. Rivers,
+lakes, oceans and climate remain separate physical models, to integrate
+after credible exposed geology.
+
+ 
+### Canonical ridge sampling performance gate
+
+The first mountain-detail candidate passed 280 C# regressions and 12/13
+browser tests, but the first-world boot test exceeded its 15 second
+readiness check. Rather than increasing the timeout, the source now skips
+the expensive sub-kilometre ridge calculations outside a smoothly gated
+tectonic mountain envelope (including oceans) and uses one coordinated
+low-frequency spatial warp instead of three independent 3D noise samples.
+This reduces the number of expensive sampled noise gradients while keeping
+canonical deterministic LOD identity. The visual and boot-performance
+gates both remain blocking until the new CI run and screenshot audit pass.
+
+ 
+### Subregional rock-crest cross-sections
+
+The first optimized CI passed 280 C# tests and all 13 browser tests, and
+the full 8 km render finally showed connected, recognizable landform relief.
+Its identical Gaussian crests at all scales still looked like swollen clay
+ribbons, so the local geological prior now retains its broad 5.5 km
+mountain shoulders but uses finite, more angular crest profiles at
+2.75/1.375/0.6875 km. The profile remains a continuous deterministic
+physical rock surface with a small regularizing radius, bounded heights
+and no vertical shader exaggeration. It is not a replacement for drainage
+geomorphology. Compare the second full-region CI screenshot with the first
+before accepting this milestone.

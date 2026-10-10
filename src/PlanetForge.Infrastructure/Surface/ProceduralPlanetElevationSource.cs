@@ -90,7 +90,18 @@ public sealed class ProceduralPlanetElevationSource : IPlanetElevationSource
         var foldRelief = (orogenicStructure.FoldReliefMeters + orogenicStructure.RidgeReliefMeters) *
             landMask / MaximumLandElevationMeters;
         var regionalRock = SampleRegionalRockReliefMeters(direction, seed) * mountainBelt * landMask / MaximumLandElevationMeters;
-        var normalized = crust + uplift + terrain - incisions + impacts + foldRelief + regionalRock + (coastFine * shoreMask * 0.024);
+        // Distinct 5.5–0.69 km rock ridges are part of the same canonical
+        // geology sampled by the globe, research Hero and gameplay LODs.
+        // They are never a renderer-only detail texture or extra noise per zoom.
+        // Skip expensive sub-kilometre ridge sampling where the continuous
+        // mountain envelope is effectively zero (notably most ocean tiles).
+        // Smooth activation keeps the coast/upland transition free of seams.
+        var localRockSupport = mountainBelt * landMask;
+        var localRock = localRockSupport <= 0.015 ? 0.0 :
+            SampleLocalMountainReliefMeters(direction, seed) * localRockSupport *
+            SmoothStep(0.015, 0.11, localRockSupport) / MaximumLandElevationMeters;
+        var normalized = crust + uplift + terrain - incisions + impacts + foldRelief + regionalRock + localRock +
+            (coastFine * shoreMask * 0.024);
 
         if (normalized < 0.0)
         {
@@ -155,6 +166,50 @@ public sealed class ProceduralPlanetElevationSource : IPlanetElevationSource
             relief += (2.0 * ridge * ridge - 1.0) * amplitude;
             wavelength *= 0.5;
             amplitude *= 0.5;
+        }
+
+        return relief;
+    }
+
+    /// <summary>
+    /// Physical subregional bedrock: finite-amplitude, warped ridge branches
+    /// at 5.5, 2.75, 1.375 and 0.6875 km. The field is deterministic in
+    /// spherical world metres, is bounded independently of mesh density and
+    /// has no 2D tile boundary or periodic fold repetition. Geological uplift
+    /// is gated by the tectonic mountain envelope at the call site.
+    /// </summary>
+    public double SampleLocalMountainReliefMeters(PlanetVector direction, int seed)
+    {
+        var point = PlanetVector.Normalize(direction) * PlanetRadiusMeters;
+        // Low-amplitude 3D warp prevents a visible alignment to integer
+        // lattice axes while retaining physical locality across all LODs.
+        var offset = ValueNoise(point.X / 11_000.0, point.Y / 11_000.0, point.Z / 11_000.0, seed ^ RegionalSeedSalt) * 650.0;
+        var warped = point + new PlanetVector(offset, -offset * 0.61, offset * 0.37);
+
+        var relief = 0.0;
+        var wavelength = 5_500.0;
+        var amplitude = 155.0;
+        for (var octave = 0; octave < 4; octave++)
+        {
+            var signal = ValueNoise(warped.X / wavelength, warped.Y / wavelength, warped.Z / wavelength,
+                unchecked(seed ^ (BasinSeedSalt + octave * 1637)));
+            // Broad 5.5 km tectonic shoulders grade into narrower, sharper
+            // rock crests at the next scales. Applying the same Gaussian to
+            // all four levels made valleys look like inflated clay tubes.
+            // A softly regularized absolute-value crest is height-continuous,
+            // has steep flanks and avoids an unbounded mathematical cusp.
+            if (octave == 0)
+            {
+                var shoulder = Math.Exp(-signal * signal / 0.055);
+                relief += amplitude * (1.70 * shoulder - 0.75);
+            }
+            else
+            {
+                var narrowCrest = Math.Max(0.0, 1.0 - Math.Sqrt(signal * signal + 0.0009));
+                relief += amplitude * (1.45 * narrowCrest * narrowCrest * narrowCrest - 0.55);
+            }
+            amplitude *= 0.51;
+            wavelength *= 0.5;
         }
 
         return relief;

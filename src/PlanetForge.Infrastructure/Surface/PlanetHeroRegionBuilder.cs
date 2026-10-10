@@ -56,8 +56,9 @@ public sealed class PlanetHeroRegionBuilder(IPlanetElevationSource elevationSour
     /// Selects a physical nested catchment rather than the deepest isolated
     /// eroded pixel. Each potential child center is scored against a 5×5
     /// sampling of the surrounding quarter-scale landscape. Subtracting the
-    /// best-fit local plane distinguishes actual branching bedrock morphology
-    /// from a uniformly sloping escarpment or a single raster-step scar.
+    /// best-fit local plane measures nonplanar structure; the final choice also
+    /// requires a physically connected, routed channel neighborhood so a
+    /// single incised crater rim cannot win merely through large relief.
     /// </summary>
     public static int FindIncisedChannelCell(PlanetHeroRegion region)
     {
@@ -67,8 +68,35 @@ public sealed class PlanetHeroRegionBuilder(IPlanetElevationSource elevationSour
         var radius = Math.Max(2, (width - 1) / 8);
         var step = Math.Max(1, radius / 2);
         var selected = (width / 2) * width + (width / 2);
+        var fallback = selected;
         var best = double.NegativeInfinity;
+        var fallbackBest = double.NegativeInfinity;
         var areaPerCellKm2 = region.CellSpacingMeters * region.CellSpacingMeters / 1_000_000.0;
+        var stride = width + 1;
+        var channelIntegral = new int[stride * stride];
+
+        // Count real incised and routed stream cells in physical neighborhoods.
+        // A summed-area table avoids rescanning an 8/32 km basin for each
+        // candidate, including on the optional 257² iPhone research grid.
+        for (var y = 1; y <= width; y++)
+        {
+            var rowCount = 0;
+            for (var x = 1; x <= width; x++)
+            {
+                var index = (y - 1) * width + x - 1;
+                var drainageKm2 = region.AccumulatedRunoffCells[index] * areaPerCellKm2;
+                if (region.CumulativeCutMeters[index] >= 0.5f && drainageKm2 >= 0.2)
+                {
+                    rowCount++;
+                }
+
+                channelIntegral[y * stride + x] = channelIntegral[(y - 1) * stride + x] + rowCount;
+            }
+        }
+
+        int ChannelCount(int left, int top, int right, int bottom) =>
+            channelIntegral[bottom * stride + right] - channelIntegral[top * stride + right] -
+            channelIntegral[bottom * stride + left] + channelIntegral[top * stride + left];
 
         for (var y = margin; y < width - margin; y++)
         {
@@ -95,7 +123,10 @@ public sealed class PlanetHeroRegionBuilder(IPlanetElevationSource elevationSour
                     {
                         var sampleX = Math.Clamp(x + dx * step, 0, width - 1);
                         var sampleY = Math.Clamp(y + dy * step, 0, width - 1);
-                        var height = region.EvolvedElevationMeters[sampleY * width + sampleX];
+                        // Score parent rock structure, not the cliff-like
+                        // numerical erosion field. Routed cuts are used below
+                        // as hydrological evidence, not as a proxy for geology.
+                        var height = region.OriginalElevationMeters[sampleY * width + sampleX];
                         min = Math.Min(min, height);
                         max = Math.Max(max, height);
                         mean += height;
@@ -114,26 +145,90 @@ public sealed class PlanetHeroRegionBuilder(IPlanetElevationSource elevationSour
                     {
                         var sampleX = Math.Clamp(x + dx * step, 0, width - 1);
                         var sampleY = Math.Clamp(y + dy * step, 0, width - 1);
-                        var height = region.EvolvedElevationMeters[sampleY * width + sampleX];
+                        // Keep the residual and fitted plane in the same
+                        // original-rock elevation field. Mixing this with
+                        // evolved heights made a numeric cliff look rugged.
+                        var height = region.OriginalElevationMeters[sampleY * width + sampleX];
                         var residual = height - (mean + horizontalSlope * dx + verticalSlope * dy);
                         residualSum += residual * residual;
                     }
                 }
 
                 var nonPlanarRelief = Math.Sqrt(residualSum / 25.0);
-                var score = 2.8 * nonPlanarRelief + 0.25 * (max - min) +
+                var fallbackScore = 2.8 * nonPlanarRelief + 0.25 * (max - min) +
                     Math.Min(cut, 60.0) * 0.20 + 6.0 * Math.Log2(1.0 + contributingKm2);
-                if (score <= best)
+                if (fallbackScore > fallbackBest)
+                {
+                    fallbackBest = fallbackScore;
+                    fallback = index;
+                }
+
+                // At 32 km, a rough crater rim could outscore a connected
+                // 8 km catchment even though the target has very little local
+                // fluvial morphology. Require routed incision through a
+                // physically sized neighborhood on at least two sides.
+                var left = x - radius;
+                var top = y - radius;
+                var right = x + radius + 1;
+                var bottom = y + radius + 1;
+                var streamCells = ChannelCount(left, top, right, bottom);
+                if (streamCells < Math.Max(4, radius / 2))
                 {
                     continue;
                 }
 
-                best = score;
-                selected = index;
+                // The inspection camera is centered on this cell, not on the
+                // full quarter-scale neighborhood. A stream confined to the
+                // edge of that neighborhood can otherwise qualify an empty
+                // central shelf, creating the featureless 8 km screenshots.
+                var centralRadius = Math.Max(2, radius / 3);
+                var centralStreamCells = ChannelCount(x - centralRadius, y - centralRadius,
+                    x + centralRadius + 1, y + centralRadius + 1);
+                if (centralStreamCells < 3)
+                {
+                    continue;
+                }
+
+                // Count directional reach around the selected channel
+                // centre, not only diagonal quadrants. A real straight
+                // north-south stream may occupy exactly the centre column;
+                // ignoring that axis wrongly rejected the whole valley.
+                var directions = 0;
+                if (ChannelCount(left, top, right, y) > 0) directions++;
+                if (ChannelCount(left, y + 1, right, bottom) > 0) directions++;
+                if (ChannelCount(left, top, x, bottom) > 0) directions++;
+                if (ChannelCount(x + 1, top, right, bottom) > 0) directions++;
+                if (directions < 2)
+                {
+                    continue;
+                }
+
+                // The rock itself must be interesting. Runoff, cut depth,
+                // reach length and quadrant spread prove the site is a useful
+                // catchment but cannot manufacture geological structure.
+                // Large additive flow bonuses used to select flat bedrock with
+                // one numerically excavated cliff over a genuinely varied ridge.
+                var rockStructure = 1.5 * nonPlanarRelief + 0.15 * (max - min);
+                if (rockStructure < 1.0)
+                {
+                    continue;
+                }
+
+                var continuity = Math.Clamp(streamCells / (radius * 2.0), 0.0, 1.0);
+                var centralContinuity = Math.Clamp(centralStreamCells / (centralRadius * 2.0), 0.0, 1.0);
+                var branching = (directions - 2) / 2.0;
+                var score = rockStructure * (0.50 + 0.20 * continuity + 0.20 * centralContinuity + 0.10 * branching);
+                if (score > best)
+                {
+                    best = score;
+                    selected = index;
+                }
             }
         }
 
-        return selected;
+        // Some planets are dry or lack routed incision in a given preview;
+        // keep the previous terrain-based choice in that situation.
+        return double.IsNegativeInfinity(best) ? fallback : selected;
     }
 
     /// <summary>
