@@ -193,6 +193,57 @@ public sealed class PlanetHeroRegionBuilderTests
     }
 
     [TestMethod]
+    public void FindIncisedChannelCell_NumericalErosionScar_DoesNotOutrankStructuredBedrockCatchment()
+    {
+        const int width = 65;
+        const double spacing = 125.0;
+        var original = Enumerable.Repeat(1_500f, width * width).ToArray();
+        var evolved = (float[])original.Clone();
+        var runoff = new float[original.Length];
+
+        // The synthetic numerical cliff has very high evolved relief and
+        // abundant incised pixels, but its pre-erosion rock was planar.
+        for (var y = 15; y <= 29; y++)
+        {
+            for (var x = 20; x <= 29; x++)
+            {
+                if (x < 23)
+                {
+                    continue;
+                }
+
+                var index = y * width + x;
+                evolved[index] -= 280f;
+                runoff[index] = 80f;
+            }
+        }
+
+        // A separate real bedrock catchment has moderate curved ridge relief
+        // and one continuous routed tributary through its interior.
+        for (var y = 33; y <= 55; y++)
+        {
+            for (var x = 37; x <= 55; x++)
+            {
+                var index = y * width + x;
+                original[index] += (float)(85.0 * Math.Sin((x - 36) * 0.33) * Math.Cos((y - 32) * 0.31));
+                evolved[index] = original[index];
+            }
+
+            var center = 46 + (int)Math.Round(2.0 * Math.Sin(y * 0.25));
+            var stream = y * width + center;
+            evolved[stream] -= 16f;
+            runoff[stream] = 85f;
+        }
+
+        var cuts = original.Zip(evolved, (before, after) => before - after).ToArray();
+        var region = new PlanetHeroRegion(24061984, width, spacing, original, evolved, cuts, runoff, 6, 8, 0, 0, 0);
+        var selected = PlanetHeroRegionBuilder.FindIncisedChannelCell(region);
+
+        Assert.IsGreaterThan(35, selected % width, "Numerically steep erosion is not itself complex source bedrock.");
+        Assert.IsGreaterThan(30, selected / width, "Inspect the physically structured valley, not the simulated cliff.");
+    }
+
+    [TestMethod]
     public void FindIncisedChannelCell_NoIncisedStreams_UsesStableCentralFallback()
     {
         const int width = 65;
