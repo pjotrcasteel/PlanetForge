@@ -10,6 +10,61 @@ public sealed class PlanetRegionalGeologyOverlayTests
     private const double CellSpacingMeters = 2_000.0;
     private const int Size = 40;
 
+
+    [TestMethod]
+    public void SampleDeltaMeters_InheritedChannel_CrossesParentCellBoundariesWithContinuousSlope()
+    {
+        // Parent 2 km erosion cuts become the actual input to finer nested
+        // grids. Bilinear interpolation used to create piecewise planar banks:
+        // the slope changed abruptly at every parent raster line.
+        var before = Enumerable.Repeat(1_000f, Size * Size).ToArray();
+        var after = new float[before.Length];
+        for (var y = 0; y < Size; y++)
+        {
+            for (var x = 0; x < Size; x++)
+            {
+                var distance = (x - 20.0) / 1.2;
+                after[y * Size + x] = (float)(1_000.0 - 120.0 * Math.Exp(-0.5 * distance * distance));
+            }
+        }
+
+        var original = PlanetRegionalGeologyEvolution.Initialize(24061984, "physical-shoulder", Size, Size, CellSpacingMeters, before);
+        var cutVolume = before.Zip(after, (a, b) => (double)a - b).Sum() * CellSpacingMeters * CellSpacingMeters;
+        var evolved = original with
+        {
+            Iteration = 1,
+            ElevationMeters = after,
+            CumulativeErodedVolumeCubicMeters = cutVolume,
+            CumulativeExportedVolumeCubicMeters = cutVolume
+        };
+        var anchor = PlanetVector.UnitZ;
+        var overlay = PlanetRegionalGeologyOverlay.Create(original, evolved, anchor, PlanetRadiusMeters);
+
+        foreach (var node in new[] { 19.0, 20.0, 21.0 })
+        {
+            const double epsilon = 0.01;
+            var left = overlay.SampleDeltaMeters(DirectionAt(anchor, node - epsilon, 20.0), original.Seed);
+            var center = overlay.SampleDeltaMeters(DirectionAt(anchor, node, 20.0), original.Seed);
+            var right = overlay.SampleDeltaMeters(DirectionAt(anchor, node + epsilon, 20.0), original.Seed);
+            Assert.IsLessThan(0.05, Math.Abs((center - left) - (right - center)),
+                $"The inherited erosion must not acquire a slope corner at parent grid x={node}.");
+            Assert.AreEqual(after[20 * Size + (int)node] - before[20 * Size + (int)node], center, 0.002,
+                "Interpolating between parent samples must retain the exact physical rock cut at every grid vertex.");
+        }
+
+        for (var x = 16.0; x < 24.0; x += 0.125)
+        {
+            var left = (int)Math.Floor(x);
+            var minimum = Math.Min(after[20 * Size + left] - before[20 * Size + left],
+                after[20 * Size + left + 1] - before[20 * Size + left + 1]);
+            var maximum = Math.Max(after[20 * Size + left] - before[20 * Size + left],
+                after[20 * Size + left + 1] - before[20 * Size + left + 1]);
+            var actual = overlay.SampleDeltaMeters(DirectionAt(anchor, x, 20.0), original.Seed);
+            Assert.IsGreaterThanOrEqualTo(minimum - 0.002, actual, "Physical interpolation must not create a deeper trench.");
+            Assert.IsLessThanOrEqualTo(maximum + 0.002, actual, "Physical interpolation must not invent a ridge.");
+        }
+    }
+
     [TestMethod]
     public void SampleDeltaMeters_InteriorCell_UsesActualEvolvedElevation()
     {
