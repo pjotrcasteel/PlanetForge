@@ -56,8 +56,9 @@ public sealed class PlanetHeroRegionBuilder(IPlanetElevationSource elevationSour
     /// Selects a physical nested catchment rather than the deepest isolated
     /// eroded pixel. Each potential child center is scored against a 5×5
     /// sampling of the surrounding quarter-scale landscape. Subtracting the
-    /// best-fit local plane distinguishes actual branching bedrock morphology
-    /// from a uniformly sloping escarpment or a single raster-step scar.
+    /// best-fit local plane measures nonplanar structure; the final choice also
+    /// requires a physically connected, routed channel neighborhood so a
+    /// single incised crater rim cannot win merely through large relief.
     /// </summary>
     public static int FindIncisedChannelCell(PlanetHeroRegion region)
     {
