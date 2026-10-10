@@ -58,9 +58,39 @@ public sealed class PlanetValleyBankCarverTests
 
         Assert.IsGreaterThan(0.0, acrossCut, "Real runoff should excavate streamside banks.");
         Assert.IsGreaterThan(alongCut, acrossCut, "Cross-stream retreat must exceed isolated upstream/downstream erosion.");
-        Assert.AreEqual(result.ElevationMeters[centerY * width + centerX - 1],
-            result.ElevationMeters[centerY * width + centerX + 1], 0.00001);
+        Assert.IsLessThan(result.ElevationMeters[centerY * width + centerX - 1],
+            result.ElevationMeters[centerY * width + centerX + 1],
+            "A continuous downstream reach must excavate further along the receiver than behind its source.");
         Assert.IsGreaterThan(0.0, result.AdditionalExportedSedimentCubicMeters);
+    }
+
+    [TestMethod]
+    public void Apply_DiagonalReceiver_RoutesPhysicalChannelAlongTheConnectedReach()
+    {
+        const int width = 41;
+        const int center = 20 * width + 20;
+        var original = Enumerable.Repeat(1_700f, width * width).ToArray();
+        var eroded = (float[])original.Clone();
+        eroded[center] -= 90f;
+        var runoff = new float[original.Length];
+        runoff[center] = 160f; // 1 km² at 79.06 m spacing
+        var receiver = center + width + 1;
+        var receivers = Enumerable.Repeat(-1, original.Length).ToArray();
+        receivers[center] = receiver;
+
+        var result = PlanetValleyBankCarver.Apply(original, eroded, runoff, width, width, 100, receivers);
+        var receiverCut = original[receiver] - result.ElevationMeters[receiver];
+        var oppositeCut = original[center - width - 1] - result.ElevationMeters[center - width - 1];
+        var leftBankCut = original[center + width] - result.ElevationMeters[center + width];
+        var rightBankCut = original[center + 1] - result.ElevationMeters[center + 1];
+
+        Assert.IsGreaterThan(oppositeCut, receiverCut,
+            "The physical diagonal downstream receiver must be carved as part of a continuous reach.");
+        Assert.AreEqual(leftBankCut, rightBankCut, 0.01,
+            "Opposite shoulders of the diagonal reach should be symmetric.");
+        Assert.IsGreaterThan(0.0, result.AdditionalExportedSedimentCubicMeters);
+        var replay = PlanetValleyBankCarver.Apply(original, eroded, runoff, width, width, 100, receivers);
+        CollectionAssert.AreEqual(result.ElevationMeters, replay.ElevationMeters);
     }
 
     [TestMethod]
