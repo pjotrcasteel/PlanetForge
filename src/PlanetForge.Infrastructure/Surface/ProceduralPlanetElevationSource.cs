@@ -329,7 +329,7 @@ public sealed class ProceduralPlanetElevationSource : IPlanetElevationSource
         return relief;
     }
 
-    private static double SampleTectonicRelief(
+    internal static double SampleTectonicRelief(
         PlanetVector direction,
         int seed,
         NearestPlatePair nearest,
@@ -343,17 +343,21 @@ public sealed class ProceduralPlanetElevationSource : IPlanetElevationSource
             return 0.0;
         }
 
-        var primaryCenter = PlateCenter(seed, nearest.PrimaryIndex);
-        var secondaryCenter = PlateCenter(seed, nearest.SecondaryIndex);
-        var boundaryNormal = PlanetVector.Normalize(primaryCenter - secondaryCenter);
-        var primaryMotion = PlateMotion(seed, nearest.PrimaryIndex, primaryCenter);
-        var secondaryMotion = PlateMotion(seed, nearest.SecondaryIndex, secondaryCenter);
-        var relativeMotion = primaryMotion - secondaryMotion;
+        // A plate boundary is an unordered geological pair. Canonical order
+        // prevents a texture/height jump when the nearest plate changes.
+        var firstIndex = Math.Min(nearest.PrimaryIndex, nearest.SecondaryIndex);
+        var secondIndex = Math.Max(nearest.PrimaryIndex, nearest.SecondaryIndex);
+        var firstCenter = PlateCenter(seed, firstIndex);
+        var secondCenter = PlateCenter(seed, secondIndex);
+        var boundaryNormal = PlanetVector.Normalize(firstCenter - secondCenter);
+        var firstMotion = PlateMotion(seed, firstIndex, firstCenter);
+        var secondMotion = PlateMotion(seed, secondIndex, secondCenter);
+        var relativeMotion = firstMotion - secondMotion;
         var convergence = PlanetVector.Dot(relativeMotion, boundaryNormal);
         var tangent = PlanetVector.Cross(direction, boundaryNormal);
         var tangentLength = tangent.Length;
         var transform = tangentLength <= 0.000001 ? 0.0 : Math.Abs(PlanetVector.Dot(relativeMotion, tangent / tangentLength));
-        var ridgeTexture = RidgedNoise(direction, seed ^ BoundarySeedSalt ^ (nearest.PrimaryIndex * 977) ^ (nearest.SecondaryIndex * 1297), 9.0, 4, 2.05, 0.50);
+        var ridgeTexture = RidgedNoise(direction, seed ^ BoundarySeedSalt ^ (firstIndex * 977) ^ (secondIndex * 1297), 9.0, 4, 2.05, 0.50);
         var brokenRange = Lerp(0.55, 1.0, ToUnitRange(boundaryNoise)) * Lerp(0.68, 1.15, ToUnitRange(ridgeTexture));
         var envelope = boundaryInfluence * boundaryInfluence;
 
@@ -366,10 +370,19 @@ public sealed class ProceduralPlanetElevationSource : IPlanetElevationSource
 
             if (primaryContinental != secondaryContinental)
             {
-                var continentalSide = primaryContinental ? 1.0 : -1.0;
+                // Primary/secondary flip at a mixed continental contact.
+                // Transition uplift and trench strengths across a finite
+                // signed separation, sampled in the original plate field.
+                var signedSeparation = nearest.PrimaryIndex == firstIndex
+                    ? nearest.PrimaryDot - nearest.SecondaryDot
+                    : nearest.SecondaryDot - nearest.PrimaryDot;
+                var firstContinental = nearest.PrimaryIndex == firstIndex ? primaryContinental : secondaryContinental;
+                var firstSideWeight = SmoothStep(-0.012, 0.012, signedSeparation);
+                var continentalWeight = firstContinental ? firstSideWeight : 1.0 - firstSideWeight;
                 var coastalRange = envelope * brokenRange * Lerp(0.10, 0.24, Math.Clamp(convergence * 2.6, 0.0, 1.0));
                 var trench = envelope * Lerp(0.08, 0.18, Math.Clamp(convergence * 2.6, 0.0, 1.0));
-                return (coastalRange * (primaryContinental ? 1.0 : 0.45)) - (trench * (continentalSide < 0.0 ? 1.0 : 0.55));
+                return (coastalRange * Lerp(0.45, 1.0, continentalWeight)) -
+                    (trench * Lerp(1.0, 0.55, continentalWeight));
             }
 
             return -envelope * Lerp(0.05, 0.13, Math.Clamp(convergence * 2.4, 0.0, 1.0));
@@ -545,5 +558,5 @@ public sealed class ProceduralPlanetElevationSource : IPlanetElevationSource
         int Index, PlanetVector Normal, PlanetVector Center, PlanetVector Start, PlanetVector Tangent,
         double Breadth, double StartAlong, double FullAlong, double FoldWavelengthMeters, double FoldPhase);
 
-    private readonly record struct NearestPlatePair(int PrimaryIndex, int SecondaryIndex, double PrimaryDot, double SecondaryDot);
+    internal readonly record struct NearestPlatePair(int PrimaryIndex, int SecondaryIndex, double PrimaryDot, double SecondaryDot);
 }
