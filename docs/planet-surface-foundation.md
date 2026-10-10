@@ -602,3 +602,35 @@ the second loop still computed residuals from `EvolvedElevationMeters`. The
 mismatch makes simulated erosion itself appear as enormous rock ruggedness.
 Both passes now use the identical original geological field, while hydraulic
 cut/runoff remain separate qualification inputs.
+
+ 
+### PF 0.0.37.16 — canonical 0.69–5.5 km mountain relief
+
+The visual gate on bedrock-first site selection remained failed: full-frame
+8 km tiles still showed mostly smooth hill flanks and isolated deep hydraulic
+trenches. The geological generator produced bounded finite ranges and
+32–2 km rock structure, but did not have a distinctive physical mountain
+network at the 1 km scale. Refining 129² to 257² exposed that absence;
+extra vertices cannot create source morphology.
+
+The canonical spherical elevation source now contains another bounded,
+warped crest-and-pass field at 5.5, 2.75, 1.375 and 0.6875 km. It uses
+nonperiodic continuous three-dimensional world-metre coordinates and the
+existing tectonic mountain envelope. Its ridges are physical source rock,
+not water, shader displacement, grid-cell noise or an LOD-specific layer.
+The field is deliberately amplitude-limited to approximately -221 to
++281 metres **before** tectonic land masking, so it cannot erase global
+land/water separation or create enormous local spikes. Its four octave
+wavelengths describe potential subregional uplift and lithological rock
+structure, not calibrated erosion or river flow.
+
+Changing canonical heights advances generation identity 18 -> 19 and
+research snapshot schema 5 -> 6. Domain/gameplay save schema itself
+remains unchanged. Regression checks cover 8 km local crest structure,
+one-metre continuity, seed determinism, exact shared source-rock vertices
+between 17² and 33² meshes, plus full 128/32/8 km browser visual tests.
+Do not promote this research branch merely for passing build and tests:
+the physical 8 km before/after images must have recognizable intersecting
+ridges, realistic scale and no isolated industrial-looking trenches. Rivers,
+lakes, oceans and climate remain separate physical models, to integrate
+after credible exposed geology.
