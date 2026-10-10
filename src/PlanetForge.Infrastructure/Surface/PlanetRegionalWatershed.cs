@@ -218,10 +218,10 @@ public sealed class PlanetRegionalWatershed
             var index = visitOrder[order];
             var downstream = receivers[index];
             var runoff = accumulation[index];
-            // Water routed through a catchment is an area, not a number of
-            // pixels. Refining 1 km cells to 500 m cells must not quadruple
-            // physical stream power for the same mountain basin.
-            var drainageAreaSquareKilometers = runoff * cellArea / 1_000_000.0;
+            // Specific contributing area is upstream area per unit flow width.
+            // On a hillslope, refining the raster splits one flow strip into
+            // narrower strips; its total area falls but water per metre does not.
+            var specificAreaKilometers = runoff * cellSpacingMeters / 1_000.0;
             var secondary = secondaryReceivers[index];
             var secondaryPart = secondaryFractions[index];
             var primarySlope = downstream < 0 ? 0.0 : Math.Max(0.0,
@@ -232,9 +232,9 @@ public sealed class PlanetRegionalWatershed
                 (cellSpacingMeters * (IsDiagonal(index, secondary, width) ? Math.Sqrt(2.0) : 1.0)));
             var slope = (primarySlope * (1.0 - secondaryPart)) + (alternateSlope * secondaryPart);
 
-            if (downstream >= 0 && drainageAreaSquareKilometers >= 6.0 && slope > 0.00001)
+            if (downstream >= 0 && specificAreaKilometers >= 6.0 && slope > 0.00001)
             {
-                var streamPower = Math.Pow((drainageAreaSquareKilometers - 5.0) / 8.0, 0.43) *
+                var streamPower = Math.Pow((specificAreaKilometers - 5.0) / 8.0, 0.43) *
                     Math.Pow(slope / 0.06, 0.42);
                 var erodibility = erodibilityCellWeights is null ? 1.0f : erodibilityCellWeights[index];
                 // One pass is an uncalibrated numerical iteration, not a
@@ -254,11 +254,20 @@ public sealed class PlanetRegionalWatershed
             // deposited up to 80 m per numerical pass across entire catchments.
             // Only a connected, low-gradient reach can accumulate a floodplain.
             // Keep the remaining sediment in transit until another reach or outlet.
-            var capacity = 12.0 * Math.Pow(drainageAreaSquareKilometers, 0.65) * Math.Sqrt(slope) * cellArea;
+            // Transport capacity is flux through a cross-section, so it scales
+            // with flow width, not with the area of a raster cell. The 1000 m
+            // reference preserves the research coefficient at the original grid.
+            var capacity = 12.0 * Math.Pow(specificAreaKilometers, 0.65) * Math.Sqrt(slope) * cellSpacingMeters * 1_000.0;
             var floodplainFactor = Math.Clamp((0.035 - slope) / 0.035, 0.0, 1.0);
-            var depositionalCapacityMeters = Math.Min(6.0, 0.35 * Math.Sqrt(drainageAreaSquareKilometers));
-            var depositedHere = downstream < 0 || drainageAreaSquareKilometers < 8.0 ? 0.0 :
-                Math.Min(Math.Max(0.0, sedimentLoad[index] - capacity) * 0.25 * floodplainFactor,
+            var depositionalCapacityMeters = Math.Min(6.0, 0.35 * Math.Sqrt(specificAreaKilometers));
+            // Exponential attenuation composes over physical reach length:
+            // two half-length reaches settle the same fraction as one full reach.
+            var primaryLength = cellSpacingMeters * (downstream >= 0 && IsDiagonal(index, downstream, width) ? Math.Sqrt(2.0) : 1.0);
+            var secondaryLength = cellSpacingMeters * (secondary >= 0 && IsDiagonal(index, secondary, width) ? Math.Sqrt(2.0) : 1.0);
+            var settlingFraction = (1.0 - Math.Pow(0.75, primaryLength * floodplainFactor / 1_000.0)) * (1.0 - secondaryPart) +
+                (1.0 - Math.Pow(0.75, secondaryLength * floodplainFactor / 1_000.0)) * secondaryPart;
+            var depositedHere = downstream < 0 || specificAreaKilometers < 8.0 ? 0.0 :
+                Math.Min(Math.Max(0.0, sedimentLoad[index] - capacity) * settlingFraction,
                     depositionalCapacityMeters * cellArea);
             deposition[index] = (float)(depositedHere / cellArea);
             sedimentLoad[index] -= depositedHere;

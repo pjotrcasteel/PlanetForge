@@ -226,19 +226,19 @@ public sealed class PlanetRegionalWatershedTests
     }
 
     [TestMethod]
-    public void Build_SamePhysicalCatchmentAtTwoResolutions_ProducesComparableStreamIncision()
+    public void Build_SameRunoffPerUnitWidth_ProducesComparableUncappedIncision()
     {
-        // A 1 km cell fed by seven units of rainfall and a 500 m cell fed by
-        // 28 units drain the same 7 km² catchment. Stream power must use
-        // physical area, not raw cell-count units.
+        // Equal flow per metre across 1000 m and 500 m strips: 7 km² / 1 km
+        // equals 3.5 km² / 0.5 km. Rainfall counts alone are not comparable.
         var coarse = OneWetHillslopeSource(33, 1_000.0, 7f);
-        var fine = OneWetHillslopeSource(65, 500.0, 28f);
+        var fine = OneWetHillslopeSource(65, 500.0, 14f);
         var coarseCenter = 16 * 33 + 16;
         var fineCenter = 32 * 65 + 32;
 
         Assert.IsGreaterThan(0f, coarse.IncisionMeters[coarseCenter]);
-        Assert.AreEqual(coarse.IncisionMeters[coarseCenter], fine.IncisionMeters[fineCenter], 0.5f,
-            "Doubling grid resolution must not change erosion strength on the same physically sized catchment.");
+        Assert.AreEqual(coarse.IncisionMeters[coarseCenter], fine.IncisionMeters[fineCenter], 0.001f,
+            "Refining an equally supplied flow strip must preserve incision depth below the numerical cap.");
+        Assert.IsLessThan(12.0f, coarse.IncisionMeters[coarseCenter]);
         Assert.IsLessThanOrEqualTo(12.0f, coarse.IncisionMeters.Max());
         Assert.IsLessThanOrEqualTo(12.0f, fine.IncisionMeters.Max());
     }
@@ -265,6 +265,71 @@ public sealed class PlanetRegionalWatershedTests
         Assert.AreEqual(watershed.ErodedVolumeCubicMeters,
             watershed.DepositedVolumeCubicMeters + watershed.ExportedVolumeCubicMeters,
             Math.Max(1.0, watershed.ErodedVolumeCubicMeters * 1e-5));
+    }
+
+    [TestMethod]
+    [DataRow(0.0, 0.0)]
+    [DataRow(0.013, 0.0)]
+    [DataRow(0.0, 0.0000005)]
+    public void Build_RefinedPhysicalHillslope_ConvergesWithoutHittingIncisionCap(double crossSlope, double curvature)
+    {
+        var volumes = new List<double>();
+        foreach (var width in new[] { 65, 129, 257 })
+        {
+            var heights = PhysicalCatchment(width, crossSlope, curvature);
+            var rock = Enumerable.Repeat(0.005f, heights.Length).ToArray();
+            var result = PlanetRegionalWatershed.Build(width, width, 128_000.0 / (width - 1), heights, erodibilityCellWeights: rock);
+            Assert.IsGreaterThan(0.0, result.ErodedVolumeCubicMeters);
+            Assert.IsLessThan(12f, result.IncisionMeters.Max(), "Saturation must not conceal resolution dependence.");
+            Assert.AreEqual(result.ErodedVolumeCubicMeters, result.DepositedVolumeCubicMeters + result.ExportedVolumeCubicMeters,
+                result.ErodedVolumeCubicMeters * 1e-6);
+            volumes.Add(result.ErodedVolumeCubicMeters);
+        }
+
+        var coarseChange = Math.Abs(volumes[0] - volumes[1]);
+        var fineChange = Math.Abs(volumes[1] - volumes[2]);
+        Assert.IsLessThan(coarseChange, fineChange, "Successive refinement must reduce the integration error.");
+        Assert.AreEqual(volumes[1], volumes[2], volumes[2] * 0.05,
+            "Halving 1 km cells must preserve uncapped bulk erosion within the 5% research benchmark.");
+    }
+
+    [TestMethod]
+    [DataRow(0.0, 0.0)]
+    [DataRow(0.013, 0.0)]
+    [DataRow(0.0, 0.0000005)]
+    public void Advance_RefinedPhysicalCatchment_PreservesSixStepSedimentExport(double crossSlope, double curvature)
+    {
+        var exports = new List<double>();
+        foreach (var width in new[] { 129, 257 })
+        {
+            var initial = PlanetRegionalGeologyEvolution.Initialize(1, "physical-refinement", width, width,
+                128_000.0 / (width - 1), PhysicalCatchment(width, crossSlope, curvature));
+            var evolved = PlanetRegionalGeologyEvolution.Advance(initial, 6);
+            Assert.IsGreaterThan(0.0, evolved.CumulativeExportedVolumeCubicMeters);
+            Assert.AreEqual(evolved.CumulativeErodedVolumeCubicMeters,
+                evolved.CumulativeDepositedVolumeCubicMeters + evolved.CumulativeExportedVolumeCubicMeters,
+                evolved.CumulativeErodedVolumeCubicMeters * 1e-6);
+            exports.Add(evolved.CumulativeExportedVolumeCubicMeters);
+        }
+
+        Assert.AreEqual(exports[0], exports[1], exports[1] * 0.03,
+            "Matched 128 km benchmark catchments must agree within 3% after six iterations.");
+    }
+
+    private static float[] PhysicalCatchment(int width, double crossSlope, double curvature)
+    {
+        var spacing = 128_000.0 / (width - 1);
+        var heights = new float[width * width];
+        for (var y = 0; y < width; y++)
+        {
+            for (var x = 0; x < width; x++)
+            {
+                var east = (x - (width - 1) * 0.5) * spacing;
+                heights[y * width + x] = (float)(1_000 + y * spacing * 0.02 + crossSlope * x * spacing + curvature * east * east);
+            }
+        }
+
+        return heights;
     }
 
     private static PlanetRegionalWatershed OneWetHillslopeSource(int width, double spacingMeters, float rainfall)
