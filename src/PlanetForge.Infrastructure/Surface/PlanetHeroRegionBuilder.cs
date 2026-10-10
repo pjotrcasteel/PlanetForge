@@ -119,8 +119,8 @@ public sealed class PlanetHeroRegionBuilder(IPlanetElevationSource elevationSour
                 }
 
                 var nonPlanarRelief = Math.Sqrt(residualSum / 25.0);
-                var score = 1.8 * nonPlanarRelief + 0.25 * (max - min) +
-                    Math.Min(cut, 200.0) * 0.45 + 12.0 * Math.Log2(1.0 + contributingKm2);
+                var score = 2.8 * nonPlanarRelief + 0.25 * (max - min) +
+                    Math.Min(cut, 60.0) * 0.20 + 6.0 * Math.Log2(1.0 + contributingKm2);
                 if (score <= best)
                 {
                     continue;
