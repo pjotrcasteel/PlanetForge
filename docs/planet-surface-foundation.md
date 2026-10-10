@@ -522,3 +522,36 @@ grid boundaries, no spurious ridges or trench overshoots, existing local
 mass accounting, and full mobile WebGL captures. These are numerical terrain
 quality improvements, not yet a validated geological erosion timescale.
 The 8 km realism and resolution-convergence gates remain open.
+
+ 
+## PF 0.0.37.16 — nested inspection targets connected catchments
+
+The first PF 0.0.37.15 mobile captures confirm fewer inherited polygonal
+facets at 32 km, but the 8 km region still lands on a large smooth shelf with
+one circular bowl and narrow steep trenches. The physical heightfield was not
+invented by the renderer. Selection from 32 → 8 km was the next root cause:
+the parent focus rewarded high RMS nonplanar rock relief far more heavily than
+the presence of an actual connected fluvial network, so a sharp crater rim
+or single scar could win despite poorly resolved surrounding drainage.
+
+The focus selector now builds an O(n²) summed-area field of physical runoff
+and existing incision. For each candidate, its quarter-scale 8/32 km
+neighborhood must contain a minimum count of actually routed channel cells
+and reach at least two distinct quadrants. A branch-spread score then
+distinguishes branching catchments from one isolated cliff, while a
+multi-kilometre best-fit plane residual retains geological ridge diversity.
+The support threshold uses drainage area in km², not raw runoff-cell counts,
+and the channel-support score is normalized by the chosen physical window.
+
+Synthetic regressions place an unusually rugged dry crater and a connected
+two-tributary channel system in the same regional world. Only the connected
+catchment should be selected for local detail. An entirely dry region retains
+a stable central fallback. Generation identity remains 18; canonical
+elevation, hydraulic sediment volumes, gameplay save schema, and research
+snapshot schema 5 are unchanged. Only the nested research-camera geography
+changes. Browser regressions continue validating 128/32/8 km physical solves.
+
+This does not establish that the underlying 8 km erosion physics is now
+realistic. Remaining gates: high-energy incision caps, raster routing
+convergence, sediment transfer across regional boundaries, and convincing
+multiseed mountain/river morphology.
