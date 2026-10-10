@@ -93,7 +93,13 @@ public sealed class ProceduralPlanetElevationSource : IPlanetElevationSource
         // Distinct 5.5–0.69 km rock ridges are part of the same canonical
         // geology sampled by the globe, research Hero and gameplay LODs.
         // They are never a renderer-only detail texture or extra noise per zoom.
-        var localRock = SampleLocalMountainReliefMeters(direction, seed) * mountainBelt * landMask / MaximumLandElevationMeters;
+        // Skip expensive sub-kilometre ridge sampling where the continuous
+        // mountain envelope is effectively zero (notably most ocean tiles).
+        // Smooth activation keeps the coast/upland transition free of seams.
+        var localRockSupport = mountainBelt * landMask;
+        var localRock = localRockSupport <= 0.015 ? 0.0 :
+            SampleLocalMountainReliefMeters(direction, seed) * localRockSupport *
+            SmoothStep(0.015, 0.11, localRockSupport) / MaximumLandElevationMeters;
         var normalized = crust + uplift + terrain - incisions + impacts + foldRelief + regionalRock + localRock +
             (coastFine * shoreMask * 0.024);
 
@@ -177,10 +183,8 @@ public sealed class ProceduralPlanetElevationSource : IPlanetElevationSource
         var point = PlanetVector.Normalize(direction) * PlanetRadiusMeters;
         // Low-amplitude 3D warp prevents a visible alignment to integer
         // lattice axes while retaining physical locality across all LODs.
-        var warped = point + new PlanetVector(
-            ValueNoise(point.X / 11_000.0, point.Y / 11_000.0, point.Z / 11_000.0, seed ^ RegionalSeedSalt),
-            ValueNoise(point.Y / 11_000.0, point.Z / 11_000.0, point.X / 11_000.0, seed ^ ProvinceSeedSalt),
-            ValueNoise(point.Z / 11_000.0, point.X / 11_000.0, point.Y / 11_000.0, seed ^ DetailSeedSalt)) * 650.0;
+        var offset = ValueNoise(point.X / 11_000.0, point.Y / 11_000.0, point.Z / 11_000.0, seed ^ RegionalSeedSalt) * 650.0;
+        var warped = point + new PlanetVector(offset, -offset * 0.61, offset * 0.37);
 
         var relief = 0.0;
         var wavelength = 5_500.0;
