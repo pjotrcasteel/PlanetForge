@@ -189,6 +189,11 @@ test('TerrainLab_HeroRegion_RendersPhysical3DLandscapeAndComparesErosion', async
   expect(detailed.glError).toBe(0);
   expect(detailed.maxElevationMeters - detailed.minElevationMeters).toBeGreaterThan(30);
   expect(detailed.rmsPhysicalSlope, 'Nested 32 km region has insufficient real slope geometry').toBeGreaterThan(0.0005);
+  // The close valley camera can hide most of a selected catchment. Record
+  // both the full-region morphology and the valley inspection framing.
+  await page.locator('#lab-hero-framing').click();
+  await hero.screenshot({ path: testInfo.outputPath('hero-nested-32km-full-region.png') });
+  await page.locator('#lab-hero-framing').click();
   const nestedAfter = PNG.sync.read(await hero.screenshot({ path: testInfo.outputPath('hero-nested-32km-eroded.png') }));
   const materialColors = new Set();
   let nestedPixels = 0;
@@ -303,6 +308,10 @@ test('TerrainLab_HeroRegion_RendersPhysical3DLandscapeAndComparesErosion', async
   await expect(page.locator('.lab-hero-status')).toContainText('31.25 m cells');
   await expect(page.locator('#lab-hero-detail')).toHaveText('USE FAST 129² GRID');
   await microCanvas.screenshot({ path: testInfo.outputPath('hero-nested-8km-257-detail.png') });
+  await page.locator('#lab-hero-framing').click();
+  expect((await page.evaluate(() => window.__planetForgeHeroRegionStats)).framing).toBe('full');
+  await microCanvas.screenshot({ path: testInfo.outputPath('hero-nested-8km-257-full-region.png') });
+  await page.locator('#lab-hero-framing').click();
 });
 
 test('TerrainLab_ErosionIterations_AdvanceRewindReplayDeterministically', async ({ page }, testInfo) => {
