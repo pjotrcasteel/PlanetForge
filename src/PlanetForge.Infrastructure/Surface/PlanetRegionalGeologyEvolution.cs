@@ -26,7 +26,7 @@ public sealed record PlanetRegionalGeologySnapshot(
 public static class PlanetRegionalGeologyEvolution
 {
     // Version 5 invalidates old research histories after canonical plate-contact correction.
-    public const int CurrentSchemaVersion = 5;
+    public const int CurrentSchemaVersion = 6;
     public const int MaximumIterationsPerCall = 64;
 
     public static PlanetRegionalGeologySnapshot Initialize(
