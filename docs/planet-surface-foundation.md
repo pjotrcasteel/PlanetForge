@@ -555,3 +555,16 @@ This does not establish that the underlying 8 km erosion physics is now
 realistic. Remaining gates: high-energy incision caps, raster routing
 convergence, sediment transfer across regional boundaries, and convincing
 multiseed mountain/river morphology.
+
+### Visual audit gate
+
+The first 0.0.37.16 candidate passed 275 C# and 13 browser checks, but
+inspecting its 8 km *close-camera* CI screenshots still showed broad smooth
+rock and isolated cuts. It was not merged on test success alone. The local
+focus now also requires routed channel support within the central third of
+the quarter-scale window, and the evaluation weights this camera-visible
+continuity separately from channels near the outer edge. The browser suite
+captures both full-region 32/8 km morphology and the close valley camera so
+we can audit the same framing used in the iPhone screenshots. Visual quality
+remains a manual release criterion until objective channel-morphology metrics
+are calibrated against independent examples.
