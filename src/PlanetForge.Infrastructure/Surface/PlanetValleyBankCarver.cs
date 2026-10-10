@@ -64,13 +64,17 @@ public static class PlanetValleyBankCarver
                 var runoff = accumulatedRunoff[center];
                 var drainageAreaSquareKilometers = runoff * spacingMeters * spacingMeters / 1_000_000.0;
                 var existingCut = original[center] - eroded[center];
-                // A fixed pixel-count threshold becomes 16x easier to meet
-                // when cell width halves. Tributary width and activation
-                // must respond to contributing *physical* drainage area.
-                if (drainageAreaSquareKilometers < 0.8 || existingCut < 4.0f)
+                // Activation is measured in physical drainage area and actual
+                // pre-existing incision. Hard 0.8 km² / 4 m switches used to
+                // stamp finite bank cuts onto the first eligible 8 km cells.
+                if (drainageAreaSquareKilometers <= 0.8 || existingCut <= 0.0f)
                 {
                     continue;
                 }
+
+                var areaProgress = Math.Clamp((drainageAreaSquareKilometers - 0.8) / 1.6, 0.0, 1.0);
+                var cutProgress = Math.Clamp(existingCut / 8.0, 0.0, 1.0);
+                var activation = SmoothStep(areaProgress) * SmoothStep(cutProgress);
                 // Width is a property of the physical catchment. A minimum in pixels
                 // artificially broadens every coarse-grid channel; a pixel-radius
                 // cap truncates the same banks when the grid is refined.
@@ -79,7 +83,7 @@ public static class PlanetValleyBankCarver
                 // Bound the search by grid extent before converting to an integer.
                 var radius = (int)Math.Ceiling(Math.Min(Math.Max(width, height), halfWidth * 1.8 / spacingMeters + 1.0));
                 var receiver = downstreamIndices is null ? -1 : downstreamIndices[center];
-                var channelDepth = Math.Min(260.0, existingCut);
+                var channelDepth = Math.Min(260.0, existingCut) * activation;
                 if (receiver >= 0)
                 {
                     // Headward erosion deepens only an existing, connected,
@@ -100,7 +104,7 @@ public static class PlanetValleyBankCarver
                     // and of its own length in one geological solve.
                     // Smaller cells consequently evolve smaller headward steps.
                     var incrementalLimit = Math.Min(existingCut * 0.28, reachMeters * 0.06);
-                    var headwardCut = Math.Min(incrementalLimit, headDrop * 0.2 * streamEnergy * routedRunoff);
+                    var headwardCut = Math.Min(incrementalLimit, headDrop * 0.2 * streamEnergy * routedRunoff) * activation;
                     channelDepth = Math.Min(340.0, channelDepth + headwardCut);
                     deepestCut[center] = Math.Max(deepestCut[center], channelDepth);
                 }
@@ -159,6 +163,8 @@ public static class PlanetValleyBankCarver
 
         return new Result(output, extraRemoved * spacingMeters * spacingMeters);
     }
+
+    private static double SmoothStep(double value) => value * value * (3.0 - 2.0 * value);
 
     private static double DistanceToSegmentSquared(double east, double north,
         double segmentEast, double segmentNorth, double segmentLengthSquared, double halfWidth)

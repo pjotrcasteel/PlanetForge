@@ -5,6 +5,50 @@ namespace PlanetForge.Infrastructure.Tests.Surface;
 [TestClass]
 public sealed class PlanetRegionalWatershedTests
 {
+
+    [TestMethod]
+    [DataRow(8f)]
+    [DataRow(10f)]
+    [DataRow(12f)]
+    public void Build_DepositionThresholds_AreContinuousAndConserveSediment(float runoff)
+    {
+        const int width = 33;
+        const int center = 16 * width + 16;
+        var heights = new float[width * width];
+        for (var y = 0; y < width; y++)
+        {
+            for (var x = 0; x < width; x++)
+            {
+                heights[y * width + x] = 2_000f + (y * 5f) + (x * 0.01f);
+            }
+        }
+
+        PlanetRegionalWatershed Solve(float water)
+        {
+            var rainfall = new float[heights.Length];
+            rainfall[center] = water;
+            var rock = Enumerable.Repeat(3f, heights.Length).ToArray();
+            return PlanetRegionalWatershed.Build(width, width, 1_000.0, heights, rainfall, rock);
+        }
+
+        var before = Solve(runoff - 0.0001f);
+        var after = Solve(runoff + 0.0001f);
+        Assert.IsLessThan(0.05f,
+            Math.Abs(after.SedimentDepositionMeters[center] - before.SedimentDepositionMeters[center]),
+            "A small runoff change must not deposit an abrupt floodplain shelf.");
+        foreach (var result in new[] { before, after })
+        {
+            Assert.AreEqual(result.ErodedVolumeCubicMeters,
+                result.DepositedVolumeCubicMeters + result.ExportedVolumeCubicMeters,
+                Math.Max(1.0, result.ErodedVolumeCubicMeters * 1e-6));
+        }
+        if (runoff == 8f)
+        {
+            Assert.AreEqual(0f, before.SedimentDepositionMeters[center]);
+            Assert.IsLessThan(0.001f, after.SedimentDepositionMeters[center]);
+        }
+    }
+
     [TestMethod]
     [DataRow(5f)]
     [DataRow(6f)]

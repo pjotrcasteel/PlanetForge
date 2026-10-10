@@ -25,8 +25,8 @@ public sealed record PlanetRegionalGeologySnapshot(
 /// </summary>
 public static class PlanetRegionalGeologyEvolution
 {
-    // Version 3 adds continuous hydraulic onset and canonical kilometre-scale bedrock.
-    public const int CurrentSchemaVersion = 3;
+    // Version 4 adds continuous floodplain deposition onset for the research solver.
+    public const int CurrentSchemaVersion = 4;
     public const int MaximumIterationsPerCall = 64;
 
     public static PlanetRegionalGeologySnapshot Initialize(

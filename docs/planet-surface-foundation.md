@@ -432,3 +432,27 @@ be regenerated. Tests cover metre-scale continuity and nonplanar structure
 within 128, 32 and 8 km windows for three seeds, aligned canonical LOD samples,
 and continuity across both the old and new hydraulic activation boundaries.
 The gameplay save format is unchanged. The Hero realism gate remains open.
+
+
+## PF 0.0.37.13 — continuous bank and floodplain activation
+
+The 8 km research preview still exposes numerical shelves in eroded rock.
+Two discrete erosion-stage eligibility checks remained after continuous
+hydraulic incision onset was introduced in 0.0.37.12. Bank widening jumped
+into existence at 0.8 km² of physical drainage and 4 m of prior cutting;
+floodplain deposition switched on at specific contributing area 8 km.
+
+Bank-width and headward retreat now use smooth activation across 0.8–2.4 km²
+and 0–8 m of actual pre-existing incision. Above those transition ranges,
+the physical channel-width law and bounded headward limits are unchanged.
+Floodplain deposition now ramps from specific contributing area 8–12 km,
+**after** the depositional safety cap, without creating or losing sediment.
+The changes affect only the experimental physical solver, not the camera,
+GPU geometry, gameplay save schema or canonical bedrock generator.
+
+Regression tests probe both sides of each bank threshold and each deposition
+transition, alongside sediment conservation. The research snapshot schema
+advances to 4; existing schema 1–3 snapshots must be regenerated. The generator
+identity stays 17 because canonical bedrock is unchanged. The full erosion
+convergence and visual realism gates remain open: capped high-energy flows,
+receiver switching and boundary exchange may still create visible terraces.

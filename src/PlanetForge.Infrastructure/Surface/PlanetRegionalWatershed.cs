@@ -270,9 +270,15 @@ public sealed class PlanetRegionalWatershed
             var secondaryLength = cellSpacingMeters * (secondary >= 0 && IsDiagonal(index, secondary, width) ? Math.Sqrt(2.0) : 1.0);
             var settlingFraction = (1.0 - Math.Pow(0.75, primaryLength * floodplainFactor / 1_000.0)) * (1.0 - secondaryPart) +
                 (1.0 - Math.Pow(0.75, secondaryLength * floodplainFactor / 1_000.0)) * secondaryPart;
-            var depositedHere = downstream < 0 || specificAreaKilometers < 8.0 ? 0.0 :
+            // A minimum wet contributing area is a physical condition, not an
+            // on/off deposition switch. Apply onset after the volume cap, so a
+            // tiny change in runoff cannot deposit several metres on one cell.
+            // All unsettled sediment continues downstream and remains in balance.
+            var depositionProgress = Math.Clamp((specificAreaKilometers - 8.0) / 4.0, 0.0, 1.0);
+            var depositionOnset = depositionProgress * depositionProgress * (3.0 - 2.0 * depositionProgress);
+            var depositedHere = downstream < 0 ? 0.0 :
                 Math.Min(Math.Max(0.0, sedimentLoad[index] - capacity) * settlingFraction,
-                    depositionalCapacityMeters * cellArea);
+                    depositionalCapacityMeters * cellArea) * depositionOnset;
             deposition[index] = (float)(depositedHere / cellArea);
             sedimentLoad[index] -= depositedHere;
             deposited += depositedHere;
