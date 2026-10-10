@@ -116,7 +116,7 @@ public sealed class ProceduralPlanetElevationSource : IPlanetElevationSource
     }
 
     /// <summary>
-    /// Canonical 4–24 km structural ridge relief shared by orbital, regional
+    /// Canonical finite, branching ridge relief shared by orbital, regional
     /// and local sampling; no mesh-dependent displacement.
     /// </summary>
     public double SampleOrogenicRidgeReliefMeters(PlanetVector direction, int seed)
@@ -175,27 +175,73 @@ public sealed class ProceduralPlanetElevationSource : IPlanetElevationSource
             var alongStrength = 0.82 + 0.18 * Math.Cos(alongMeters / 210_000.0 + arc.FoldPhase);
             foldSum += Math.Cos(phase) * 230.0 * alongStrength * envelope * envelope;
 
-            // The previous finest source ridges varied hundreds of km apart.
-            // These secondary and tertiary fold trains are shorter geological
-            // structures, not detail noise added according to camera distance.
-            // Their cross-belt ridges curve along the same tectonic arc.
-            var secondaryWavelength = arc.FoldWavelengthMeters * 0.26; // 14–25 km
-            var tertiaryWavelength = arc.FoldWavelengthMeters * 0.085; // 4.7–8.1 km
-            var phaseBend = 0.65 * Math.Sin(alongMeters / 52_000.0 + arc.FoldPhase) +
-                0.31 * Math.Sin(alongMeters / 19_000.0 - arc.FoldPhase);
-            var secondaryPhase = 2.0 * Math.PI * crossMeters / secondaryWavelength + phaseBend;
-            var tertiaryPhase = 2.0 * Math.PI * crossMeters / tertiaryWavelength + phaseBend * 1.7;
-            var alongVariation = 0.72 + 0.28 * Math.Cos(alongMeters / 35_000.0 + arc.FoldPhase);
-            ridgeSum += (Math.Cos(secondaryPhase) * 185.0 +
-                Math.Cos(tertiaryPhase) * 38.0) * alongVariation * envelope * envelope;
+            // The previous pair of high-frequency cosine fold trains produced
+            // endless parallel corrugations on the 128 km Hero. Instead build
+            // short, finite spurs that branch outward from each tectonic arc.
+            // Geometry is evaluated in physical coordinates: no mesh-specific
+            // randomness, vertex-grid noise or additional shader displacement.
+            ridgeSum += SampleBranchingRidges(crossMeters, alongMeters, seed, arc.Index) * envelope * envelope;
             foldWeight += envelope;
         }
 
         // Multiple intersecting belts blend smoothly; neither elevation
-        // depends on raster resolution. The two envelopes bound canonical
-        // tectonic deformation to 230m + 223m respectively before masking.
+        // depends on raster resolution. Primary folds stay within ±230 m,
+        // finite branching ridges stay within +223 m before land masking.
         var normalization = Math.Max(1.0, foldWeight);
         return new OrogenicStructure(strongest, foldSum / normalization, ridgeSum / normalization);
+    }
+
+    /// <summary>
+    /// Finite rock spurs leave the principal orogenic ridge on either flank.
+    /// Each sector has seed-stable position, length, orientation and width.
+    /// The sample only visits nearby sectors, keeping globe generation bounded.
+    /// These are structural bedrock forms; streams still follow downhill
+    /// routing and erode them in the separate watershed simulation.
+    /// </summary>
+    private static double SampleBranchingRidges(double crossMeters, double alongMeters, int seed, int arcIndex)
+    {
+        const double sectorLengthMeters = 44_000.0;
+        var sector = (int)Math.Floor(alongMeters / sectorLengthMeters);
+        var cumulativeHeight = 0.0;
+
+        for (var candidate = sector - 2; candidate <= sector + 2; candidate++)
+        {
+            var placement = HashValue(candidate, arcIndex, seed, ProvinceSeedSalt);
+            var sectionCenter = (candidate + 0.5) * sectorLengthMeters + placement * 7_500.0;
+            var alongOffset = alongMeters - sectionCenter;
+            if (Math.Abs(alongOffset) > 53_000.0)
+            {
+                continue;
+            }
+
+            for (var branch = 0; branch < 2; branch++)
+            {
+                var side = branch == 0 ? -1.0 : 1.0;
+                var variant = ToUnitRange(HashValue(candidate, arcIndex, branch, seed ^ DetailSeedSalt));
+                var skew = ToUnitRange(HashValue(candidate, branch, arcIndex, seed ^ BoundarySeedSalt));
+                var extentMeters = 25_000.0 + 25_000.0 * skew;
+                var progression = Math.Abs(alongOffset) / extentMeters;
+                if (progression >= 1.0)
+                {
+                    continue;
+                }
+
+                var offsetMeters = side * (12_000.0 + variant * 14_000.0);
+                var outwardSlope = side * (0.28 + 0.54 * skew);
+                var centerAcross = offsetMeters + outwardSlope * alongOffset +
+                    2_100.0 * Math.Sin(alongOffset / 15_000.0 + placement * Math.PI);
+                var halfWidthMeters = 3_500.0 + 3_000.0 * variant;
+                var normalOffset = (crossMeters - centerAcross) / halfWidthMeters;
+                var crossSection = Math.Exp(-0.5 * normalOffset * normalOffset);
+                var alongSection = SmoothStep(0.0, 0.60, 1.0 - progression);
+                var amplitude = 105.0 + 60.0 * skew;
+                cumulativeHeight += amplitude * crossSection * alongSection;
+            }
+        }
+
+        // Several branches can converge at a common ridge crest. The finite
+        // height budget avoids inventing extremely sharp cliffs at junctions.
+        return Math.Min(223.0, cumulativeHeight);
     }
 
     private static OrogenicArc[] BuildOrogenicArcs(int seed)
@@ -222,7 +268,7 @@ public sealed class ProceduralPlanetElevationSource : IPlanetElevationSource
                 ToUnitRange(HashValue(index, seed, BoundarySeedSalt, UplandSeedSalt)));
             var foldPhase = Math.PI * (1.0 +
                 HashValue(index, seed, DetailSeedSalt, RegionalSeedSalt));
-            arcs[index] = new OrogenicArc(normal, center, start, tangent, breadth,
+            arcs[index] = new OrogenicArc(index, normal, center, start, tangent, breadth,
                 Math.Cos(halfSpan), Math.Cos(halfSpan * 0.70), wavelengthMeters, foldPhase);
         }
 
@@ -464,7 +510,7 @@ public sealed class ProceduralPlanetElevationSource : IPlanetElevationSource
     private readonly record struct OrogenicStructure(double Envelope, double FoldReliefMeters, double RidgeReliefMeters);
 
     private readonly record struct OrogenicArc(
-        PlanetVector Normal, PlanetVector Center, PlanetVector Start, PlanetVector Tangent,
+        int Index, PlanetVector Normal, PlanetVector Center, PlanetVector Start, PlanetVector Tangent,
         double Breadth, double StartAlong, double FullAlong, double FoldWavelengthMeters, double FoldPhase);
 
     private readonly record struct NearestPlatePair(int PrimaryIndex, int SecondaryIndex, double PrimaryDot, double SecondaryDot);
