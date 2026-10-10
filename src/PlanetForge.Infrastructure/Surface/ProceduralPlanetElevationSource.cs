@@ -89,7 +89,8 @@ public sealed class ProceduralPlanetElevationSource : IPlanetElevationSource
         // elevation in metres, not an independent local Hero detail shader.
         var foldRelief = (orogenicStructure.FoldReliefMeters + orogenicStructure.RidgeReliefMeters) *
             landMask / MaximumLandElevationMeters;
-        var normalized = crust + uplift + terrain - incisions + impacts + foldRelief + (coastFine * shoreMask * 0.024);
+        var regionalRock = SampleRegionalRockReliefMeters(direction, seed) * mountainBelt * landMask / MaximumLandElevationMeters;
+        var normalized = crust + uplift + terrain - incisions + impacts + foldRelief + regionalRock + (coastFine * shoreMask * 0.024);
 
         if (normalized < 0.0)
         {
@@ -124,6 +125,39 @@ public sealed class ProceduralPlanetElevationSource : IPlanetElevationSource
         var macroDirection = WarpDirection(direction, seed ^ WarpSeedSalt, 0.29, 1.16);
         var boundaryNoise = FractalNoise(direction, seed ^ BoundarySeedSalt, 4.2, 3, 2.05, 0.49);
         return SampleOrogenicSystems(macroDirection, seed, boundaryNoise).RidgeReliefMeters;
+    }
+
+    /// <summary>
+    /// Nonperiodic structural relief at 32, 16, 8, 4 and 2 km scales.
+    /// This is a bounded procedural bedrock prior, not simulated erosion.
+    /// Coordinates and amplitudes are physical and shared by every LOD.
+    /// </summary>
+    public double SampleRegionalRockReliefMeters(PlanetVector direction, int seed)
+    {
+        // A smooth 64 km warp breaks the Cartesian alignment of the noise
+        // lattice. Three-dimensional spherical sampling has no map seam.
+        var frequency = PlanetRadiusMeters / 64_000.0;
+        var warp = new PlanetVector(
+            ValueNoise(direction.X * frequency, direction.Y * frequency, direction.Z * frequency, seed ^ WarpSeedSalt),
+            ValueNoise(direction.Y * frequency, direction.Z * frequency, direction.X * frequency, seed ^ RegionalSeedSalt),
+            ValueNoise(direction.Z * frequency, direction.X * frequency, direction.Y * frequency, seed ^ DetailSeedSalt));
+        var warped = direction * PlanetRadiusMeters + warp * 8_000.0;
+        var relief = 0.0;
+        var wavelength = 32_000.0;
+        var amplitude = 320.0;
+        for (var octave = 0; octave < 5; octave++)
+        {
+            var noise = ValueNoise(warped.X / wavelength, warped.Y / wavelength, warped.Z / wavelength,
+                unchecked(seed ^ (DetailSeedSalt + octave * 1297)));
+            // Soft absolute value retains irregular crests without a sharp
+            // derivative cusp at every noise zero crossing.
+            var ridge = 1.0 - Math.Sqrt(noise * noise + 0.01);
+            relief += (2.0 * ridge * ridge - 1.0) * amplitude;
+            wavelength *= 0.5;
+            amplitude *= 0.5;
+        }
+
+        return relief;
     }
 
     private OrogenicStructure SampleOrogenicSystems(PlanetVector direction, int seed, double distortion)
@@ -161,19 +195,17 @@ public sealed class ProceduralPlanetElevationSource : IPlanetElevationSource
                 continue;
             }
 
-            // Compression creates coherent anticline/syncline trains roughly
-            // 55–95 km apart, parallel to each long tectonic belt. Slow
-            // along-belt curvature prevents mechanically straight stripes.
-            // The phase is evaluated in physical metres in the canonical
-            // spherical frame, independent of the raster / mesh resolution.
+            // Broad folds retain tectonic alignment, but their amplitudes and
+            // spacing vary along the belt. A cosine repeated the same rounded
+            // cross-section indefinitely, creating the Hero's smooth bands.
             var crossMeters = signedArcDistance * PlanetRadiusMeters;
             var alongMeters = Math.Atan2(PlanetVector.Dot(direction, arc.Tangent),
                 PlanetVector.Dot(direction, arc.Start)) * PlanetRadiusMeters;
-            var phase = crossMeters * (2.0 * Math.PI / arc.FoldWavelengthMeters) +
-                (0.72 * Math.Sin(alongMeters / 145_000.0 + arc.FoldPhase)) +
-                (0.23 * Math.Sin(alongMeters / 61_000.0 - arc.FoldPhase * 0.7));
-            var alongStrength = 0.82 + 0.18 * Math.Cos(alongMeters / 210_000.0 + arc.FoldPhase);
-            foldSum += Math.Cos(phase) * 230.0 * alongStrength * envelope * envelope;
+            var foldAcross = crossMeters / arc.FoldWavelengthMeters +
+                0.35 * Math.Sin(alongMeters / 145_000.0 + arc.FoldPhase);
+            var fold = ValueNoise(foldAcross, alongMeters / 70_000.0, arc.FoldPhase,
+                unchecked(seed ^ (UplandSeedSalt + arc.Index * 1013)));
+            foldSum += fold * 230.0 * envelope * envelope;
 
             // The previous pair of high-frequency cosine fold trains produced
             // endless parallel corrugations on the 128 km Hero. Instead build

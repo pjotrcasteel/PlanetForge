@@ -396,3 +396,39 @@ Regional geology snapshot version advances to 2 so old numerical histories
 cannot silently resume under different evolution equations. Version 1 research
 snapshots must be regenerated from canonical bedrock. Gameplay save schemas are
 unchanged because the new solver remains in the terrain research workflow.
+
+
+## PF 0.0.37.12 — irregular regional bedrock and continuous incision onset
+
+The 128 km Hero screenshots still showed broad smooth bands, while refinement
+made erosion steps more visible. Subdivision of the five steepest 1 km edges
+at the existing seed 24061984 Hero anchor found continuous bedrock, not height
+jumps: the steepest sampled edge changed about 131 m over 1 km. This does not
+establish continuity everywhere on the planet, including plate transitions.
+
+Canonical broad tectonic folds now use a nonperiodic field aligned with each
+arc instead of an endlessly repeating cosine. A separate spherical bedrock
+field supplies irregular structure at 32, 16, 8, 4 and 2 km lattice scales,
+with respective amplitude budgets of 320, 160, 80, 40 and 20 metres. A smooth
+64 km field warps coordinates by at most 8 km on each axis. Softened ridge
+profiles avoid absolute-value cusps. The total contribution is bounded by
+620 metres before the land and mountain-envelope masks. This is a procedural
+structural prior, not a claim that erosion or calibrated tectonics produced
+these features. It is sampled by the canonical elevation source for globe,
+regional and local geometry, with no camera-dependent displacement.
+
+Hydraulic incision formerly switched from zero to a finite cut at specific
+contributing area 6 km. It now begins continuously at 5 km, reaching full
+strength at 12 km with a cubic smoothstep. Activation multiplies the capped
+incision so the safety cap cannot erase the transition. Unit-width forcing,
+sediment mass accounting and the existing refinement regressions remain.
+Deposition activation and bank carving still have thresholds; this change
+does not claim to eliminate every numerical terrace or pass the full erosion
+convergence gate.
+
+Generation identity advances from 16 to 17 because canonical terrain changes.
+Regional research snapshots advance from schema 2 to 3; versions 1 and 2 must
+be regenerated. Tests cover metre-scale continuity and nonplanar structure
+within 128, 32 and 8 km windows for three seeds, aligned canonical LOD samples,
+and continuity across both the old and new hydraulic activation boundaries.
+The gameplay save format is unchanged. The Hero realism gate remains open.
