@@ -297,3 +297,40 @@ substantially between the 129² and 257² grids. Numerical resolution
 invariance requires a dedicated calibrated physical experiment rather
 than a visual tolerance adjustment; it must pass before region evolution
 can be applied to the main gameplay planet.
+
+## PF 0.0.37.10 — Physical bank width and stage-specific sediment diagnostics
+
+The bank-carving kernel no longer adds a fraction of cell spacing to physical
+channel width or forces a minimum width of 1.35 cells. That floor made channels
+physically wider on coarser grids. Its 12-cell radius cap also truncated banks
+on fine grids; support now follows physical width and includes the receiver reach.
+A channel narrower than the grid can remain unresolved instead of excavating
+extra neighbouring rock to make it visible. Resolving subgrid channel volume
+requires a separate finite-volume treatment; this change does not claim that.
+
+A controlled straight channel with 80 km² contributing area and 80 m incision
+previously cut 29.80 m at a point 1 km from its centre on a 1 km grid. The physical
+kernel correctly leaves that point outside its support. Regression tests compare
+the same physical bank point at 1000/500/250/125 m spacing for an 800 km² channel,
+and integrate an 80 km² channel at 125/62.5/31.25 m spacing against its analytic
+Gaussian cross-section (1% quadrature tolerance). These tests hold the channel
+and contributing area fixed, isolating the bank stage from routing changes.
+
+Hero diagnostics now separate hydraulic export from additional bank export.
+For seed 24061984 at the existing selected 128 km anchor (0.42242678262485306,
+0.4821837720791227, -0.7674988099435489), six iterations produce:
+
+| Grid | Hydraulic export km³ | Bank export km³ | Total export km³ |
+| --- | ---: | ---: | ---: |
+| 129² | 795.34 | 28.16 | 823.50 |
+| 257² | 548.72 | 9.60 | 558.32 |
+
+**The full resolution-invariance gate is still failing.** Most of the discrepancy
+comes from the hydraulic stage, not the corrected bank width. An analytic 128 km
+parabolic catchment, z = 1000 + 0.02y + 0.0000005x² in metres, also produces
+908.08 versus 784.64 km³ hydraulic export over six iterations. Next work must
+address discharge/erosion footprints and sediment transport under refinement,
+including quadrature at regional boundaries. Do not tune a visual tolerance or
+claim these numerical iterations represent a calibrated geological duration.
+Bedrock realism, multi-seed validation and mobile performance remain separate
+gates before applying evolved Hero terrain to the gameplay planet.

@@ -22,7 +22,9 @@ public sealed record PlanetHeroRegion(
     double ExportedVolumeCubicMeters,
     int FocusCellIndex = -1,
     double HillslopeTransportedVolumeCubicMeters = 0,
-    int HillslopeInitiallyUnstableEdges = 0);
+    int HillslopeInitiallyUnstableEdges = 0,
+    double HydraulicExportedVolumeCubicMeters = 0,
+    double BankExportedVolumeCubicMeters = 0);
 
 public sealed class PlanetHeroRegionBuilder(IPlanetElevationSource elevationSource)
 {
@@ -236,7 +238,9 @@ public sealed class PlanetHeroRegionBuilder(IPlanetElevationSource elevationSour
             evolved.CumulativeDepositedVolumeCubicMeters + hillslopes.AdditionalDepositedVolumeCubicMeters,
             evolved.CumulativeExportedVolumeCubicMeters + valleys.AdditionalExportedSedimentCubicMeters,
             HillslopeTransportedVolumeCubicMeters: hillslopes.AdditionalDepositedVolumeCubicMeters,
-            HillslopeInitiallyUnstableEdges: hillslopes.InitiallyUnstableEdges);
+            HillslopeInitiallyUnstableEdges: hillslopes.InitiallyUnstableEdges,
+            HydraulicExportedVolumeCubicMeters: evolved.CumulativeExportedVolumeCubicMeters,
+            BankExportedVolumeCubicMeters: valleys.AdditionalExportedSedimentCubicMeters);
         return region with { FocusCellIndex = FindIncisedChannelCell(region) };
     }
 }
