@@ -92,6 +92,42 @@ public sealed class PlanetHeroRegionBuilderTests
     }
 
     [TestMethod]
+    public void FindIncisedChannelCell_ChoosesStructuredBranchingTerrainInsteadOfDeepSinglePixel()
+    {
+        const int width = 65;
+        const int seed = 24061984;
+        var before = Enumerable.Repeat(1_500f, width * width).ToArray();
+        var after = (float[])before.Clone();
+        var cuts = new float[before.Length];
+        var runoff = new float[before.Length];
+
+        var isolated = 16 * width + 16;
+        after[isolated] = 1_340f;
+        cuts[isolated] = 160f;
+        runoff[isolated] = 300f;
+
+        for (var y = 31; y < 54; y++)
+        {
+            for (var x = 31; x < 54; x++)
+            {
+                var index = y * width + x;
+                var fold = 100f * (float)(Math.Sin((x - 31) * 0.42) * Math.Cos((y - 31) * 0.46));
+                after[index] += fold - 8f;
+                cuts[index] = 8f;
+                runoff[index] = 15f;
+            }
+        }
+
+        var region = new PlanetHeroRegion(seed, width, 500, before, after, cuts, runoff,
+            6, 8, 0, 0, 0);
+        var selected = PlanetHeroRegionBuilder.FindIncisedChannelCell(region);
+        Assert.IsGreaterThan(30, selected % width,
+            "A 32 km window with connected ridge variation should win over an isolated deep erosion scar.");
+        Assert.IsGreaterThan(30, selected / width);
+        Assert.AreEqual(selected, PlanetHeroRegionBuilder.FindIncisedChannelCell(region));
+    }
+
+    [TestMethod]
     public void CreateParentOverlay_NestedRegionInheritsPhysicalParentIncision()
     {
         const int width = 17;
