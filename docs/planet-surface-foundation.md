@@ -537,7 +537,7 @@ or single scar could win despite poorly resolved surrounding drainage.
 The focus selector now builds an O(n²) summed-area field of physical runoff
 and existing incision. For each candidate, its quarter-scale 8/32 km
 neighborhood must contain a minimum count of actually routed channel cells
-and reach at least two distinct quadrants. A branch-spread score then
+and reach at least two cardinal directions (including channels on the centre axes). A branch-spread score then
 distinguishes branching catchments from one isolated cliff, while a
 multi-kilometre best-fit plane residual retains geological ridge diversity.
 The support threshold uses drainage area in km², not raw runoff-cell counts,
@@ -583,3 +583,13 @@ of original rocky terrain. An adversarial regression with a huge numerical
 scar on flat rock and a separate connected ridge catchment protects the
 ranking against this confusion. Full-frame browser captures remain required
 before deployment; test success alone is not geological acceptance.
+
+### Centreline continuity check
+
+The new bedrock-first adversarial test revealed a qualification bug: a straight
+channel passing directly through the selected centreline is not necessarily
+present in two diagonal quadrants. The focus selector now counts four
+cardinal reaches excluding only the centrepoint. Two-direction continuity
+suffices for a through-channel, with three/four directions providing a small
+branching bonus. This preserves physically plausible straight tributaries
+without allowing runoff quantity to outweigh pre-existing rock structure.
