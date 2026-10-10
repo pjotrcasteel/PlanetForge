@@ -44,6 +44,15 @@ public sealed class PlanetTerrainRegionProvider(IPlanetElevationSource canonical
         }
     }
 
+    /// <summary>
+    /// Publishes an explicitly selected, previously evolved geological epoch
+    /// using stable geographical addresses. No simulation occurs here.
+    /// Publication is all-or-nothing if any history has an incompatible
+    /// world, duplicate region, epoch or physical snapshot.
+    /// </summary>
+    public long PublishHistories(PlanetGeologicalEpoch epoch, IReadOnlyList<PlanetGeologicalRegionHistory> histories) =>
+        ReplaceLayers(PlanetGeologicalRegionLayerBuilder.Build(epoch, histories));
+
     public long ClearLayers() => ReplaceLayers();
 
     private sealed record PublishedTerrain(IPlanetElevationSource Elevation, long Revision);
