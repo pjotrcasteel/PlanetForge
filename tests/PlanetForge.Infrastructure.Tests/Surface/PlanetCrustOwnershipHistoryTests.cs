@@ -86,6 +86,27 @@ public sealed class PlanetCrustOwnershipHistoryTests
     }
 
     [TestMethod]
+    public void SuggestTransfers_ActiveBoundary_ReturnsBoundedReplayableOptInProposals()
+    {
+        var catalog = PlanetCrustParcelCatalog.Create(24061984);
+        var history = PlanetCrustOwnershipHistory.Create(catalog);
+        var epoch = new PlanetGeologicalEpoch(1_000_000);
+        var candidates = history.SuggestTransfers(epoch, 8);
+        Assert.IsGreaterThan(0, candidates.Count);
+        Assert.IsLessThanOrEqualTo(8, candidates.Count);
+        CollectionAssert.AreEqual(candidates.ToArray(), history.SuggestTransfers(epoch, 8).ToArray());
+        Assert.IsTrue(candidates.All(item => item.ContactInfluence > 0.0 && item.Transfer.World == catalog.World));
+
+        var first = candidates[0];
+        var accepted = history.WithTransfer(first.Transfer);
+        Assert.AreEqual(first, accepted.Transfers.Single());
+        Assert.AreEqual(0, history.Transfers.Count);
+        Assert.IsFalse(accepted.SuggestTransfers(epoch, 8).Any(item => item.Transfer.ParcelId == first.Transfer.ParcelId));
+        Assert.ThrowsExactly<ArgumentException>(() => history.SuggestTransfers(PlanetGeologicalEpoch.Present));
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => history.SuggestTransfers(epoch, 0));
+    }
+
+    [TestMethod]
     public void WithTransfer_OutsideProxyContact_RejectsFabricatedOwnershipChanges()
     {
         var catalog = PlanetCrustParcelCatalog.Create(24061984);
@@ -114,12 +135,7 @@ public sealed class PlanetCrustOwnershipHistoryTests
         var stale = transfer with { Epoch = new PlanetGeologicalEpoch(500_000) };
         Assert.ThrowsExactly<ArgumentException>(() => history.WithTransfer(stale));
 
-        var wrongOwner = transfer with { Epoch = new PlanetGeologicalEpoch(2_000_000), FromPlate = transfer.ToPlate,
-            ToPlate = transfer.FromPlate };
-        // This is a potential legitimate reverse transfer in principle; the
-        // boundary-proxy gate must decide whether it is valid, not this test.
-        // Instead, supply a source not owning the material.
-        wrongOwner = wrongOwner with { FromPlate = transfer.FromPlate, ToPlate = transfer.ToPlate };
+        var wrongOwner = transfer with { Epoch = new PlanetGeologicalEpoch(2_000_000) };
         Assert.ThrowsExactly<InvalidOperationException>(() => history.WithTransfer(wrongOwner));
     }
 
