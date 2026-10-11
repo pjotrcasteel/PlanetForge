@@ -44,6 +44,10 @@ public readonly record struct PlanetCrustSphericalFace(
 public sealed class PlanetCrustSphericalControlVolumes
 {
     private const double RadiusMeters = PlanetTectonicPlateKinematics.NominalPlanetRadiusMeters;
+    // Reciprocal vertex agreement is <1e-7 chord units (~0.64 m on Earth).
+    // Endpoint errors bound possible shared arc-length disagreement by twice that.
+    private const double MaximumReciprocalVertexGap = 1e-7;
+    private const double MaximumReciprocalLengthGapMeters = 2.0 * RadiusMeters * MaximumReciprocalVertexGap;
     private static readonly double SphereAreaSquareMeters = 4.0 * Math.PI * RadiusMeters * RadiusMeters;
 
     private readonly PlanetVector[] sites;
@@ -382,7 +386,7 @@ public sealed class PlanetCrustSphericalControlVolumes
             }
             else
             {
-                if (shared.Occurrences != 1 || Math.Abs(shared.Face.LengthMeters - length) > 0.1 ||
+                if (shared.Occurrences != 1 || Math.Abs(shared.Face.LengthMeters - length) > MaximumReciprocalLengthGapMeters ||
                     !SameSharedEndpoints(shared.Face.Start, shared.Face.End, start, end))
                 {
                     throw new InvalidOperationException(
@@ -399,7 +403,8 @@ public sealed class PlanetCrustSphericalControlVolumes
 
     private static bool SameSharedEndpoints(PlanetVector firstStart, PlanetVector firstEnd,
         PlanetVector secondStart, PlanetVector secondEnd) =>
-        (firstStart - secondEnd).Length < 1e-7 && (firstEnd - secondStart).Length < 1e-7;
+        (firstStart - secondEnd).Length < MaximumReciprocalVertexGap &&
+        (firstEnd - secondStart).Length < MaximumReciprocalVertexGap;
 
     private int BuildIndex(int[] indices, int depth, List<KdNode> nodes)
     {
