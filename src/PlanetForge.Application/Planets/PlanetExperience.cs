@@ -49,9 +49,9 @@ public sealed class PlanetExperience(
     private const double MaximumCarbonDioxidePartsPerMillion = 5_000.0;
     private const double MinimumWaterEarthHydrospheres = 0.0;
     private const double MaximumWaterEarthHydrospheres = 5.0;
-    // One area-weighted global terrain profile (6 * 16 * 16 samples), cached by
-    // geological revision. Higher resolution comes after measured mobile profiling.
-    private const int SeaLevelSamplingGridLevel = 4;
+    // One low-cost area-weighted globe sample (6 * 8 * 8 cells), cached by
+    // geological revision. Refine only after measuring WASM/iPhone startup cost.
+    private const int SeaLevelSamplingGridLevel = 3;
     private const double LiquidWaterDensityKilogramsPerCubicMeter = 1_000.0;
     private const double MinimumVisualSeaLevelMeters = -11_000.0;
     private const double MaximumVisualSeaLevelMeters = 6_000.0;
