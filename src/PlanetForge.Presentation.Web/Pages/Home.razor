@@ -25,7 +25,7 @@
                 <small data-testid="planet-seed">SEED @CurrentSeed</small>
                 <button class="foundation-generate" data-testid="geology-terrain-toggle" type="button"
                         aria-label="Toggle geological deformation in the main 3D planet"
-                        aria-pressed="@geologyActive" disabled="@(isTransitioning || geologyLoading)"
+                        aria-pressed="@(geologyActive ? "true" : "false")" disabled="@(isTransitioning || geologyLoading)"
                         @onclick="ToggleGeologyAsync">@(geologyLoading ? "BUILDING…" : geologyActive ? "GEOLOGY ON" : "GEOLOGY OFF")</button>
                 @if (regionalStreamingEnabled)
                 {
