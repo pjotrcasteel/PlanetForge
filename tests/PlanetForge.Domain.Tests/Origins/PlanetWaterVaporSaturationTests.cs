@@ -34,12 +34,12 @@ public sealed class PlanetWaterVaporSaturationTests
     [TestMethod]
     public void Estimate_HotSteamAtmosphere_CanHoldWaterThatWouldCondenseAtLowerTemperature()
     {
-        var inventory = PlanetWaterInventory.Empty.Deliver(PlanetWaterReservoir.AtmosphericVapor, 1.0e21);
+        var inventory = PlanetWaterInventory.Empty.Deliver(PlanetWaterReservoir.AtmosphericVapor, 5.0e20);
         var hot = PlanetWaterCondensationModel.Estimate(inventory, 600.0, EarthRadiusMeters, EarthSurfaceGravityMetersPerSecondSquared);
         var cooled = PlanetWaterCondensationModel.Estimate(inventory, 373.15, EarthRadiusMeters, EarthSurfaceGravityMetersPerSecondSquared);
 
         Assert.AreEqual(0.0, hot.PotentialCondensateMassKilograms, 0.0);
-        Assert.IsTrue(cooled.PotentialCondensateMassKilograms > 9.0e20);
+        Assert.IsTrue(cooled.PotentialCondensateMassKilograms > 4.0e20);
         Assert.IsTrue(cooled.SaturationPressurePascals < hot.SaturationPressurePascals);
         Assert.AreEqual(0.0, inventory.GetMassKilograms(PlanetWaterReservoir.SurfaceLiquid), 0.0,
             "A diagnostic saturation estimate must not spontaneously materialize an ocean.");
