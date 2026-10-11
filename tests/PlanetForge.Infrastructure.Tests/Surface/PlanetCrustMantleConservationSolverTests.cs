@@ -96,7 +96,7 @@ public sealed class PlanetCrustMantleConservationSolverTests
         }
 
         var after = solver.Advance(state, catalog, history, newer, proposals);
-        Assert.IsTrue(after.Columns.Any((column, i) => column.CrustMassKilograms != state.Columns[i].CrustMassKilograms));
+        Assert.IsTrue(after.Columns.Where((column, i) => column.CrustMassKilograms != state.Columns[i].CrustMassKilograms).Any());
         Assert.AreEqual(proposals.Count, after.Events.Count);
     }
 
@@ -147,8 +147,8 @@ public sealed class PlanetCrustMantleConservationSolverTests
         Assert.AreEqual(present.Epoch, presentState.Epoch);
         Assert.AreEqual(initial.TotalMassKilograms, presentState.TotalMassKilograms,
             initial.TotalMassKilograms * 1e-12);
-        Assert.AreEqual(one.Events.Count + presentState.Events.Count - one.Events.Count,
-            presentState.Events.Count);
+        Assert.IsGreaterThanOrEqualTo(one.Events.Count, presentState.Events.Count);
+        CollectionAssert.AreEqual(one.Events.ToArray(), presentState.Events.Take(one.Events.Count).ToArray());
         Assert.AreEqual(initial.Events.Count, 0);
         Assert.AreEqual(initial.InitialTotalMassKilograms, presentState.InitialTotalMassKilograms);
     }
