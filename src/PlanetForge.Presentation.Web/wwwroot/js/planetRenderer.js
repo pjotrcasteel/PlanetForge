@@ -734,6 +734,7 @@ function measureSurface(s) {
     let icePixels = 0;
     let minimumOceanLuminance = Number.POSITIVE_INFINITY;
     let maximumOceanLuminance = Number.NEGATIVE_INFINITY;
+    const oceanMask = new Uint8Array(canvas.width * canvas.height);
 
     for (let offset = 0; offset < pixels.length; offset += 4) {
         const alpha = pixels[offset + 3] / 255.0;
@@ -752,6 +753,7 @@ function measureSurface(s) {
 
         const isOcean = blue > red * 1.35 && green > red * 1.30 && blue >= green * 0.72;
         if (!isOcean) continue;
+        oceanMask[offset / 4] = 1;
         oceanPixels++;
         minimumOceanLuminance = Math.min(minimumOceanLuminance, luminance);
         maximumOceanLuminance = Math.max(maximumOceanLuminance, luminance);
@@ -764,9 +766,51 @@ function measureSurface(s) {
         icePixels,
         iceFraction: planetPixels > 0 ? icePixels / planetPixels : 0.0,
         oceanFraction: planetPixels > 0 ? oceanPixels / planetPixels : 0.0,
+        oceanLargestConnectedFraction: oceanPixels > 0 ? largestOceanConnectedArea(oceanMask, canvas.width, canvas.height) / oceanPixels : 0.0,
         oceanLuminanceRange: oceanPixels > 0 ? maximumOceanLuminance - minimumOceanLuminance : 0.0,
         glError: gl.getError()
     };
+}
+
+// Browser-only physical-water visual gate: count connected ocean pixels rather
+// than accepting thousands of unrelated dark fragments as a coherent ocean.
+// Eight-neighbour connectivity tolerates diagonal antialiasing of coastlines.
+function largestOceanConnectedArea(mask, width, height) {
+    const visited = new Uint8Array(mask.length);
+    const queue = new Int32Array(mask.length);
+    let largest = 0;
+
+    for (let start = 0; start < mask.length; start++) {
+        if (mask[start] === 0 || visited[start]) continue;
+        let head = 0;
+        let tail = 1;
+        let size = 0;
+        queue[0] = start;
+        visited[start] = 1;
+
+        while (head < tail) {
+            const current = queue[head++];
+            size++;
+            const x = current % width;
+            const y = (current / width) | 0;
+            for (let deltaY = -1; deltaY <= 1; deltaY++) {
+                const neighborY = y + deltaY;
+                if (neighborY < 0 || neighborY >= height) continue;
+                for (let deltaX = -1; deltaX <= 1; deltaX++) {
+                    const neighborX = x + deltaX;
+                    if ((deltaX === 0 && deltaY === 0) || neighborX < 0 || neighborX >= width) continue;
+                    const next = neighborY * width + neighborX;
+                    if (mask[next] === 0 || visited[next]) continue;
+                    visited[next] = 1;
+                    queue[tail++] = next;
+                }
+            }
+        }
+
+        largest = Math.max(largest, size);
+    }
+
+    return largest;
 }
 
 function render() {
