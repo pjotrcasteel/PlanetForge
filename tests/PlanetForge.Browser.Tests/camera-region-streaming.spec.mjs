@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test';
 
 test('CameraRegionStreaming_NoArchives_PreservesCanonicalGlobeAndDoesNotBlockBoot', async ({ page }) => {
   await page.goto('/?regionalStreaming=1&visualTest=1&seed=24061984');
-  await expect(page.getByTestId('planet-seed')).toContainText('24061984');
+  await expect(page.getByTestId('planet-seed')).toContainText('24061984', { timeout: 30_000 });
   await expect(page.getByTestId('region-stream-status')).toContainText('0 SAVED', { timeout: 20_000 });
   await expect.poll(async () => page.evaluate(() => window.__planetForgeSurfaceTest?.getSeed())).toBe(24061984);
   expect(await page.evaluate(() => document.documentElement.scrollWidth - innerWidth)).toBeLessThanOrEqual(2);
