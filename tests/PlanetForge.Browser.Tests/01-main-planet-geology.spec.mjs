@@ -75,3 +75,38 @@ test('MainPlanet_GeologyToggle_MobileLayout_StaysOnCanvasAndFitsPhone', async ({
     expect(metrics.buttonHeight).toBeGreaterThanOrEqual(28);
     expect(metrics.hasCanvas).toBe(true);
 });
+
+test('MainPlanet_MeltingWorld_ShowsActualSeaLevelOceansWithGeologyEnabled', async ({ page }, testInfo) => {
+    test.setTimeout(300_000);
+    await page.goto('/?visualTest=1');
+    await expect(page.locator('#planet-canvas')).toBeVisible({ timeout: 30_000 });
+    await page.waitForFunction(() => window.__planetForgeSurfaceTest?.getTerrainGeometryKey(), null, { timeout: 30_000 });
+
+    const baseline = await page.evaluate(() => window.__planetForgeSurfaceTest.measure());
+    expect(baseline.glError).toBe(0);
+
+    await page.getByRole('button', { name: 'NEXT' }).click();
+    await expect(page.getByText('MELTING WORLD', { exact: true })).toBeVisible({ timeout: 60_000 });
+    await expect(page.getByRole('button', { name: 'NEXT' })).toBeEnabled({ timeout: 60_000 });
+    await page.waitForFunction(() => window.__planetForgeSurfaceTest?.measure().oceanPixels > 100, null, { timeout: 45_000 });
+
+    const melted = await page.evaluate(() => ({
+        key: window.__planetForgeSurfaceTest.getTerrainGeometryKey(),
+        stats: window.__planetForgeSurfaceTest.measure()
+    }));
+    expect(melted.stats.glError).toBe(0);
+    expect(melted.stats.oceanPixels).toBeGreaterThan(100);
+    await page.screenshot({ path: testInfo.outputPath('main-planet-melted-oceans.png'), fullPage: true });
+
+    const geology = page.getByTestId('geology-terrain-toggle');
+    await geology.click();
+    await expect(geology).toHaveAttribute('aria-pressed', 'true', { timeout: 150_000 });
+    await page.waitForFunction(previous => window.__planetForgeSurfaceTest?.getTerrainGeometryKey() !== previous,
+        melted.key, { timeout: 30_000 });
+    await page.waitForFunction(() => window.__planetForgeSurfaceTest?.measure().oceanPixels > 100, null, { timeout: 30_000 });
+
+    const physical = await page.evaluate(() => window.__planetForgeSurfaceTest.measure());
+    expect(physical.glError).toBe(0);
+    expect(physical.oceanPixels).toBeGreaterThan(100);
+    await page.screenshot({ path: testInfo.outputPath('main-planet-physical-geology-oceans.png'), fullPage: true });
+});
