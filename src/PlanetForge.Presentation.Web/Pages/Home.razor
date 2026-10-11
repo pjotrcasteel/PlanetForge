@@ -40,7 +40,7 @@
         </div>
 
         <div class="foundation-controls">
-            <button class="foundation-next" disabled="@isTransitioning" @onclick="AdvanceAsync">@FormatButtonLabel()</button>
+            <button class="foundation-next" disabled="@(isTransitioning || geologyLoading)" @onclick="AdvanceAsync">@FormatButtonLabel()</button>
         </div>
     </section>
 </main>
