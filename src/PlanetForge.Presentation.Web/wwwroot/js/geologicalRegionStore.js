@@ -184,3 +184,45 @@ export function downloadArchive(json, filename) {
     link.remove();
     setTimeout(() => URL.revokeObjectURL(url), 10_000);
 }
+
+
+/**
+ * Read only geographical identities (no elevation arrays) for the present
+ * epoch of one generated planet. Return at most 256 addresses to keep mobile
+ * catalogues bounded; report truncation instead of pretending a partial
+ * catalogue represents the whole saved planet.
+ */
+export async function listPresentGeologicalRegions(seed, version, limit = 256) {
+    if (!Number.isSafeInteger(seed) || !Number.isSafeInteger(version) || version < 1 ||
+        !Number.isSafeInteger(limit) || limit < 1 || limit > 256) {
+        throw new Error('Invalid geological region catalogue request.');
+    }
+    const prefix = `${archivePrefix}G${version}:S${seed}:`;
+    const db = await openDatabase();
+    try {
+        return await new Promise((resolve, reject) => {
+            const tx = db.transaction(storeName, 'readonly');
+            const cursorRequest = tx.objectStore(storeName).openKeyCursor(
+                IDBKeyRange.bound(prefix, prefix + '\uffff'));
+            const keys = [];
+            let truncated = false;
+            cursorRequest.onsuccess = () => {
+                const cursor = cursorRequest.result;
+                if (!cursor) return;
+                if (String(cursor.key).endsWith('/YBP:0')) {
+                    if (keys.length >= limit) {
+                        truncated = true;
+                        return;
+                    }
+                    keys.push(cursor.key);
+                }
+                cursor.continue();
+            };
+            tx.oncomplete = () => resolve({ keys, truncated });
+            tx.onerror = () => reject(tx.error ?? new Error('Geological region catalogue failed.'));
+            tx.onabort = () => reject(tx.error ?? new Error('Geological region catalogue was interrupted.'));
+        });
+    } finally {
+        db.close();
+    }
+}

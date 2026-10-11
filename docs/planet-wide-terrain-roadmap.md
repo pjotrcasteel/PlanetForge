@@ -149,3 +149,12 @@ When an archive already exists at the same planet/region/epoch, importing requir
 Keys are paginated (ten per page) without deserializing large archives; a standalone index screen never generates or loads a dense planet terrain. A dedicated Playwright flow checks validation, reload, export, replacement, concurrent-edit conflict, pagination and mobile layout.
 
 Safari Private Browsing may delete local IndexedDB content when the session ends, so downloadable backups are an essential part of the experience. This is supporting tooling, **not** the main gameplay feature. The primary visual acceptance target remains the **whole globe and LOD 0–3**. Canonical geology, moving crust, recognizable mountain ranges/volcanoes and connected snowmelt rivers/lakes/oceans are future physical milestones. No shader-generated pseudo-geography is accepted in place of actual planetary simulation.
+
+ 
+## A3.1 — Camera-driven archived geology (PF 0.0.37.19)
+
+The planet can opt into a research preview with `?regionalStreaming=1`. The normal game remains canonical-only, and Hero research does **not** implicitly become the whole planet. At boot, the preview queries the browser's IndexedDB **key catalogue only** for the current world generation/seed and geological present (YBP 0), capped at 256 keys; historical epochs are never chosen automatically.
+
+When the camera enters adaptive orbit (distance <1.35 planet radii), the C# selector seeks the nearest geographically addressed saved region within a conservative short angular range, rather than scanning and decoding large archives on every frame. The streamer loads only **one** archive candidate, verifies the camera actually intersects its physical erosion support, then restores via A2.3 atomic publication. Leaving that location or zooming back out restores canonical terrain, and revision-aware globe/ground meshes re-sample the shared geology. Duplicate views reuse the already loaded selection; superseded or cancelled loads cannot republish a stale region.
+
+The preview is intentionally behind a query flag until the visual and device-performance gates are satisfied. If there are no archived geological regions for the current seed, no geology is fabricated or loaded. Archived YBP values are not calibrated geological evolution. Further milestones must refine LOD 0–3 visuals, handle more than one adjacent region with stable ownership and sediment flow, implement camera-friendly asynchronous disk prefetch, and add physically consistent tectonic motion, ice and drainage.

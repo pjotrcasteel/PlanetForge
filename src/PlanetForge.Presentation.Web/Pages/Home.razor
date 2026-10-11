@@ -1,11 +1,15 @@
 @using PlanetForge.Application.Missions
 @using PlanetForge.Application.Runs
+@using PlanetForge.Application.Surface
 @using PlanetForge.Domain.WorldGeneration
+@using PlanetForge.Domain.Surface
+@using PlanetForge.Infrastructure.Surface
 @implements IAsyncDisposable
 @inject PlanetExperience Experience
 @inject PlanetRun Run
 @inject IJSRuntime JsRuntime
 @inject NavigationManager Navigation
+@inject PlanetGeologicalCameraRegionStream RegionStream
 
 <main class="foundation-shell">
     <section class="planet-stage foundation-stage @PlanetVisualClass()">
@@ -20,6 +24,10 @@
                 <small data-testid="planet-seed">SEED @CurrentSeed</small>
                 <a class="foundation-generate" href="?terrainLab=1" aria-label="Open Terrain Lab">LAB</a>
                 <a class="foundation-generate" href="?geologyArchive=1" aria-label="Open Geological Archives">ARCHIVES</a>
+                @if (regionalStreamingEnabled)
+                {
+                    <small data-testid="region-stream-status" aria-live="polite">@regionalStreamStatus</small>
+                }
                 <button class="foundation-generate" disabled="@isTransitioning" aria-label="Generate new planet" @onclick="GeneratePlanetAsync">GENERATE</button>
             </div>
         </div>
@@ -39,6 +47,12 @@
     private const int ScaffoldFrameCount = 36;
 
     private readonly CancellationTokenSource disposeCancellationTokenSource = new();
+    private IJSObjectReference? archiveModule;
+    private bool regionalStreamingEnabled;
+    private bool regionalCatalogReady;
+    private IReadOnlyList<PlanetGeologicalRegionId> regionalCatalog = [];
+    private PlanetSurfaceView? lastRegionalCameraView;
+    private string regionalStreamStatus = "REGION STREAM: INITIALIZING";
     private IJSObjectReference? rendererModule;
     private IJSObjectReference? waterRendererModule;
     private PlanetRenderSnapshot? snapshot;
@@ -52,6 +66,8 @@
 
     protected override void OnInitialized()
     {
+        regionalStreamingEnabled = new Uri(Navigation.Uri).Query.TrimStart('?').Split('&', StringSplitOptions.RemoveEmptyEntries)
+            .Contains("regionalStreaming=1", StringComparer.OrdinalIgnoreCase);
         var visualTestSeed = GetVisualTestSeed();
         ApplyRun(visualTestSeed.HasValue ? Run.StartNew(visualTestSeed.Value) : Run.StartNew());
         currentStage = FoundationStage.FrozenWorld;
@@ -71,7 +87,86 @@
         waterRendererModule = await JsRuntime.InvokeAsync<IJSObjectReference>("import", disposeCancellationTokenSource.Token, "./js/waterOverlay.js");
         await waterRendererModule.InvokeVoidAsync("initialize", disposeCancellationTokenSource.Token, "water-overlay-canvas", "planet-canvas", snapshot.PhysicalParameters.RadiusMeters);
         await waterRendererModule.InvokeVoidAsync("clearWaterCycle", disposeCancellationTokenSource.Token);
+        if (regionalStreamingEnabled)
+        {
+            try
+            {
+                archiveModule = await JsRuntime.InvokeAsync<IJSObjectReference>("import", disposeCancellationTokenSource.Token, "./js/geologicalRegionStore.js");
+                await LoadRegionalCatalogueAsync();
+            }
+            catch (Exception error)
+            {
+                regionalStreamStatus = $"REGION STREAM UNAVAILABLE: {error.Message}";
+                StateHasChanged();
+            }
+        }
     }
+
+    private async Task LoadRegionalCatalogueAsync()
+    {
+        regionalCatalogReady = false;
+        regionalCatalog = [];
+        if (archiveModule is null)
+        {
+            return;
+        }
+
+        var keys = await archiveModule.InvokeAsync<RegionalArchiveCatalogue>(
+            "listPresentGeologicalRegions", disposeCancellationTokenSource.Token,
+            CurrentSeed, PlanetGenerationVersion.Current.Value);
+        regionalCatalog = keys.Keys
+            .Select(key => PlanetGeologicalCameraRegionSelector.TryParsePresentArchiveKey(key, out var region) ? region : (PlanetGeologicalRegionId?)null)
+            .Where(region => region.HasValue)
+            .Select(region => region!.Value)
+            .Distinct()
+            .ToArray();
+        regionalCatalogReady = true;
+        regionalStreamStatus = keys.Truncated
+            ? $"REGION STREAM: {regionalCatalog.Count}+ SAVED (INDEX LIMITED)"
+            : $"REGION STREAM: {regionalCatalog.Count} SAVED";
+        StateHasChanged();
+    }
+
+    private async Task ObserveRegionalCameraAsync(PlanetSurfaceView view, int seed)
+    {
+        try
+        {
+            var changed = await RegionStream.ObserveAsync(seed, view, regionalCatalog, disposeCancellationTokenSource.Token);
+            if (!changed || seed != CurrentSeed || !regionalStreamingEnabled)
+            {
+                return;
+            }
+
+            await InvokeAsync(async () =>
+            {
+                // Revision-aware surface caches rebuild orbital and ground
+                // geometry from one newly published geological snapshot.
+                if (lastRegionalCameraView is not null)
+                {
+                    snapshot = EnsureLocalSurfaceDelivery(Experience.UpdateSurfaceView(lastRegionalCameraView));
+                    await SyncPlanetAsync();
+                }
+
+                var active = RegionStream.ActiveRegion;
+                regionalStreamStatus = active is null ? "REGION STREAM: CANONICAL TERRAIN" : $"REGION STREAM: {active.Value.Tile.Level} / SAVED GEOLOGY";
+                StateHasChanged();
+            });
+        }
+        catch (OperationCanceledException)
+        {
+            // Camera moved, a newer request won, or this page was disposed.
+        }
+        catch (Exception error)
+        {
+            await InvokeAsync(() =>
+            {
+                regionalStreamStatus = $"REGION STREAM: {error.Message}";
+                StateHasChanged();
+            });
+        }
+    }
+
+    private sealed record RegionalArchiveCatalogue(string[] Keys, bool Truncated);
 
     private int? GetVisualTestSeed()
     {
@@ -106,7 +201,16 @@
         try
         {
             var seed = CreateRandomSeed(CurrentSeed);
+            if (regionalStreamingEnabled)
+            {
+                RegionStream.Reset();
+                regionalCatalogReady = false;
+            }
             ApplyRun(Run.StartNew(seed));
+            if (regionalStreamingEnabled)
+            {
+                await LoadRegionalCatalogueAsync();
+            }
             currentStage = FoundationStage.FrozenWorld;
             elapsedYears = 0.0;
             await SyncPlanetAsync();
@@ -270,6 +374,10 @@
         BeginTransition(FoundationStage.FrozenWorld);
         try
         {
+            if (regionalStreamingEnabled)
+            {
+                RegionStream.Reset();
+            }
             ApplyRun(Run.Restart());
             currentStage = FoundationStage.FrozenWorld;
             elapsedYears = 0.0;
@@ -365,6 +473,21 @@
     public async ValueTask DisposeAsync()
     {
         disposeCancellationTokenSource.Cancel();
+        if (regionalStreamingEnabled)
+        {
+            RegionStream.Reset();
+        }
+        if (archiveModule is not null)
+        {
+            try
+            {
+                await archiveModule.DisposeAsync();
+            }
+            catch (JSDisconnectedException)
+            {
+                // Browser navigated away.
+            }
+        }
         if (waterRendererModule is not null)
         {
             try

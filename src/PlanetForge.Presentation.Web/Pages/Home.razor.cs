@@ -31,6 +31,11 @@ public partial class Home
         };
 
         snapshot = EnsureLocalSurfaceDelivery(Experience.UpdateSurfaceView(view));
+        if (regionalStreamingEnabled && regionalCatalogReady)
+        {
+            lastRegionalCameraView = view;
+            _ = ObserveRegionalCameraAsync(view, snapshot.Seed);
+        }
         return snapshot;
     }
 
