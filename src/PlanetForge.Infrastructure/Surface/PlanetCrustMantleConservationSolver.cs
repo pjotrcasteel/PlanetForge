@@ -158,11 +158,7 @@ public sealed class PlanetCrustMantleConservationSolver
             var eligible = source.Value;
             var reservoir = process == PlanetCrustMantleProcess.Spreading
                 ? eligible.ExchangeableMantleMassKilograms : eligible.CrustMassKilograms;
-            var budget = reservoir * MaximumTransferredFractionPerStep;
-            var move = Math.Min(budget, Math.Abs(contact.CompressionMetersPerMillionYears) * durationMillionYears *
-                face.LengthMeters * eligible.Material.ReferenceThicknessMeters *
-                eligible.Material.ReferenceDensityKilogramsPerCubicMeter *
-                contact.ContactInfluence * EffectiveInteractionScale);
+            var move = MaximumTransferMass(eligible, contact, face, durationMillionYears, process.Value);
             if (!double.IsFinite(move) || move <= 0.0)
             {
                 continue;
@@ -232,6 +228,13 @@ public sealed class PlanetCrustMantleConservationSolver
                 throw new ArgumentException("The event conflicts with the actual signed plate-relative motion at this face.", nameof(exchanges));
             }
 
+            var durationMillionYears = (state.Epoch.YearsBeforePresent - targetGeometry.Epoch.YearsBeforePresent) / 1_000_000.0;
+            var physicallyAllowed = MaximumTransferMass(source, contact, face, durationMillionYears, request.Process);
+            if (request.MassKilograms > physicallyAllowed * (1.0 + 1e-12))
+            {
+                throw new ArgumentException("The proposed material flux exceeds this boundary's measured relative-motion budget.", nameof(exchanges));
+            }
+
             var sign = request.Process == PlanetCrustMantleProcess.Spreading ? 1.0 : -1.0;
             deltaCrust[index] += sign * request.MassKilograms;
             evidence[i] = new PlanetCrustMantleExchangeEvidence(request, targetGeometry.Epoch,
@@ -267,6 +270,22 @@ public sealed class PlanetCrustMantleConservationSolver
         var allEvents = state.Events.Concat(evidence).ToArray();
         return new PlanetCrustMantleReservoirSnapshot(state.World, targetGeometry.Epoch, result,
             allEvents, state.InitialTotalMassKilograms);
+    }
+
+    private static double MaximumTransferMass(
+        PlanetCrustMantleReservoirColumn source,
+        PlanetPlateBoundarySample contact,
+        PlanetCrustSphericalFace face,
+        double durationMillionYears,
+        PlanetCrustMantleProcess process)
+    {
+        var available = process == PlanetCrustMantleProcess.Spreading
+            ? source.ExchangeableMantleMassKilograms : source.CrustMassKilograms;
+        var motionBound = Math.Abs(contact.CompressionMetersPerMillionYears) * durationMillionYears *
+            face.LengthMeters * source.Material.ReferenceThicknessMeters *
+            source.Material.ReferenceDensityKilogramsPerCubicMeter *
+            contact.ContactInfluence * EffectiveInteractionScale;
+        return Math.Min(available * MaximumTransferredFractionPerStep, motionBound);
     }
 
     private PlanetPlateBoundarySample Sample(PlanetCrustSphericalFace face,
