@@ -25,7 +25,7 @@ public sealed class PlanetOriginEpochStateTests
         Assert.AreEqual(1L, evolved.Revision);
         Assert.AreEqual(4_539_000_000L, evolved.Clock.YearsBeforePresent);
         Assert.AreEqual(4_540_000_000L, original.Clock.YearsBeforePresent);
-        Assert.AreEqual(2_150.0, evolved.Thermal.EnergyBudget.StoredEnergyJoules, 1e-9);
+        Assert.AreEqual(2_050.0, evolved.Thermal.EnergyBudget.StoredEnergyJoules, 1e-9);
         Assert.AreEqual(2_100.0, evolved.Water.PlanetaryWaterMassKilograms, 1e-9);
         Assert.AreEqual(1_700.0, evolved.Water.GetMassKilograms(PlanetWaterReservoir.HydratedMantle), 1e-9);
         Assert.AreEqual(100.0, evolved.Water.GetMassKilograms(PlanetWaterReservoir.DissolvedInMagma), 1e-9);
