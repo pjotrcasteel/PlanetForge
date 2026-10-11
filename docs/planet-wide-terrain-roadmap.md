@@ -176,3 +176,13 @@ The initial speed calibration of 0.35–1 × 60 km/Myr (about 2.1–6 cm/year) i
 2. Use relative plate velocities to classify convergence/divergence/shear, then derive uplift, rifting, subduction and volcanism over time.
 3. Propagate the resulting physical surface through orbit and LOD 0–3 before expanding local Hero inspectors; avoid shader-only landforms.
 4. Resolve world-wide drainage and inter-region sediment flow before allowing moving mountains and meltwater to restructure lakes and oceans.
+
+## A2.5.2 — Relative motion and plate-boundary diagnostics (PF 0.0.37.21)
+
+`PlanetTectonicBoundaryKinematics` computes contact-relative velocity from the **same canonical plate Euler poles** introduced in A2.5.1. For one geographic position and a requested geological epoch, it finds the two nearest moving plate centres and evaluates their velocities at that *position*, rather than incorrectly subtracting only the centre velocities.
+
+The great-circle bisector between two centre points is a **provisional Voronoi contact**, not a topologically conserved crust boundary. The local tangent normal is oriented by ascending persistent plate ID, so swapping the input order cannot reverse the signs. Compression is positive when plates approach, negative when they separate. Signed shear measures lateral motion; a neutral boundary, transform contact, convergence, divergence and oblique combinations are classified separately. The influence envelope is bounded to 0–0.035 radians from that bisector, with a smooth falloff beyond 0.010 radians. Widths and classification thresholds are explicit **research assumptions**, not measured elastic properties or physical forces.
+
+C# tests cover synthetic convergent, divergent, transform, oblique and neutral motions; plate-order invariance; locality and undefined coincident-centre contacts; invalid cross-world ownership; seed/epoch determinism; and unchanged canonical surface sampling. The diagnostic is not called by globe or LOD meshes, and it does not change planet generation, world saves or Hero.
+
+**Next gate:** persistent crust parcels and genuinely evolving boundary topology, followed by an explicit material/energy-budgeted uplift, extension, trench and magma source solver. Its fields must publish through the shared planetary terrain source and be checked at orbital and LOD 0–3 scales. Boundary labels or colour overlays alone do not satisfy the geological realism goal.

@@ -35,7 +35,8 @@ async function importArchive(page, json) {
         mimeType: 'application/json',
         buffer: Buffer.from(json)
     });
-    await expect(page.getByTestId('archive-preview')).toBeVisible();
+    const expectedExportedVolume = JSON.parse(json).Evolved.CumulativeExportedVolumeCubicMeters;
+    await expect(page.getByTestId('archive-preview')).toContainText(String(expectedExportedVolume));
 }
 
 test('GeologicalArchives_ImportValidateReloadExportAndExplicitReplace', async ({ page }) => {
@@ -77,7 +78,9 @@ test('GeologicalArchives_RejectsMalformedFileAndConcurrentOverwrite', async ({ p
     await expect(page.getByTestId('archive-preview')).toHaveCount(0);
     await importArchive(page, archive(20));
     await page.locator('#archive-save').click();
+    await expect(page.getByTestId('archive-status')).toContainText('saved');
     await importArchive(page, archive(30));
+    await expect(page.getByTestId('archive-status')).toContainText('A local archive already exists');
     await page.locator('#archive-replace').check();
 
     await page.evaluate(async ({ key, json }) => {
