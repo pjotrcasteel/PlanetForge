@@ -1385,6 +1385,12 @@ void main() {
     }
 
     if (uMode == 5) {
+        // Geological bedrock beneath liquid sea level must not write depth
+        // before the sea-surface pass. At orbital distance, the 18-metre
+        // clearance between rock and water is below depth-buffer precision;
+        // allowing both opaque surfaces causes z-fighting ocean speckles.
+        // This mask uses the same physical elevation as oceanMaterial below.
+        if (uLiquidFraction > 0.001 && elevationAboveSeaLevel < 0.0) discard;
         outColor = vec4(barrenRockMaterial(radial, normal, vElevationMeters), 1.0);
         return;
     }
