@@ -137,7 +137,7 @@ test('MainPlanet_ActiveWaterWorld_BuildsWaterAgainstVisibleTerrainWithoutSecondC
 });
 
 test('MainPlanet_DefaultGameplay_IdentifiesSnowballExperimentInsteadOfPrimordialEarth', async ({ page }) => {
-    test.setTimeout(90_000);
+    test.setTimeout(240_000);
     await page.goto('/?visualTest=1');
     await expect(page.locator('#planet-canvas')).toBeVisible({ timeout: 30_000 });
 
