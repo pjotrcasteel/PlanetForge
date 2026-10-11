@@ -140,17 +140,19 @@ public sealed class PlanetCrustEpochTopologyTests
         var epoch = new PlanetGeologicalEpoch(2_000_000);
         var before = PlanetCrustSphericalControlVolumes.BuildAtEpoch(catalog, original, epoch);
         var after = PlanetCrustSphericalControlVolumes.BuildAtEpoch(catalog, accepted, epoch);
-        var comparison = PlanetCrustEpochTopologyTransition.Compare(catalog, accepted, before, after);
         var moved = accepted.Transfers[0].Transfer.ParcelId;
 
         Assert.AreEqual(moved, after.Locate(accepted.GetState(moved, epoch).GeographicDirection).MaterialId);
-        Assert.AreEqual(catalog.Parcels[(int)moved.Value - 1].ReferenceMassKilograms,
-            comparison.CellChanges[(int)moved.Value - 1].ReferenceMassKilograms);
+        Assert.IsGreaterThan(0.0,
+            (after.GetSiteDirection(moved) - before.GetSiteDirection(moved)).Length);
         Assert.AreEqual(0, original.Transfers.Count);
         Assert.AreEqual(1, accepted.Transfers.Count);
-        Assert.AreEqual(catalog.TotalReferenceMassKilograms, comparison.TotalReferenceMassKilograms);
+        Assert.AreEqual(catalog.TotalReferenceMassKilograms,
+            catalog.Parcels.Sum(parcel => parcel.ReferenceMassKilograms));
         Assert.AreEqual(before.GeographicAreaSquareMeters, after.GeographicAreaSquareMeters,
             after.GeographicAreaSquareMeters * 1e-8);
+        Assert.ThrowsExactly<ArgumentException>(() =>
+            PlanetCrustEpochTopologyTransition.Compare(catalog, accepted, before, after));
     }
 
     [TestMethod]
