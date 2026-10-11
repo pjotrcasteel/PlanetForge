@@ -14,7 +14,7 @@ public sealed class PlanetCrustParcelCatalog
     // A representative equal-area quadrature budget, NOT contiguous Voronoi
     // crust polygons. No raster or renderer depends on the count.
     public const int ReferenceParcelCount = 1024;
-    private const double GoldenAngle = Math.PI * (3.0 - Math.Sqrt(5.0));
+    private static readonly double GoldenAngle = Math.PI * (3.0 - Math.Sqrt(5.0));
 
     private readonly PlanetTectonicPlateState[] plateStates;
     private readonly PlanetCrustMaterialParcel[] parcels;
