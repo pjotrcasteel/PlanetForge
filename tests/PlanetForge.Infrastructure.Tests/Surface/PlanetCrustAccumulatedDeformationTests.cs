@@ -16,7 +16,7 @@ public sealed class PlanetCrustAccumulatedDeformationTests
         var history = PlanetCrustOwnershipHistory.Create(catalog);
         var sequence = new PlanetCrustAccumulatedDeformation().Simulate(catalog, history, 2);
 
-        Assert.HasCount(3, sequence);
+        Assert.AreEqual(3, sequence.Count);
         Assert.AreEqual(2_000_000L, sequence[0].Epoch.YearsBeforePresent);
         Assert.AreEqual(1_000_000L, sequence[1].Epoch.YearsBeforePresent);
         Assert.AreEqual(0L, sequence[2].Epoch.YearsBeforePresent);
@@ -27,7 +27,7 @@ public sealed class PlanetCrustAccumulatedDeformationTests
         foreach (var snapshot in sequence)
         {
             Assert.AreEqual(catalog.World, snapshot.World);
-            Assert.HasCount(catalog.Parcels.Count, snapshot.Columns);
+            Assert.AreEqual(catalog.Parcels.Count, snapshot.Columns.Count);
             Assert.AreEqual(sequence[0].ConservedReferenceBudgetKilograms,
                 snapshot.ConservedReferenceBudgetKilograms);
             Assert.AreEqual(sequence[0].TotalMaterialBudgetKilograms, snapshot.TotalMaterialBudgetKilograms,
@@ -86,7 +86,7 @@ public sealed class PlanetCrustAccumulatedDeformationTests
         var catalog = PlanetCrustParcelCatalog.Create(42);
         var history = PlanetCrustOwnershipHistory.Create(catalog);
         var sequence = new PlanetCrustAccumulatedDeformation().Simulate(catalog, history, 0);
-        Assert.HasCount(1, sequence);
+        Assert.AreEqual(1, sequence.Count);
         Assert.AreEqual(PlanetGeologicalEpoch.Present, sequence[0].Epoch);
         Assert.AreEqual(0, sequence[0].AcceptedEvents);
         foreach (var column in sequence[0].Columns)
