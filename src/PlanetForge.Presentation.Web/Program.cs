@@ -12,5 +12,6 @@ builder.Services.AddPlanetForge();
 builder.Services.AddScoped<IPlanetGeologicalRegionDocumentStore, IndexedDbGeologicalRegionStore>();
 builder.Services.AddScoped<PlanetGeologicalRegionCache>();
 builder.Services.AddScoped<PlanetGeologicalRegionRepository>();
+builder.Services.AddScoped<PlanetGeologicalRegionSession>();
 
 await builder.Build().RunAsync();

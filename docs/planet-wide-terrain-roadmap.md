@@ -1,6 +1,6 @@
 # PlanetForge — from Hero research tiles to one planetary terrain
 
-**Status:** A1 and A2.1 completed and deployed. A2.2 adds IndexedDB archive storage and a conservative spatial index. Unreleased geological realism work remains isolated in draft PR #113.
+**Status:** A1, A2.1 and A2.2 completed and deployed. A2.3 adds bounded, atomic region restoration. Unreleased geological realism work remains isolated in draft PR #113.
 
 ## Decision
 
@@ -101,3 +101,39 @@ The first A2 slice keeps geographical identity in `PlanetGeologicalRegionId` (ca
 - Demand-driven loading/eviction and streaming near the camera, with revision-aware sampling snapshots across asynchronous transitions (A3).
 - Exact edge ownership and inter-region physical sediment conservation (A4).
 - Orbital image sharpness: current reddish globe shows broad features but lacks clearly resolved mountain provinces at full-disc distance. Treat this as a separate **orbital LOD, normals and physical-relief quality gate**, not a reason to apply artificial shader-only mountains.
+
+## A2.3 — Atomic region restoration (PF 0.0.37.17)
+
+`PlanetGeologicalRegionSession` is an explicit owner for loading an archived
+selection into the shared terrain provider. It validates one current generated
+world, unique region addresses and one requested epoch before loading. At most
+eight regions and 524,288 grid samples may be active in one selection. Original
+and evolved arrays both exist for each grid; the sample limit is not a total
+process-memory budget. The repository's separate bounded LRU still applies.
+
+Only one selection materializes archives at a time. All archives must exist,
+deserialize and pass their identity/model checks before an immutable atlas is
+built and atomically published. Missing, corrupt or oversized selections leave
+the previously published source and revision unchanged. Loading can populate
+the disposable repository cache even when publication is subsequently canceled.
+
+A newer valid request supersedes every older request; an obsolete completion
+throws `OperationCanceledException` and cannot publish, even if the storage
+adapter ignored cancellation. `Clear` invalidates pending restorations and
+returns to canonical terrain. Publication and request ordering share a lock,
+so a delayed callback cannot resurrect cleared terrain. Callers should use one
+session owner per shared provider; direct provider mutations bypass this
+request-ordering contract. Already captured sampling sources remain immutable.
+
+Tests cover deterministic leave/return after repository/cache reconstruction,
+epoch switching, missing/corrupt archives, selection/sample budgets,
+superseding requests, cancellation with a noncooperative storage adapter and
+clear-during-load. This is DI-registered infrastructure, not a new Hero button
+or automatic gameplay activation. No geological model or save schema changes.
+Version 0.0.37.16 remains associated with unreleased draft PR #113; this release
+uses 0.0.37.17 without incorporating that experimental terrain rewrite.
+
+Next: archive inspection and backup/import/export controls, then camera demand
+selection and streaming. Cross-region sediment exchange and the visible
+landform realism gates remain separate requirements; the latest 8 km Hero
+screenshots are still evidence of unresolved trench/shelf artifacts.
