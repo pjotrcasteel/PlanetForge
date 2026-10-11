@@ -135,12 +135,10 @@ public sealed class PlanetCrustContactStrainSolver
 
             var separationMeters = Math.Max(10_000.0,
                 separationRadians * PlanetTectonicPlateKinematics.NominalPlanetRadiusMeters);
-            var fraction = -sample.CompressionMetersPerMillionYears * durationMillionYears *
-                sample.ContactInfluence / separationMeters;
-            // Normalize contacts against the neighborhood degree so a parcel
-            // cannot acquire strain merely from a larger graph sampling budget.
+            // Normalize against neighborhood degree: increasing graph sampling
+            // density must not manufacture more material-column strain.
             var degree = Math.Max(neighborhood.GetNeighbors(edge.First).Count, neighborhood.GetNeighbors(edge.Second).Count);
-            var contribution = Math.Clamp(fraction / degree, -0.04, 0.04);
+            var contribution = ComputeLogAreaContribution(sample, separationMeters, durationMillionYears, degree);
             logArea[aIndex] += contribution;
             logArea[bIndex] += contribution;
             var shear = Math.Abs(sample.ShearMetersPerMillionYears) * durationMillionYears *
@@ -155,17 +153,75 @@ public sealed class PlanetCrustContactStrainSolver
         var columns = new PlanetCrustColumnStrain[states.Length];
         for (var i = 0; i < states.Length; i++)
         {
-            var material = states[i].Material;
-            var strain = Math.Clamp(logArea[i], -MaximumAbsoluteLogAreaStrain, MaximumAbsoluteLogAreaStrain);
-            var area = material.ReferenceAreaSquareMeters * Math.Exp(strain);
-            var thickness = material.ReferenceMassKilograms /
-                (area * material.ReferenceDensityKilogramsPerCubicMeter);
-            columns[i] = new PlanetCrustColumnStrain(states[i], area, thickness,
-                material.ReferenceMassKilograms, strain, shearExposure[i]);
+            columns[i] = ApplyColumnStrain(states[i], logArea[i], shearExposure[i]);
         }
 
         return new PlanetCrustInteractionSnapshot(catalog.World, epoch, durationMillionYears,
             columns, contacts.ToArray(), catalog.TotalReferenceMassKilograms);
+    }
+
+    /// <summary>
+    /// Independent local strain law for collision/extension/shear regression.
+    /// Signed compression shortens a material footprint; pure shear causes
+    /// no artificial area or vertical thickness change.
+    /// </summary>
+    public static double ComputeLogAreaContribution(
+        PlanetPlateBoundarySample sample,
+        double separationMeters,
+        double durationMillionYears,
+        int neighborDegree)
+    {
+        if (!double.IsFinite(separationMeters) || separationMeters <= 0.0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(separationMeters));
+        }
+
+        if (!double.IsFinite(durationMillionYears) || durationMillionYears < 0.0 ||
+            durationMillionYears > MaximumStepMillionYears)
+        {
+            throw new ArgumentOutOfRangeException(nameof(durationMillionYears));
+        }
+
+        ArgumentOutOfRangeException.ThrowIfLessThan(neighborDegree, 1);
+        if (!double.IsFinite(sample.CompressionMetersPerMillionYears) ||
+            !double.IsFinite(sample.ContactInfluence) || sample.ContactInfluence < 0.0 || sample.ContactInfluence > 1.0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(sample));
+        }
+
+        var fraction = -sample.CompressionMetersPerMillionYears * durationMillionYears *
+            sample.ContactInfluence / (separationMeters * neighborDegree);
+        if (!double.IsFinite(fraction))
+        {
+            throw new ArgumentOutOfRangeException(nameof(sample), "Contact strain must be finite.");
+        }
+
+        return Math.Clamp(fraction, -0.04, 0.04);
+    }
+
+    /// <summary>
+    /// Each reference material sample remains its own conserved mass
+    /// reservoir; area and thickness are reciprocal column quantities.
+    /// This does not establish global coverage conservation on the sphere.
+    /// </summary>
+    public static PlanetCrustColumnStrain ApplyColumnStrain(
+        PlanetCrustMaterialState state,
+        double logAreaStrain,
+        double shearExposureMeters)
+    {
+        ArgumentNullException.ThrowIfNull(state.Material);
+        if (!double.IsFinite(logAreaStrain) || !double.IsFinite(shearExposureMeters) || shearExposureMeters < 0.0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(logAreaStrain), "Column strain and shear must be finite.");
+        }
+
+        var material = state.Material;
+        var strain = Math.Clamp(logAreaStrain, -MaximumAbsoluteLogAreaStrain, MaximumAbsoluteLogAreaStrain);
+        var area = material.ReferenceAreaSquareMeters * Math.Exp(strain);
+        var thickness = material.ReferenceMassKilograms /
+            (area * material.ReferenceDensityKilogramsPerCubicMeter);
+        return new PlanetCrustColumnStrain(state, area, thickness,
+            material.ReferenceMassKilograms, strain, shearExposureMeters);
     }
 
     private static bool Matches(
