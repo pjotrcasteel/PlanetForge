@@ -106,6 +106,21 @@ public sealed class PlanetCrustEpochConservativeRemapper
         }
 
         var count = catalog.Parcels.Count;
+        // Identical reconstructed partitions must be an EXACT identity map,
+        // rather than accumulating numerical clipping noise at shared faces.
+        if (Enumerable.Range(0, count).All(i =>
+            from.GetSiteDirection(catalog.Parcels[i].Id) == to.GetSiteDirection(catalog.Parcels[i].Id)))
+        {
+            var identityCells = catalog.Parcels.Select((material, i) =>
+                new PlanetCrustGeographicTracerCell(material.Id, to.Cells[i].GeographicAreaSquareMeters,
+                    tracerKilograms[i])).ToArray();
+            var identityTransfers = catalog.Parcels.Select((material, i) =>
+                new PlanetCrustGeographicTracerTransfer(material.Id, material.Id,
+                    to.Cells[i].GeographicAreaSquareMeters, tracerKilograms[i])).ToArray();
+            return new PlanetCrustGeographicRemapSnapshot(catalog.World, from.Epoch, to.Epoch,
+                total, identityCells, identityTransfers, 0.0);
+        }
+
         var sourceSites = Enumerable.Range(0, count).Select(i => from.GetSiteDirection(catalog.Parcels[i].Id)).ToArray();
         var targetSites = Enumerable.Range(0, count).Select(i => to.GetSiteDirection(catalog.Parcels[i].Id)).ToArray();
         var sourceRadii = Enumerable.Range(0, count).Select(i => BoundingRadius(sourceSites[i], from.Cells[i])).ToArray();
