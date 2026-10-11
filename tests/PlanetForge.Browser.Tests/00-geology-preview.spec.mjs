@@ -24,7 +24,7 @@ async function openStableBlazorPage(page, path, readySelector) {
     }
 }
 
-test('GeologyPreview_AuditedTimelineDrawsMeasuredGlobalMapsWithoutTouchingMainPlanet', async ({ page }) => {
+test('GeologyPreview_AuditedTimelineDrawsMeasuredGlobalMapsWithoutTouchingMainPlanet', async ({ page }, testInfo) => {
     test.setTimeout(240_000);
     await openStableBlazorPage(page, '/?geologyPreview=1', '.geology-preview-header h1');
     await expect(page.getByRole('heading', { name: 'Geological deformation preview' })).toBeVisible();
@@ -60,9 +60,12 @@ test('GeologyPreview_AuditedTimelineDrawsMeasuredGlobalMapsWithoutTouchingMainPl
         expect(canvas.differences).toBeGreaterThan(10);
     }
 
+    await page.screenshot({ path: testInfo.outputPath('geology-deformation-present.png'), fullPage: true });
+
     // Oldest epoch is exactly the undeformed reference state.
     await page.locator('#geology-epoch').selectOption('0');
     await expect(page.getByTestId('geology-preview-metrics')).toContainText('0 m');
+    await page.screenshot({ path: testInfo.outputPath('geology-deformation-reference.png'), fullPage: true });
     await page.locator('#geology-epoch').selectOption('2');
     await expect(page.getByTestId('geology-preview-status')).toContainText('Ready');
     await expect(page.getByTestId('geology-preview-scale')).toContainText('Measured map range');
