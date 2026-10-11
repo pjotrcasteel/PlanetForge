@@ -4,7 +4,7 @@ using PlanetForge.Domain.WorldGeneration;
 namespace PlanetForge.Infrastructure.Surface;
 
 /// <summary>
-/// Immutable polygon of the present-day spherical nearest-material partition.
+/// Immutable spherical nearest-material geographic cell at one epoch.
 /// Its exact geographic area is separate from the older equal-weight material
 /// quadrature area, which must not be silently replaced in existing mass ledgers.
 /// </summary>
@@ -30,10 +30,11 @@ public readonly record struct PlanetCrustSphericalFace(
     double LengthMeters);
 
 /// <summary>
-/// A complete, deterministic partition of the REFERENCE globe into convex
-/// spherical Voronoi cells around the 1,024 material reference directions.
-/// A cell belongs to a material seed, but is NOT an evolving/material-conserving
-/// tectonic plate polygon. History-driven deformation/remeshing comes later.
+/// Complete deterministic spherical Voronoi partitions around crust material
+/// sample directions at one requested epoch. The present-day reference build
+/// remains unchanged, while BuildAtEpoch observes persistent material through
+/// explicit kinematic ownership history. Voronoi cells are GEOGRAPHIC partitions
+/// of moving sites, not advected, area-conserving Lagrangian crust polygons.
 ///
 /// Construction clips each cell by exact great-circle bisectors. Geometry is
 /// validated for closure of the sphere, reciprocal faces and positive areas.
@@ -43,6 +44,10 @@ public readonly record struct PlanetCrustSphericalFace(
 public sealed class PlanetCrustSphericalControlVolumes
 {
     private const double RadiusMeters = PlanetTectonicPlateKinematics.NominalPlanetRadiusMeters;
+    // Reciprocal vertex agreement is <1e-7 chord units (~0.64 m on Earth).
+    // Endpoint errors bound possible shared arc-length disagreement by twice that.
+    private const double MaximumReciprocalVertexGap = 1e-7;
+    private const double MaximumReciprocalLengthGapMeters = 2.0 * RadiusMeters * MaximumReciprocalVertexGap;
     private static readonly double SphereAreaSquareMeters = 4.0 * Math.PI * RadiusMeters * RadiusMeters;
 
     private readonly PlanetVector[] sites;
@@ -54,11 +59,13 @@ public sealed class PlanetCrustSphericalControlVolumes
 
     private PlanetCrustSphericalControlVolumes(
         PlanetWorldIdentity world,
+        PlanetGeologicalEpoch epoch,
         PlanetVector[] sites,
         PlanetCrustSphericalCell[] cells,
         PlanetCrustSphericalFace[] faces)
     {
         World = world;
+        Epoch = epoch;
         this.sites = sites;
         this.cells = cells;
         publicCells = Array.AsReadOnly(cells);
@@ -70,6 +77,7 @@ public sealed class PlanetCrustSphericalControlVolumes
     }
 
     public PlanetWorldIdentity World { get; }
+    public PlanetGeologicalEpoch Epoch { get; }
     public IReadOnlyList<PlanetCrustSphericalCell> Cells => publicCells;
     public IReadOnlyList<PlanetCrustSphericalFace> Faces => faces;
     public double GeographicAreaSquareMeters { get; }
@@ -85,6 +93,20 @@ public sealed class PlanetCrustSphericalControlVolumes
         return cells[(int)id.Value - 1];
     }
 
+    /// <summary>
+    /// Geographic position of the actual moving material reference site used
+    /// to create this epoch-specific polygon (not its area centroid).
+    /// </summary>
+    public PlanetVector GetSiteDirection(PlanetCrustParcelId id)
+    {
+        if (id.Value == 0 || id.Value > (ulong)sites.Length)
+        {
+            throw new ArgumentOutOfRangeException(nameof(id));
+        }
+
+        return sites[(int)id.Value - 1];
+    }
+
     public PlanetCrustSphericalCell Locate(PlanetVector geographicDirection)
     {
         var direction = PlanetVector.Normalize(geographicDirection);
@@ -98,6 +120,50 @@ public sealed class PlanetCrustSphericalControlVolumes
     {
         ArgumentNullException.ThrowIfNull(catalog);
         var sites = catalog.Parcels.Select(material => material.PresentDirection).ToArray();
+        return BuildCore(catalog, PlanetGeologicalEpoch.Present, sites);
+    }
+
+    /// <summary>
+    /// Reconstruct moving geographic control volumes at a geological epoch
+    /// from persistent material sample positions, not moving plate centres.
+    /// The full globe is re-partitioned atomically and all reciprocal faces
+    /// must still close. Coincident sample sites fail rather than losing mass.
+    /// </summary>
+    public static PlanetCrustSphericalControlVolumes BuildAtEpoch(
+        PlanetCrustParcelCatalog catalog,
+        PlanetCrustOwnershipHistory history,
+        PlanetGeologicalEpoch epoch)
+    {
+        ArgumentNullException.ThrowIfNull(catalog);
+        ArgumentNullException.ThrowIfNull(history);
+        if (history.World != catalog.World)
+        {
+            throw new ArgumentException("Geological history must belong to this generated world.", nameof(history));
+        }
+
+        var sites = catalog.Parcels.Select(material =>
+            history.GetState(material.Id, epoch).GeographicDirection).ToArray();
+        return BuildCore(catalog, epoch, sites);
+    }
+
+    private static PlanetCrustSphericalControlVolumes BuildCore(
+        PlanetCrustParcelCatalog catalog,
+        PlanetGeologicalEpoch epoch,
+        PlanetVector[] sites)
+    {
+        // A one-site-to-one-cell mapping needs distinct locations. The
+        // reference material IDs themselves never change on remeshing.
+        for (var first = 0; first < sites.Length; first++)
+        {
+            for (var second = first + 1; second < sites.Length; second++)
+            {
+                if (PlanetVector.Dot(sites[first], sites[second]) > 1.0 - 1e-13)
+                {
+                    throw new InvalidOperationException("Two material samples occupy indistinguishable geographic positions.");
+                }
+            }
+        }
+
         var cells = new PlanetCrustSphericalCell[sites.Length];
         var faces = new SortedDictionary<ulong, FaceCounter>();
 
@@ -130,7 +196,7 @@ public sealed class PlanetCrustSphericalControlVolumes
             throw new InvalidOperationException("Every reference cell face must be shared by precisely two adjacent cells.");
         }
 
-        return new PlanetCrustSphericalControlVolumes(catalog.World, sites,
+        return new PlanetCrustSphericalControlVolumes(catalog.World, epoch, sites,
             cells, faces.Values.Select(face => face.Face).ToArray());
     }
 
@@ -217,10 +283,31 @@ public sealed class PlanetCrustSphericalControlVolumes
 
     private static PlanetVector IntersectGreatCircle(PlanetVector first, PlanetVector second, PlanetVector halfspace)
     {
-        // Spherical binary search on the SHORT great-circle arc. Unlike planar
-        // linear interpolation, every intermediate point remains on the sphere.
+        // Both the polygon edge and a Voronoi bisector are GREAT CIRCLES.
+        // Their plane intersection is analytic; repeated spherical midpoints
+        // can accumulate visible rounding error near changing topology.
+        var edgeNormal = PlanetVector.Cross(first, second);
+        var crossing = PlanetVector.Cross(edgeNormal, halfspace);
+        if (crossing.Length > 1e-12)
+        {
+            var intersection = PlanetVector.Normalize(crossing);
+            if (PlanetVector.Dot(intersection, first + second) < 0.0)
+            {
+                intersection = intersection * -1.0;
+            }
+
+            var edgeDot = PlanetVector.Dot(first, second);
+            if (PlanetVector.Dot(intersection, first) >= edgeDot - 1e-12 &&
+                PlanetVector.Dot(intersection, second) >= edgeDot - 1e-12)
+            {
+                return intersection;
+            }
+        }
+
+        // Almost-coincident edges / nearly parallel clipping planes retain
+        // a bounded, arc-safe fallback rather than inventing a vertex.
         var firstInside = PlanetVector.Dot(first, halfspace) >= 0.0;
-        for (var step = 0; step < 48; step++)
+        for (var step = 0; step < 64; step++)
         {
             var midpoint = PlanetVector.Normalize(first + second);
             if ((PlanetVector.Dot(midpoint, halfspace) >= 0.0) == firstInside)
@@ -299,10 +386,14 @@ public sealed class PlanetCrustSphericalControlVolumes
             }
             else
             {
-                if (shared.Occurrences != 1 || Math.Abs(shared.Face.LengthMeters - length) > 0.1 ||
+                if (shared.Occurrences != 1 || Math.Abs(shared.Face.LengthMeters - length) > MaximumReciprocalLengthGapMeters ||
                     !SameSharedEndpoints(shared.Face.Start, shared.Face.End, start, end))
                 {
-                    throw new InvalidOperationException("Adjacent crust cells disagree on their common spherical face.");
+                    throw new InvalidOperationException(
+                        $"Adjacent crust cells disagree: owner={index + 1} neighbor={neighbor + 1} " +
+                        $"pair={smaller + 1}-{larger + 1} count={shared.Occurrences} " +
+                        $"firstLength={shared.Face.LengthMeters:R} secondLength={length:R} " +
+                        $"startGap={(shared.Face.Start - end).Length:R} endGap={(shared.Face.End - start).Length:R}.");
                 }
 
                 shared.Occurrences++;
@@ -312,7 +403,8 @@ public sealed class PlanetCrustSphericalControlVolumes
 
     private static bool SameSharedEndpoints(PlanetVector firstStart, PlanetVector firstEnd,
         PlanetVector secondStart, PlanetVector secondEnd) =>
-        (firstStart - secondEnd).Length < 1e-7 && (firstEnd - secondStart).Length < 1e-7;
+        (firstStart - secondEnd).Length < MaximumReciprocalVertexGap &&
+        (firstEnd - secondStart).Length < MaximumReciprocalVertexGap;
 
     private int BuildIndex(int[] indices, int depth, List<KdNode> nodes)
     {

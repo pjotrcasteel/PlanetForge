@@ -43,7 +43,7 @@ public sealed class PlanetCrustFaceFluxSnapshot
 }
 
 /// <summary>
-/// Conservative flux bookkeeping on the CLOSED present-day spherical
+/// Conservative flux bookkeeping on CLOSED epoch-specific spherical
 /// Voronoi control volumes. Every signed face transfer has one debit and
 /// one credit. Flux budgets are checked across ALL faces of a donor before
 /// publication; no order-dependent transfers can overdraw reference material.
@@ -61,7 +61,8 @@ public sealed class PlanetCrustSphericalFaceFluxLedger
         ArgumentNullException.ThrowIfNull(material);
         ArgumentNullException.ThrowIfNull(geometry);
         ArgumentNullException.ThrowIfNull(fluxes);
-        if (material.World != geometry.World || material.Columns.Count != geometry.Cells.Count)
+        if (material.World != geometry.World || material.Epoch != geometry.Epoch ||
+            material.Columns.Count != geometry.Cells.Count)
         {
             throw new ArgumentException("Face geometry and material state must refer to the same generated world.");
         }
