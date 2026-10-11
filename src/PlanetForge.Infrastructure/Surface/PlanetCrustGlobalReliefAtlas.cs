@@ -26,7 +26,7 @@ public sealed class PlanetCrustGlobalReliefAtlas
     public PlanetCrustGlobalReliefAtlas(PlanetCrustEvolvingSnapshot snapshot)
     {
         ArgumentNullException.ThrowIfNull(snapshot);
-        if (snapshot.Columns.Count != PlanetCrustParcelCatalog.MaterialSampleCount ||
+        if (snapshot.Columns.Count != PlanetCrustParcelCatalog.ReferenceParcelCount ||
             snapshot.Columns.Any(column =>
                 !double.IsFinite(column.SurfaceDisplacementMeters) ||
                 !double.IsFinite(column.GeographicDirection.Length) ||
