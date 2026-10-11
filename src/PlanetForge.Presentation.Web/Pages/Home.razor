@@ -2,6 +2,7 @@
 @using PlanetForge.Application.Runs
 @using PlanetForge.Application.Surface
 @using PlanetForge.Domain.WorldGeneration
+@using PlanetForge.Domain.Origins
 @using PlanetForge.Domain.Surface
 @using PlanetForge.Infrastructure.Surface
 @implements IAsyncDisposable
@@ -20,7 +21,7 @@
         <div class="foundation-clock" aria-live="polite">
             <strong>@FormatElapsedTime()</strong>
             <span>@FormatStageLabel()</span>
-            <small class="foundation-geology-preview">@(geologyActive ? "GEOLOGY / PHYSICAL TERRAIN" : "PLANET / CANONICAL TERRAIN")</small>
+            <small class="foundation-geology-preview" data-testid="planet-scenario-label" title="@CurrentScenarioName">@(geologyActive ? "EXPERIMENT / PHYSICAL TERRAIN" : "EXPERIMENT / CANONICAL TERRAIN")</small>
             <div class="foundation-seed">
                 <small data-testid="planet-seed">SEED @CurrentSeed</small>
                 <button class="foundation-generate" data-testid="geology-terrain-toggle" type="button"
@@ -73,6 +74,7 @@
     private double elapsedYears;
 
     private int CurrentSeed => run?.Mission.Planet.Seed ?? PlanetSeedCatalog.ShowcaseSeed;
+    private string CurrentScenarioName => PlanetScenarioCatalog.CurrentPlayable.Name;
 
     protected override void OnInitialized()
     {
@@ -543,7 +545,7 @@
     private static string StageName(FoundationStage stage)
         => stage switch
         {
-            FoundationStage.FrozenWorld => "FROZEN WORLD",
+            FoundationStage.FrozenWorld => "SNOWBALL EXPERIMENT",
             FoundationStage.MeltingWorld => "MELTING WORLD",
             FoundationStage.ActiveWaterCycle => "ACTIVE WATER CYCLE",
             FoundationStage.FirstLife => "FIRST LIFE",

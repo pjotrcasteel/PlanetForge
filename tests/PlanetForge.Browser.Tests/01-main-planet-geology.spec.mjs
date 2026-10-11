@@ -135,3 +135,17 @@ test('MainPlanet_ActiveWaterWorld_BuildsWaterAgainstVisibleTerrainWithoutSecondC
     expect(aligned.waterYaw).toBeCloseTo(aligned.webGlYaw, 10);
     expect(aligned.riverCount).toBe(water.activeRiverSegmentCount);
 });
+
+test('MainPlanet_DefaultGameplay_IdentifiesSnowballExperimentInsteadOfPrimordialEarth', async ({ page }) => {
+    test.setTimeout(240_000);
+    await page.goto('/?visualTest=1');
+    await expect(page.locator('#planet-canvas')).toBeVisible({ timeout: 30_000 });
+
+    await expect(page.getByText('SNOWBALL EXPERIMENT', { exact: true })).toBeVisible();
+    await expect(page.getByTestId('planet-scenario-label')).toContainText('EXPERIMENT / CANONICAL TERRAIN');
+    await expect(page.getByText('EARTH ORIGIN', { exact: true })).toHaveCount(0);
+
+    await page.getByTestId('geology-terrain-toggle').click();
+    await expect(page.getByTestId('geology-terrain-toggle')).toHaveAttribute('aria-pressed', 'true', { timeout: 150_000 });
+    await expect(page.getByTestId('planet-scenario-label')).toContainText('EXPERIMENT / PHYSICAL TERRAIN');
+});
