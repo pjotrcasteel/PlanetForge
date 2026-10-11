@@ -5,7 +5,11 @@
 
 @inject NavigationManager Navigation
 
-@if (Navigation.Uri.Contains("terrainLab=1", StringComparison.OrdinalIgnoreCase))
+@if (Navigation.Uri.Contains("geologyArchive=1", StringComparison.OrdinalIgnoreCase))
+{
+    <GeologicalArchives />
+}
+else if (Navigation.Uri.Contains("terrainLab=1", StringComparison.OrdinalIgnoreCase))
 {
     <TerrainLab />
 }
