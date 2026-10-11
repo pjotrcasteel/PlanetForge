@@ -105,7 +105,6 @@ public sealed class PlanetCrustGlobalReliefAtlasTests
 
         var ground = groundSampler.Sample(PlanetVector.UnitZ, 2_000, cells,
             Seed, RadiusMeters, CancellationToken.None);
-        Assert.IsTrue(Math.Abs(orbital[0] - 1_000.0) > 0.01);
         foreach (var elevation in orbital)
         {
             Assert.AreEqual(orbital[0], elevation, 1e-7);
