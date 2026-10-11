@@ -1042,15 +1042,11 @@ void main() {
     vec3 tangentNormal = physicalNormal - (radial * dot(physicalNormal, radial));
     float elevationMeters = (physicalRadius - 1.0) * uPlanetRadiusMeters;
     float elevationAboveSeaLevel = elevationMeters - uSeaLevelMeters;
+    // Geology must retain the actual physical radius even at orbital distance.
+    // Flattening it to a unit sphere incorrectly occludes below-datum oceans.
     float visualRadius = physicalRadius;
 
-    if (uMode == 5) {
-        // Preserve a perfectly smooth silhouette from far orbit, then reveal the REAL
-        // canonical elevation smoothly during regional approach. No synthetic height exaggeration.
-        float cameraAltitudeRatio = max(length(uCameraPosition) - 1.0, 0.0);
-        float reliefBlend = 1.0 - smoothstep(0.012, 0.080, cameraAltitudeRatio);
-        visualRadius = mix(1.0, physicalRadius, reliefBlend);
-    } else if (uMode == 0 || uMode == 2) {
+    if (uMode == 0 || uMode == 2) {
         float exaggeration = elevationAboveSeaLevel >= 0.0 ? 8.0 : 2.0;
         visualRadius = 1.0 + ((elevationMeters * exaggeration) / uPlanetRadiusMeters);
     } else if (uMode == 3) {
