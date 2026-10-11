@@ -106,3 +106,32 @@ test('MainPlanet_WaterOverlay_CameraFollowsWebGLOrbitWithoutIndependentGestures'
         expect(aligned.distanceDifference).toBeLessThan(1e-10);
     }
 });
+
+test('MainPlanet_ActiveWaterWorld_BuildsWaterAgainstVisibleTerrainWithoutSecondCamera', async ({ page }, testInfo) => {
+    test.setTimeout(300_000);
+    await page.goto('/?visualTest=1');
+    await expect(page.locator('#planet-canvas')).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByRole('button', { name: 'NEXT' })).toBeEnabled({ timeout: 30_000 });
+
+    await page.getByRole('button', { name: 'NEXT' }).click();
+    await expect(page.getByText('MELTING WORLD', { exact: true })).toBeVisible({ timeout: 90_000 });
+    await expect(page.getByRole('button', { name: 'NEXT' })).toBeEnabled({ timeout: 90_000 });
+    await page.getByRole('button', { name: 'NEXT' }).click();
+    await page.waitForFunction(() => window.__planetForgeWaterTest?.measure().activeRiverSegmentCount > 0, null, { timeout: 180_000 });
+
+    const water = await page.evaluate(() => window.__planetForgeWaterTest.measure());
+    expect(water.activeRiverSegmentCount).toBeGreaterThan(0);
+    expect(water.riverPointCount).toBeGreaterThan(1);
+    expect(water.terrainVertexCount).toBeGreaterThan(0);
+    expect(water.terrainSampleCount).toBeGreaterThan(0);
+    await page.screenshot({ path: testInfo.outputPath('main-planet-physical-hydrology.png'), fullPage: true });
+
+    await page.evaluate(() => window.__planetForgeSurfaceTest.setYaw(0.95));
+    const aligned = await page.evaluate(() => ({
+        webGlYaw: window.__planetForgeSurfaceTest.getYaw(),
+        waterYaw: window.__planetForgeWaterTest.camera().yaw,
+        riverCount: window.__planetForgeWaterTest.measure().activeRiverSegmentCount
+    }));
+    expect(aligned.waterYaw).toBeCloseTo(aligned.webGlYaw, 10);
+    expect(aligned.riverCount).toBe(water.activeRiverSegmentCount);
+});
