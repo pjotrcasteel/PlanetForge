@@ -279,10 +279,31 @@ public sealed class PlanetCrustSphericalControlVolumes
 
     private static PlanetVector IntersectGreatCircle(PlanetVector first, PlanetVector second, PlanetVector halfspace)
     {
-        // Spherical binary search on the SHORT great-circle arc. Unlike planar
-        // linear interpolation, every intermediate point remains on the sphere.
+        // Both the polygon edge and a Voronoi bisector are GREAT CIRCLES.
+        // Their plane intersection is analytic; repeated spherical midpoints
+        // can accumulate visible rounding error near changing topology.
+        var edgeNormal = PlanetVector.Cross(first, second);
+        var crossing = PlanetVector.Cross(edgeNormal, halfspace);
+        if (crossing.Length > 1e-12)
+        {
+            var intersection = PlanetVector.Normalize(crossing);
+            if (PlanetVector.Dot(intersection, first + second) < 0.0)
+            {
+                intersection = intersection * -1.0;
+            }
+
+            var edgeDot = PlanetVector.Dot(first, second);
+            if (PlanetVector.Dot(intersection, first) >= edgeDot - 1e-12 &&
+                PlanetVector.Dot(intersection, second) >= edgeDot - 1e-12)
+            {
+                return intersection;
+            }
+        }
+
+        // Almost-coincident edges / nearly parallel clipping planes retain
+        // a bounded, arc-safe fallback rather than inventing a vertex.
         var firstInside = PlanetVector.Dot(first, halfspace) >= 0.0;
-        for (var step = 0; step < 48; step++)
+        for (var step = 0; step < 64; step++)
         {
             var midpoint = PlanetVector.Normalize(first + second);
             if ((PlanetVector.Dot(midpoint, halfspace) >= 0.0) == firstInside)
