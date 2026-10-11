@@ -110,8 +110,16 @@ test('GeologicalArchives_PaginationAndMobileLayout', async ({ page }) => {
     await page.locator('#archive-next').click();
     await expect(page.locator('.archive-key')).toHaveCount(3);
 
-    const overflow = await page.evaluate(() => document.documentElement.scrollWidth - innerWidth);
-    expect(overflow, 'The archive inspector must not overflow the iPhone viewport').toBeLessThanOrEqual(2);
+    const overflow = await page.evaluate(() => ({
+        pixels: document.documentElement.scrollWidth - innerWidth,
+        offenders: [...document.querySelectorAll('body *')]
+            .filter(element => element.getBoundingClientRect().right > innerWidth + 2)
+            .slice(0, 8)
+            .map(element => ({ tag: element.tagName, className: String(element.className).slice(0, 80),
+                right: Math.round(element.getBoundingClientRect().right) }))
+    }));
+    expect(overflow.pixels, `The archive inspector must fit on iPhone; overflowing elements: ${JSON.stringify(overflow.offenders)}`)
+        .toBeLessThanOrEqual(2);
 });
 
 test('GeologicalArchives_DeletionIsScopedToOneEpoch', async ({ page }) => {
