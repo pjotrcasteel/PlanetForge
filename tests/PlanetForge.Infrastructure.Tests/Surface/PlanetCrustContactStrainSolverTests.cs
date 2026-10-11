@@ -44,6 +44,48 @@ public sealed class PlanetCrustContactStrainSolverTests
     }
 
     [TestMethod]
+    public void ComputeLogAreaContribution_SyntheticCollisionExtensionAndPureShear_HaveCorrectSigns()
+    {
+        var plates = new PlanetTectonicPlateKinematics().GetPlates(42);
+        var collision = new PlanetPlateBoundarySample(plates[0].Id, plates[1].Id,
+            PlanetPlateBoundaryKind.Convergent, 0, 1.0, 60_000, 0, 60_000);
+        var extension = collision with { Kind = PlanetPlateBoundaryKind.Divergent,
+            CompressionMetersPerMillionYears = -60_000 };
+        var transform = collision with { Kind = PlanetPlateBoundaryKind.Transform,
+            CompressionMetersPerMillionYears = 0, ShearMetersPerMillionYears = 60_000 };
+
+        var shortening = PlanetCrustContactStrainSolver.ComputeLogAreaContribution(collision, 400_000, 0.5, 6);
+        var spreading = PlanetCrustContactStrainSolver.ComputeLogAreaContribution(extension, 400_000, 0.5, 6);
+        var sliding = PlanetCrustContactStrainSolver.ComputeLogAreaContribution(transform, 400_000, 0.5, 6);
+
+        Assert.IsTrue(shortening < 0);
+        Assert.IsTrue(spreading > 0);
+        Assert.AreEqual(-shortening, spreading, 1e-12);
+        Assert.AreEqual(0.0, sliding);
+        Assert.AreEqual(0.0, PlanetCrustContactStrainSolver.ComputeLogAreaContribution(
+            collision with { ContactInfluence = 0 }, 400_000, 0.5, 6));
+
+        var catalog = PlanetCrustParcelCatalog.Create(42);
+        var material = catalog.Parcels[0];
+        var original = new PlanetCrustMaterialState(material, PlanetGeologicalEpoch.Present,
+            material.InitialPlate, material.PresentDirection);
+        var compressed = PlanetCrustContactStrainSolver.ApplyColumnStrain(original, shortening, 0);
+        var extended = PlanetCrustContactStrainSolver.ApplyColumnStrain(original, spreading, 0);
+        var sheared = PlanetCrustContactStrainSolver.ApplyColumnStrain(original, sliding, 30_000);
+        Assert.IsTrue(compressed.AreaSquareMeters < material.ReferenceAreaSquareMeters);
+        Assert.IsTrue(compressed.ThicknessMeters > material.ReferenceThicknessMeters);
+        Assert.IsTrue(extended.AreaSquareMeters > material.ReferenceAreaSquareMeters);
+        Assert.IsTrue(extended.ThicknessMeters < material.ReferenceThicknessMeters);
+        Assert.AreEqual(material.ReferenceAreaSquareMeters, sheared.AreaSquareMeters);
+        Assert.AreEqual(material.ReferenceThicknessMeters, sheared.ThicknessMeters,
+            material.ReferenceThicknessMeters * 1e-12);
+        Assert.AreEqual(30_000.0, sheared.ShearExposureMeters);
+        Assert.AreEqual(material.ReferenceMassKilograms, compressed.MassKilograms);
+        Assert.AreEqual(material.ReferenceMassKilograms, extended.MassKilograms);
+        Assert.AreEqual(material.ReferenceMassKilograms, sheared.MassKilograms);
+    }
+
+    [TestMethod]
     public void Evaluate_ZeroDuration_LeavesAllMaterialColumnsAtReferenceState()
     {
         var catalog = PlanetCrustParcelCatalog.Create(24061984);
