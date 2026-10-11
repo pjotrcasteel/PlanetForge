@@ -9,6 +9,10 @@
 {
     <GeologicalArchives />
 }
+else if (Navigation.Uri.Contains("geologyPreview=1", StringComparison.OrdinalIgnoreCase))
+{
+    <GeologyPreview />
+}
 else if (Navigation.Uri.Contains("terrainLab=1", StringComparison.OrdinalIgnoreCase))
 {
     <TerrainLab />
