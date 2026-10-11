@@ -69,7 +69,8 @@ public sealed record PlanetTectonicPlateState(
     double AngularVelocityRadiansPerMillionYears,
     double SpeedMetersPerMillionYears)
 {
-    public PlanetVector CenterAt(PlanetGeologicalEpoch epoch) => Move(CenterAtPresent, epoch);
+    public PlanetVector CenterAt(PlanetGeologicalEpoch epoch) =>
+        epoch.YearsBeforePresent == 0 ? CenterAtPresent : Move(CenterAtPresent, epoch);
 
     /// <summary>Moves material at present-day direction back to an older epoch.</summary>
     public PlanetVector Move(PlanetVector presentDirection, PlanetGeologicalEpoch epoch) =>
