@@ -23,6 +23,22 @@ public sealed class PlanetThermalEnergyBudgetTests
     }
 
     [TestMethod]
+    public void Advance_NoHeatSources_CoolsWithoutCreatingNewInternalEnergy()
+    {
+        var initial = new PlanetThermalEnergyBudget(1.0e20);
+        var cooling = new PlanetThermalEnergyFlux(0.0, 0.0, 1.0e10);
+
+        var evolved = initial.Advance(100.0, cooling);
+
+        var loss = 100.0 * PlanetThermalEnergyBudget.JulianYearSeconds * cooling.SurfaceHeatLossWatts;
+        Assert.AreEqual(1.0e20 - loss, evolved.StoredEnergyJoules, 1e6);
+        Assert.AreEqual(0.0, evolved.CumulativeImpactHeatJoules, 0.0);
+        Assert.AreEqual(0.0, evolved.CumulativeRadiogenicHeatJoules, 0.0);
+        Assert.AreEqual(loss, evolved.CumulativeSurfaceHeatLossJoules, 1e6);
+        Assert.IsLessThan(1.0e20 * 1e-12, Math.Abs(evolved.ConservationResidualJoules));
+    }
+
+    [TestMethod]
     public void Advance_TwoHalfSteps_MatchesOneWholeStep()
     {
         var starting = new PlanetThermalEnergyBudget(1_000_000.0);
