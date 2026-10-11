@@ -171,5 +171,6 @@ test('MainPlanet_MeltingWorld_PublishesPhysicallyPlacedOceanInBothGeologyModes',
     const physical = await page.evaluate(() => window.__planetForgeSurfaceTest.measure());
     expect(physical.glError).toBe(0);
     expect(physical.oceanPixels).toBeGreaterThan(dry.oceanPixels + 1_000);
+    expect(physical.oceanFraction).toBeGreaterThan(dry.oceanFraction);
     await page.screenshot({ path: testInfo.outputPath('main-planet-physical-oceans-geology-on.png'), fullPage: true });
 });
