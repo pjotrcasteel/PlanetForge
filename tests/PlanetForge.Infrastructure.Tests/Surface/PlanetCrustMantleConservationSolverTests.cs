@@ -187,6 +187,20 @@ public sealed class PlanetCrustMantleConservationSolverTests
         var foreign = PlanetCrustParcelCatalog.Create(43);
         Assert.ThrowsExactly<ArgumentException>(() => solver.Advance(starting, foreign,
             PlanetCrustOwnershipHistory.Create(foreign), newer, []));
+
+        // An explicitly accepted historical plate-frame transition changes
+        // source ownership, even at the instant position remains continuous.
+        var accepted = history.WithTransfer(
+            history.SuggestTransfers(new PlanetGeologicalEpoch(1_000_000)).First().Transfer);
+        var compatibleTarget = PlanetCrustSphericalControlVolumes.BuildAtEpoch(
+            catalog, accepted, PlanetGeologicalEpoch.Present);
+        Assert.ThrowsExactly<ArgumentException>(() => solver.Advance(starting, catalog,
+            accepted, compatibleTarget, []));
+
+        // A physically excessive event is invalid even if it stays below the
+        // available reservoir cap: the plate speed limits usable flux.
+        var excessive = candidate with { MassKilograms = candidate.MassKilograms * 1.01 };
+        Assert.ThrowsExactly<ArgumentException>(() => solver.Advance(starting, catalog, history, newer, [excessive]));
     }
 
     [TestMethod]
