@@ -1,19 +1,20 @@
-.archive-shell { max-width: 880px; padding: 1.25rem 1rem 5rem; margin: 0 auto; color: #dbece0; }
+.archive-shell { box-sizing: border-box; width: 100%; max-width: 880px; min-width: 0; padding: 1.25rem 1rem 5rem; margin: 0 auto; color: #dbece0; }
 .archive-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 1.25rem; }
 .archive-header small { color: #77b997; letter-spacing: .16em; font-weight: 700; font-size: .65rem; }
 .archive-header h1 { font-size: clamp(1.8rem, 5vw, 2.7rem); line-height: 1.1; letter-spacing: -.04em; margin: .6rem 0; }
 .archive-header p, .archive-panel p { color: #a8bfb1; line-height: 1.5; }
 .archive-header a { padding: .75rem; color: #8de6ac; text-decoration: none; white-space: nowrap; }
 .archive-notice { padding: .9rem 1rem; border-left: 3px solid #b2bb82; background: #1d2922; line-height: 1.5; }
-.archive-panel { border: 1px solid #2e5140; border-radius: 1rem; background: #101d18; padding: 1rem; margin: 1rem 0; }
+.archive-panel { box-sizing: border-box; min-width: 0; max-width: 100%; border: 1px solid #2e5140; border-radius: 1rem; background: #101d18; padding: 1rem; margin: 1rem 0; }
 .archive-panel h2 { font-size: 1.1rem; margin: 0 0 .85rem; letter-spacing: 0; }
 .archive-heading, .archive-pager { display: flex; align-items: center; justify-content: space-between; gap: .75rem; }
-.archive-entries { list-style: none; padding: 0; margin: 0; display: grid; gap: .45rem; }
-.archive-key { display: block; width: 100%; font-size: .78rem; overflow-wrap: anywhere; text-align: left; }
+.archive-entries { list-style: none; padding: 0; margin: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: .45rem; }
+.archive-entries li { min-width: 0; max-width: 100%; }
+.archive-key { display: block; box-sizing: border-box; width: 100%; min-width: 0; max-width: 100%; font-size: .78rem; white-space: normal; overflow-wrap: anywhere; word-break: break-word; text-align: left; }
 .archive-pager { margin-top: 1rem; }
 .archive-pager span { font-size: .8rem; color: #a8bfb1; text-align: center; }
 .archive-panel label { display: block; margin-bottom: .7rem; }
-.archive-panel input[type=file] { max-width: 100%; font: inherit; padding: .6rem; border: 1px dashed #4a765d; border-radius: .5rem; }
+.archive-panel input[type=file] { box-sizing: border-box; width: 100%; min-width: 0; max-width: 100%; font: inherit; padding: .6rem; border: 1px dashed #4a765d; border-radius: .5rem; }
 .archive-metadata { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .7rem; margin: 0 0 1.5rem; }
 .archive-metadata div { background: #172b21; border-radius: .5rem; padding: .65rem; min-width: 0; }
 .archive-metadata dt { color: #8aaf97; font-size: .7rem; }
