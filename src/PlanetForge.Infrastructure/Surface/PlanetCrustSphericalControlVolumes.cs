@@ -51,6 +51,7 @@ public sealed class PlanetCrustSphericalControlVolumes
     private static readonly double SphereAreaSquareMeters = 4.0 * Math.PI * RadiusMeters * RadiusMeters;
 
     private readonly PlanetVector[] sites;
+    private readonly PlanetTectonicPlateId[] owningPlates;
     private readonly PlanetCrustSphericalCell[] cells;
     private readonly IReadOnlyList<PlanetCrustSphericalCell> publicCells;
     private readonly IReadOnlyList<PlanetCrustSphericalFace> faces;
@@ -61,12 +62,14 @@ public sealed class PlanetCrustSphericalControlVolumes
         PlanetWorldIdentity world,
         PlanetGeologicalEpoch epoch,
         PlanetVector[] sites,
+        PlanetTectonicPlateId[] owningPlates,
         PlanetCrustSphericalCell[] cells,
         PlanetCrustSphericalFace[] faces)
     {
         World = world;
         Epoch = epoch;
         this.sites = sites;
+        this.owningPlates = owningPlates;
         this.cells = cells;
         publicCells = Array.AsReadOnly(cells);
         this.faces = Array.AsReadOnly(faces);
@@ -107,6 +110,17 @@ public sealed class PlanetCrustSphericalControlVolumes
         return sites[(int)id.Value - 1];
     }
 
+    /// <summary>Actual plate owner of a persistent material site in this epoch's reconstruction.</summary>
+    public PlanetTectonicPlateId GetOwningPlate(PlanetCrustParcelId id)
+    {
+        if (id.Value == 0 || id.Value > (ulong)owningPlates.Length)
+        {
+            throw new ArgumentOutOfRangeException(nameof(id));
+        }
+
+        return owningPlates[(int)id.Value - 1];
+    }
+
     public PlanetCrustSphericalCell Locate(PlanetVector geographicDirection)
     {
         var direction = PlanetVector.Normalize(geographicDirection);
@@ -120,7 +134,8 @@ public sealed class PlanetCrustSphericalControlVolumes
     {
         ArgumentNullException.ThrowIfNull(catalog);
         var sites = catalog.Parcels.Select(material => material.PresentDirection).ToArray();
-        return BuildCore(catalog, PlanetGeologicalEpoch.Present, sites);
+        var owners = catalog.Parcels.Select(material => material.InitialPlate).ToArray();
+        return BuildCore(catalog, PlanetGeologicalEpoch.Present, sites, owners);
     }
 
     /// <summary>
@@ -141,15 +156,17 @@ public sealed class PlanetCrustSphericalControlVolumes
             throw new ArgumentException("Geological history must belong to this generated world.", nameof(history));
         }
 
-        var sites = catalog.Parcels.Select(material =>
-            history.GetState(material.Id, epoch).GeographicDirection).ToArray();
-        return BuildCore(catalog, epoch, sites);
+        var states = catalog.Parcels.Select(material => history.GetState(material.Id, epoch)).ToArray();
+        var sites = states.Select(state => state.GeographicDirection).ToArray();
+        var owners = states.Select(state => state.OwningPlate).ToArray();
+        return BuildCore(catalog, epoch, sites, owners);
     }
 
     private static PlanetCrustSphericalControlVolumes BuildCore(
         PlanetCrustParcelCatalog catalog,
         PlanetGeologicalEpoch epoch,
-        PlanetVector[] sites)
+        PlanetVector[] sites,
+        PlanetTectonicPlateId[] owningPlates)
     {
         // A one-site-to-one-cell mapping needs distinct locations. The
         // reference material IDs themselves never change on remeshing.
@@ -196,7 +213,7 @@ public sealed class PlanetCrustSphericalControlVolumes
             throw new InvalidOperationException("Every reference cell face must be shared by precisely two adjacent cells.");
         }
 
-        return new PlanetCrustSphericalControlVolumes(catalog.World, epoch, sites,
+        return new PlanetCrustSphericalControlVolumes(catalog.World, epoch, sites, owningPlates,
             cells, faces.Values.Select(face => face.Face).ToArray());
     }
 
