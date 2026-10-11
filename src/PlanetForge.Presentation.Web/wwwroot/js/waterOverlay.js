@@ -459,13 +459,14 @@ function synchronizeMainPlanet(s) {
     s.yaw = camera.yaw;
     s.pitch = camera.pitch;
     s.distance = camera.distance;
+    const seaLevelChanged = s.seaLevelMeters !== camera.seaLevelMeters;
     s.seaLevelMeters = camera.seaLevelMeters;
     const retained = getRetainedSurfaceGeometry();
     const radiusChanged = s.planetRadiusMeters !== camera.planetRadiusMeters;
     const geometryChanged = retained.surfaceTiles !== s.terrainTiles
         || retained.terrainRevision !== s.terrainRevision || radiusChanged;
     if (radiusChanged) s.planetRadiusMeters = camera.planetRadiusMeters;
-    if (geometryChanged) {
+    if (geometryChanged || seaLevelChanged) {
         // Publish geometry for the latest complete terrain view, never reuse
         // pre-epoch or pre-LOD interpolated bank elevations.
         s.terrainIndex = null;
