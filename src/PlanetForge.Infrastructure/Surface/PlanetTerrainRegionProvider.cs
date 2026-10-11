@@ -53,6 +53,37 @@ public sealed class PlanetTerrainRegionProvider(IPlanetElevationSource canonical
     public long PublishHistories(PlanetGeologicalEpoch epoch, IReadOnlyList<PlanetGeologicalRegionHistory> histories) =>
         ReplaceLayers(PlanetGeologicalRegionLayerBuilder.Build(epoch, histories));
 
+    /// <summary>
+    /// Atomically publish a whole-planet crust deformation research snapshot
+    /// into the SAME canonical elevation path used by orbital tiles and local
+    /// ground patches. The complete geographic index is constructed before
+    /// the publication lock; no renderer can observe partially filled cells.
+    /// This research profile is world-seed isolated and does not update saves.
+    /// </summary>
+    public long PublishGlobalCrustDeformation(PlanetCrustEvolvingSnapshot snapshot)
+    {
+        ArgumentNullException.ThrowIfNull(snapshot);
+        if (snapshot.Epoch.YearsBeforePresent != 0)
+        {
+            throw new ArgumentException("Only an explicitly completed present-day research snapshot may be published.", nameof(snapshot));
+        }
+
+        var atlas = new PlanetCrustGlobalReliefAtlas(snapshot);
+        var elevation = new PlanetCrustGlobalReliefElevationSource(canonicalElevation, atlas);
+        lock (publicationGate)
+        {
+            var next = new PublishedTerrain(elevation, checked(published.Revision + 1));
+            Volatile.Write(ref published, next);
+            return next.Revision;
+        }
+    }
+
+    /// <summary>
+    /// Restores the unchanged canonical terrain, invalidating both orbital
+    /// and local mesh revisions for a reproducible A/B comparison.
+    /// </summary>
+    public long ClearGlobalCrustDeformation() => ClearLayers();
+
     public long ClearLayers() => ReplaceLayers();
 
     private sealed record PublishedTerrain(IPlanetElevationSource Elevation, long Revision);
