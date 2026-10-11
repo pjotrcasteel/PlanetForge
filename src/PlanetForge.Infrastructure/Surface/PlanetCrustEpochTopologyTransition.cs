@@ -107,6 +107,11 @@ public sealed class PlanetCrustEpochTopologyTransition
 
             var oldState = history.GetState(material.Id, from.Epoch);
             var newState = history.GetState(material.Id, to.Epoch);
+            if ((from.GetSiteDirection(material.Id) - oldState.GeographicDirection).Length > 1e-9 ||
+                (to.GetSiteDirection(material.Id) - newState.GeographicDirection).Length > 1e-9)
+            {
+                throw new ArgumentException("Epoch geometry must have been reconstructed from the supplied exact ownership history.");
+            }
             var angle = Math.Atan2(PlanetVector.Cross(oldState.GeographicDirection, newState.GeographicDirection).Length,
                 PlanetVector.Dot(oldState.GeographicDirection, newState.GeographicDirection));
             cells[i] = new PlanetCrustEpochCellChange(
