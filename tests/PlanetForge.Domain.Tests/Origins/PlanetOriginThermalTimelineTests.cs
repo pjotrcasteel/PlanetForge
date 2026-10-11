@@ -35,6 +35,26 @@ public sealed class PlanetOriginThermalTimelineTests
     }
 
     [TestMethod]
+    public void AdvanceYears_LateImpact_ReheatsPreviouslySolidRockWithoutReversingGeologicalTime()
+    {
+        var initial = new PlanetOriginThermalTimeline(
+            PlanetOriginClock.EarthAccretionReference,
+            new PlanetThermalEnergyBudget(2_000.0),
+            CreateRockModel());
+        const long elapsedYears = 500_000;
+        var durationSeconds = elapsedYears * PlanetThermalEnergyBudget.JulianYearSeconds;
+        var impact = new PlanetThermalEnergyFlux(2_400.0 / durationSeconds, 0.0, 0.0);
+
+        var heated = initial.AdvanceYears(elapsedYears, impact);
+
+        Assert.AreEqual(0.0, initial.Rock.MeltFraction, 0.0);
+        Assert.AreEqual(1.0, heated.Rock.MeltFraction, 0.0);
+        Assert.AreEqual(4_539_500_000L, heated.Clock.YearsBeforePresent);
+        Assert.AreEqual(2_400.0, heated.EnergyBudget.CumulativeImpactHeatJoules, 1e-9);
+        Assert.AreEqual(0.0, heated.EnergyBudget.ConservationResidualJoules, 1e-9);
+    }
+
+    [TestMethod]
     public void AdvanceYears_ZeroYearsWithZeroFlux_IsIdempotent()
     {
         var timeline = new PlanetOriginThermalTimeline(
