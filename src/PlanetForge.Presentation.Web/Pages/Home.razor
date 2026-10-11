@@ -10,6 +10,7 @@
 @inject IJSRuntime JsRuntime
 @inject NavigationManager Navigation
 @inject PlanetGeologicalCameraRegionStream RegionStream
+@inject PlanetTerrainRegionProvider TerrainProvider
 
 <main class="foundation-shell">
     <section class="planet-stage foundation-stage @PlanetVisualClass()">
@@ -19,18 +20,23 @@
         <div class="foundation-clock" aria-live="polite">
             <strong>@FormatElapsedTime()</strong>
             <span>@FormatStageLabel()</span>
-            <small class="foundation-geology-preview">GEOLOGY PREVIEW</small>
+            <small class="foundation-geology-preview">@(geologyActive ? "GEOLOGY / PHYSICAL TERRAIN" : "PLANET / CANONICAL TERRAIN")</small>
             <div class="foundation-seed">
                 <small data-testid="planet-seed">SEED @CurrentSeed</small>
-                <a class="foundation-generate" href="?terrainLab=1" aria-label="Open Terrain Lab">LAB</a>
-                <a class="foundation-generate" href="?geologyPreview=1" aria-label="Open geological deformation preview">GEOLOGY</a>
-                <a class="foundation-generate" href="?geologyArchive=1" aria-label="Open Geological Archives">ARCHIVES</a>
+                <button class="foundation-generate" data-testid="geology-terrain-toggle" type="button"
+                        aria-label="Toggle geological deformation in the main 3D planet"
+                        aria-pressed="@geologyActive" disabled="@(isTransitioning || geologyLoading)"
+                        @onclick="ToggleGeologyAsync">@(geologyLoading ? "BUILDING…" : geologyActive ? "GEOLOGY ON" : "GEOLOGY OFF")</button>
                 @if (regionalStreamingEnabled)
                 {
                     <small data-testid="region-stream-status" aria-live="polite">@regionalStreamStatus</small>
                 }
-                <button class="foundation-generate" disabled="@isTransitioning" aria-label="Generate new planet" @onclick="GeneratePlanetAsync">GENERATE</button>
+                <button class="foundation-generate" disabled="@(isTransitioning || geologyLoading)" aria-label="Generate new planet" @onclick="GeneratePlanetAsync">GENERATE</button>
             </div>
+            @if (!string.IsNullOrEmpty(geologyStatus))
+            {
+                <small class="foundation-geology-status" role="status" data-testid="main-geology-status">@geologyStatus</small>
+            }
         </div>
 
         <div class="foundation-controls">
@@ -61,6 +67,9 @@
     private FoundationStage currentStage = FoundationStage.FrozenWorld;
     private FoundationStage? transitionStage;
     private bool isTransitioning;
+    private bool geologyActive;
+    private bool geologyLoading;
+    private string geologyStatus = string.Empty;
     private double elapsedYears;
 
     private int CurrentSeed => run?.Mission.Planet.Seed ?? PlanetSeedCatalog.ShowcaseSeed;
@@ -191,7 +200,7 @@
 
     private async Task GeneratePlanetAsync()
     {
-        if (isTransitioning)
+        if (isTransitioning || geologyLoading)
         {
             return;
         }
@@ -202,6 +211,13 @@
         try
         {
             var seed = CreateRandomSeed(CurrentSeed);
+            if (geologyActive)
+            {
+                TerrainProvider.ClearGlobalCrustDeformation();
+                geologyActive = false;
+                geologyStatus = string.Empty;
+            }
+
             if (regionalStreamingEnabled)
             {
                 RegionStream.Reset();
@@ -224,6 +240,72 @@
         finally
         {
             EndTransition();
+        }
+    }
+
+    /// <summary>
+    /// Compare baseline and physics-derived ACTUAL terrain on the same globe,
+    /// using the identical revision-aware IPlanetElevationSource at all LODs.
+    /// Builds the research field on demand to avoid a costly mobile startup.
+    /// No extra page, diagnostic shader, height multiplier or saved-world change.
+    /// </summary>
+    private async Task ToggleGeologyAsync()
+    {
+        if (isTransitioning || geologyLoading)
+        {
+            return;
+        }
+
+        geologyLoading = true;
+        geologyStatus = geologyActive ? "RESTORING CANONICAL TERRAIN" : "RECONSTRUCTING 2 MYR OF GEOLOGY";
+        StateHasChanged();
+        await Task.Delay(20, disposeCancellationTokenSource.Token);
+
+        try
+        {
+            if (geologyActive)
+            {
+                TerrainProvider.ClearGlobalCrustDeformation();
+                geologyActive = false;
+                geologyStatus = "CANONICAL BEDROCK · GEOLOGY COMPARISON OFF";
+            }
+            else
+            {
+                var seed = CurrentSeed;
+                var catalog = PlanetCrustParcelCatalog.Create(seed);
+                var history = PlanetCrustOwnershipHistory.Create(catalog);
+                var timeline = new PlanetCrustAccumulatedDeformation().Simulate(catalog, history, 2);
+                disposeCancellationTokenSource.Token.ThrowIfCancellationRequested();
+                if (seed != CurrentSeed)
+                {
+                    return;
+                }
+
+                var current = timeline[^1];
+                TerrainProvider.PublishGlobalCrustDeformation(current);
+                geologyActive = true;
+                geologyStatus = $"REAL ELEVATION · 2 MYR · UP TO {current.MaximumAbsoluteSurfaceDisplacementMeters:0} M LOCAL COLUMN";
+            }
+
+            snapshot = Experience.InvalidateTerrain();
+            await SyncPlanetAsync();
+        }
+        catch (Exception error) when (error is not OperationCanceledException)
+        {
+            if (geologyActive)
+            {
+                TerrainProvider.ClearGlobalCrustDeformation();
+                geologyActive = false;
+            }
+
+            geologyStatus = $"GEOLOGY NOT AVAILABLE: {error.Message}";
+            snapshot = Experience.InvalidateTerrain();
+            await SyncPlanetAsync();
+        }
+        finally
+        {
+            geologyLoading = false;
+            StateHasChanged();
         }
     }
 
@@ -474,6 +556,11 @@
     public async ValueTask DisposeAsync()
     {
         disposeCancellationTokenSource.Cancel();
+        if (geologyActive)
+        {
+            TerrainProvider.ClearGlobalCrustDeformation();
+            geologyActive = false;
+        }
         if (regionalStreamingEnabled)
         {
             RegionStream.Reset();
