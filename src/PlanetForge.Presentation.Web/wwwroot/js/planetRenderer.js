@@ -695,6 +695,9 @@ function installVisualTestApi() {
                 localCellSpacingMeters: state.renderMode === 'local' ? state.localCellSpacingMeters : null
             };
         },
+        // Debugging identity of the real shared terrain revision; never an
+        // independent visual-only geology or shader mode.
+        getTerrainGeometryKey() { return state?.geometryKey ?? null; },
         getSeed() { return state?.seed ?? null; },
         measure() {
             if (!state) return null;

@@ -1,7 +1,7 @@
 // The single source of truth for the visible PlanetForge release version.
 // Every deployed build also displays its own Git commit SHA in the page badge.
-const buildVersion = '0.0.37.31';
-document.title = `PlanetForge ${buildVersion} — Geological Terrain Research`;
+const buildVersion = '0.0.37.32';
+document.title = `PlanetForge ${buildVersion} — Main Planet Geology`;
 
 document.addEventListener('DOMContentLoaded', () => {
     const badge = document.getElementById('planetforge-build-badge');

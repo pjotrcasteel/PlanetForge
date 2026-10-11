@@ -71,7 +71,7 @@ test('GeologyPreview_AuditedTimelineDrawsMeasuredGlobalMapsWithoutTouchingMainPl
     await expect(page.getByTestId('geology-preview-scale')).toContainText('Measured map range');
 
     await openStableBlazorPage(page, '/', '#planet-canvas');
-    await expect(page.getByRole('link', { name: 'Open geological deformation preview' })).toBeVisible();
+    await expect(page.getByTestId('geology-terrain-toggle')).toBeVisible();
 });
 
 test('GeologyPreview_MobileLayout_FitsIPhoneWithoutHorizontalOverflow', async ({ page }) => {
