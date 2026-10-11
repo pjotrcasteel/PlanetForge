@@ -24,6 +24,21 @@ public sealed class PlanetHypsometryCacheTests
     }
 
     [TestMethod]
+    public void Clear_ExistingCache_ForcesFreshSamplingWithoutChangingThePlanet()
+    {
+        var source = new CountingElevationSource();
+        var cache = CreateCache(source);
+        var first = cache.GetOrBuild(2, 42, EarthRadiusMeters, CancellationToken.None);
+        var samples = source.SampleCount;
+
+        cache.Clear();
+        var rebuilt = cache.GetOrBuild(2, 42, EarthRadiusMeters, CancellationToken.None);
+
+        Assert.AreNotSame(first, rebuilt);
+        Assert.IsGreaterThan(samples, source.SampleCount);
+    }
+
+    [TestMethod]
     public void GetOrBuild_GeologicalPublication_RebuildsWaterVolumeCurve()
     {
         var source = new CountingElevationSource();
