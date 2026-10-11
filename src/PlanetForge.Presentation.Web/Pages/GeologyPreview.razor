@@ -176,7 +176,7 @@
                     column.GeographicDirection.Z, column.SurfaceDisplacementMeters,
                     column.CrustThicknessMeters - reference.ReferenceThicknessMeters);
             }).ToArray();
-            var extremes = await module.InvokeAsync<PreviewExtremes>("drawGeologyPreview", cancellation.Token, physical);
+            var extremes = await module.InvokeAsync<PreviewExtremes>("drawGeologyPreview", cancellation.Token, (object)physical);
             legend = $"Measured map range: uplift ±{extremes.MaxAbsUpliftMeters:0.##} m · crust-thickness delta ±{extremes.MaxAbsThicknessMeters:0.##} m (auto-scaled diverging colours).";
         }
         catch (Exception error) when (error is not OperationCanceledException)
