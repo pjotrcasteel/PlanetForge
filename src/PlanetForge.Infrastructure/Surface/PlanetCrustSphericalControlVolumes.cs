@@ -4,7 +4,7 @@ using PlanetForge.Domain.WorldGeneration;
 namespace PlanetForge.Infrastructure.Surface;
 
 /// <summary>
-/// Immutable polygon of the present-day spherical nearest-material partition.
+/// Immutable spherical nearest-material geographic cell at one epoch.
 /// Its exact geographic area is separate from the older equal-weight material
 /// quadrature area, which must not be silently replaced in existing mass ledgers.
 /// </summary>
@@ -30,10 +30,11 @@ public readonly record struct PlanetCrustSphericalFace(
     double LengthMeters);
 
 /// <summary>
-/// A complete, deterministic partition of the REFERENCE globe into convex
-/// spherical Voronoi cells around the 1,024 material reference directions.
-/// A cell belongs to a material seed, but is NOT an evolving/material-conserving
-/// tectonic plate polygon. History-driven deformation/remeshing comes later.
+/// Complete deterministic spherical Voronoi partitions around crust material
+/// sample directions at one requested epoch. The present-day reference build
+/// remains unchanged, while BuildAtEpoch observes persistent material through
+/// explicit kinematic ownership history. Voronoi cells are GEOGRAPHIC partitions
+/// of moving sites, not advected, area-conserving Lagrangian crust polygons.
 ///
 /// Construction clips each cell by exact great-circle bisectors. Geometry is
 /// validated for closure of the sphere, reciprocal faces and positive areas.
@@ -54,11 +55,13 @@ public sealed class PlanetCrustSphericalControlVolumes
 
     private PlanetCrustSphericalControlVolumes(
         PlanetWorldIdentity world,
+        PlanetGeologicalEpoch epoch,
         PlanetVector[] sites,
         PlanetCrustSphericalCell[] cells,
         PlanetCrustSphericalFace[] faces)
     {
         World = world;
+        Epoch = epoch;
         this.sites = sites;
         this.cells = cells;
         publicCells = Array.AsReadOnly(cells);
@@ -70,6 +73,7 @@ public sealed class PlanetCrustSphericalControlVolumes
     }
 
     public PlanetWorldIdentity World { get; }
+    public PlanetGeologicalEpoch Epoch { get; }
     public IReadOnlyList<PlanetCrustSphericalCell> Cells => publicCells;
     public IReadOnlyList<PlanetCrustSphericalFace> Faces => faces;
     public double GeographicAreaSquareMeters { get; }
@@ -98,6 +102,50 @@ public sealed class PlanetCrustSphericalControlVolumes
     {
         ArgumentNullException.ThrowIfNull(catalog);
         var sites = catalog.Parcels.Select(material => material.PresentDirection).ToArray();
+        return BuildCore(catalog, PlanetGeologicalEpoch.Present, sites);
+    }
+
+    /// <summary>
+    /// Reconstruct moving geographic control volumes at a geological epoch
+    /// from persistent material sample positions, not moving plate centres.
+    /// The full globe is re-partitioned atomically and all reciprocal faces
+    /// must still close. Coincident sample sites fail rather than losing mass.
+    /// </summary>
+    public static PlanetCrustSphericalControlVolumes BuildAtEpoch(
+        PlanetCrustParcelCatalog catalog,
+        PlanetCrustOwnershipHistory history,
+        PlanetGeologicalEpoch epoch)
+    {
+        ArgumentNullException.ThrowIfNull(catalog);
+        ArgumentNullException.ThrowIfNull(history);
+        if (history.World != catalog.World)
+        {
+            throw new ArgumentException("Geological history must belong to this generated world.", nameof(history));
+        }
+
+        var sites = catalog.Parcels.Select(material =>
+            history.GetState(material.Id, epoch).GeographicDirection).ToArray();
+        return BuildCore(catalog, epoch, sites);
+    }
+
+    private static PlanetCrustSphericalControlVolumes BuildCore(
+        PlanetCrustParcelCatalog catalog,
+        PlanetGeologicalEpoch epoch,
+        PlanetVector[] sites)
+    {
+        // A one-site-to-one-cell mapping needs distinct locations. The
+        // reference material IDs themselves never change on remeshing.
+        for (var first = 0; first < sites.Length; first++)
+        {
+            for (var second = first + 1; second < sites.Length; second++)
+            {
+                if (PlanetVector.Dot(sites[first], sites[second]) > 1.0 - 1e-13)
+                {
+                    throw new InvalidOperationException("Two material samples occupy indistinguishable geographic positions.");
+                }
+            }
+        }
+
         var cells = new PlanetCrustSphericalCell[sites.Length];
         var faces = new SortedDictionary<ulong, FaceCounter>();
 
@@ -130,7 +178,7 @@ public sealed class PlanetCrustSphericalControlVolumes
             throw new InvalidOperationException("Every reference cell face must be shared by precisely two adjacent cells.");
         }
 
-        return new PlanetCrustSphericalControlVolumes(catalog.World, sites,
+        return new PlanetCrustSphericalControlVolumes(catalog.World, epoch, sites,
             cells, faces.Values.Select(face => face.Face).ToArray());
     }
 
