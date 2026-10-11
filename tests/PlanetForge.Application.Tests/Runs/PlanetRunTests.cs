@@ -150,6 +150,67 @@ public sealed class PlanetRunTests
     }
 
     [TestMethod]
+    public void SurveyWaterWorld_StableTerrain_ReusesTopologyAndRebuildsAfterGeologyOrErosion()
+    {
+        var elevation = new RevisionedElevationSource();
+        var deformation = new TestTerrainDeformationStore();
+        var run = CreateRun(elevation, deformation);
+        run.StartNew();
+        CompleteFrozenWorld(run);
+
+        run.SurveyWaterWorld(CancellationToken.None);
+        var initialSamples = elevation.SampleCount;
+        run.SurveyWaterWorld(CancellationToken.None);
+        Assert.AreEqual(initialSamples, elevation.SampleCount, "Identical world state should reuse the drainage topology.");
+
+        elevation.AdvanceRevision();
+        run.SurveyWaterWorld(CancellationToken.None);
+        Assert.IsGreaterThan(initialSamples, elevation.SampleCount, "A geological publication must invalidate hydrology.");
+
+        var geologicalSamples = elevation.SampleCount;
+        deformation.AdvanceRevision();
+        run.SurveyWaterWorld(CancellationToken.None);
+        Assert.IsGreaterThan(geologicalSamples, elevation.SampleCount, "River erosion must invalidate hydrology.");
+    }
+
+    [TestMethod]
+    public void SurveyWaterWorld_TerrainChangedDuringSampling_RetainsCacheUntilSuccessfulRetry()
+    {
+        var elevation = new RevisionedElevationSource();
+        var run = CreateRun(elevation);
+        run.StartNew();
+        CompleteFrozenWorld(run);
+        run.SurveyWaterWorld(CancellationToken.None);
+
+        elevation.AdvanceRevision();
+        elevation.AdvanceRevisionOnNextSample = true;
+        Assert.ThrowsExactly<InvalidOperationException>(() => run.SurveyWaterWorld(CancellationToken.None));
+
+        var failedSamples = elevation.SampleCount;
+        run.SurveyWaterWorld(CancellationToken.None);
+        Assert.IsGreaterThan(failedSamples, elevation.SampleCount, "A stable retry must rebuild a consistent topology.");
+    }
+
+    [TestMethod]
+    public void SurveyWaterWorld_CancelledRebuild_DoesNotReplaceHydrology()
+    {
+        var elevation = new RevisionedElevationSource();
+        var run = CreateRun(elevation);
+        run.StartNew();
+        CompleteFrozenWorld(run);
+        run.SurveyWaterWorld(CancellationToken.None);
+        elevation.AdvanceRevision();
+
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+        Assert.ThrowsExactly<OperationCanceledException>(() => run.SurveyWaterWorld(cancellation.Token));
+
+        var beforeRetry = elevation.SampleCount;
+        run.SurveyWaterWorld(CancellationToken.None);
+        Assert.IsGreaterThan(beforeRetry, elevation.SampleCount);
+    }
+
+    [TestMethod]
     public void SelectResearch_UnlocksCapabilityAndSpendsInsight()
     {
         var run = CreateRun();
@@ -231,9 +292,9 @@ public sealed class PlanetRunTests
         return run.SimulateCommit().Run;
     }
 
-    private static PlanetRun CreateRun()
+    private static PlanetRun CreateRun(IPlanetElevationSource? elevationSource = null, IPlanetTerrainDeformationStore? deformationStore = null)
     {
-        var elevationSource = new TestElevationSource();
+        elevationSource ??= new TestElevationSource();
         var experience = CreateExperience(elevationSource);
         var mission = new FrozenWorldMission(experience);
         var hydrologyBuilder = new PlanetHydrologyModelBuilder(elevationSource);
@@ -242,7 +303,7 @@ public sealed class PlanetRunTests
         var hydrologyExtractor = new PlanetHydrologyFeatureExtractor();
         var geomorphologyModel = new PlanetRiverGeomorphologyModel();
         var sedimentModel = new PlanetRiverSedimentModel();
-        var deformationStore = new TestTerrainDeformationStore();
+        deformationStore ??= new TestTerrainDeformationStore();
         return new PlanetRun(mission, hydrologyBuilder, runoffModel, cryosphereRunoffModel, hydrologyExtractor, geomorphologyModel, sedimentModel, deformationStore);
     }
 
@@ -261,6 +322,29 @@ public sealed class PlanetRunTests
         public double SampleElevationMeters(PlanetVector direction, int seed) => (direction.Y * 4_000.0) + (direction.X * 1_000.0);
     }
 
+    private sealed class RevisionedElevationSource : IPlanetElevationRevisionSource
+    {
+        public long Revision { get; private set; }
+
+        public int SampleCount { get; private set; }
+
+        public bool AdvanceRevisionOnNextSample { get; set; }
+
+        public void AdvanceRevision() => Revision++;
+
+        public double SampleElevationMeters(PlanetVector direction, int seed)
+        {
+            SampleCount++;
+            if (AdvanceRevisionOnNextSample)
+            {
+                AdvanceRevisionOnNextSample = false;
+                AdvanceRevision();
+            }
+
+            return (direction.Y * 4_000.0) + (direction.X * 1_000.0);
+        }
+    }
+
     private sealed class TestTerrainDeformationStore : IPlanetTerrainDeformationStore
     {
         private readonly List<PlanetTerrainDeformation> erosions = [];
@@ -270,6 +354,8 @@ public sealed class PlanetRunTests
         public double SampleElevationDeltaMeters(PlanetVector direction, int seed) => 0.0;
 
         public int GetRevision(int seed) => revision;
+
+        public void AdvanceRevision() => revision++;
 
         public void Apply(int seed, IReadOnlyList<PlanetTerrainDeformation> deformations)
         {
