@@ -15,7 +15,7 @@ test.beforeEach(async ({ page }) => {
 test('PlanetStages_ReloadUsesShowcaseAndGenerateCreatesNewWorld', async ({ page }) => {
   await page.goto('/?visualTest=1');
   const seedLabel = page.getByTestId('planet-seed');
-  await expect(page.getByText('FROZEN WORLD', { exact: true })).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByText('SNOWBALL EXPERIMENT', { exact: true })).toBeVisible({ timeout: 20_000 });
   await expect(page.getByRole('button', { name: 'NEXT' })).toBeVisible();
   await expect(seedLabel).toHaveText('SEED 24061984', { timeout: 20_000 });
   await page.waitForFunction(() => Boolean(window.__planetForgeSurfaceTest) || Boolean(window.__planetForgeSurfaceError), null, { timeout: 15_000 });
