@@ -188,6 +188,58 @@ public sealed class PlanetCrustOwnershipHistory
         return result.AsReadOnly();
     }
 
+    /// <summary>
+    /// Suggest bounded, deterministic near-contact plate-frame transfers.
+    /// A suggestion is only evidence: the caller must explicitly accept it
+    /// through WithTransfer. No automatic subduction, material creation,
+    /// fragmentation or force-driven geological simulation is claimed.
+    /// </summary>
+    public IReadOnlyList<PlanetCrustPlateTransferEvidence> SuggestTransfers(PlanetGeologicalEpoch epoch, int maxResults = 32)
+    {
+        if (epoch.YearsBeforePresent == 0)
+        {
+            throw new ArgumentException("Present-day reference ownership cannot be modified.", nameof(epoch));
+        }
+
+        ArgumentOutOfRangeException.ThrowIfLessThan(maxResults, 1);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(maxResults, catalog.Parcels.Count);
+
+        var boundary = new PlanetTectonicBoundaryKinematics();
+        var result = new List<PlanetCrustPlateTransferEvidence>();
+        foreach (var material in catalog.Parcels)
+        {
+            if (checkpoints.TryGetValue(material.Id.Value, out var prior) &&
+                prior[^1].Epoch.YearsBeforePresent >= epoch.YearsBeforePresent)
+            {
+                continue;
+            }
+
+            var state = GetState(material.Id, epoch);
+            var contact = boundary.Sample(state.GeographicDirection, World.Seed, epoch);
+            if (!contact.IsAtContact || contact.Kind == PlanetPlateBoundaryKind.Neutral)
+            {
+                continue;
+            }
+
+            var target = contact.FirstPlate == state.OwningPlate ? contact.SecondPlate :
+                contact.SecondPlate == state.OwningPlate ? contact.FirstPlate : (PlanetTectonicPlateId?)null;
+            if (target is null)
+            {
+                continue;
+            }
+
+            var transfer = new PlanetCrustPlateTransfer(World, material.Id, epoch, state.OwningPlate, target.Value);
+            result.Add(new PlanetCrustPlateTransferEvidence(transfer, contact.Kind, contact.ContactInfluence,
+                contact.CompressionMetersPerMillionYears, contact.ShearMetersPerMillionYears));
+            if (result.Count == maxResults)
+            {
+                break;
+            }
+        }
+
+        return result.AsReadOnly();
+    }
+
     private void ValidateTransfer(PlanetCrustPlateTransfer transfer)
     {
         if (transfer.World != World || transfer.FromPlate.World != World || transfer.ToPlate.World != World)
