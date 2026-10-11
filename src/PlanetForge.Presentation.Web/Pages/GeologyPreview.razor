@@ -77,6 +77,7 @@
     private int selectedSeed = PlanetSeedCatalog.ShowcaseSeed;
     private int selectedFrame = ResearchSteps;
     private bool working;
+    private bool drawQueued;
     private string status = "Initializing experimental geology…";
     private string legend = "Waiting for measured field values.";
     private IReadOnlyList<PlanetCrustEvolvingSnapshot>? snapshots;
@@ -88,6 +89,12 @@
     {
         if (!firstRender)
         {
+            if (drawQueued)
+            {
+                drawQueued = false;
+                await DrawSelectedAsync();
+            }
+
             return;
         }
 
@@ -130,9 +137,8 @@
             selectedFrame = timeline.Count - 1;
             working = false;
             status = $"Ready • seed {selectedSeed} • {ResearchSteps} Myr of forward-time conservation and contact-strain research.";
+            drawQueued = true;
             StateHasChanged();
-            await Task.Yield();
-            await DrawSelectedAsync();
         }
         catch (Exception error) when (error is not OperationCanceledException)
         {
