@@ -96,6 +96,10 @@ test('MainPlanet_MeltingWorld_ShowsActualSeaLevelOceansWithGeologyEnabled', asyn
     }));
     expect(melted.stats.glError).toBe(0);
     expect(melted.stats.oceanPixels).toBeGreaterThan(100);
+    // A handful of bluish terrain pixels can pass a naive colour-presence check.
+    // Demand a meaningful connected-sea footprint on this deterministic seed.
+    expect(melted.stats.oceanFraction).toBeGreaterThan(0.16);
+    expect(melted.stats.oceanFraction).toBeGreaterThan(baseline.oceanFraction * 1.8);
     await page.screenshot({ path: testInfo.outputPath('main-planet-melted-oceans.png'), fullPage: true });
 
     const geology = page.getByTestId('geology-terrain-toggle');
@@ -108,5 +112,7 @@ test('MainPlanet_MeltingWorld_ShowsActualSeaLevelOceansWithGeologyEnabled', asyn
     const physical = await page.evaluate(() => window.__planetForgeSurfaceTest.measure());
     expect(physical.glError).toBe(0);
     expect(physical.oceanPixels).toBeGreaterThan(100);
+    expect(physical.oceanFraction).toBeGreaterThan(0.16);
+    expect(physical.oceanFraction).toBeGreaterThan(baseline.oceanFraction * 1.8);
     await page.screenshot({ path: testInfo.outputPath('main-planet-physical-geology-oceans.png'), fullPage: true });
 });
