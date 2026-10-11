@@ -112,7 +112,7 @@ public sealed class PlanetCrustMantleConservationSolver
         PlanetCrustSphericalControlVolumes targetGeometry,
         int maxResults = 32)
     {
-        ValidateState(state, catalog, history, targetGeometry, allowEarlierState: true);
+        ValidateState(state, catalog, history, targetGeometry);
         ArgumentOutOfRangeException.ThrowIfLessThan(maxResults, 1);
         ArgumentOutOfRangeException.ThrowIfGreaterThan(maxResults, catalog.Parcels.Count);
         ValidateForwardTime(state.Epoch, targetGeometry.Epoch);
@@ -184,8 +184,12 @@ public sealed class PlanetCrustMantleConservationSolver
         IReadOnlyList<PlanetCrustMantleExchange> exchanges)
     {
         ArgumentNullException.ThrowIfNull(exchanges);
-        ValidateState(state, catalog, history, targetGeometry, allowEarlierState: true);
+        ValidateState(state, catalog, history, targetGeometry);
         ValidateForwardTime(state.Epoch, targetGeometry.Epoch);
+        if (state.Epoch == targetGeometry.Epoch && exchanges.Count != 0)
+        {
+            throw new ArgumentException("A zero-duration geological step cannot physically transfer material.", nameof(exchanges));
+        }
 
         // Validate the current material snapshot's plate ownership separately
         // from the target: remeshing can change owners at explicit checkpoints.
@@ -327,7 +331,7 @@ public sealed class PlanetCrustMantleConservationSolver
     private static void ValidateState(PlanetCrustMantleReservoirSnapshot state,
         PlanetCrustParcelCatalog catalog,
         PlanetCrustOwnershipHistory history,
-        PlanetCrustSphericalControlVolumes geometry, bool allowEarlierState)
+        PlanetCrustSphericalControlVolumes geometry)
     {
         ArgumentNullException.ThrowIfNull(state);
         ValidateWorld(catalog, history, geometry);
