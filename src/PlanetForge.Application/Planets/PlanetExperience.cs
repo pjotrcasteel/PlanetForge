@@ -1,5 +1,6 @@
 using PlanetForge.Application.Rendering;
 using PlanetForge.Application.Surface;
+using PlanetForge.Application.Surface.Hydrology;
 using PlanetForge.Domain.Atmosphere;
 using PlanetForge.Domain.Climate;
 using PlanetForge.Domain.Hydrology;
@@ -14,7 +15,8 @@ public sealed class PlanetExperience(
     PlanetLocalSurfacePatchSampler localSurfacePatchSampler,
     PlanetLocalSurfaceMeshBuilder localSurfaceMeshBuilder,
     IPlanetTerrainDeformationStore? terrainDeformationStore = null,
-    PlanetSurfaceLodSelector? surfaceLodSelector = null)
+    PlanetSurfaceLodSelector? surfaceLodSelector = null,
+    PlanetHypsometryCache? hypsometryCache = null)
 {
     private const int GlobalSurfaceLevel = 1;
     private const int SurfaceCellsPerAxis = 32;
@@ -47,6 +49,10 @@ public sealed class PlanetExperience(
     private const double MaximumCarbonDioxidePartsPerMillion = 5_000.0;
     private const double MinimumWaterEarthHydrospheres = 0.0;
     private const double MaximumWaterEarthHydrospheres = 5.0;
+    // One area-weighted global terrain profile (6 * 16 * 16 samples), cached by
+    // geological revision. Higher resolution comes after measured mobile profiling.
+    private const int SeaLevelSamplingGridLevel = 4;
+    private const double LiquidWaterDensityKilogramsPerCubicMeter = 1_000.0;
     private const double MinimumVisualSeaLevelMeters = -11_000.0;
     private const double MaximumVisualSeaLevelMeters = 6_000.0;
 
@@ -268,7 +274,7 @@ public sealed class PlanetExperience(
         climateState ??= ClimateFeedbackSimulator.Initialize(state.PhysicalParameters, atmosphere, state.WaterParameters);
         var climateResult = ClimateFeedbackSimulator.Evaluate(state.PhysicalParameters, atmosphere, state.WaterParameters, climateState);
         climateState = climateResult.State;
-        var seaLevelMeters = CalculateVisualSeaLevelMeters(climateResult.Water);
+        var seaLevelMeters = CalculateSeaLevelMeters(climateResult.Water);
         var atmosphereDensity = CalculateAtmosphereDensity(atmosphere.SurfacePressurePascals);
         var radiusMeters = state.PhysicalParameters.RadiusMeters;
         var localSurface = CreateLocalSurface(radiusMeters);
@@ -435,6 +441,28 @@ public sealed class PlanetExperience(
         var current = parameters.TotalMassKilograms / EarthWaterReference.TotalHydrosphereMassKilograms;
         var next = Math.Clamp(current + deltaEarthHydrospheres, MinimumWaterEarthHydrospheres, MaximumWaterEarthHydrospheres);
         state.SetWaterParameters(parameters with { TotalMassKilograms = next * EarthWaterReference.TotalHydrosphereMassKilograms });
+    }
+
+    private double CalculateSeaLevelMeters(WaterPhaseSnapshot water)
+    {
+        // Frozen/dry worlds should not sample the full globe at startup.
+        if (water.LiquidMassKilograms <= 0.0)
+        {
+            return MinimumVisualSeaLevelMeters;
+        }
+
+        // Tests and legacy manually constructed experiences can retain their
+        // previous behavior until opting into the shared physical model.
+        if (hypsometryCache is null)
+        {
+            return CalculateVisualSeaLevelMeters(water);
+        }
+
+        var planetRadiusMeters = state.PhysicalParameters.RadiusMeters;
+        var terrainVolume = hypsometryCache.GetOrBuild(
+            SeaLevelSamplingGridLevel, state.Seed, planetRadiusMeters, CancellationToken.None);
+        var liquidVolumeCubicMeters = water.LiquidMassKilograms / LiquidWaterDensityKilogramsPerCubicMeter;
+        return terrainVolume.SolveSeaLevelMeters(liquidVolumeCubicMeters);
     }
 
     private static double CalculateVisualSeaLevelMeters(WaterPhaseSnapshot water)
