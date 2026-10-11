@@ -30,6 +30,19 @@ public sealed class PlanetRockEnthalpyModelTests
     }
 
     [TestMethod]
+    public void Resolve_ExactlyAtSolidusAndLiquidus_HasContinuousPhaseBoundaries()
+    {
+        var model = CreateModel();
+        var atSolidus = model.Resolve(model.CalculateStoredEnergyJoules(100.0));
+        var atLiquidus = model.Resolve(model.CalculateStoredEnergyJoules(200.0));
+
+        Assert.AreEqual(100.0, atSolidus.TemperatureKelvin, 1e-9);
+        Assert.AreEqual(0.0, atSolidus.MeltFraction, 0.0);
+        Assert.AreEqual(200.0, atLiquidus.TemperatureKelvin, 1e-9);
+        Assert.AreEqual(1.0, atLiquidus.MeltFraction, 0.0);
+    }
+
+    [TestMethod]
     public void Resolve_AboveLiquidus_IsEntirelyMolten()
     {
         var state = CreateModel().Resolve(4_400.0);
