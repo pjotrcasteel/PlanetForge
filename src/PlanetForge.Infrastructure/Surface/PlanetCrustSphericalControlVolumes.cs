@@ -364,7 +364,11 @@ public sealed class PlanetCrustSphericalControlVolumes
                 if (shared.Occurrences != 1 || Math.Abs(shared.Face.LengthMeters - length) > 0.1 ||
                     !SameSharedEndpoints(shared.Face.Start, shared.Face.End, start, end))
                 {
-                    throw new InvalidOperationException("Adjacent crust cells disagree on their common spherical face.");
+                    throw new InvalidOperationException(
+                        $"Adjacent crust cells disagree: owner={index + 1} neighbor={neighbor + 1} " +
+                        $"pair={smaller + 1}-{larger + 1} count={shared.Occurrences} " +
+                        $"firstLength={shared.Face.LengthMeters:R} secondLength={length:R} " +
+                        $"startGap={(shared.Face.Start - end).Length:R} endGap={(shared.Face.End - start).Length:R}.");
                 }
 
                 shared.Occurrences++;
