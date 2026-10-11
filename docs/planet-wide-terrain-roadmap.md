@@ -158,3 +158,21 @@ The planet can opt into a research preview with `?regionalStreaming=1`. The norm
 When the camera enters adaptive orbit (distance <1.35 planet radii), the C# selector seeks the nearest geographically addressed saved region within a conservative short angular range, rather than scanning and decoding large archives on every frame. The streamer loads only **one** archive candidate, verifies the camera actually intersects its physical erosion support, then restores via A2.3 atomic publication. Leaving that location or zooming back out restores canonical terrain, and revision-aware globe/ground meshes re-sample the shared geology. Duplicate views reuse the already loaded selection; superseded or cancelled loads cannot republish a stale region.
 
 The preview is intentionally behind a query flag until the visual and device-performance gates are satisfied. If there are no archived geological regions for the current seed, no geology is fabricated or loaded. Archived YBP values are not calibrated geological evolution. Further milestones must refine LOD 0–3 visuals, handle more than one adjacent region with stable ownership and sediment flow, implement camera-friendly asynchronous disk prefetch, and add physically consistent tectonic motion, ice and drainage.
+
+
+## A2.5.1 — Canonical plate kinematics (PF 0.0.37.20)
+
+The existing `ProceduralPlanetElevationSource` has eighteen canonical seeded geological plate centres with an instantaneous tangent motion field. This milestone **reuses those exact 18 identities**. `PlanetTectonicPlateId` distinguishes the generated-world identity from a plate index. `PlanetTectonicPlateKinematics` exposes immutable present-day plate states and rotations backwards to a requested `PlanetGeologicalEpoch`.
+
+An Euler pole is obtained from each canonical centre and existing tangent motion vector; rotation uses Rodrigues' formula on normalized spherical coordinates. Present (YBP 0) exactly matches the existing static plates, and mapping a material direction backwards in geological time and forward again recovers the original location. Moving material and fixed `PlanetGeologicalRegionId` locations are deliberately separate.
+
+The initial speed calibration of 0.35–1 × 60 km/Myr (about 2.1–6 cm/year) is a **model assumption**, not tectonic evolution measured from real data. Rotation preserves the unit-sphere norm and is deterministic for seed, identity and epoch. The nearest-moving-centre helper is a diagnostic Voronoi proxy only; it does **not** advect complete crust polygons or conserve plate area. Continental crust still requires a parcel/crust-composition model, and changing the plate-centre positions alone does not generate physical mountain uplift, trenches, volcanoes or ocean basins.
+
+**No gameplay or renderer behavior changes:** the orbital and regional geometry continues to use the canonical present-day static geological source. The new model stays available for further evolution work and is covered by regression tests for canonical identity/motion agreement, seeded determinism, sphere preservation, inverse epoch mapping and invalid indices.
+
+### Next physical gates
+
+1. Model persistent crust material and plate membership separately from Eulerian geographical regions; preserve material through plate-boundary interactions.
+2. Use relative plate velocities to classify convergence/divergence/shear, then derive uplift, rifting, subduction and volcanism over time.
+3. Propagate the resulting physical surface through orbit and LOD 0–3 before expanding local Hero inspectors; avoid shader-only landforms.
+4. Resolve world-wide drainage and inter-region sediment flow before allowing moving mountains and meltwater to restructure lakes and oceans.

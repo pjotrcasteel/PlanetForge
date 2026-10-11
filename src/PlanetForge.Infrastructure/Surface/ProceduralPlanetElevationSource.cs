@@ -450,6 +450,28 @@ public sealed class ProceduralPlanetElevationSource : IPlanetElevationSource
         return new NearestPlatePair(primaryIndex, secondaryIndex, primaryDot, secondaryDot);
     }
 
+    // Reuse the exact same plate identities and instantaneous motion field
+    // for geological-time kinematics. Do not introduce a competing seeded
+    // plate catalogue alongside the canonical terrain generator.
+    internal static int PresentPlateCount => PlateCount;
+
+    internal static PlanetVector GetPresentPlateCenter(int seed, int index)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(index);
+        if (index >= PlateCount)
+        {
+            throw new ArgumentOutOfRangeException(nameof(index));
+        }
+
+        return PlateCenter(seed, index);
+    }
+
+    internal static PlanetVector GetPresentPlateMotion(int seed, int index)
+    {
+        var center = GetPresentPlateCenter(seed, index);
+        return PlateMotion(seed, index, center);
+    }
+
     private static PlanetVector PlateCenter(int seed, int index) => SeedDirection(seed ^ PlateSeedSalt, index, 8_191 + (index * 137));
 
     private static bool IsContinentalPlate(int seed, int plateIndex)
