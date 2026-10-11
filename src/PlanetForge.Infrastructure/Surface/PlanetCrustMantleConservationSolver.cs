@@ -31,6 +31,7 @@ public readonly record struct PlanetCrustMantleExchangeEvidence(
 public readonly record struct PlanetCrustMantleReservoirColumn(
     PlanetCrustMaterialParcel Material,
     PlanetTectonicPlateId OwningPlate,
+    PlanetVector GeographicDirection,
     double CrustMassKilograms,
     double ExchangeableMantleMassKilograms)
 {
@@ -91,10 +92,12 @@ public sealed class PlanetCrustMantleConservationSolver
         PlanetCrustSphericalControlVolumes geometry)
     {
         ValidateWorld(catalog, history, geometry);
-        var columns = catalog.Parcels.Select(material => new PlanetCrustMantleReservoirColumn(material,
-            history.GetState(material.Id, geometry.Epoch).OwningPlate,
-            material.ReferenceMassKilograms,
-            material.ReferenceMassKilograms * InitialMantleBudgetMultiplier)).ToArray();
+        var columns = catalog.Parcels.Select(material =>
+        {
+            var observed = history.GetState(material.Id, geometry.Epoch);
+            return new PlanetCrustMantleReservoirColumn(material, observed.OwningPlate, observed.GeographicDirection,
+                material.ReferenceMassKilograms, material.ReferenceMassKilograms * InitialMantleBudgetMultiplier);
+        }).ToArray();
         return new PlanetCrustMantleReservoirSnapshot(catalog.World, geometry.Epoch, columns, [],
             columns.Sum(column => column.TotalMassKilograms));
     }
@@ -191,14 +194,8 @@ public sealed class PlanetCrustMantleConservationSolver
             throw new ArgumentException("A zero-duration geological step cannot physically transfer material.", nameof(exchanges));
         }
 
-        // Validate the current material snapshot's plate ownership separately
-        // from the target: remeshing can change owners at explicit checkpoints.
-        var outgoingGeometry = PlanetCrustSphericalControlVolumes.BuildAtEpoch(catalog, history, state.Epoch);
-        if (state.Columns.Where((column, i) => column.OwningPlate != outgoingGeometry.GetOwningPlate(column.Material.Id)).Any())
-        {
-            throw new ArgumentException("Starting material ownership disagrees with the geological source epoch.", nameof(state));
-        }
-
+        // The starting epoch and every material's owner AND position were
+        // validated against history, preventing incompatible checkpoint replay.
         var faces = targetGeometry.Faces.ToDictionary(face => FaceKey(face.First, face.Second));
         var usedPairs = new HashSet<ulong>();
         var deltaCrust = new double[state.Columns.Count];
@@ -263,7 +260,8 @@ public sealed class PlanetCrustMantleConservationSolver
             }
 
             result[i] = new PlanetCrustMantleReservoirColumn(before.Material,
-                targetGeometry.GetOwningPlate(before.Material.Id), crust, mantle);
+                targetGeometry.GetOwningPlate(before.Material.Id),
+                targetGeometry.GetSiteDirection(before.Material.Id), crust, mantle);
         }
 
         var allEvents = state.Events.Concat(evidence).ToArray();
@@ -343,7 +341,10 @@ public sealed class PlanetCrustMantleConservationSolver
         for (var i = 0; i < state.Columns.Count; i++)
         {
             var column = state.Columns[i];
+            var recorded = history.GetState(column.Material.Id, state.Epoch);
             if (column.Material != catalog.Parcels[i] ||
+                column.OwningPlate != recorded.OwningPlate ||
+                (column.GeographicDirection - recorded.GeographicDirection).Length > 1e-9 ||
                 !double.IsFinite(column.CrustMassKilograms) || column.CrustMassKilograms <= 0.0 ||
                 !double.IsFinite(column.ExchangeableMantleMassKilograms) || column.ExchangeableMantleMassKilograms < 0.0)
             {
