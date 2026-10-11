@@ -157,6 +157,9 @@ test('MainPlanet_MeltingWorld_PublishesPhysicallyPlacedOceanInBothGeologyModes',
     expect(melted.water.glError).toBe(0);
     expect(melted.water.oceanPixels).toBeGreaterThan(dry.oceanPixels + 1_000);
     expect(melted.water.oceanFraction).toBeGreaterThan(dry.oceanFraction);
+    expect(melted.water.oceanLargestConnectedFraction).toBeGreaterThan(0.20);
+    // A sea should be geographically connected rather than scattered dark
+    // patches. Its absolute coverage still follows physical water mass.
     // Sea coverage is determined from actual water volume and terrain, not
     // an arbitrary minimum ocean percentage or a shader-painted continent.
     await page.screenshot({ path: testInfo.outputPath('main-planet-physical-oceans-geology-off.png'), fullPage: true });
@@ -172,5 +175,6 @@ test('MainPlanet_MeltingWorld_PublishesPhysicallyPlacedOceanInBothGeologyModes',
     expect(physical.glError).toBe(0);
     expect(physical.oceanPixels).toBeGreaterThan(dry.oceanPixels + 1_000);
     expect(physical.oceanFraction).toBeGreaterThan(dry.oceanFraction);
+    expect(physical.oceanLargestConnectedFraction).toBeGreaterThan(0.20);
     await page.screenshot({ path: testInfo.outputPath('main-planet-physical-oceans-geology-on.png'), fullPage: true });
 });
