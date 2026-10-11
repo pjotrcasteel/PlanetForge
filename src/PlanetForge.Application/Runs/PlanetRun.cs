@@ -3,6 +3,7 @@ using PlanetForge.Application.Rendering;
 using PlanetForge.Application.Surface.Hydrology;
 using PlanetForge.Domain.Physics;
 using PlanetForge.Domain.Surface;
+using PlanetForge.Domain.WorldGeneration;
 
 namespace PlanetForge.Application.Runs;
 
@@ -65,6 +66,7 @@ public sealed class PlanetRun(
     private PlanetWaterSurvey? waterSurvey;
     private PlanetWaterCycleState? waterCycle;
     private PlanetHydrologySnapshot? waterHydrology;
+    private PlanetHydrologyCacheKey? waterHydrologyKey;
 
     public IReadOnlyList<PlanetRunEraDefinition> Eras => EraDefinitions;
 
@@ -84,6 +86,7 @@ public sealed class PlanetRun(
         waterSurvey = null;
         waterCycle = null;
         waterHydrology = null;
+        waterHydrologyKey = null;
         journal.Clear();
         researchUnlocks.Clear();
         AddJournalEntry(
@@ -251,6 +254,7 @@ public sealed class PlanetRun(
         waterSurvey = save.WaterSurvey;
         waterCycle = save.WaterCycle;
         waterHydrology = null;
+        waterHydrologyKey = null;
         journal.Clear();
         journal.AddRange(save.Journal);
         researchUnlocks.Clear();
@@ -298,6 +302,7 @@ public sealed class PlanetRun(
         }
 
         waterHydrology = null;
+        waterHydrologyKey = null;
         mission = frozenWorldMission.RefreshTerrain();
 
         if (deformations.Count > 0 && !HasJournalEntry("river-incision-observed"))
@@ -353,19 +358,42 @@ public sealed class PlanetRun(
 
     private PlanetHydrologySnapshot EnsureWaterHydrology(CancellationToken cancellationToken)
     {
-        if (waterHydrology is not null)
+        cancellationToken.ThrowIfCancellationRequested();
+        var key = GetWaterHydrologyKey();
+        if (waterHydrology is not null && waterHydrologyKey == key)
         {
             return waterHydrology;
         }
 
-        var planet = CurrentMission.Planet;
-        waterHydrology = hydrologyModelBuilder.Build(
+        // Build into a local candidate. A failed/cancelled rebuild must never
+        // replace a previously consistent drainage topology.
+        var rebuilt = hydrologyModelBuilder.Build(
             WaterSurveyGridLevel,
+            key.Seed,
+            key.PlanetRadiusMeters,
+            key.SeaLevelMeters,
+            cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
+        if (GetWaterHydrologyKey() != key)
+        {
+            throw new InvalidOperationException("The terrain changed during hydrology generation. Retry against the latest geological revision.");
+        }
+
+        waterHydrology = rebuilt;
+        waterHydrologyKey = key;
+        return rebuilt;
+    }
+
+    private PlanetHydrologyCacheKey GetWaterHydrologyKey()
+    {
+        var planet = CurrentMission.Planet;
+        return new PlanetHydrologyCacheKey(
+            PlanetGenerationVersion.Current.Value,
             planet.Seed,
             planet.PhysicalParameters.RadiusMeters,
             planet.SeaLevelMeters,
-            cancellationToken);
-        return waterHydrology;
+            hydrologyModelBuilder.ElevationRevision,
+            terrainDeformationStore.GetRevision(planet.Seed));
     }
 
     private void EnsureWaterSurvey(PlanetHydrologyFeatures features)

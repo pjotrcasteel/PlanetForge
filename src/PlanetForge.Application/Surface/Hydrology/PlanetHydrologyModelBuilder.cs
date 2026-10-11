@@ -6,6 +6,10 @@ public sealed class PlanetHydrologyModelBuilder(IPlanetElevationSource elevation
 {
     private const int MaximumHydrologyLevel = 9;
 
+    // The shared terrain provider publishes complete geological epochs atomically.
+    // Downstream hydrology caches must be invalidated whenever that field changes.
+    public long ElevationRevision => (elevationSource as IPlanetElevationRevisionSource)?.Revision ?? 0L;
+
     public PlanetHydrologySnapshot Build(int level, int seed, double planetRadiusMeters, double seaLevelMeters, CancellationToken cancellationToken)
     {
         if (level < 0 || level > MaximumHydrologyLevel)
