@@ -137,3 +137,15 @@ Next: archive inspection and backup/import/export controls, then camera demand
 selection and streaming. Cross-region sediment exchange and the visible
 landform realism gates remain separate requirements; the latest 8 km Hero
 screenshots are still evidence of unresolved trench/shelf artifacts.
+ 
+## A2.4 — Inspectable archive workflow (PF 0.0.37.18)
+
+The dedicated Geological Archives screen (`?geologyArchive=1`) lets a player browse a bounded paginated list of locally saved archives, inspect fixed geographic and epoch metadata, import a validated geological JSON backup, export the unchanged validated bytes, and explicitly delete one archived epoch.
+
+Import verifies the versioned archive, geographic identity, grid dimensions, physical sample values and sediment conservation through the existing C# deserializer. Data is never published to the active planet simply by opening, saving or exporting an archive. The importer warns when a backup's canonical generation version is not the current source model. Files must be <=40 MB and are validated before persistence.
+
+When an archive already exists at the same planet/region/epoch, importing requires affirmative replacement permission. Save and delete both use IndexedDB **compare-and-swap inside a single readwrite transaction**, based on the previously inspected stored bytes. Another tab updating or removing a record causes the operation to fail safely, rather than overwriting a newer checkpoint. The in-memory region cache is cleared after a successful mutation.
+
+Keys are paginated (ten per page) without deserializing large archives; a standalone index screen never generates or loads a dense planet terrain. A dedicated Playwright flow checks validation, reload, export, replacement, concurrent-edit conflict, pagination and mobile layout.
+
+Safari Private Browsing may delete local IndexedDB content when the session ends, so downloadable backups are an essential part of the experience. This is supporting tooling, **not** the main gameplay feature. The primary visual acceptance target remains the **whole globe and LOD 0–3**. Canonical geology, moving crust, recognizable mountain ranges/volcanoes and connected snowmelt rivers/lakes/oceans are future physical milestones. No shader-generated pseudo-geography is accepted in place of actual planetary simulation.
