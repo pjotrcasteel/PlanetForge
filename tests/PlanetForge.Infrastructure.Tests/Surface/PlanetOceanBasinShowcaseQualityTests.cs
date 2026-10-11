@@ -16,12 +16,12 @@ public sealed class PlanetOceanBasinShowcaseQualityTests
 
         var elevation = new ProceduralPlanetElevationSource();
         var terrainVolume = new PlanetHypsometrySampler(elevation)
-            .Build(3, seed, radiusMeters, TestContext.CancellationToken);
+            .Build(3, seed, radiusMeters, CancellationToken.None);
         var seaLevel = terrainVolume.SolveSeaLevelMeters(
             EarthWaterReference.TotalHydrosphereMassKilograms / liquidWaterDensityKilogramsPerCubicMeter);
         var hydrology = new PlanetHydrologyModelBuilder(elevation)
-            .Build(5, seed, radiusMeters, seaLevel, TestContext.CancellationToken);
-        var connectivity = PlanetOceanConnectivitySurvey.Measure(hydrology, TestContext.CancellationToken);
+            .Build(5, seed, radiusMeters, seaLevel, CancellationToken.None);
+        var connectivity = PlanetOceanConnectivitySurvey.Measure(hydrology, CancellationToken.None);
 
         TestContext.WriteLine($"Showcase seed {seed}: physical sea level {seaLevel:0.0}m; " +
             $"ocean-cell fraction {connectivity.OceanCellFraction:P2}; " +
