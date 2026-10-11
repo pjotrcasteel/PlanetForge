@@ -89,6 +89,20 @@ public sealed class PlanetCrustSphericalControlVolumes
         return cells[(int)id.Value - 1];
     }
 
+    /// <summary>
+    /// Geographic position of the actual moving material reference site used
+    /// to create this epoch-specific polygon (not its area centroid).
+    /// </summary>
+    public PlanetVector GetSiteDirection(PlanetCrustParcelId id)
+    {
+        if (id.Value == 0 || id.Value > (ulong)sites.Length)
+        {
+            throw new ArgumentOutOfRangeException(nameof(id));
+        }
+
+        return sites[(int)id.Value - 1];
+    }
+
     public PlanetCrustSphericalCell Locate(PlanetVector geographicDirection)
     {
         var direction = PlanetVector.Normalize(geographicDirection);
