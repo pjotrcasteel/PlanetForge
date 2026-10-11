@@ -12,9 +12,9 @@ public sealed class PlanetOceanConnectivitySurveyTests
     public void Measure_DryWorld_HasNoOceansOrConnectedRegions()
     {
         var hydrology = new PlanetHydrologyModelBuilder(new ConstantElevationSource(500.0))
-            .Build(3, 17, PlanetRadiusMeters, 0.0, TestContext.CancellationToken);
+            .Build(3, 17, PlanetRadiusMeters, 0.0, CancellationToken.None);
 
-        var result = PlanetOceanConnectivitySurvey.Measure(hydrology, TestContext.CancellationToken);
+        var result = PlanetOceanConnectivitySurvey.Measure(hydrology, CancellationToken.None);
 
         Assert.AreEqual(0, result.OceanCells);
         Assert.AreEqual(0, result.OceanComponents);
@@ -26,9 +26,9 @@ public sealed class PlanetOceanConnectivitySurveyTests
     public void Measure_EntirelySubmergedWorld_IsOneConnectedGlobalOceanAcrossAllCubeFaces()
     {
         var hydrology = new PlanetHydrologyModelBuilder(new ConstantElevationSource(-500.0))
-            .Build(4, 17, PlanetRadiusMeters, 0.0, TestContext.CancellationToken);
+            .Build(4, 17, PlanetRadiusMeters, 0.0, CancellationToken.None);
 
-        var result = PlanetOceanConnectivitySurvey.Measure(hydrology, TestContext.CancellationToken);
+        var result = PlanetOceanConnectivitySurvey.Measure(hydrology, CancellationToken.None);
 
         Assert.AreEqual(result.TotalCells, result.OceanCells);
         Assert.AreEqual(1, result.OceanComponents);
@@ -40,9 +40,9 @@ public sealed class PlanetOceanConnectivitySurveyTests
     public void Measure_OneHemisphereOcean_CrossesCubeFaceSeamsWithoutSplitting()
     {
         var hydrology = new PlanetHydrologyModelBuilder(new HemisphericElevationSource())
-            .Build(4, 42, PlanetRadiusMeters, 0.0, TestContext.CancellationToken);
+            .Build(4, 42, PlanetRadiusMeters, 0.0, CancellationToken.None);
 
-        var result = PlanetOceanConnectivitySurvey.Measure(hydrology, TestContext.CancellationToken);
+        var result = PlanetOceanConnectivitySurvey.Measure(hydrology, CancellationToken.None);
 
         Assert.IsTrue(result.OceanCells > 0 && result.LandCells > 0);
         Assert.AreEqual(1, result.OceanComponents, "One continuous hemisphere must remain connected through cubed-sphere face seams.");
@@ -53,9 +53,9 @@ public sealed class PlanetOceanConnectivitySurveyTests
     public void Measure_TwoSeparatePolarBasins_AreNotPresentedAsOneOcean()
     {
         var hydrology = new PlanetHydrologyModelBuilder(new SeparatedPolarBasinsElevationSource())
-            .Build(4, 42, PlanetRadiusMeters, 0.0, TestContext.CancellationToken);
+            .Build(4, 42, PlanetRadiusMeters, 0.0, CancellationToken.None);
 
-        var result = PlanetOceanConnectivitySurvey.Measure(hydrology, TestContext.CancellationToken);
+        var result = PlanetOceanConnectivitySurvey.Measure(hydrology, CancellationToken.None);
 
         Assert.AreEqual(2, result.OceanComponents);
         Assert.IsTrue(result.OceanCells > 0 && result.LargestOceanComponentCells < result.OceanCells);
@@ -66,7 +66,7 @@ public sealed class PlanetOceanConnectivitySurveyTests
     public void Measure_PreCancelledSurvey_NeverReturnsIncompleteRegionCounts()
     {
         var hydrology = new PlanetHydrologyModelBuilder(new ConstantElevationSource(-500.0))
-            .Build(3, 17, PlanetRadiusMeters, 0.0, TestContext.CancellationToken);
+            .Build(3, 17, PlanetRadiusMeters, 0.0, CancellationToken.None);
         using var cancellation = new CancellationTokenSource();
         cancellation.Cancel();
 
@@ -74,7 +74,6 @@ public sealed class PlanetOceanConnectivitySurveyTests
             PlanetOceanConnectivitySurvey.Measure(hydrology, cancellation.Token));
     }
 
-    public TestContext TestContext { get; set; } = null!;
 
     private sealed class ConstantElevationSource(double elevationMeters) : IPlanetElevationSource
     {
