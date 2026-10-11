@@ -1,14 +1,11 @@
 import { getRetainedSurfaceGeometry } from './surfaceGeometryStore.js';
+import { getPlanetCameraSnapshot } from './planetRenderer.js';
 
 let state;
 
 const verticalFieldOfViewRadians = Math.PI / 4.2;
-const minimumCameraAltitudeMeters = 3.0;
-const maximumCameraAltitudeRatio = 4.2;
 const localTransitionAltitudeMeters = 20_000.0;
-const localExitAltitudeMeters = 25_000.0;
-const landReliefExaggeration = 28.0;
-const visualWaterClearanceMeters = 180.0;
+const visualWaterClearanceMeters = 18.0;
 const terrainLatitudeBins = 60;
 const terrainLongitudeBins = 120;
 const riverSamplesPerSegment = 7;
@@ -27,9 +24,8 @@ export function initialize(overlayCanvasId, inputCanvasId, planetRadiusMeters) {
         yaw: -0.65,
         pitch: 0.24,
         distance: 3.15,
-        dragging: false,
-        lastX: 0,
-        lastY: 0,
+        seaLevelMeters: 0.0,
+        terrainTiles: null,
         cycle: null,
         riverSegments: [],
         lakeGroups: [],
@@ -39,7 +35,6 @@ export function initialize(overlayCanvasId, inputCanvasId, planetRadiusMeters) {
         metrics: createMetrics()
     };
 
-    installInput(state);
     installVisualTestApi();
     requestAnimationFrame(render);
 }
@@ -54,6 +49,7 @@ export function setPlanetRadius(planetRadiusMeters) {
 export function setWaterCycle(waterCycle) {
     if (!state) return;
     state.cycle = waterCycle ?? null;
+    synchronizeMainPlanet(state);
     rebuildWaterGeometry(state);
 }
 
@@ -88,9 +84,16 @@ function createMetrics() {
 
 function rebuildWaterGeometry(s) {
     s.metrics = createMetrics();
-    ensureTerrainIndex(s);
     const paths = s.cycle?.activeRiverSegments ?? [];
     const lakeCells = s.cycle?.activeLakeCells ?? [];
+    if (paths.length > 0 || lakeCells.length > 0) {
+        ensureTerrainIndex(s);
+    } else {
+        // A dry planet needs camera sync, not an eagerly allocated elevation index.
+        const geometry = getRetainedSurfaceGeometry();
+        s.terrainTiles = geometry.surfaceTiles;
+        s.terrainRevision = geometry.terrainRevision;
+    }
     s.metrics.activeRiverSegmentCount = paths.length;
     s.metrics.lakeCellCount = lakeCells.length;
     s.riverSegments = buildRiverSegments(s, paths);
@@ -109,6 +112,7 @@ function ensureTerrainIndex(s) {
     if (s.terrainIndex
         && s.terrainVertexCount === vertexCount
         && s.terrainRevision === terrainRevision
+        && s.terrainTiles === tiles
         && vertexCount > 0
         && Math.abs(s.planetRadiusMeters - radiusMeters) < 0.5) {
         s.metrics.terrainVertexCount = vertexCount;
@@ -118,6 +122,7 @@ function ensureTerrainIndex(s) {
     s.planetRadiusMeters = radiusMeters;
     s.terrainVertexCount = vertexCount;
     s.terrainRevision = terrainRevision;
+    s.terrainTiles = tiles;
     const bins = new Map();
     for (const tile of tiles) {
         const positions = tile?.positions ?? [];
@@ -228,7 +233,7 @@ function buildRiverSegments(s, paths) {
                 const terrainElevation = sampleTerrainElevation(s, direction);
                 minimumElevation = Math.min(minimumElevation, terrainElevation);
                 maximumElevation = Math.max(maximumElevation, terrainElevation);
-                if (terrainElevation < -50.0) {
+                if (terrainElevation <= s.seaLevelMeters) {
                     reachedOcean = true;
                     break;
                 }
@@ -366,7 +371,7 @@ function buildLakeGroup(s, cells, fillScale) {
 }
 
 function surfacePoint(direction, elevationMeters, planetRadiusMeters) {
-    const visualRadius = 1.0 + (((elevationMeters * landReliefExaggeration) + visualWaterClearanceMeters) / Math.max(planetRadiusMeters, 1.0));
+    const visualRadius = 1.0 + ((elevationMeters + visualWaterClearanceMeters) / Math.max(planetRadiusMeters, 1.0));
     return scale(direction, visualRadius);
 }
 
@@ -446,36 +451,39 @@ function lakeCellsTouch(first, second, firstDirection = null, secondDirection = 
     return separation <= (firstRadius + secondRadius) * 1.18;
 }
 
-function installInput(s) {
-    const canvas = s.inputCanvas;
-    canvas.addEventListener('pointerdown', event => {
-        s.dragging = true;
-        s.lastX = event.clientX;
-        s.lastY = event.clientY;
-    });
-    canvas.addEventListener('pointerup', () => s.dragging = false);
-    canvas.addEventListener('pointercancel', () => s.dragging = false);
-    canvas.addEventListener('pointermove', event => {
-        if (!s.dragging) return;
-        const deltaX = event.clientX - s.lastX;
-        const deltaY = event.clientY - s.lastY;
-        s.lastX = event.clientX;
-        s.lastY = event.clientY;
-        if ((s.distance - 1.0) * s.planetRadiusMeters <= localExitAltitudeMeters) return;
-        s.yaw += deltaX * 0.008;
-        s.pitch = clamp(s.pitch + deltaY * 0.008, -1.25, 1.25);
-    });
-    canvas.addEventListener('wheel', event => {
-        const zoomFactor = Math.exp(event.deltaY * 0.0015);
-        const minimumAltitudeRatio = minimumCameraAltitudeMeters / Math.max(s.planetRadiusMeters, 1.0);
-        const altitudeRatio = clamp(s.distance - 1.0, minimumAltitudeRatio, maximumCameraAltitudeRatio);
-        s.distance = 1.0 + clamp(altitudeRatio * zoomFactor, minimumAltitudeRatio, maximumCameraAltitudeRatio);
-    }, { passive: true });
+// One authoritative camera: neither pinch nor drag should be processed twice.
+function synchronizeMainPlanet(s) {
+    const camera = getPlanetCameraSnapshot();
+    if (!camera) return false;
+
+    s.yaw = camera.yaw;
+    s.pitch = camera.pitch;
+    s.distance = camera.distance;
+    s.seaLevelMeters = camera.seaLevelMeters;
+    const retained = getRetainedSurfaceGeometry();
+    const radiusChanged = s.planetRadiusMeters !== camera.planetRadiusMeters;
+    const geometryChanged = retained.surfaceTiles !== s.terrainTiles
+        || retained.terrainRevision !== s.terrainRevision || radiusChanged;
+    if (radiusChanged) s.planetRadiusMeters = camera.planetRadiusMeters;
+    if (geometryChanged) {
+        // Publish geometry for the latest complete terrain view, never reuse
+        // pre-epoch or pre-LOD interpolated bank elevations.
+        s.terrainIndex = null;
+        rebuildWaterGeometry(s);
+    }
+
+    return camera.mode === 'globe';
 }
 
 function installVisualTestApi() {
     if (!new URLSearchParams(window.location.search).has('visualTest')) return;
     window.__planetForgeWaterTest = {
+        camera() {
+            if (!state) return null;
+            synchronizeMainPlanet(state);
+            return { yaw: state.yaw, pitch: state.pitch, distance: state.distance,
+                terrainRevision: state.terrainRevision, terrainVertexCount: state.terrainVertexCount };
+        },
         measure() {
             if (!state) return createMetrics();
             draw(state);
@@ -502,8 +510,9 @@ function resize(s) {
 
 function draw(s) {
     const { context, canvas } = s;
+    const isGlobe = synchronizeMainPlanet(s);
     context.clearRect(0, 0, canvas.width, canvas.height);
-    if (s.riverSegments.length === 0 && s.lakeGroups.length === 0) return;
+    if (!isGlobe || (s.riverSegments.length === 0 && s.lakeGroups.length === 0)) return;
     if ((s.distance - 1.0) * s.planetRadiusMeters <= localTransitionAltitudeMeters) return;
 
     const aspect = canvas.width / Math.max(canvas.height, 1);
