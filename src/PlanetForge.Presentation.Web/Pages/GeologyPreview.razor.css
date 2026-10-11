@@ -1,0 +1,37 @@
+.geology-preview-shell { width: min(1150px, calc(100% - 32px)); margin: 0 auto; padding: max(28px, env(safe-area-inset-top)) 0 max(36px, env(safe-area-inset-bottom)); color: #e8f2ec; }
+.geology-preview-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; }
+.geology-preview-header small { color: #83d8a5; letter-spacing: .17em; font-size: .67rem; font-weight: 800; }
+.geology-preview-header h1 { margin: 12px 0 16px; font-size: clamp(1.6rem, 4vw, 3rem); letter-spacing: -.045em; line-height: 1.05; }
+.geology-preview-header p { max-width: 690px; margin: 0; color: #a9c3b7; font-size: .9rem; }
+.geology-preview-header nav { display: flex; gap: 10px; flex-wrap: wrap; }
+.geology-preview-header a { color: #c9f3d8; white-space: nowrap; text-decoration: none; border: 1px solid #315744; border-radius: 8px; padding: 8px 10px; font-size: .82rem; }
+.geology-preview-controls { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; padding: 16px; margin-top: 24px; border: 1px solid #2d4c3d; border-radius: 15px; background: #0d2019; }
+.geology-preview-controls label { color: #aac6b6; font-size: .82rem; font-weight: 700; }
+.geology-preview-controls select { padding: 9px 12px; min-width: 120px; border: 1px solid #456954; border-radius: 9px; background: #142d21; color: #effaef; font: inherit; font-size: .84rem; }
+.geology-preview-controls button { background: #235e3e; color: #fff; font-size: .8rem; font-weight: 800; }
+.geology-preview-status { margin: 12px 2px 18px; min-height: 25px; font-size: .82rem; color: #b1e7c6; }
+.geology-preview-metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.geology-preview-metrics div { display: flex; flex-direction: column; gap: 7px; padding: 16px; border: 1px solid #2a5540; border-radius: 14px; background: #10251e; min-width: 0; }
+.geology-preview-metrics span { color: #a3bcac; font-size: .77rem; }
+.geology-preview-metrics strong { font: 800 clamp(1rem, 2.4vw, 1.45rem) ui-monospace, SFMono-Regular, Menlo, monospace; overflow-wrap: anywhere; }
+.geology-preview-metrics small { color: #91b09d; font-size: .69rem; }
+.geology-preview-maps { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin-top: 16px; }
+.geology-preview-maps article { padding: 14px; min-width: 0; border: 1px solid #2b4e3c; border-radius: 16px; background: #0d201a; }
+.geology-preview-maps h2 { margin: 0; font-size: 1rem; font-weight: 750; letter-spacing: 0; }
+.geology-preview-maps p { font-size: .81rem; color: #9fbaac; min-height: 63px; }
+.geology-preview-maps canvas { display: block; width: 100%; height: auto; aspect-ratio: 2 / 1; border-radius: 10px; image-rendering: auto; border: 1px solid #36594a; }
+.geology-preview-legend { display: flex; gap: 10px; align-items: center; margin-top: 10px; color: #97b5a3; font-size: .67rem; letter-spacing: .05em; font-weight: 700; }
+.geology-preview-gradient { flex: 1; min-width: 40px; height: 7px; background: linear-gradient(90deg, #42a4cf, #1d282f, #e99f5a); border-radius: 999px; }
+.geology-preview-scale { margin: 12px 0 24px; font-size: .82rem; color: #bedbc9; }
+.geology-preview-explanation { margin-top: 20px; padding: 20px; border: 1px solid #294d3a; border-radius: 16px; background: #0b1d16; }
+.geology-preview-explanation h2 { margin: 0 0 10px; font-size: 1.15rem; }
+.geology-preview-explanation p { max-width: 990px; margin: 8px 0; font-size: .84rem; color: #adc5b7; }
+@media (max-width: 720px) {
+  .geology-preview-shell { width: calc(100% - 24px); padding-top: max(16px, env(safe-area-inset-top)); }
+  .geology-preview-header { flex-direction: column; gap: 14px; }
+  .geology-preview-metrics { grid-template-columns: 1fr; }
+  .geology-preview-maps { grid-template-columns: 1fr; }
+  .geology-preview-maps p { min-height: 0; }
+  .geology-preview-controls { gap: 10px; padding: 12px; }
+  .geology-preview-controls button { width: 100%; }
+}

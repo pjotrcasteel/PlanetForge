@@ -1,0 +1,205 @@
+@using PlanetForge.Domain.Surface
+@using PlanetForge.Domain.WorldGeneration
+@using PlanetForge.Infrastructure.Surface
+@implements IAsyncDisposable
+@inject IJSRuntime Js
+
+<main class="geology-preview-shell" aria-label="Geological deformation preview">
+    <header class="geology-preview-header">
+        <div>
+            <small>PLANETFORGE / EXPERIMENTAL PHYSICS</small>
+            <h1>Geological deformation preview</h1>
+            <p>First visual inspection of the real, research-only crust/mantle ledger. These are potential physical displacements, not terrain already applied to the planet.</p>
+        </div>
+        <nav aria-label="Geology preview navigation">
+            <a href="?terrainLab=1">Terrain Lab</a>
+            <a href="./">← Planet</a>
+        </nav>
+    </header>
+
+    <section class="geology-preview-controls" aria-label="Experimental geology controls">
+        <label for="geology-seed">Planet seed</label>
+        <select id="geology-seed" @bind="selectedSeed" disabled="@working">
+            @foreach (var seed in PlanetSeedCatalog.IntegritySeeds)
+            {
+                <option value="@seed">@seed@(seed == PlanetSeedCatalog.ShowcaseSeed ? " / showcase" : "")</option>
+            }
+        </select>
+        <button id="geology-generate" @onclick="GenerateAsync" disabled="@working">@(working ? "RECONSTRUCTING…" : "RECONSTRUCT GEOLOGY")</button>
+        <label for="geology-epoch">Snapshot</label>
+        <select id="geology-epoch" @bind="selectedFrame" @bind:after="DrawSelectedAsync" disabled="@(working || snapshots is null)">
+            @if (snapshots is not null)
+            {
+                @for (var index = 0; index < snapshots.Count; index++)
+                {
+                    <option value="@index">@(snapshots[index].Epoch.YearsBeforePresent / 1_000_000) Ma before present</option>
+                }
+            }
+        </select>
+    </section>
+
+    <p class="geology-preview-status" role="status" data-testid="geology-preview-status" aria-live="polite">@status</p>
+
+    @if (snapshots is not null)
+    {
+        <section class="geology-preview-metrics" aria-label="Conserved geological metrics" data-testid="geology-preview-metrics">
+            <div><span>Reservoir budget</span><strong>@(Math.Round(snapshots[selectedFrame].TotalMaterialBudgetKilograms / snapshots[0].TotalMaterialBudgetKilograms * 100.0, 8).ToString("0.########"))%</strong><small>Crust + exchangeable mantle</small></div>
+            <div><span>Accepted boundary events</span><strong>@snapshots[selectedFrame].AcceptedEvents</strong><small>Explicit, signed transfers</small></div>
+            <div><span>Maximum column displacement</span><strong>@snapshots[selectedFrame].MaximumAbsoluteSurfaceDisplacementMeters.ToString("0.##") m</strong><small>Physical research metres</small></div>
+        </section>
+
+        <section class="geology-preview-maps" aria-label="Global simulated geology maps">
+            <article>
+                <h2>01 / Isostatic uplift &amp; subsidence</h2>
+                <p>Orange: positive uplift. Blue: subsidence. Values are unexaggerated physical metres computed from crust and mantle column masses.</p>
+                <canvas id="geology-uplift" width="256" height="128" aria-label="Global predicted isostatic uplift map"></canvas>
+                <div class="geology-preview-legend">SUBSIDENCE <span class="geology-preview-gradient"></span> UPLIFT</div>
+            </article>
+            <article>
+                <h2>02 / Accumulated crust thickness</h2>
+                <p>Change from each material parcel's reference thickness, integrating contact strain and crust/mantle mass exchange.</p>
+                <canvas id="geology-thickness" width="256" height="128" aria-label="Global simulated crust thickness change map"></canvas>
+                <div class="geology-preview-legend">THINNER <span class="geology-preview-gradient"></span> THICKER</div>
+            </article>
+        </section>
+        <p class="geology-preview-scale" data-testid="geology-preview-scale">@legend</p>
+    }
+
+    <section class="geology-preview-explanation">
+        <h2>What to look for</h2>
+        <p>Compare the oldest snapshot with one and two million years of evolution. Check whether deformation develops near plate contacts rather than forming isolated dots, whether positive and negative regions remain connected, and whether the mass total stays at 100%.</p>
+        <p><strong>Important:</strong> This uses 1,024 persistent reference samples and smooth geographic interpolation. It does not yet demonstrate real mountain belts at orbital scale, isostatic flexure, ocean-basin evolution or LOD 0–3 geometry. The main planet and saved worlds are untouched. The colour range adjusts to the observed physical data; it does not multiply the elevation values.</p>
+    </section>
+</main>
+
+@code {
+    private const int ResearchSteps = 2;
+    private int selectedSeed = PlanetSeedCatalog.ShowcaseSeed;
+    private int selectedFrame = ResearchSteps;
+    private bool working;
+    private bool drawQueued;
+    private string status = "Initializing experimental geology…";
+    private string legend = "Waiting for measured field values.";
+    private IReadOnlyList<PlanetCrustEvolvingSnapshot>? snapshots;
+    private PlanetCrustParcelCatalog? catalog;
+    private IJSObjectReference? module;
+    private readonly CancellationTokenSource cancellation = new();
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+        {
+            if (drawQueued)
+            {
+                drawQueued = false;
+                await DrawSelectedAsync();
+            }
+
+            return;
+        }
+
+        try
+        {
+            module = await Js.InvokeAsync<IJSObjectReference>("import", cancellation.Token, "./js/geologyPreview.js");
+            await GenerateAsync();
+        }
+        catch (Exception error) when (error is not OperationCanceledException)
+        {
+            status = $"Preview initialization failed: {error.Message}";
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task GenerateAsync()
+    {
+        if (working || module is null)
+        {
+            return;
+        }
+
+        working = true;
+        snapshots = null;
+        catalog = null;
+        status = $"Building persistent material and geological epochs for seed {selectedSeed}…";
+        StateHasChanged();
+        await Task.Delay(1, cancellation.Token);
+
+        try
+        {
+            var nextCatalog = PlanetCrustParcelCatalog.Create(selectedSeed);
+            var history = PlanetCrustOwnershipHistory.Create(nextCatalog);
+            var evolution = new PlanetCrustAccumulatedDeformation();
+            var timeline = evolution.Simulate(nextCatalog, history, ResearchSteps);
+            cancellation.Token.ThrowIfCancellationRequested();
+
+            catalog = nextCatalog;
+            snapshots = timeline;
+            selectedFrame = timeline.Count - 1;
+            working = false;
+            status = $"Ready • seed {selectedSeed} • {ResearchSteps} Myr of forward-time conservation and contact-strain research.";
+            drawQueued = true;
+            StateHasChanged();
+
+            // OnAfterRender will normally draw when Razor inserts the new
+            // canvases. The fallback guarantees first-time initialization
+            // even when the initial OnAfterRenderTask was still running while
+            // the newly generated state was committed.
+            await Task.Delay(80, cancellation.Token);
+            if (drawQueued)
+            {
+                drawQueued = false;
+                await DrawSelectedAsync();
+            }
+        }
+        catch (Exception error) when (error is not OperationCanceledException)
+        {
+            working = false;
+            status = $"Geological preview unavailable: {error.Message}";
+            StateHasChanged();
+        }
+    }
+
+    private async Task DrawSelectedAsync()
+    {
+        if (module is null || snapshots is null || catalog is null || selectedFrame >= snapshots.Count)
+        {
+            return;
+        }
+
+        try
+        {
+            var snapshot = snapshots[selectedFrame];
+            var physical = snapshot.Columns.Select((column, index) =>
+            {
+                var reference = catalog.Parcels[index];
+                return new PreviewMaterial(column.GeographicDirection.X, column.GeographicDirection.Y,
+                    column.GeographicDirection.Z, column.SurfaceDisplacementMeters,
+                    column.CrustThicknessMeters - reference.ReferenceThicknessMeters);
+            }).ToArray();
+            var extremes = await module.InvokeAsync<PreviewExtremes>("drawGeologyPreview", cancellation.Token, (object)physical);
+            legend = $"Measured map range: uplift ±{extremes.MaxAbsUpliftMeters:0.##} m · crust-thickness delta ±{extremes.MaxAbsThicknessMeters:0.##} m (auto-scaled diverging colours).";
+        }
+        catch (Exception error) when (error is not OperationCanceledException)
+        {
+            legend = "Research map did not render.";
+            status = $"Preview rendering failed: {error.Message}";
+        }
+
+        StateHasChanged();
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        await cancellation.CancelAsync();
+        if (module is not null)
+        {
+            try { await module.DisposeAsync(); }
+            catch (JSDisconnectedException) { }
+        }
+
+        cancellation.Dispose();
+    }
+
+    private sealed record PreviewMaterial(double X, double Y, double Z, double UpliftMeters, double ThicknessChangeMeters);
+    private sealed record PreviewExtremes(double MaxAbsUpliftMeters, double MaxAbsThicknessMeters);
+}
