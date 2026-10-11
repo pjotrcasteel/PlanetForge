@@ -108,7 +108,9 @@ public sealed class PlanetCrustEpochTopologyTransition
             var oldState = history.GetState(material.Id, from.Epoch);
             var newState = history.GetState(material.Id, to.Epoch);
             if ((from.GetSiteDirection(material.Id) - oldState.GeographicDirection).Length > 1e-9 ||
-                (to.GetSiteDirection(material.Id) - newState.GeographicDirection).Length > 1e-9)
+                (to.GetSiteDirection(material.Id) - newState.GeographicDirection).Length > 1e-9 ||
+                from.GetOwningPlate(material.Id) != oldState.OwningPlate ||
+                to.GetOwningPlate(material.Id) != newState.OwningPlate)
             {
                 throw new ArgumentException("Epoch geometry must have been reconstructed from the supplied exact ownership history.");
             }
