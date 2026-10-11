@@ -64,7 +64,7 @@ public sealed class PlanetCrustGlobalReliefAtlas
             }
         }
 
-        MaximumAbsoluteDisplacementMeters = displacement.Max(Math.Abs);
+        MaximumAbsoluteDisplacementMeters = displacement.Max(value => Math.Abs(value));
     }
 
     public PlanetWorldIdentity World { get; }
