@@ -62,7 +62,8 @@ public sealed class PlanetRockEnthalpyModelTests
 
         Assert.AreEqual(1.0, model.Resolve(high).MeltFraction, 0.0);
         Assert.AreEqual(0.5, model.Resolve(halfMolten).MeltFraction, 1e-10);
-        Assert.AreEqual(0.0, model.Resolve(rock).MeltFraction, 0.0);
+        Assert.AreEqual(0.0, model.Resolve(rock).MeltFraction, 1e-12,
+            "Floating-point flux integration may leave sub-machine-precision residual melt near the solidus.");
         Assert.AreEqual(100.0, model.Resolve(rock).TemperatureKelvin, 1e-10);
         Assert.AreEqual(0.0, rock.ConservationResidualJoules, 1e-9);
     }
