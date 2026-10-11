@@ -734,6 +734,7 @@ function measureSurface(s) {
     let icePixels = 0;
     let minimumOceanLuminance = Number.POSITIVE_INFINITY;
     let maximumOceanLuminance = Number.NEGATIVE_INFINITY;
+    const oceanMask = new Uint8Array(canvas.width * canvas.height);
 
     for (let offset = 0; offset < pixels.length; offset += 4) {
         const alpha = pixels[offset + 3] / 255.0;
@@ -752,6 +753,7 @@ function measureSurface(s) {
 
         const isOcean = blue > red * 1.35 && green > red * 1.30 && blue >= green * 0.72;
         if (!isOcean) continue;
+        oceanMask[offset / 4] = 1;
         oceanPixels++;
         minimumOceanLuminance = Math.min(minimumOceanLuminance, luminance);
         maximumOceanLuminance = Math.max(maximumOceanLuminance, luminance);
@@ -764,9 +766,51 @@ function measureSurface(s) {
         icePixels,
         iceFraction: planetPixels > 0 ? icePixels / planetPixels : 0.0,
         oceanFraction: planetPixels > 0 ? oceanPixels / planetPixels : 0.0,
+        oceanLargestConnectedFraction: oceanPixels > 0 ? largestOceanConnectedArea(oceanMask, canvas.width, canvas.height) / oceanPixels : 0.0,
         oceanLuminanceRange: oceanPixels > 0 ? maximumOceanLuminance - minimumOceanLuminance : 0.0,
         glError: gl.getError()
     };
+}
+
+// Browser-only physical-water visual gate: count connected ocean pixels rather
+// than accepting thousands of unrelated dark fragments as a coherent ocean.
+// Eight-neighbour connectivity tolerates diagonal antialiasing of coastlines.
+function largestOceanConnectedArea(mask, width, height) {
+    const visited = new Uint8Array(mask.length);
+    const queue = new Int32Array(mask.length);
+    let largest = 0;
+
+    for (let start = 0; start < mask.length; start++) {
+        if (mask[start] === 0 || visited[start]) continue;
+        let head = 0;
+        let tail = 1;
+        let size = 0;
+        queue[0] = start;
+        visited[start] = 1;
+
+        while (head < tail) {
+            const current = queue[head++];
+            size++;
+            const x = current % width;
+            const y = (current / width) | 0;
+            for (let deltaY = -1; deltaY <= 1; deltaY++) {
+                const neighborY = y + deltaY;
+                if (neighborY < 0 || neighborY >= height) continue;
+                for (let deltaX = -1; deltaX <= 1; deltaX++) {
+                    const neighborX = x + deltaX;
+                    if ((deltaX === 0 && deltaY === 0) || neighborX < 0 || neighborX >= width) continue;
+                    const next = neighborY * width + neighborX;
+                    if (mask[next] === 0 || visited[next]) continue;
+                    visited[next] = 1;
+                    queue[tail++] = next;
+                }
+            }
+        }
+
+        largest = Math.max(largest, size);
+    }
+
+    return largest;
 }
 
 function render() {
@@ -829,12 +873,14 @@ function renderGlobe(s) {
     gl.uniform1i(s.globeUniforms.mode, geologicalPreviewMode ? 5 : (isPreBiologicalSurface(s) ? 2 : 0));
     drawTerrain(s);
 
-    if (!geologicalPreviewMode) {
-        if (s.liquidFraction > 0.001) {
-            gl.uniform1i(s.globeUniforms.mode, 3);
-            drawSurface(s);
-        }
+    // Every liquid ocean is a real sea-level surface even when the barren
+    // geological material is selected. Do not mask the water with the rock pass.
+    if (s.liquidFraction > 0.001) {
+        gl.uniform1i(s.globeUniforms.mode, 3);
+        drawSurface(s);
+    }
 
+    if (!geologicalPreviewMode) {
         gl.enable(gl.BLEND);
         gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
         gl.depthMask(true);
@@ -1053,15 +1099,11 @@ void main() {
     vec3 tangentNormal = physicalNormal - (radial * dot(physicalNormal, radial));
     float elevationMeters = (physicalRadius - 1.0) * uPlanetRadiusMeters;
     float elevationAboveSeaLevel = elevationMeters - uSeaLevelMeters;
+    // Render the geological surface at physical altitude. Flattening to a
+    // unit sphere at orbit depth-occludes any ocean below the reference datum.
     float visualRadius = physicalRadius;
 
-    if (uMode == 5) {
-        // Preserve a perfectly smooth silhouette from far orbit, then reveal the REAL
-        // canonical elevation smoothly during regional approach. No synthetic height exaggeration.
-        float cameraAltitudeRatio = max(length(uCameraPosition) - 1.0, 0.0);
-        float reliefBlend = 1.0 - smoothstep(0.012, 0.080, cameraAltitudeRatio);
-        visualRadius = mix(1.0, physicalRadius, reliefBlend);
-    } else if (uMode == 0 || uMode == 2) {
+    if (uMode == 0 || uMode == 2) {
         float exaggeration = elevationAboveSeaLevel >= 0.0 ? 8.0 : 2.0;
         visualRadius = 1.0 + ((elevationMeters * exaggeration) / uPlanetRadiusMeters);
     } else if (uMode == 3) {
@@ -1343,6 +1385,12 @@ void main() {
     }
 
     if (uMode == 5) {
+        // Geological bedrock beneath liquid sea level must not write depth
+        // before the sea-surface pass. At orbital distance, the 18-metre
+        // clearance between rock and water is below depth-buffer precision;
+        // allowing both opaque surfaces causes z-fighting ocean speckles.
+        // This mask uses the same physical elevation as oceanMaterial below.
+        if (uLiquidFraction > 0.001 && elevationAboveSeaLevel < 0.0) discard;
         outColor = vec4(barrenRockMaterial(radial, normal, vElevationMeters), 1.0);
         return;
     }
