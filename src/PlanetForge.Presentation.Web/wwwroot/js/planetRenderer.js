@@ -45,6 +45,22 @@ export function initialize(canvasId, snapshot, dotNetReference, generatorPreview
     }
 }
 
+// Read-only snapshot consumed by other render layers. Input and orbit motion
+// belong exclusively to the main renderer, not to each visual overlay.
+export function getPlanetCameraSnapshot() {
+    if (!state) return null;
+    return {
+        yaw: state.yaw,
+        pitch: state.pitch,
+        distance: state.distance,
+        mode: state.renderMode,
+        geometryKey: state.geometryKey,
+        seed: state.seed,
+        planetRadiusMeters: state.planetRadiusMeters,
+        seaLevelMeters: state.seaLevelMeters
+    };
+}
+
 export function setPlanet(snapshot) {
     if (!state) return;
     state.dirty = true;
