@@ -1,0 +1,374 @@
+@using System.Text
+@using Microsoft.AspNetCore.Components.Forms
+@using PlanetForge.Domain.Surface
+@using PlanetForge.Domain.WorldGeneration
+@using PlanetForge.Infrastructure.Surface
+@implements IAsyncDisposable
+@inject IJSRuntime Js
+@inject PlanetGeologicalRegionCache Cache
+
+<main class="archive-shell" aria-label="Geological archives">
+    <header class="archive-header">
+        <div>
+            <small>PLANETFORGE / GEOLOGY TOOLS</small>
+            <h1>Geological archives</h1>
+            <p>Explore saved regional geology across epochs. Archives are supporting research tools; the whole planet and LOD 0–3 remain the main experience.</p>
+        </div>
+        <a href="./">← Back to planet</a>
+    </header>
+
+    <p class="archive-notice">Back up important archives to a file. Browser storage can be cleared, and Safari Private Browsing may discard it when the private session closes.</p>
+    <section class="archive-panel" aria-label="Saved regions">
+        <div class="archive-heading">
+            <h2>Saved regions</h2>
+            <button id="archive-refresh" @onclick="RefreshAsync" disabled="@busy">Refresh</button>
+        </div>
+        @if (listing is null)
+        {
+            <p>Loading regional archive index…</p>
+        }
+        else if (listing.Total == 0)
+        {
+            <p>No geological regions saved on this device yet. Open a compatible JSON backup below to get started.</p>
+        }
+        else
+        {
+            <p>@listing.Total locally saved region(s). Select a region to inspect or export its checkpoint.</p>
+            <ul class="archive-entries" aria-label="Stored archive keys">
+                @foreach (var key in listing.Keys)
+                {
+                    <li><button class="archive-key" @onclick="() => InspectSavedAsync(key)" disabled="@busy">@key</button></li>
+                }
+            </ul>
+            <div class="archive-pager">
+                <button id="archive-prev" @onclick="PreviousAsync" disabled="@(busy || offset == 0)">Previous</button>
+                <span>Page @(offset / PageSize + 1) of @Math.Max(1, (listing.Total + PageSize - 1) / PageSize)</span>
+                <button id="archive-next" @onclick="NextAsync" disabled="@(busy || offset + PageSize >= listing.Total)">Next</button>
+            </div>
+        }
+    </section>
+
+    <section class="archive-panel" aria-label="Import geological backup">
+        <h2>Open backup</h2>
+        <label for="archive-file">Import a PlanetForge geological region archive (.json)</label>
+        <InputFile id="archive-file" OnChange="ImportFileAsync" accept=".json,application/json" disabled="@busy" />
+        <p>Opening a backup validates its geographic identity, model version, physical heights and sediment accounting. It does not change the planet.</p>
+    </section>
+
+    @if (preview is not null && selectedKey is not null)
+    {
+        <section class="archive-panel" aria-label="Archive inspection" data-testid="archive-preview">
+            <h2>Inspect region</h2>
+            <dl class="archive-metadata">
+                <div><dt>Planet seed</dt><dd>@preview.Seed</dd></div>
+                <div><dt>Generator</dt><dd>@preview.GenerationVersion</dd></div>
+                <div><dt>Geological epoch</dt><dd>@preview.EpochYearsBeforePresent years before present</dd></div>
+                <div><dt>Fixed region</dt><dd>@preview.Region</dd></div>
+                <div><dt>Physical grid</dt><dd>@preview.Width × @preview.Height</dd></div>
+                <div><dt>Grid spacing</dt><dd>@preview.CellSpacingMeters.ToString("0.##") m</dd></div>
+                <div><dt>Erosion iterations</dt><dd>@preview.Iterations</dd></div>
+                <div><dt>Exported sediment</dt><dd>@preview.ExportedVolume.ToString("0.##") m³</dd></div>
+            </dl>
+            @if (preview.GenerationVersion != PlanetGenerationVersion.Current.Value)
+            {
+                <p class="archive-notice">This archive belongs to an older generator. It can be backed up, but cannot be published on the current planet.</p>
+            }
+            <div class="archive-actions">
+                <button id="archive-export" @onclick="ExportAsync" disabled="@busy">Download JSON backup</button>
+                @if (isImported)
+                {
+                    @if (existingToken is not null)
+                    {
+                        <label class="archive-confirm">
+                            <input id="archive-replace" type="checkbox" @bind="replaceApproved" />
+                            Replace the existing local backup at this same planet, region and epoch
+                        </label>
+                    }
+                    <button id="archive-save" class="archive-primary" @onclick="SaveImportedAsync"
+                            disabled="@(busy || (existingToken is not null && !replaceApproved))">
+                        @(existingToken is null ? "Save on this device" : "Replace local backup")
+                    </button>
+                }
+                else
+                {
+                    @if (!deleteApproved)
+                    {
+                        <button id="archive-delete-start" @onclick="() => deleteApproved = true" disabled="@busy">Delete backup…</button>
+                    }
+                    else
+                    {
+                        <p>Delete only this region and epoch from this device? Export a backup first if needed.</p>
+                        <button id="archive-delete-confirm" @onclick="DeleteSelectedAsync" disabled="@busy">Confirm deletion</button>
+                        <button @onclick="() => deleteApproved = false">Cancel</button>
+                    }
+                }
+            </div>
+        </section>
+    }
+    <p class="archive-status" role="status" data-testid="archive-status" aria-live="polite">@status</p>
+</main>
+
+@code {
+    private const int PageSize = 10;
+    private const long MaximumFileBytes = 40_000_000;
+    private IJSObjectReference? module;
+    private ArchiveListing? listing;
+    private RegionPreview? preview;
+    private int offset;
+    private bool busy;
+    private bool isImported;
+    private bool replaceApproved;
+    private bool deleteApproved;
+    private string? selectedKey;
+    private string? selectedJson;
+    private string? existingToken;
+    private string status = "Open a saved region or import a backup to inspect its history.";
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+        {
+            return;
+        }
+
+        try
+        {
+            module = await Js.InvokeAsync<IJSObjectReference>("import", "./js/geologicalRegionStore.js");
+            await RefreshAsync();
+        }
+        catch (Exception error)
+        {
+            status = $"Archive storage unavailable: {error.Message}";
+            StateHasChanged();
+        }
+    }
+
+    private async Task RefreshAsync()
+    {
+        if (module is null || busy)
+        {
+            return;
+        }
+
+        busy = true;
+        try
+        {
+            listing = await module.InvokeAsync<ArchiveListing>("listArchives", offset, PageSize);
+            if (listing is not null && offset >= listing.Total && offset != 0)
+            {
+                offset = Math.Max(0, (listing.Total - 1) / PageSize * PageSize);
+                listing = await module.InvokeAsync<ArchiveListing>("listArchives", offset, PageSize);
+            }
+        }
+        catch (Exception error)
+        {
+            status = $"Unable to list archives: {error.Message}";
+        }
+        finally
+        {
+            busy = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task PreviousAsync()
+    {
+        offset = Math.Max(0, offset - PageSize);
+        await RefreshAsync();
+    }
+
+    private async Task NextAsync()
+    {
+        offset += PageSize;
+        await RefreshAsync();
+    }
+
+    private async Task ImportFileAsync(InputFileChangeEventArgs eventArgs)
+    {
+        if (busy || module is null)
+        {
+            return;
+        }
+
+        busy = true;
+        ClearPreview();
+        try
+        {
+            var file = eventArgs.File;
+            if (file.Size is <= 0 or > MaximumFileBytes)
+            {
+                throw new InvalidDataException("Archive must be a nonempty JSON file of at most 40 MB.");
+            }
+
+            await using var stream = file.OpenReadStream(MaximumFileBytes);
+            using var reader = new StreamReader(stream, Encoding.UTF8, true);
+            var json = await reader.ReadToEndAsync();
+            var history = PlanetGeologicalRegionArchive.Deserialize(json);
+            SetPreview(history, json, imported: true);
+            existingToken = await module.InvokeAsync<string?>("loadArchive", selectedKey);
+            status = existingToken is null
+                ? "Backup validated. You can save it locally or download a copy."
+                : "Backup validated. A local archive already exists; explicit replacement approval is required.";
+        }
+        catch (Exception error)
+        {
+            ClearPreview();
+            status = $"Invalid backup: {error.Message}";
+        }
+        finally
+        {
+            busy = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task InspectSavedAsync(string key)
+    {
+        if (busy || module is null)
+        {
+            return;
+        }
+
+        busy = true;
+        ClearPreview();
+        try
+        {
+            var json = await module.InvokeAsync<string?>("loadArchive", key) ??
+                throw new InvalidDataException("Archive was removed by another tab.");
+            var history = PlanetGeologicalRegionArchive.Deserialize(json);
+            if (PlanetGeologicalRegionRepository.Key(history.Region, history.Epoch) != key)
+            {
+                throw new InvalidDataException("Archive identity does not match its storage address.");
+            }
+
+            SetPreview(history, json, imported: false);
+            existingToken = json;
+            status = "Local archive verified. This inspection has not altered the gameplay planet.";
+        }
+        catch (Exception error)
+        {
+            status = $"Unable to inspect archive: {error.Message}";
+        }
+        finally
+        {
+            busy = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task SaveImportedAsync()
+    {
+        if (busy || module is null || !isImported || selectedKey is null || selectedJson is null ||
+            (existingToken is not null && !replaceApproved))
+        {
+            return;
+        }
+
+        busy = true;
+        try
+        {
+            await module.InvokeVoidAsync("saveArchiveIfUnchanged", selectedKey, selectedJson, existingToken);
+            Cache.Clear();
+            isImported = false;
+            deleteApproved = false;
+            existingToken = selectedJson;
+            offset = 0;
+            status = "Validated geological region saved. The planet remains unchanged until explicitly restored.";
+        }
+        catch (Exception error)
+        {
+            status = $"Archive not saved: {error.Message}";
+        }
+        finally
+        {
+            busy = false;
+            await RefreshAsync();
+        }
+    }
+
+    private async Task DeleteSelectedAsync()
+    {
+        if (busy || module is null || isImported || !deleteApproved || selectedKey is null || selectedJson is null)
+        {
+            return;
+        }
+
+        busy = true;
+        try
+        {
+            await module.InvokeVoidAsync("deleteArchiveIfUnchanged", selectedKey, selectedJson);
+            Cache.Clear();
+            ClearPreview();
+            status = "Selected regional archive deleted from local browser storage.";
+        }
+        catch (Exception error)
+        {
+            status = $"Archive not deleted: {error.Message}";
+        }
+        finally
+        {
+            busy = false;
+            await RefreshAsync();
+        }
+    }
+
+    private async Task ExportAsync()
+    {
+        if (module is null || preview is null || selectedJson is null)
+        {
+            return;
+        }
+
+        try
+        {
+            var name = $"PlanetForge-G{preview.GenerationVersion}-S{preview.Seed}-{preview.Region}-YBP{preview.EpochYearsBeforePresent}.json";
+            await module.InvokeVoidAsync("downloadArchive", selectedJson, name);
+            status = "JSON backup download requested. Keep a copy outside Private Browsing.";
+        }
+        catch (Exception error)
+        {
+            status = $"Unable to export archive: {error.Message}";
+        }
+    }
+
+    private void SetPreview(PlanetGeologicalRegionHistory history, string json, bool imported)
+    {
+        selectedKey = PlanetGeologicalRegionRepository.Key(history.Region, history.Epoch);
+        selectedJson = json;
+        preview = new RegionPreview(history.Region.ToString(), history.Region.World.Seed,
+            history.Region.World.GenerationVersion.Value, history.Epoch.YearsBeforePresent,
+            history.Original.Width, history.Original.Height, history.Original.CellSpacingMeters,
+            history.Evolved.Iteration, history.Evolved.CumulativeExportedVolumeCubicMeters);
+        isImported = imported;
+    }
+
+    private void ClearPreview()
+    {
+        selectedKey = null;
+        selectedJson = null;
+        existingToken = null;
+        preview = null;
+        isImported = false;
+        replaceApproved = false;
+        deleteApproved = false;
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (module is not null)
+        {
+            try
+            {
+                await module.DisposeAsync();
+            }
+            catch (JSDisconnectedException)
+            {
+                // Navigation released the underlying JavaScript runtime.
+            }
+        }
+    }
+
+    private sealed record ArchiveListing(int Total, string[] Keys);
+    private sealed record RegionPreview(string Region, int Seed, int GenerationVersion, long EpochYearsBeforePresent,
+        int Width, int Height, double CellSpacingMeters, int Iterations, double ExportedVolume);
+}
