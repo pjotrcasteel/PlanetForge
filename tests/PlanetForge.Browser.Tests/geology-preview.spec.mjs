@@ -4,8 +4,9 @@ test('GeologyPreview_AuditedTimelineDrawsMeasuredGlobalMapsWithoutTouchingMainPl
     test.setTimeout(240_000);
     await page.goto('/?geologyPreview=1');
     await expect(page.getByRole('heading', { name: 'Geological deformation preview' })).toBeVisible();
-    await expect(page.getByTestId('geology-preview-status')).toContainText('Ready', { timeout: 180_000 });
-    await page.waitForFunction(() => window.__planetForgeGeologyPreviewReady === true, { timeout: 90_000 });
+    await expect(page.getByTestId('geology-preview-status')).toContainText('Ready', { timeout: 90_000 });
+    await expect(page.getByTestId('geology-preview-scale')).toContainText('Measured map range', { timeout: 60_000 });
+    await page.waitForFunction(() => window.__planetForgeGeologyPreviewReady === true, null, { timeout: 60_000 });
 
     const metrics = page.getByTestId('geology-preview-metrics');
     await expect(metrics).toContainText('100%');
