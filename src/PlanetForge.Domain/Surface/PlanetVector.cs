@@ -32,6 +32,8 @@ public readonly record struct PlanetVector(double X, double Y, double Z)
 
     public static PlanetVector operator -(PlanetVector left, PlanetVector right) => new(left.X - right.X, left.Y - right.Y, left.Z - right.Z);
 
+    public static PlanetVector operator -(PlanetVector left, PlanetVector right) => new(left.X - right.X, left.Y - right.Y, left.Z - right.Z);
+
     public static PlanetVector operator *(PlanetVector value, double scalar) => new(value.X * scalar, value.Y * scalar, value.Z * scalar);
 
     public static PlanetVector operator /(PlanetVector value, double scalar) => new(value.X / scalar, value.Y / scalar, value.Z / scalar);
