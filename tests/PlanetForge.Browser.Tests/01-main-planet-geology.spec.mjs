@@ -136,16 +136,40 @@ test('MainPlanet_ActiveWaterWorld_BuildsWaterAgainstVisibleTerrainWithoutSecondC
     expect(aligned.riverCount).toBe(water.activeRiverSegmentCount);
 });
 
-test('MainPlanet_DefaultGameplay_IdentifiesSnowballExperimentInsteadOfPrimordialEarth', async ({ page }) => {
-    test.setTimeout(240_000);
+test('MainPlanet_MeltingWorld_PublishesPhysicallyPlacedOceanInBothGeologyModes', async ({ page }, testInfo) => {
+    test.setTimeout(300_000);
     await page.goto('/?visualTest=1');
     await expect(page.locator('#planet-canvas')).toBeVisible({ timeout: 30_000 });
+    await page.waitForFunction(() => window.__planetForgeSurfaceTest?.getTerrainGeometryKey(), null, { timeout: 30_000 });
 
-    await expect(page.getByText('SNOWBALL EXPERIMENT', { exact: true })).toBeVisible();
-    await expect(page.getByTestId('planet-scenario-label')).toContainText('EXPERIMENT / CANONICAL TERRAIN');
-    await expect(page.getByText('EARTH ORIGIN', { exact: true })).toHaveCount(0);
+    const dry = await page.evaluate(() => window.__planetForgeSurfaceTest.measure());
+    expect(dry.glError).toBe(0);
 
-    await page.getByTestId('geology-terrain-toggle').click();
-    await expect(page.getByTestId('geology-terrain-toggle')).toHaveAttribute('aria-pressed', 'true', { timeout: 150_000 });
-    await expect(page.getByTestId('planet-scenario-label')).toContainText('EXPERIMENT / PHYSICAL TERRAIN');
+    await page.getByRole('button', { name: 'NEXT' }).click();
+    await expect(page.getByText('MELTING WORLD', { exact: true })).toBeVisible({ timeout: 90_000 });
+    await expect(page.getByRole('button', { name: 'NEXT' })).toBeEnabled({ timeout: 90_000 });
+    await page.waitForFunction(() => window.__planetForgeSurfaceTest?.measure().oceanPixels > 1_000, null, { timeout: 60_000 });
+    const melted = await page.evaluate(() => ({
+        geometryKey: window.__planetForgeSurfaceTest.getTerrainGeometryKey(),
+        water: window.__planetForgeSurfaceTest.measure()
+    }));
+
+    expect(melted.water.glError).toBe(0);
+    expect(melted.water.oceanPixels).toBeGreaterThan(dry.oceanPixels + 1_000);
+    expect(melted.water.oceanFraction).toBeGreaterThan(dry.oceanFraction);
+    // Sea coverage is determined from actual water volume and terrain, not
+    // an arbitrary minimum ocean percentage or a shader-painted continent.
+    await page.screenshot({ path: testInfo.outputPath('main-planet-physical-oceans-geology-off.png'), fullPage: true });
+
+    const geology = page.getByTestId('geology-terrain-toggle');
+    await geology.click();
+    await expect(geology).toHaveAttribute('aria-pressed', 'true', { timeout: 150_000 });
+    await page.waitForFunction(previous => window.__planetForgeSurfaceTest?.getTerrainGeometryKey() !== previous,
+        melted.geometryKey, { timeout: 30_000 });
+    await page.waitForFunction(() => window.__planetForgeSurfaceTest?.measure().oceanPixels > 1_000, null, { timeout: 60_000 });
+
+    const physical = await page.evaluate(() => window.__planetForgeSurfaceTest.measure());
+    expect(physical.glError).toBe(0);
+    expect(physical.oceanPixels).toBeGreaterThan(dry.oceanPixels + 1_000);
+    await page.screenshot({ path: testInfo.outputPath('main-planet-physical-oceans-geology-on.png'), fullPage: true });
 });

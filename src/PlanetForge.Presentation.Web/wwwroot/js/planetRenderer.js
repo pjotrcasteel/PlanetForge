@@ -829,12 +829,14 @@ function renderGlobe(s) {
     gl.uniform1i(s.globeUniforms.mode, geologicalPreviewMode ? 5 : (isPreBiologicalSurface(s) ? 2 : 0));
     drawTerrain(s);
 
-    if (!geologicalPreviewMode) {
-        if (s.liquidFraction > 0.001) {
-            gl.uniform1i(s.globeUniforms.mode, 3);
-            drawSurface(s);
-        }
+    // Every liquid ocean is a real sea-level surface even when the barren
+    // geological material is selected. Do not mask the water with the rock pass.
+    if (s.liquidFraction > 0.001) {
+        gl.uniform1i(s.globeUniforms.mode, 3);
+        drawSurface(s);
+    }
 
+    if (!geologicalPreviewMode) {
         gl.enable(gl.BLEND);
         gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
         gl.depthMask(true);
@@ -1053,15 +1055,11 @@ void main() {
     vec3 tangentNormal = physicalNormal - (radial * dot(physicalNormal, radial));
     float elevationMeters = (physicalRadius - 1.0) * uPlanetRadiusMeters;
     float elevationAboveSeaLevel = elevationMeters - uSeaLevelMeters;
+    // Render the geological surface at physical altitude. Flattening to a
+    // unit sphere at orbit depth-occludes any ocean below the reference datum.
     float visualRadius = physicalRadius;
 
-    if (uMode == 5) {
-        // Preserve a perfectly smooth silhouette from far orbit, then reveal the REAL
-        // canonical elevation smoothly during regional approach. No synthetic height exaggeration.
-        float cameraAltitudeRatio = max(length(uCameraPosition) - 1.0, 0.0);
-        float reliefBlend = 1.0 - smoothstep(0.012, 0.080, cameraAltitudeRatio);
-        visualRadius = mix(1.0, physicalRadius, reliefBlend);
-    } else if (uMode == 0 || uMode == 2) {
+    if (uMode == 0 || uMode == 2) {
         float exaggeration = elevationAboveSeaLevel >= 0.0 ? 8.0 : 2.0;
         visualRadius = 1.0 + ((elevationMeters * exaggeration) / uPlanetRadiusMeters);
     } else if (uMode == 3) {
