@@ -100,7 +100,9 @@ public sealed class PlanetCrustGlobalReliefAtlasTests
             var n = level == 0 ? 0 : (1 << (level - 1)) - 1;
             var id = new PlanetTileId(CubeFace.PositiveZ, level, n, n);
             var tile = tileSampler.Sample(id, cells, Seed);
-            orbital[level] = tile.GetPoint(cells, cells).ElevationMeters;
+            orbital[level] = level == 0
+                ? tile.GetPoint(cells / 2, cells / 2).ElevationMeters
+                : tile.GetPoint(cells, cells).ElevationMeters;
         }
 
         var ground = groundSampler.Sample(PlanetVector.UnitZ, 2_000, cells,
