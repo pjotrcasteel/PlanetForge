@@ -139,6 +139,17 @@
             status = $"Ready • seed {selectedSeed} • {ResearchSteps} Myr of forward-time conservation and contact-strain research.";
             drawQueued = true;
             StateHasChanged();
+
+            // OnAfterRender will normally draw when Razor inserts the new
+            // canvases. The fallback guarantees first-time initialization
+            // even when the initial OnAfterRenderTask was still running while
+            // the newly generated state was committed.
+            await Task.Delay(80, cancellation.Token);
+            if (drawQueued)
+            {
+                drawQueued = false;
+                await DrawSelectedAsync();
+            }
         }
         catch (Exception error) when (error is not OperationCanceledException)
         {
@@ -155,16 +166,25 @@
             return;
         }
 
-        var snapshot = snapshots[selectedFrame];
-        var physical = snapshot.Columns.Select((column, index) =>
+        try
         {
-            var reference = catalog.Parcels[index];
-            return new PreviewMaterial(column.GeographicDirection.X, column.GeographicDirection.Y,
-                column.GeographicDirection.Z, column.SurfaceDisplacementMeters,
-                column.CrustThicknessMeters - reference.ReferenceThicknessMeters);
-        }).ToArray();
-        var extremes = await module.InvokeAsync<PreviewExtremes>("drawGeologyPreview", cancellation.Token, physical);
-        legend = $"Measured map range: uplift ±{extremes.MaxAbsUpliftMeters:0.##} m · crust-thickness delta ±{extremes.MaxAbsThicknessMeters:0.##} m (auto-scaled diverging colours).";
+            var snapshot = snapshots[selectedFrame];
+            var physical = snapshot.Columns.Select((column, index) =>
+            {
+                var reference = catalog.Parcels[index];
+                return new PreviewMaterial(column.GeographicDirection.X, column.GeographicDirection.Y,
+                    column.GeographicDirection.Z, column.SurfaceDisplacementMeters,
+                    column.CrustThicknessMeters - reference.ReferenceThicknessMeters);
+            }).ToArray();
+            var extremes = await module.InvokeAsync<PreviewExtremes>("drawGeologyPreview", cancellation.Token, physical);
+            legend = $"Measured map range: uplift ±{extremes.MaxAbsUpliftMeters:0.##} m · crust-thickness delta ±{extremes.MaxAbsThicknessMeters:0.##} m (auto-scaled diverging colours).";
+        }
+        catch (Exception error) when (error is not OperationCanceledException)
+        {
+            legend = "Research map did not render.";
+            status = $"Preview rendering failed: {error.Message}";
+        }
+
         StateHasChanged();
     }
 
