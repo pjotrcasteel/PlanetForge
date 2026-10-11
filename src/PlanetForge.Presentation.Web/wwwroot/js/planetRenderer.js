@@ -813,12 +813,17 @@ function renderGlobe(s) {
     gl.uniform1i(s.globeUniforms.mode, geologicalPreviewMode ? 5 : (isPreBiologicalSurface(s) ? 2 : 0));
     drawTerrain(s);
 
-    if (!geologicalPreviewMode) {
-        if (s.liquidFraction > 0.001) {
-            gl.uniform1i(s.globeUniforms.mode, 3);
-            drawSurface(s);
-        }
+    // Sea-level water remains coupled to the physical elevation even while
+    // we inspect geology. The rock material is a presentation choice, not a
+    // reason to hide the world's real ocean surface.
+    if (s.liquidFraction > 0.001) {
+        gl.uniform1i(s.globeUniforms.mode, 3);
+        drawSurface(s);
+    }
 
+    // The original exaggerated cryosphere mesh is intentionally kept out of
+    // the non-exaggerated geological inspection until the two align in scale.
+    if (!geologicalPreviewMode) {
         gl.enable(gl.BLEND);
         gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
         gl.depthMask(true);
