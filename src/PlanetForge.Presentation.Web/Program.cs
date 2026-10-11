@@ -13,5 +13,6 @@ builder.Services.AddScoped<IPlanetGeologicalRegionDocumentStore, IndexedDbGeolog
 builder.Services.AddScoped<PlanetGeologicalRegionCache>();
 builder.Services.AddScoped<PlanetGeologicalRegionRepository>();
 builder.Services.AddScoped<PlanetGeologicalRegionSession>();
+builder.Services.AddScoped<PlanetGeologicalCameraRegionStream>();
 
 await builder.Build().RunAsync();
