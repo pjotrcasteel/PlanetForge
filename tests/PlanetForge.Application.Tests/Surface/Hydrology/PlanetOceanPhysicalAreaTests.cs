@@ -72,6 +72,18 @@ public sealed class PlanetOceanPhysicalAreaTests
     }
 
     [TestMethod]
+    public void MeasureAreaWeighted_PreCancelledToken_NeverReturnsAnIncompleteAreaEstimate()
+    {
+        var hydrology = new PlanetHydrologyModelBuilder(new ConstantElevationSource(-500.0))
+            .Build(4, 17, EarthRadiusMeters, 0.0, CancellationToken.None);
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+
+        Assert.ThrowsExactly<OperationCanceledException>(() =>
+            PlanetOceanConnectivitySurvey.MeasureAreaWeighted(hydrology, EarthRadiusMeters, cancellation.Token));
+    }
+
+    [TestMethod]
     public void MeasureAreaWeighted_InvalidRadius_RejectsAreaCalculation()
     {
         var hydrology = new PlanetHydrologyModelBuilder(new ConstantElevationSource(-1.0))
