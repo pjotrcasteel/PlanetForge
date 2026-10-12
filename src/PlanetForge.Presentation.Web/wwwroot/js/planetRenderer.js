@@ -663,7 +663,7 @@ function installVisualTestApi() {
             if (!state) return;
             state.pitch = clamp(pitch, -1.25, 1.25);
             state.dirty = true;
-            renderGlobe(state);
+            renderCurrentView(state);
             state.dirty = false;
         },
         getPitch() { return state?.pitch ?? 0.0; },
@@ -671,7 +671,7 @@ function installVisualTestApi() {
             if (!state) return;
             state.yaw = yaw;
             state.dirty = true;
-            renderGlobe(state);
+            renderCurrentView(state);
             state.dirty = false;
         },
         getYaw() { return state?.yaw ?? 0.0; },
@@ -683,7 +683,7 @@ function installVisualTestApi() {
             if (shouldRequestSurfaceUpdate(state) || previousDistance < adaptiveOrbitStartDistance) {
                 scheduleSurfaceUpdate(state, surfaceUpdateDebounceMilliseconds);
             }
-            renderGlobe(state);
+            renderCurrentView(state);
             state.dirty = false;
         },
         getDistance() { return state?.distance ?? 0.0; },
@@ -717,7 +717,7 @@ function installVisualTestApi() {
         getSeed() { return state?.seed ?? null; },
         measure() {
             if (!state) return null;
-            renderGlobe(state);
+            renderCurrentView(state);
             state.dirty = false;
             return measureSurface(state);
         }
@@ -813,12 +813,19 @@ function largestOceanConnectedArea(mask, width, height) {
     return largest;
 }
 
+// Both the animation frame and visual acceptance tooling must draw the
+// ACTIVE mesh. Calling renderGlobe in local mode clears the canvas without
+// drawing the local terrain (which previously let black frames pass CI).
+function renderCurrentView(s) {
+    if (s.renderMode === 'local' && s.localSurface) renderLocal(s);
+    else renderGlobe(s);
+}
+
 function render() {
     if (!state) return;
     resize(state);
     if (state.dirty) {
-        if (state.renderMode === 'local' && state.localSurface) renderLocal(state);
-        else renderGlobe(state);
+        renderCurrentView(state);
         state.dirty = false;
         if (state.pendingDrawStartedAt !== null) {
             const submittedAt = performance.now();
