@@ -152,6 +152,26 @@ public sealed class PlanetOriginEpochState
     /// across saturation thresholds. If any substep fails or is cancelled,
     /// not even the preceding successful substeps are published.
     /// </summary>
+    /// <summary>
+    /// Atomically integrates re-evaluated, bounded physical substeps. The
+    /// process callback receives the latest accepted candidate state and
+    /// must supply *all* physical rates and material/phase proposals. A
+    /// rejected trial is reduced and re-proposed; no intermediate candidate
+    /// becomes a public geological revision, even if a later trial fails.
+    /// </summary>
+    public PlanetOriginEpochState AdvanceCoupledAdaptive(
+        PlanetOriginDuration duration,
+        PlanetOriginAdaptiveIntegrationOptions options,
+        Func<PlanetOriginEnergyLedger, PlanetOriginDuration, PlanetOriginEnergyStep> propose,
+        CancellationToken cancellationToken = default)
+    {
+        var initial = CoupledEnergy ?? throw new InvalidOperationException(
+            "Adaptive physical steps require an energy-coupled Earth-origin epoch.");
+        var candidate = PlanetOriginAdaptiveIntegrator.Integrate(initial, duration, options, propose, cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
+        return new PlanetOriginEpochState(candidate, checked(Revision + 1));
+    }
+
     public PlanetOriginEpochState AdvanceCoupled(
         IReadOnlyList<PlanetOriginEnergyStep> substeps, CancellationToken cancellationToken = default)
     {
