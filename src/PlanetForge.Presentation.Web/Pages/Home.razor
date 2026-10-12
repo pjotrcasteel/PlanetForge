@@ -383,7 +383,9 @@
         geologyLoading = true;
         geologyLoadingDirection = offset;
         StateHasChanged();
-        await Task.Yield();
+        // Let Safari paint the spinner before a potentially expensive WASM
+        // terrain rebuild blocks the main UI thread.
+        await Task.Delay(20, disposeCancellationTokenSource.Token);
 
         var previousIndex = geologyFrameIndex;
         try
