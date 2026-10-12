@@ -288,7 +288,16 @@ test('MainPlanet_PhysicalLocalDetail_ResolvesRegionalBedrockWithinMobileMeshBudg
     await expect(page.locator('#planet-canvas')).toBeVisible({ timeout: 30_000 });
     await page.waitForFunction(() => window.__planetForgeSurfaceTest?.getLodStats(), null, { timeout: 30_000 });
 
-    await page.evaluate(() => window.__planetForgeSurfaceTest.setDistance(1.0 + 3_000 / 6_371_000));
+    // Aim at the already independently tested regional-rock research
+    // coordinate, rather than the default camera's potentially flat ocean
+    // floor. This same world-space location is validated for nontrivial
+    // 8/32/128 km canonical rock curvature by C# tests.
+    await page.evaluate(() => {
+        const surface = window.__planetForgeSurfaceTest;
+        surface.setYaw(Math.atan2(0.42242678262485306, -0.7674988099435489));
+        surface.setPitch(Math.asin(0.4821837720791227));
+        surface.setDistance(1.0 + 3_000 / 6_371_000);
+    });
     await page.waitForFunction(() => {
         const detail = window.__planetForgeSurfaceTest?.getLodStats();
         return detail?.mode === 'local' && !detail.refining;
