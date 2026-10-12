@@ -170,7 +170,7 @@ public sealed class PlanetOriginEpochState
         {
             cancellationToken.ThrowIfCancellationRequested();
             ArgumentNullException.ThrowIfNull(substep);
-            if (substep.ElapsedYears <= 0)
+            if (substep.Duration.IsZero)
             {
                 throw new ArgumentOutOfRangeException(nameof(substeps), "Each physical substep must advance geological time.");
             }
