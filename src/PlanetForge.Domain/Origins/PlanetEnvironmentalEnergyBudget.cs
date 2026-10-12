@@ -107,6 +107,22 @@ public sealed class PlanetEnvironmentalEnergyBudget
         return new PlanetEnvironmentalEnergyBudget(copy);
     }
 
+    /// <summary>Withdraws heat carried away by matter leaving the modelled planet.</summary>
+    internal PlanetEnvironmentalEnergyBudget Withdraw(PlanetEnvironmentHeatReservoir reservoir, double joules)
+    {
+        var index = ValidateReservoir(reservoir);
+        ValidateEnergy(joules);
+        if (joules > energies[index])
+        {
+            throw new InvalidOperationException("Material escape exceeds the heat available in its donor reservoir.");
+        }
+
+        if (joules == 0.0) return this;
+        var copy = (double[])energies.Clone();
+        copy[index] -= joules;
+        return new PlanetEnvironmentalEnergyBudget(copy);
+    }
+
     /// <summary>
     /// Applies one interval of external radiation: stellar energy enters the
     /// absorbing store and infrared energy leaves the emitting store. When both
@@ -236,6 +252,27 @@ public sealed class PlanetWaterEnvironmentalState
         }
 
         return new PlanetWaterEnvironmentalState(Water, environment, RelativeLatentEnergyJoules, initial);
+    }
+
+    /// <summary>
+    /// Atomically changes water inventory and sensible energy for one matter
+    /// crossing, without pretending the transfer is an evaporation/freezing
+    /// reaction. Net energy is signed: arriving material credits the state,
+    /// escaped material debits it, and interior outgassing credits this state
+    /// only after the caller has debited the interior by the same amount.
+    /// </summary>
+    internal PlanetWaterEnvironmentalState WithMaterialExchange(
+        PlanetWaterInventory water, PlanetEnvironmentalEnergyBudget environment, double netEnergyJoules)
+    {
+        ArgumentNullException.ThrowIfNull(water);
+        ArgumentNullException.ThrowIfNull(environment);
+        if (!double.IsFinite(netEnergyJoules) || !double.IsFinite(InitialCombinedEnergyJoules + netEnergyJoules))
+        {
+            throw new ArgumentOutOfRangeException(nameof(netEnergyJoules), "Material enthalpy must remain finite.");
+        }
+
+        return new PlanetWaterEnvironmentalState(water, environment, RelativeLatentEnergyJoules,
+            InitialCombinedEnergyJoules + netEnergyJoules);
     }
 
     public PlanetWaterEnvironmentalState Apply(
