@@ -86,13 +86,20 @@ export function setPlanet(snapshot) {
     state.planetRadiusMeters = snapshot.physicalParameters.radiusMeters;
     state.atmosphereDensity = snapshot.atmosphereDensity;
     state.equilibriumTemperature = snapshot.physics.equilibriumTemperatureKelvin;
-    state.surfaceTemperature = state.generatorPreview ? 288.0 : snapshot.climate.surfaceTemperatureKelvin;
+    // The origin's actual surface-rock temperature replaces the legacy
+    // frozen-climate temperature only when a coupled epoch is published.
+    const origin = state.generatorPreview ? null : snapshot.origin;
+    state.surfaceTemperature = origin
+        ? (origin.nearSurfaceRockTemperatureKelvin ?? 0.0)
+        : (state.generatorPreview ? 288.0 : snapshot.climate.surfaceTemperatureKelvin);
     state.solarFlux = snapshot.physics.solarFluxWattsPerSquareMeter;
-    state.liquidFraction = state.generatorPreview ? 1.0 : snapshot.water.liquidFraction;
-    state.vaporFraction = state.generatorPreview ? 0.0 : snapshot.water.vaporFraction;
-    state.seaIceFraction = state.generatorPreview ? 0.0 : (snapshot.climateFeedback?.seaIceFraction ?? snapshot.climateFeedback?.cryosphereFraction ?? state.seaIceFraction);
-    state.landIceFraction = state.generatorPreview ? 0.0 : (snapshot.climateFeedback?.landIceFraction ?? snapshot.climateFeedback?.cryosphereFraction ?? state.landIceFraction);
-    state.snowCoverFraction = state.generatorPreview ? 0.0 : (snapshot.climateFeedback?.snowCoverFraction ?? snapshot.climateFeedback?.cryosphereFraction ?? state.snowCoverFraction);
+    state.liquidFraction = origin ? (origin.surfaceLiquidMassKilograms > 0.0 ? 1.0 : 0.0) : (state.generatorPreview ? 1.0 : snapshot.water.liquidFraction);
+    state.vaporFraction = origin ? origin.atmosphericSteamMassFraction : (state.generatorPreview ? 0.0 : snapshot.water.vaporFraction);
+    // Global ice inventory does not establish a spatial ice/snow field.
+    // Avoid fabricating polar ice from the older experiment's climate state.
+    state.seaIceFraction = origin ? 0.0 : (state.generatorPreview ? 0.0 : (snapshot.climateFeedback?.seaIceFraction ?? snapshot.climateFeedback?.cryosphereFraction ?? state.seaIceFraction));
+    state.landIceFraction = origin ? 0.0 : (state.generatorPreview ? 0.0 : (snapshot.climateFeedback?.landIceFraction ?? snapshot.climateFeedback?.cryosphereFraction ?? state.landIceFraction));
+    state.snowCoverFraction = origin ? 0.0 : (state.generatorPreview ? 0.0 : (snapshot.climateFeedback?.snowCoverFraction ?? snapshot.climateFeedback?.cryosphereFraction ?? state.snowCoverFraction));
 
     const geometryKey = `${snapshot.seed}:${snapshot.physicalParameters.radiusMeters}:${snapshot.terrainRevision ?? 0}`;
     if (state.geometryKey !== geometryKey) {
