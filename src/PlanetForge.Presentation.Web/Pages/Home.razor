@@ -39,11 +39,31 @@
                 <div class="foundation-geology-epochs" data-testid="main-geology-epochs" aria-label="Geological crust research timeline">
                     <button data-testid="main-geology-previous" aria-label="Older crust research epoch" type="button"
                             disabled="@(isTransitioning || geologyLoading || geologyFrameIndex == 0)"
-                            @onclick="() => SelectGeologyEpochAsync(-1)">◀</button>
+                            aria-busy="@(geologyLoadingDirection == -1 ? "true" : "false")"
+                            @onclick="() => SelectGeologyEpochAsync(-1)">
+                        @if (geologyLoadingDirection == -1)
+                        {
+                            <span class="foundation-epoch-spinner" role="status" aria-label="Loading older crust epoch" data-testid="main-geology-spinner" />
+                        }
+                        else
+                        {
+                            <span aria-hidden="true">◀</span>
+                        }
+                    </button>
                     <strong data-testid="main-geology-epoch">@(geologyTimeline[geologyFrameIndex].Epoch.YearsBeforePresent / 1_000_000) Ma AGO</strong>
                     <button data-testid="main-geology-next" aria-label="Younger crust research epoch" type="button"
                             disabled="@(isTransitioning || geologyLoading || geologyFrameIndex == geologyTimeline.Count - 1)"
-                            @onclick="() => SelectGeologyEpochAsync(1)">▶</button>
+                            aria-busy="@(geologyLoadingDirection == 1 ? "true" : "false")"
+                            @onclick="() => SelectGeologyEpochAsync(1)">
+                        @if (geologyLoadingDirection == 1)
+                        {
+                            <span class="foundation-epoch-spinner" role="status" aria-label="Loading newer crust epoch" data-testid="main-geology-spinner" />
+                        }
+                        else
+                        {
+                            <span aria-hidden="true">▶</span>
+                        }
+                    </button>
                 </div>
             }
             @if (!string.IsNullOrEmpty(geologyStatus))
@@ -86,6 +106,7 @@
     private bool isTransitioning;
     private bool geologyActive;
     private bool geologyLoading;
+    private int geologyLoadingDirection;
     private IReadOnlyList<PlanetCrustEvolvingSnapshot>? geologyTimeline;
     private int geologyFrameIndex;
     private string geologyStatus = string.Empty;
@@ -315,6 +336,10 @@
 
             snapshot = Experience.InvalidateTerrain();
             await SyncPlanetAsync();
+            if (rendererModule is not null)
+            {
+                await rendererModule.InvokeVoidAsync("waitForVisibleTerrain", disposeCancellationTokenSource.Token);
+            }
         }
         catch (Exception error) when (error is not OperationCanceledException)
         {
@@ -356,8 +381,13 @@
         }
 
         geologyLoading = true;
+        geologyLoadingDirection = offset;
         StateHasChanged();
-        await Task.Yield();
+        // Let Safari paint the spinner before a potentially expensive WASM
+        // terrain rebuild blocks the main UI thread.
+        await Task.Delay(20, disposeCancellationTokenSource.Token);
+
+        var previousIndex = geologyFrameIndex;
         try
         {
             var selected = geologyTimeline[nextIndex];
@@ -368,17 +398,42 @@
 
             disposeCancellationTokenSource.Token.ThrowIfCancellationRequested();
             TerrainProvider.PublishGlobalCrustResearchEpoch(selected);
-            geologyFrameIndex = nextIndex;
-            geologyStatus = $"REAL ELEVATION · CRUST RESEARCH ONLY · UP TO {selected.MaximumAbsoluteSurfaceDisplacementMeters:0} M";
             snapshot = Experience.InvalidateTerrain();
             await SyncPlanetAsync();
+
+            // Blazor returning from setPlanet only confirms the snapshot was
+            // accepted by JavaScript. A geological epoch isn't ready until
+            // the active orbit/local framebuffer actually draws terrain.
+            if (rendererModule is not null)
+            {
+                await rendererModule.InvokeVoidAsync("waitForVisibleTerrain", disposeCancellationTokenSource.Token);
+            }
+
+            geologyFrameIndex = nextIndex;
+            geologyStatus = $"REAL ELEVATION · CRUST RESEARCH ONLY · UP TO {selected.MaximumAbsoluteSurfaceDisplacementMeters:0} M";
         }
         catch (Exception error) when (error is not OperationCanceledException)
         {
+            // Keep UI and the canonical published surface at the same epoch.
+            // A failed WebGL upload must never silently advertise new geology
+            // with an empty or stale planet on screen.
+            try
+            {
+                TerrainProvider.PublishGlobalCrustResearchEpoch(geologyTimeline[previousIndex]);
+                snapshot = Experience.InvalidateTerrain();
+                await SyncPlanetAsync();
+            }
+            catch (Exception restoreError)
+            {
+                geologyStatus = $"CRUST RESEARCH RESTORE FAILED: {restoreError.Message}";
+                return;
+            }
+
             geologyStatus = $"CRUST RESEARCH UNAVAILABLE: {error.Message}";
         }
         finally
         {
+            geologyLoadingDirection = 0;
             geologyLoading = false;
             StateHasChanged();
         }

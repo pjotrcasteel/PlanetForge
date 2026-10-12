@@ -378,3 +378,31 @@
     max-width: min(72vw, 300px);
     line-height: 1.25;
 }
+
+
+/* A chosen geological epoch remains busy until Safari has rendered the
+   new orbital/local framebuffer. Replace only the activated arrow so users
+   can see which direction is loading without changing touch target size. */
+.foundation-geology-epochs button[aria-busy="true"] {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.foundation-epoch-spinner {
+    display: inline-block;
+    width: 18px;
+    height: 18px;
+    border: 2px solid rgba(226, 243, 222, 0.25);
+    border-top-color: #e2f3de;
+    border-radius: 50%;
+    animation: foundation-epoch-spin 0.75s linear infinite;
+}
+
+@keyframes foundation-epoch-spin {
+    to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .foundation-epoch-spinner { animation: none; border-color: #e2f3de; border-right-color: transparent; }
+}

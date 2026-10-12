@@ -279,3 +279,72 @@ test('MainPlanet_VisualTestMeasurement_InLocalModeActuallyRendersVisibleGround',
     }, null, { timeout: 60_000 });
     expect((await page.evaluate(() => window.__planetForgeSurfaceTest.measure())).glError).toBe(0);
 });
+
+
+test('MainPlanet_ZoomedGeologyEpochChanges_KeepVisibleGpuTerrainAndShowDirectionalLoading', async ({ page }, testInfo) => {
+    test.setTimeout(360_000);
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto('/?visualTest=1');
+    await expect(page.locator('#planet-canvas')).toBeVisible({ timeout: 30_000 });
+    await page.waitForFunction(() => window.__planetForgeSurfaceTest?.getLodStats(), null, { timeout: 30_000 });
+
+    await page.evaluate(() => window.__planetForgeSurfaceTest.setDistance(1.07));
+    await page.waitForFunction(() => {
+        const stats = window.__planetForgeSurfaceTest?.getLodStats();
+        return stats?.mode === 'globe' && stats.maximumLevel >= 4 && !stats.refining;
+    }, null, { timeout: 90_000 });
+
+    await page.getByTestId('geology-terrain-toggle').click();
+    await expect(page.getByTestId('main-geology-epoch')).toHaveText('0 Ma AGO', { timeout: 150_000 });
+    await page.waitForFunction(() => !document.querySelector('[data-testid="main-geology-spinner"]'), null, { timeout: 30_000 });
+
+    // Read back actual rendered pixels, not just the absence of WebGL errors.
+    const physicalPixels = () => page.evaluate(() => ({
+        geometry: window.__planetForgeSurfaceTest.getTerrainGeometryKey(),
+        lod: window.__planetForgeSurfaceTest.getLodStats(),
+        visual: window.__planetForgeSurfaceTest.measure()
+    }));
+
+    const initial = await physicalPixels();
+    expect(initial.lod.maximumLevel).toBeGreaterThanOrEqual(4);
+    expect(initial.visual.planetPixels).toBeGreaterThan(5_000);
+    expect(initial.visual.glError).toBe(0);
+
+    // Observe the DOM during async Blazor state changes: the selected arrow
+    // must genuinely become a spinner, not merely a disabled/static icon.
+    await page.evaluate(() => {
+        window.__epochSpinnerObserved = false;
+        new MutationObserver(() => {
+            if (document.querySelector('[data-testid="main-geology-spinner"]')) {
+                window.__epochSpinnerObserved = true;
+            }
+        }).observe(document.body, { subtree: true, childList: true });
+    });
+
+    let lastKey = initial.geometry;
+    for (const [epoch, filename] of [
+        ['1 Ma AGO', 'geology-zoomed-1ma-visible.png'],
+        ['2 Ma AGO', 'geology-zoomed-2ma-visible.png']
+    ]) {
+        await page.getByTestId('main-geology-previous').click();
+        await expect(page.getByTestId('main-geology-epoch')).toHaveText(epoch, { timeout: 150_000 });
+        await page.waitForFunction(() => !document.querySelector('[data-testid="main-geology-spinner"]'), null, { timeout: 30_000 });
+        const state = await physicalPixels();
+        expect(state.geometry).not.toBe(lastKey);
+        expect(state.lod.mode).toBe('globe');
+        expect(state.lod.maximumLevel).toBeGreaterThanOrEqual(4);
+        expect(state.visual.glError).toBe(0);
+        expect(state.visual.planetPixels).toBeGreaterThan(5_000);
+        expect(await page.getByTestId('main-geology-previous').getAttribute('aria-busy')).toBe('false');
+        lastKey = state.geometry;
+        await page.screenshot({ path: testInfo.outputPath(filename), fullPage: true });
+    }
+    expect(await page.evaluate(() => window.__epochSpinnerObserved)).toBe(true);
+
+    // Returning toward present is also covered; the opposite arrow must
+    // enter a busy state while the selected geological surface is rebuilt.
+    await page.getByTestId('main-geology-next').click();
+    await expect(page.getByTestId('main-geology-epoch')).toHaveText('1 Ma AGO', { timeout: 150_000 });
+    expect((await physicalPixels()).visual.planetPixels).toBeGreaterThan(5_000);
+    expect(await page.getByTestId('main-geology-next').getAttribute('aria-busy')).toBe('false');
+});

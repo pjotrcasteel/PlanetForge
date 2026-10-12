@@ -411,3 +411,33 @@ insufficient: acceptance depends on the correct active framebuffer.
 Neither a high LOD number nor a nonblack frame proves geological
 realism. Real continent advection, evidence-based mountain morphology,
 and canonical orbit/local scientific LOD alignment remain open in #162.
+
+
+## A2.5e — Geology epoch publication waits for a visible surface (PF 0.0.38.4)
+
+Real **iPhone Safari** screenshots from 0.0.38.3 confirmed that the same
+geology research timeline displayed orbit/LOD4 bedrock at 0 Ma, but went
+visually empty after navigating to 1 and 2 Ma at high zoom, even as the
+HUD updated and WebGL had previously passed automated error checks.
+This is a release-blocking visual regression, not evidence that the
+tectonic calculation or material ledger failed.
+
+A snapshot sent to JavaScript is **not** a GPU-presented frame. The
+geological comparison now gates completion on a real draw of the active
+globe/local mesh and samples alpha on the actual WebGL framebuffer at
+the center and four nearby positions. A new terrain revision also
+rejects a reference-only/missing orbital or local payload *before*
+clearing old buffers. An unsuccessful epoch request restores the
+previous physical geology publication and reports an error instead of
+silently advertising a fully loaded but empty planet.
+
+The clicked ◀/▶ control shows a single accessible spinner until
+the selected epoch is visibly rendered; other controls are disabled
+during the publication. Reduced-motion preferences are respected.
+
+Browser acceptance now reproduces the reported **LOD4 → 0, 1, 2 and
+1 Ma** sequence in a 390px viewport, checks real nontransparent
+surface pixels on every step and captures frames. This deliberately
+does not add an LOD7 shortcut, alter physical height magnitudes, or
+pretend that historical coastlines are advected material: those
+scientific gaps remain under #162.
