@@ -54,6 +54,18 @@ public sealed class PlanetOriginCanonicalSurfaceTests
         Assert.AreEqual(expectedLevel, render.SeaLevelMeters, 0.02);
         Assert.AreEqual(epoch.Rock.MeltFraction, render.Origin.BulkRockMeltFraction, 0.0);
         Assert.AreEqual(2.0e18, render.Origin.SurfaceLiquidMassKilograms, 0.0);
+        Assert.AreEqual(epoch.Water.GetMassKilograms(PlanetWaterReservoir.SurfaceLiquid),
+            render.Water.LiquidMassKilograms, 0.0, "Shared water payload must match the published origin epoch.");
+        Assert.AreEqual(epoch.Water.GetMassKilograms(PlanetWaterReservoir.AtmosphericVapor),
+            render.Water.VaporMassKilograms, 0.0);
+        Assert.AreEqual(epoch.Water.GetMassKilograms(PlanetWaterReservoir.SurfaceIce),
+            render.Water.IceMassKilograms, 0.0);
+        Assert.AreEqual(render.Origin.SurfacePressurePascals, render.Atmosphere.SurfacePressurePascals, 0.0);
+        Assert.AreEqual((render.Origin.DryGasMassKilograms + render.Origin.AtmosphericSteamMassKilograms) /
+            PlanetForge.Domain.Atmosphere.EarthAtmosphereReference.TotalMassKilograms,
+            render.Atmosphere.EarthAtmosphereMasses, 1e-12);
+        Assert.IsFalse(render.Water.LiquidWaterStable, "No first-rain/phase eligibility can be borrowed from the Snowball climate.");
+        Assert.AreEqual(0.0, render.Water.BoilingPointKelvin, 0.0, "Unknown phase threshold must stay unknown.");
         Assert.IsGreaterThan(0, source.SampleCount);
         var samples = source.SampleCount;
         _ = experience.CreateSnapshot();
@@ -63,6 +75,9 @@ public sealed class PlanetOriginCanonicalSurfaceTests
         var dry = experience.PublishOriginEpoch(CreateEpoch(0.0));
         Assert.AreEqual(-11_000.0, dry.SeaLevelMeters, 0.0);
         Assert.AreEqual(0.0, dry.Origin!.SurfaceLiquidMassKilograms, 0.0);
+        Assert.AreEqual(0.0, dry.Water.LiquidMassKilograms, 0.0,
+            "An origin steam world cannot inherit a cosmetic ocean from the frozen experiment.");
+        Assert.AreEqual(5.0e16, dry.Water.VaporMassKilograms, 0.0);
         Assert.AreEqual(samples, source.SampleCount);
     }
 
@@ -98,6 +113,8 @@ public sealed class PlanetOriginCanonicalSurfaceTests
 
         var legacy = experience.ClearOriginEpoch();
         Assert.IsNull(legacy.Origin);
+        Assert.IsGreaterThan(0.0, legacy.Water.LiquidMassKilograms,
+            "Detaching origin must restore the original frozen-climate water payload.");
         Assert.IsNull(experience.PublishedOriginEpoch);
     }
 
