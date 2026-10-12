@@ -59,6 +59,7 @@ public sealed class PlanetOriginCanonicalSurfaceTests
         _ = experience.CreateSnapshot();
         Assert.AreEqual(samples, source.SampleCount);
 
+        experience.ClearOriginEpoch();
         var dry = experience.PublishOriginEpoch(CreateEpoch(0.0));
         Assert.AreEqual(-11_000.0, dry.SeaLevelMeters, 0.0);
         Assert.AreEqual(0.0, dry.Origin!.SurfaceLiquidMassKilograms, 0.0);
@@ -90,6 +91,8 @@ public sealed class PlanetOriginCanonicalSurfaceTests
         experience.PublishOriginEpoch(origin);
 
         Assert.ThrowsExactly<InvalidOperationException>(() => experience.AdvanceClimate(1.0));
+        Assert.ThrowsExactly<InvalidOperationException>(() => experience.MoveOrbitInward());
+        Assert.ThrowsExactly<InvalidOperationException>(() => experience.ExportState());
         Assert.AreEqual(origin.Clock, experience.PublishedOriginEpoch!.Clock);
         Assert.AreEqual(0L, experience.PublishedOriginEpoch.Revision);
 
@@ -144,6 +147,27 @@ public sealed class PlanetOriginCanonicalSurfaceTests
         Assert.AreSame(origin, experience.PublishedOriginEpoch);
         Assert.AreEqual(0L, experience.CreateSnapshot().Origin!.Revision);
         Assert.AreEqual(0L, experience.PublishedOriginEpoch!.Clock.MicrosecondsIntoYear);
+    }
+
+    [TestMethod]
+    public void PublishOriginEpoch_RepeatedOrStaleGeologicalPublication_IsRejected()
+    {
+        var experience = CreateExperience(new FlatElevationSource(), includeHypsometry: true);
+        var first = CreateEpoch(2.0e18);
+        experience.PublishOriginEpoch(first);
+        var duration = PlanetOriginDuration.FromSeconds(1.0);
+        var noFlux = new PlanetOriginEnergyStep(duration, 0.0, 0.0,
+            new PlanetInteriorHeatExport(0.0, PlanetEnvironmentHeatReservoir.SurfaceRock),
+            new PlanetRadiativeExchange(
+                new PlanetRadiativeBalance(1.0, 0.0, 0.0, 0.0, 0.0),
+                PlanetEnvironmentHeatReservoir.SurfaceRock, PlanetEnvironmentHeatReservoir.Atmosphere), []);
+        var second = first.AdvanceCoupled(noFlux);
+        experience.PublishOriginEpoch(second);
+
+        Assert.ThrowsExactly<InvalidOperationException>(() => experience.PublishOriginEpoch(first));
+        Assert.ThrowsExactly<InvalidOperationException>(() => experience.PublishOriginEpoch(second));
+        Assert.AreSame(second, experience.PublishedOriginEpoch);
+        Assert.AreEqual(1L, experience.CreateSnapshot().Origin!.Revision);
     }
 
     private static PlanetOriginEpochState CreateEpoch(double liquidMassKilograms)
