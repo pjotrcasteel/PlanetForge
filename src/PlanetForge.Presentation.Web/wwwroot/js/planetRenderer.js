@@ -90,6 +90,9 @@ export function setPlanet(snapshot) {
     // frozen-climate temperature only when a coupled epoch is published.
     const origin = state.generatorPreview ? null : snapshot.origin;
     state.originActive = Boolean(origin);
+    state.airlessReference = Boolean(origin && origin.dryGasMassKilograms === 0 &&
+        origin.atmosphericSteamMassKilograms === 0 && origin.surfaceLiquidMassKilograms === 0 &&
+        origin.surfaceIceMassKilograms === 0);
     state.surfaceTemperature = origin
         ? (origin.nearSurfaceRockTemperatureKelvin ?? 0.0)
         : (state.generatorPreview ? 288.0 : snapshot.climate.surfaceTemperatureKelvin);
@@ -237,7 +240,7 @@ function createState(canvas, gl, dotNetReference) {
         activePointers: new Map(), pinchDistance: null,
         lodTimer: null, lodSequence: 0, lastSurfaceRequestSignature: null, lastTerrainUpdateMs: null, lastGeometryPayloadCount: 0,
         surfaceRequestInFlight: false, surfaceRequestPending: false, dirty: true,
-        surfaceRequestsStarted: 0, surfaceRequestsCompleted: 0, surfaceResponsesSuperseded: 0, originActive: false,
+        surfaceRequestsStarted: 0, surfaceRequestsCompleted: 0, surfaceResponsesSuperseded: 0, originActive: false, airlessReference: false,
         lastGeometryCommitMs: null, lastTerrainDrawSubmittedMs: null, lastGestureToTerrainDrawMs: null,
         pendingDrawStartedAt: null, lastGestureEndedAt: null, localElevationRangeMeters: null, localCellSpacingMeters: null,
         seaLevelMeters: 0, planetRadiusMeters: 6371000, atmosphereDensity: 0.6,
@@ -257,6 +260,7 @@ function createState(canvas, gl, dotNetReference) {
             atmosphere: gl.getUniformLocation(globeProgram, 'uAtmosphere'),
             equilibriumTemperature: gl.getUniformLocation(globeProgram, 'uEquilibriumTemperature'),
             surfaceTemperature: gl.getUniformLocation(globeProgram, 'uSurfaceTemperature'),
+            airlessReference: gl.getUniformLocation(globeProgram, 'uAirlessReference'),
             solarFlux: gl.getUniformLocation(globeProgram, 'uSolarFlux'),
             liquidFraction: gl.getUniformLocation(globeProgram, 'uLiquidFraction'),
             vaporFraction: gl.getUniformLocation(globeProgram, 'uVaporFraction'),
@@ -276,6 +280,7 @@ function createState(canvas, gl, dotNetReference) {
             light: gl.getUniformLocation(localProgram, 'uLightDirection'),
             seaLevelMeters: gl.getUniformLocation(localProgram, 'uSeaLevelMeters'),
             surfaceTemperature: gl.getUniformLocation(localProgram, 'uSurfaceTemperature'),
+            airlessReference: gl.getUniformLocation(localProgram, 'uAirlessReference'),
             liquidFraction: gl.getUniformLocation(localProgram, 'uLiquidFraction'),
             vaporFraction: gl.getUniformLocation(localProgram, 'uVaporFraction'),
             objectMode: gl.getUniformLocation(localProgram, 'uObjectMode')
@@ -950,6 +955,7 @@ function renderGlobe(s) {
     gl.uniform1f(s.globeUniforms.atmosphere, s.atmosphereDensity);
     gl.uniform1f(s.globeUniforms.equilibriumTemperature, s.equilibriumTemperature);
     gl.uniform1f(s.globeUniforms.surfaceTemperature, s.surfaceTemperature);
+    gl.uniform1i(s.globeUniforms.airlessReference, s.airlessReference ? 1 : 0);
     gl.uniform1f(s.globeUniforms.solarFlux, s.solarFlux);
     gl.uniform1f(s.globeUniforms.liquidFraction, s.liquidFraction);
     gl.uniform1f(s.globeUniforms.vaporFraction, s.vaporFraction);
@@ -1016,6 +1022,7 @@ function renderLocal(s) {
     gl.uniform3f(s.localUniforms.light, 0.45, 0.82, 0.35);
     gl.uniform1f(s.localUniforms.seaLevelMeters, s.seaLevelMeters);
     gl.uniform1f(s.localUniforms.surfaceTemperature, s.surfaceTemperature);
+    gl.uniform1i(s.localUniforms.airlessReference, s.airlessReference ? 1 : 0);
     gl.uniform1f(s.localUniforms.liquidFraction, s.liquidFraction);
     gl.uniform1f(s.localUniforms.vaporFraction, s.vaporFraction);
 
@@ -1244,6 +1251,7 @@ uniform float uSeaLevelMeters;
 uniform float uAtmosphere;
 uniform float uEquilibriumTemperature;
 uniform float uSurfaceTemperature;
+uniform int uAirlessReference;
 uniform float uSolarFlux;
 uniform float uLiquidFraction;
 uniform float uVaporFraction;
@@ -1481,7 +1489,17 @@ void main() {
         // allowing both opaque surfaces causes z-fighting ocean speckles.
         // This mask uses the same physical elevation as oceanMaterial below.
         if (uLiquidFraction > 0.001 && elevationAboveSeaLevel < 0.0) discard;
-        outColor = vec4(barrenRockMaterial(radial, normal, vElevationMeters), 1.0);
+        vec3 material = barrenRockMaterial(radial, normal, vElevationMeters);
+        if (uAirlessReference == 1) {
+            // Physically derived uniform near-surface temperature. This is
+            // DISPLAY tone mapping of thermal incandescence, NOT a simulated
+            // molten-area map, crust thickness, or extra heat source.
+            float visible = smoothstep(850.0, 1650.0, uSurfaceTemperature);
+            vec3 glow = mix(vec3(0.68, 0.065, 0.015), vec3(1.0, 0.38, 0.10),
+                smoothstep(1150.0, 1900.0, uSurfaceTemperature));
+            material = clamp(mix(material, glow, visible * 0.78) + glow * visible * 0.18, 0.0, 1.0);
+        }
+        outColor = vec4(material, 1.0);
         return;
     }
 
@@ -1529,6 +1547,7 @@ in float vElevationMeters;
 uniform vec3 uLightDirection;
 uniform float uSeaLevelMeters;
 uniform float uSurfaceTemperature;
+uniform int uAirlessReference;
 uniform float uLiquidFraction;
 uniform float uVaporFraction;
 uniform int uObjectMode;
@@ -1552,7 +1571,14 @@ void main() {
         vec3 material = mix(dustyPlains, upliftedRock, elevationBand * 0.75);
         material = mix(material, exposedBedrock, clamp(cliff * 0.60 + highlandBand * 0.22, 0.0, 0.88));
         float illumination = clamp(0.34 + (0.76 * light), 0.23, 1.13);
-        outColor = vec4(material * illumination, 1.0);
+        vec3 lit = material * illumination;
+        if (uAirlessReference == 1) {
+            float visible = smoothstep(850.0, 1650.0, uSurfaceTemperature);
+            vec3 glow = mix(vec3(0.68, 0.065, 0.015), vec3(1.0, 0.38, 0.10),
+                smoothstep(1150.0, 1900.0, uSurfaceTemperature));
+            lit = clamp(mix(lit, glow, visible * 0.78) + glow * visible * 0.18, 0.0, 1.0);
+        }
+        outColor = vec4(lit, 1.0);
         return;
     }
 
