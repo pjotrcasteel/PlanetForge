@@ -322,3 +322,36 @@ Tests now demand: (1) numerically changed **IPlanetElevationSource** physical el
 **What is not yet solved:** the terrain is still the existing procedural canonical baseline plus bounded, globally interpolated **research crust response**; the old procedural mountain priors have not yet been replaced by physically accumulated belts. The source is based on 1,024 representative samples, so detached circular local signals may remain. Two million years is short for substantial tectonic construction of an Earth-scale orogen, and the measured 300–500 m signals may be visually modest at orbit scale. This is intentionally a first **real 3D geometry bridge** for quality measurement, not completion of tectonic evolution, ocean-basin formation, active faults, lava, glacial carving or water-flow evolution.
 
 **Next:** assess screenshots of the actual main globe and zoomed-in terrain with GEOLOGY ON/OFF, quantify plate-contact coherence and residual circular artefacts, then improve globally conservative spatial deformation at the source rather than adding extra visual modes. When scientifically warranted, gradually replace the placeholder canonical mountain priors with coherent time-integrated collision/rift uplift. Preserve one physical globe, correct LOD 0–3 and touch/mobile performance.
+
+
+## A2.5b — Main-planet crust research epoch comparison (opt-in)
+
+The existing `GEOLOGY ON` main-planet control now retains the same
+`PlanetCrustAccumulatedDeformation` 2-million-year *research* timeline
+instead of only displaying the final present-day result. Compact mobile
+controls select 2 Ma, 1 Ma and 0 Ma **discrete physical-crust snapshots**.
+Each selection publishes the unchanged solver's real Airy-compensated
+metre displacement through `PlanetTerrainRegionProvider`, invalidating
+both orbit and local LOD geometry on the same generated world and seed.
+The canonical reference terrain is still restored with `GEOLOGY OFF`;
+no saved world, history archive or erosion research is modified.
+
+The provider's ordinary `PublishGlobalCrustDeformation` still accepts
+only present-day research snapshots. A separately named
+`PublishGlobalCrustResearchEpoch` explicitly allows earlier snapshots
+for this *comparison*, without pretending those snapshots are full coupled
+climate, hydrology or Earth-origin geological epochs.
+
+**Do not confuse this with an evolving playable Earth.** Climate/water in
+the current playable Frozen Climate Experiment does not travel back in time
+when a user selects a crust research frame. The labels state
+`CRUST RESEARCH ONLY`. The mantle/mass-exchange research integrates
+1024 representative columns; interpolated heights are not fully conservative
+moving polygonal crust and not yet accepted mountain-range realism.
+There is no invented tectonic-animation interpolation between snapshots.
+
+Acceptance covers C# seeded height identity at orbit/local LOD,
+revision-safe switches, and an iPhone-sized WebGL browser comparison with
+screenshots of 1 Ma and 2 Ma physical geometry. Scientific/geometric
+calibration, planet-wide process coupling and real Safari evaluation remain
+open before the research result is promoted to gameplay.
