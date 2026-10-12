@@ -89,11 +89,12 @@ export function setPlanet(snapshot) {
     // The origin's actual surface-rock temperature replaces the legacy
     // frozen-climate temperature only when a coupled epoch is published.
     const origin = state.generatorPreview ? null : snapshot.origin;
-    state.surfaceTemperature = origin?.nearSurfaceRockTemperatureKelvin ??
-        (state.generatorPreview ? 288.0 : snapshot.climate.surfaceTemperatureKelvin);
+    state.surfaceTemperature = origin
+        ? (origin.nearSurfaceRockTemperatureKelvin ?? 0.0)
+        : (state.generatorPreview ? 288.0 : snapshot.climate.surfaceTemperatureKelvin);
     state.solarFlux = snapshot.physics.solarFluxWattsPerSquareMeter;
-    state.liquidFraction = origin ? origin.surfaceWaterLiquidFraction : (state.generatorPreview ? 1.0 : snapshot.water.liquidFraction);
-    state.vaporFraction = origin ? origin.surfaceWaterVaporFraction : (state.generatorPreview ? 0.0 : snapshot.water.vaporFraction);
+    state.liquidFraction = origin ? (origin.surfaceLiquidMassKilograms > 0.0 ? 1.0 : 0.0) : (state.generatorPreview ? 1.0 : snapshot.water.liquidFraction);
+    state.vaporFraction = origin ? origin.atmosphericSteamMassFraction : (state.generatorPreview ? 0.0 : snapshot.water.vaporFraction);
     // Global ice inventory does not establish a spatial ice/snow field.
     // Avoid fabricating polar ice from the older experiment's climate state.
     state.seaIceFraction = origin ? 0.0 : (state.generatorPreview ? 0.0 : (snapshot.climateFeedback?.seaIceFraction ?? snapshot.climateFeedback?.cryosphereFraction ?? state.seaIceFraction));
