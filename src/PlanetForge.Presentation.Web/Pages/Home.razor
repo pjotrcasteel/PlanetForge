@@ -161,7 +161,11 @@
             .Contains("airlessReference=1", StringComparer.OrdinalIgnoreCase);
         if (airlessReferenceActive)
         {
-            snapshot = Experience.PublishOriginEpoch(PlanetAirlessCoolingReference.CreateInitial());
+            // The first WebGL upload requires complete geometry. A regular
+            // epoch publication is allowed to contain cached mesh deltas,
+            // which would be invalid before the renderer has initialized.
+            _ = Experience.PublishOriginEpoch(PlanetAirlessCoolingReference.CreateInitial());
+            snapshot = Experience.CreateInitialRenderSnapshot();
         }
     }
 
