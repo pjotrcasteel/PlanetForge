@@ -53,6 +53,13 @@ public sealed record PlanetOriginEnergyStep(
     /// <summary>Explicit material transactions; no route is inferred from phase eligibility.</summary>
     public IReadOnlyList<PlanetOriginVolatileExchange> VolatileChanges { get; init; } = [];
 
+    /// <summary>
+    /// Optional physically bounded, well-mixed atmospheric condensation
+    /// proposal check. Unset for legacy callers; never generates rain.
+    /// </summary>
+    public PlanetOriginCondensationSafetyConditions? CondensationSafety { get; init; }
+
+
     public PlanetOriginDuration? ExplicitDuration { get; init; }
 
     public PlanetOriginDuration Duration
@@ -193,9 +200,18 @@ public sealed class PlanetOriginEnergyLedger
         // Heat must not be deposited in a store that holds no matter.
         PlanetEnvironmentTemperatureModel.Resolve(nextEnvironment, HeatCapacities);
 
-        // 5. Phase changes move mass, sensible and latent heat internally.
+        // 5. Check supplied condensation against the *current* atmosphere,
+        // after energy and volatile inputs and before any phase mass moves.
+        var condensationSafety = step.CondensationSafety;
+        var proposedCondensation = condensationSafety is null ? 0.0 :
+            PlanetOriginCondensationSafetyGate.VerifyProposals(
+                nextEnvironment, HeatCapacities, duration, step.PhaseChanges, condensationSafety);
         nextEnvironment = PlanetWaterPhaseSensibleTransport.Apply(
             nextEnvironment, HeatCapacities, step.PhaseChanges, cancellationToken);
+        if (condensationSafety is not null && proposedCondensation > 0.0)
+        {
+            PlanetOriginCondensationSafetyGate.VerifyResult(nextEnvironment, HeatCapacities, condensationSafety);
+        }
 
         cancellationToken.ThrowIfCancellationRequested();
         return new PlanetOriginEnergyLedger(nextInterior, nextEnvironment, HeatCapacities, InitialStoredEnergyJoules,

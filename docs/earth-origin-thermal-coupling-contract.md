@@ -183,6 +183,52 @@ substep; this model does not detect saturation crossing, choose precipitation
 or publish a visually advancing Earth. The existing Hero/LOD and frozen
 climate experiment remain untouched.
 
+## M4d — Opt-in condensation proposal admission and heat-feedback check
+
+A caller may now attach `PlanetOriginEnergyStep.CondensationSafety` when
+proposing **explicit** liquid-vapour condensation. The guarded step uses the
+**existing coupled** atmospheric H2O inventory, dry-gas thermal mass and
+atmospheric sensible energy. It never synthesizes water or rainfall and does
+not create a second climate/planet model.
+
+The required `PlanetOriginCondensationSafetyConditions` specify planet
+geometry, gravitational acceleration, representative dry-gas molar mass, a
+caller-supported **maximum validated ideal-mixture total pressure**, and an
+explicit **maximum physical substep**. Dry-gas mass must equal the mass
+used by `PlanetEnvironmentHeatCapacityParameters`; otherwise pressure
+and temperature would refer to different simulated atmospheres.
+
+For this narrow, explicitly **well-mixed-isothermal research approximation**,
+the effective liquid-vapour equilibration temperature is the coupled
+atmospheric **bulk** temperature, `E_atmosphere / C_atmosphere`.
+This approximation is **not** assumed to be valid for the actual Hadean
+vertical atmosphere. After interior, volatile-material and radiative exchanges,
+but before phase mass transfers, the optional admission gate:
+
+1. Rejects physical intervals longer than the caller-validated maximum,
+   nonfinite mass, pressure beyond the declared envelope, missing material
+   temperature, and unsupported IAPWS triple/critical temperature regimes.
+2. Uses the existing mixed-gas mole-fraction saturation solver and
+   **caps proposed condensate by available supersaturated H2O**.
+3. Restricts the simple check to condensation-only reaction proposals
+   (complex coincident ice/evaporation needs a general phase solver).
+4. After the existing conservative sensible/latent phase transport, **checks
+   the resulting atmosphere again**; a proposed transfer that would leave
+   the effective layer undersaturated is rejected before publication.
+5. If any substep fails, the earlier immutable epoch and its whole water,
+   energy and geological clock remain untouched.
+
+This is a **safety gate**, not a precipitation rate law or self-correcting
+equilibrium integrator. Start/end checks do not certify that a time-varying
+substep did not cross a saturation surface *between* samples. The full
+physical integrator must eventually recompute phase eligibility during
+adaptive subdivision; realistic early-Earth use additionally needs
+altitude/lapse rates, nonideal high-pressure fugacity/EOS, molecular
+composition, cloud nucleation and spatial transport. Without explicitly
+opting into the bounded approximation, older step APIs retain their
+historical behavior. No main-planet render paths, Hero regions or
+frozen-climate scenario behavior change here.
+
 ## Integration sequence
 
 1. Calibrate effective dry atmospheric mass, H2O-vapour specific heat, liquid
