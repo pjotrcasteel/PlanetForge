@@ -40,27 +40,24 @@
 
 Related: `PlanetCryosphereMassBudget` prevents making ice-covered area independent of frozen-water mass; physical ocean hypsometry and connected-area surveys are in Application and shared spherical domain geometry.
 
-**Past merged milestones:** #144 scientific scope; #145 scenario+clock; #146 interior heat; #147 water reservoirs; #149 rock latent melt; #150 thermal timeline; #151 saturation; #154 atomic epoch; #155 ice bound; #156 water-phase latent energy; #157 environmental stores; #158 heat capacity/temperatures; #159 radiation. Hydrology/ocean: #136–#142 and #152–#153. A **merged isolated model is not a completed coupled early-Earth simulator**.
+**Past merged milestones:** #144 scientific scope; #145 scenario+clock; #146 interior heat; #147 water reservoirs; #149 rock latent melt; #150 thermal timeline; #151 saturation; #154 atomic epoch; #155 ice bound; #156 water-phase latent energy; #157 environmental stores; #158 heat capacity/temperatures; #159 radiation; plus the previously open thermal-coupling PRs #160/#161 and the atomic Earth-origin epoch world state integration now merged on `main`. Hydrology/ocean: #136–#142 and #152–#153. A **merged isolated model is not a completed coupled early-Earth simulator**.
 
 ## OPEN PRs — verified 12 October 2026
 
-Exactly **two** PRs remained open, both still draft/unmerged though the **full `Validate PlanetForge` workflow passed** for their specified head SHA. Review again before merging; successful past CI is not forever valid.
+- Exactly **two** PRs remained open, both still draft/unmerged though the **full `Validate PlanetForge` workflow passed** for their specified head SHA. Review again before merging; successful past CI is not forever valid.
 
 - **[#160 — sensible heat carried by steam/liquid transfers](https://github.com/pjotrcasteel/PlanetForge/pull/160)**: head `adb1eb3e3dad73381ab97835c0e89824272b25bf`; successful run **38208102933**. Mass and sensible heat move together, with separately accounted latent heat. Supports only vapor/liquid; **ice's own thermal store not yet modeled**. Well-mixed effective-cp approximation, no precipitation kinetics.
 - **[#161 — radiative external-energy time integration](https://github.com/pjotrcasteel/PlanetForge/pull/161)**: head `2ad7f399163ea4799c62c4369cc936b15993f1b4`; successful run **38208298750**. Tracks stellar joules in, infrared joules out, named environmental emitting/absorbing stores, finite timesteps and rollback. **No calibrated early-Sun/atmospheric greenhouse/timeline**.
 
 **Immediate next-model task:** Re-fetch these exact PRs and CI, review source/test correctness, then mark ready and merge sequentially if still valid; check newer `main` deployments. Do *not* blindly merge older stale PRs.
 
-### PR sanitation just completed
+### Merged PRs and follow-up
 
-Historical **#66, #81, #113, #134 were closed without merging or deleting branches**:
+- **[#160 — sensible heat carried by steam/liquid transfers](https://github.com/pjotrcasteel/PlanetForge/pull/160)**: merged into `main`. Mass and sensible heat move together, with separately accounted latent heat. Supports only vapor/liquid; **ice's own thermal store not yet modeled**. Well-mixed effective-cp approximation, no precipitation kinetics.
+- **[#161 — radiative external-energy time integration](https://github.com/pjotrcasteel/PlanetForge/pull/161)**: merged into `main`. Tracks stellar joules in, infrared joules out, named environmental emitting/absorbing stores, finite timesteps and rollback. **No calibrated early-Sun/atmospheric greenhouse/timeline**.
+- `PlanetOriginEpochState` (merged earlier as #154) atomically advances geological age, interior energy and conserved water inventory. It does not yet own environmental, radiative or latent-energy state.
 
-- #134 ocean was superseded by merged #142/#152/#153.
-- #81 proposed orbital atlas was stale/conflicted with modern renderer/LOD.
-- #113 old Hero ridges had useful research but *still failed visual realism*; preserved in **[#162](https://github.com/pjotrcasteel/PlanetForge/issues/162)**.
-- #66 old orbit→local water/navigation remains relevant but implementation was conflicted; preserved in **[#163](https://github.com/pjotrcasteel/PlanetForge/issues/163)**.
-
-Do not discard their unique experiments or resurrect their obsolete UI/version changes. Port selectively onto *fresh current-main branches* when physical tests and visual evidence justify it.
+**Immediate next-model task:** connect the new epoch/world-state primitives into the canonical Earth-origin scenario and then feed the coupled thermal, water and radiative state into the existing presentation path without replacing the preserved Hero terrain work.
 
 ## Hero-region/geology preservation — strict contract
 

@@ -87,7 +87,9 @@ public sealed class PlanetCrustParcelCatalogTests
                 Assert.AreEqual(parcel.PresentDirection.Z, reconstructed.Z, 1e-12);
                 if (years == 0)
                 {
-                    Assert.AreEqual(parcel.PresentDirection, position.GeographicDirection);
+                    Assert.AreEqual(parcel.PresentDirection.X, position.GeographicDirection.X, 1e-12);
+                    Assert.AreEqual(parcel.PresentDirection.Y, position.GeographicDirection.Y, 1e-12);
+                    Assert.AreEqual(parcel.PresentDirection.Z, position.GeographicDirection.Z, 1e-12);
                 }
             }
         }
