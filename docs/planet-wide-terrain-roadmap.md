@@ -383,3 +383,32 @@ continuity, stable orbit/navigation, changed physical relief without a
 sudden artifact, and acceptable compute time when first enabling the longer
 research history. CI checks mass and pressure closure across all seven
 snapshots and records smartphone-sized screenshots at 1, 2 and 6 Ma.
+
+
+## A2.5d — Near-surface orbital sample resolution under fixed tile budget
+
+Actual Safari screenshots in PF 0.0.38.2 show that physical crust snapshots
+are correctly synchronized and remain subtly different, but the closest
+**orbital** views reveal soft block-like bedrock. The LOD 6 readout is not an
+error or a user-defined geological scale: this is the adaptive cube-sphere
+mesh tile level. Higher levels refine *existing physically sampled surface
+heights*, not the procedural geology or magnitude of uplift.
+
+The selector now permits center-prioritized LOD 7 **only** in the narrow
+near-local-altitude zone (< 1.006 planet radii from the planet center),
+before the existing 20 km altitude handoff to the canonical local terrain.
+This remains capped at the existing **56 active orbital tiles**, with the
+same sample resolution per tile and no new surface worlds, height
+multipliers, textures, terrain stages or runtime diagnostics. Wider orbital
+views keep their prior LOD 1–6 budgets and behavior.
+
+An iPhone-sized Playwright test exercises LOD 7 GPU meshes, preserves the
+56-tile ceiling, crosses into the existing local surface and back out to
+farther orbital LOD, checking valid WebGL output. Whether the topography
+actually *looks* more realistic is a separate Safari acceptance gate.
+
+Scientific caveat: smaller triangles resolve existing 2–32 km canonical
+bedrock relief more faithfully but **do not** improve the ridges/erosion
+process itself, move continent material laterally, or justify superimposing
+decorative detail. Physical orogenic relief and better watershed-driven
+mountain morphology remain in #162.
