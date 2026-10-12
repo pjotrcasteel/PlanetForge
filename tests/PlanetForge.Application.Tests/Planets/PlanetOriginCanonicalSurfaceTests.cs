@@ -98,6 +98,54 @@ public sealed class PlanetOriginCanonicalSurfaceTests
         Assert.IsNull(experience.PublishedOriginEpoch);
     }
 
+    [TestMethod]
+    public void AdvanceOriginEpochAdaptive_AcceptedCoolingChangesMainPlanetRockClockAndRevisionTogether()
+    {
+        var experience = CreateExperience(new FlatElevationSource(), includeHypsometry: true);
+        var origin = CreateEpoch(2.0e18);
+        var initial = experience.PublishOriginEpoch(origin);
+        var second = PlanetOriginDuration.FromSeconds(1.0);
+        var limits = new PlanetOriginAdaptiveIntegrationOptions(second, second);
+
+        var cooled = experience.AdvanceOriginEpochAdaptive(second, limits, (energy, dt) =>
+            new PlanetOriginEnergyStep(dt, 0.0, 0.0,
+                new PlanetInteriorHeatExport(1.0e19, PlanetEnvironmentHeatReservoir.SurfaceRock),
+                new PlanetRadiativeExchange(
+                    new PlanetRadiativeBalance(1.0, 0.0, 0.0, 0.0, 0.0),
+                    PlanetEnvironmentHeatReservoir.SurfaceRock, PlanetEnvironmentHeatReservoir.Atmosphere), []));
+
+        Assert.IsNotNull(initial.Origin);
+        Assert.IsNotNull(cooled.Origin);
+        Assert.AreEqual(0L, initial.Origin.Revision);
+        Assert.AreEqual(1L, cooled.Origin.Revision);
+        Assert.IsLessThan(initial.Origin.BulkRockTemperatureKelvin, cooled.Origin.BulkRockTemperatureKelvin);
+        Assert.AreEqual(1_000_000L, experience.PublishedOriginEpoch!.Clock.MicrosecondsIntoYear);
+        Assert.AreEqual(cooled.Origin.BulkRockMeltFraction, experience.PublishedOriginEpoch.Rock.MeltFraction, 0.0);
+        Assert.AreEqual(initial.SeaLevelMeters, cooled.SeaLevelMeters, 0.0, "Cooling alone must not invent or remove water.");
+        Assert.AreEqual(0L, origin.Revision);
+    }
+
+    [TestMethod]
+    public void AdvanceOriginEpochAdaptive_ImpossibleCoolingDoesNotPublishPartialState()
+    {
+        var experience = CreateExperience(new FlatElevationSource(), includeHypsometry: true);
+        var origin = CreateEpoch(2.0e18);
+        experience.PublishOriginEpoch(origin);
+        var oneSecond = PlanetOriginDuration.FromSeconds(1.0);
+        var limits = new PlanetOriginAdaptiveIntegrationOptions(oneSecond, oneSecond);
+
+        Assert.ThrowsExactly<InvalidOperationException>(() => experience.AdvanceOriginEpochAdaptive(
+            oneSecond, limits, (energy, dt) => new PlanetOriginEnergyStep(dt, 0.0, 0.0,
+                new PlanetInteriorHeatExport(1.0e30, PlanetEnvironmentHeatReservoir.SurfaceRock),
+                new PlanetRadiativeExchange(
+                    new PlanetRadiativeBalance(1.0, 0.0, 0.0, 0.0, 0.0),
+                    PlanetEnvironmentHeatReservoir.SurfaceRock, PlanetEnvironmentHeatReservoir.Atmosphere), [])));
+
+        Assert.AreSame(origin, experience.PublishedOriginEpoch);
+        Assert.AreEqual(0L, experience.CreateSnapshot().Origin!.Revision);
+        Assert.AreEqual(0L, experience.PublishedOriginEpoch!.Clock.MicrosecondsIntoYear);
+    }
+
     private static PlanetOriginEpochState CreateEpoch(double liquidMassKilograms)
     {
         var rock = new PlanetRockEnthalpyModel(
