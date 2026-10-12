@@ -64,3 +64,10 @@ Compatibility: the legacy `WaterPhaseSnapshot.BoilingPointKelvin` is set to
 until a composition/pressure-aware solver supplies a real phase proof. Climate
 controls and old save export reject while an origin epoch is active, instead
 of silently writing inconsistent state into the same rendered planet.
+
+For Earth-origin rendering, the atmosphere's **column surface pressure and
+render density** derive from dry gas plus conserved atmospheric H2O on the
+same planet gravity/area. The old Snowball gas-composition/radiative-forcing
+fields are not yet an Earth-origin atmosphere chemistry model; they are not
+valid inputs to the thermal process. They must be replaced with the next
+calibrated composition-aware steam/greenhouse closure (#180).

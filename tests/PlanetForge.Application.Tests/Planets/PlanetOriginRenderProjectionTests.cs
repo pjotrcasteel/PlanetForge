@@ -22,6 +22,12 @@ public sealed class PlanetOriginRenderProjectionTests
         Assert.AreEqual(hot.Rock.MeltFraction, snapshot.Origin.MeltFraction, 0.0);
         Assert.AreEqual(hot.Rock.TemperatureKelvin, snapshot.Origin.RockTemperatureKelvin, 0.0);
         Assert.AreEqual(5.0, snapshot.Water.VaporMassKilograms, 0.0);
+        var atmosphericMass = hot.CoupledEnergy!.HeatCapacities.NoncondensableAtmosphereMassKilograms + 5.0;
+        var area = 4.0 * Math.PI * snapshot.PhysicalParameters.RadiusMeters * snapshot.PhysicalParameters.RadiusMeters;
+        var expectedPressure = atmosphericMass * snapshot.Physics.SurfaceGravityMetersPerSecondSquared / area;
+        Assert.AreEqual(expectedPressure, snapshot.Origin.SurfacePressurePascals, expectedPressure * 1e-12);
+        Assert.AreEqual(expectedPressure, snapshot.Atmosphere.SurfacePressurePascals, expectedPressure * 1e-12);
+        Assert.IsLessThan(0.001, snapshot.AtmosphereDensity);
         Assert.AreEqual(0.0, snapshot.Water.LiquidMassKilograms, 0.0);
         Assert.AreEqual(-11_000.0, snapshot.SeaLevelMeters, 0.0);
         Assert.IsFalse(snapshot.Water.LiquidWaterStable, "No unsupported pressure/temperature stability claim.");

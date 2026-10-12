@@ -355,6 +355,13 @@ public sealed class PlanetExperience(
         var ice = epoch.Water.GetMassKilograms(PlanetWaterReservoir.SurfaceIce);
         var vapor = epoch.Water.GetMassKilograms(PlanetWaterReservoir.AtmosphericVapor);
         var accessibleWater = liquid + ice + vapor;
+        var atmosphericMass = epoch.CoupledEnergy!.HeatCapacities.NoncondensableAtmosphereMassKilograms + vapor;
+        var surfaceArea = 4.0 * Math.PI * rendered.PhysicalParameters.RadiusMeters * rendered.PhysicalParameters.RadiusMeters;
+        var surfacePressure = atmosphericMass * rendered.Physics.SurfaceGravityMetersPerSecondSquared / surfaceArea;
+        if (!double.IsFinite(atmosphericMass) || !double.IsFinite(surfacePressure))
+        {
+            throw new InvalidOperationException("Earth-origin atmospheric column mass and pressure must remain finite.");
+        }
         if (!double.IsFinite(accessibleWater))
         {
             throw new InvalidOperationException("The surface water projection requires finite H2O mass.");
@@ -372,12 +379,18 @@ public sealed class PlanetExperience(
             epoch.Revision, epoch.Clock.YearsBeforePresent,
             epoch.Rock.TemperatureKelvin, epoch.Rock.MeltFraction,
             temperatures.AtmosphereTemperatureKelvin, temperatures.SurfaceRockTemperatureKelvin,
-            vapor, liquid, ice);
+            vapor, liquid, ice, surfacePressure);
 
         return rendered with
         {
             Water = water,
             SeaLevelMeters = CalculateSeaLevelMeters(water),
+            AtmosphereDensity = CalculateAtmosphereDensity(surfacePressure),
+            Atmosphere = rendered.Atmosphere with
+            {
+                SurfacePressurePascals = surfacePressure,
+                EarthAtmosphereMasses = atmosphericMass / EarthAtmosphereReference.TotalMassKilograms
+            },
             Origin = origin
         };
     }

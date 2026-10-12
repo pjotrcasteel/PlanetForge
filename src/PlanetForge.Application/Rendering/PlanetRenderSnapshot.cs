@@ -33,4 +33,5 @@ public sealed record PlanetOriginRenderState(
     double? SurfaceRockTemperatureKelvin,
     double AtmosphericVaporKilograms,
     double SurfaceLiquidKilograms,
-    double SurfaceIceKilograms);
+    double SurfaceIceKilograms,
+    double SurfacePressurePascals);
