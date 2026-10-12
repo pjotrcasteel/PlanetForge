@@ -145,6 +145,7 @@ public sealed class PlanetExperience(
 
     public PlanetRenderSnapshot AdvanceClimate(double years)
     {
+        RequireLegacyClimateMode();
         var basePhysics = PlanetPhysicsCalculator.Calculate(state.PhysicalParameters);
         var atmosphere = AtmosphereCalculator.Calculate(state.AtmosphereParameters, state.PhysicalParameters, basePhysics);
         climateState ??= ClimateFeedbackSimulator.Initialize(state.PhysicalParameters, atmosphere, state.WaterParameters);
@@ -178,6 +179,7 @@ public sealed class PlanetExperience(
 
     public PlanetRenderSnapshot DarkenSurface()
     {
+        RequireLegacyClimateMode();
         var parameters = state.PhysicalParameters;
         state.SetPhysicalParameters(parameters with { BondAlbedo = Math.Clamp(parameters.BondAlbedo - 0.03, MinimumBondAlbedo, MaximumBondAlbedo) });
         return CreateSnapshot();
@@ -185,6 +187,7 @@ public sealed class PlanetExperience(
 
     public PlanetRenderSnapshot BrightenSurface()
     {
+        RequireLegacyClimateMode();
         var parameters = state.PhysicalParameters;
         state.SetPhysicalParameters(parameters with { BondAlbedo = Math.Clamp(parameters.BondAlbedo + 0.03, MinimumBondAlbedo, MaximumBondAlbedo) });
         return CreateSnapshot();
@@ -277,6 +280,7 @@ public sealed class PlanetExperience(
 
     public PlanetExperienceState ExportState()
     {
+        RequireLegacyClimateMode();
         _ = CreateSnapshot();
         return new PlanetExperienceState(
             state.Seed,
@@ -359,7 +363,7 @@ public sealed class PlanetExperience(
             accessibleWater > 0.0 ? ice / accessibleWater : 0.0,
             accessibleWater > 0.0 ? liquid / accessibleWater : 0.0,
             accessibleWater > 0.0 ? vapor / accessibleWater : 0.0,
-            rendered.Water.BoilingPointKelvin,
+            0.0, // Explicit unknown: Earth-origin phase stability never uses Snowball's boiling point.
             false); // Stability needs a pressure/EOS/phase proof, not the old Snowball model.
         var temperatures = epoch.Temperatures!.Value;
         var origin = new PlanetOriginRenderState(
@@ -459,8 +463,18 @@ public sealed class PlanetExperience(
         return Math.Min(patchSizeMeters, maximumSizeMeters);
     }
 
+    private void RequireLegacyClimateMode()
+    {
+        if (publishedEarthOrigin is not null)
+        {
+            throw new InvalidOperationException(
+                "Earth-origin changes must enter through the conserved geological epoch, not legacy climate controls.");
+        }
+    }
+
     private void ChangeOrbitalDistance(double deltaAstronomicalUnits)
     {
+        RequireLegacyClimateMode();
         var parameters = state.PhysicalParameters;
         var current = parameters.OrbitalDistanceMeters / PhysicalConstants.AstronomicalUnitMeters;
         var next = Math.Clamp(current + deltaAstronomicalUnits, MinimumOrbitalDistanceAu, MaximumOrbitalDistanceAu);
@@ -469,6 +483,7 @@ public sealed class PlanetExperience(
 
     private void ChangeStellarLuminosity(double deltaSolarLuminosity)
     {
+        RequireLegacyClimateMode();
         var parameters = state.PhysicalParameters;
         var current = parameters.StellarLuminosityWatts / PhysicalConstants.NominalSolarLuminosityWatts;
         var next = Math.Clamp(current + deltaSolarLuminosity, MinimumStellarLuminositySolar, MaximumStellarLuminositySolar);
@@ -477,6 +492,7 @@ public sealed class PlanetExperience(
 
     private void ChangeMass(double deltaEarthMass)
     {
+        RequireLegacyClimateMode();
         var parameters = state.PhysicalParameters;
         var current = parameters.MassKilograms / EarthReference.MassKilograms;
         var next = Math.Clamp(current + deltaEarthMass, MinimumPlanetMassEarth, MaximumPlanetMassEarth);
@@ -485,6 +501,7 @@ public sealed class PlanetExperience(
 
     private void ChangeRadius(double deltaEarthRadius)
     {
+        RequireLegacyClimateMode();
         var parameters = state.PhysicalParameters;
         var current = parameters.RadiusMeters / EarthReference.MeanRadiusMeters;
         var next = Math.Clamp(current + deltaEarthRadius, MinimumPlanetRadiusEarth, MaximumPlanetRadiusEarth);
@@ -493,6 +510,7 @@ public sealed class PlanetExperience(
 
     private void ChangeAtmosphereMass(double deltaEarthAtmospheres)
     {
+        RequireLegacyClimateMode();
         var parameters = state.AtmosphereParameters;
         var current = parameters.MassKilograms / EarthAtmosphereReference.TotalMassKilograms;
         var next = Math.Clamp(current + deltaEarthAtmospheres, MinimumAtmosphereEarthMasses, MaximumAtmosphereEarthMasses);
@@ -501,6 +519,7 @@ public sealed class PlanetExperience(
 
     private void ChangeCarbonDioxide(double factor)
     {
+        RequireLegacyClimateMode();
         var parameters = state.AtmosphereParameters;
         var next = Math.Clamp(parameters.CarbonDioxidePartsPerMillion * factor, MinimumCarbonDioxidePartsPerMillion, MaximumCarbonDioxidePartsPerMillion);
         state.SetAtmosphereParameters(parameters with { CarbonDioxidePartsPerMillion = next });
@@ -508,6 +527,7 @@ public sealed class PlanetExperience(
 
     private void ChangeWater(double deltaEarthHydrospheres)
     {
+        RequireLegacyClimateMode();
         var parameters = state.WaterParameters;
         var current = parameters.TotalMassKilograms / EarthWaterReference.TotalHydrosphereMassKilograms;
         var next = Math.Clamp(current + deltaEarthHydrospheres, MinimumWaterEarthHydrospheres, MaximumWaterEarthHydrospheres);

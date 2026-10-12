@@ -25,6 +25,8 @@ public sealed class PlanetOriginRenderProjectionTests
         Assert.AreEqual(0.0, snapshot.Water.LiquidMassKilograms, 0.0);
         Assert.AreEqual(-11_000.0, snapshot.SeaLevelMeters, 0.0);
         Assert.IsFalse(snapshot.Water.LiquidWaterStable, "No unsupported pressure/temperature stability claim.");
+        Assert.AreEqual(0.0, snapshot.Water.BoilingPointKelvin, 0.0,
+            "The old Snowball boiling-point diagnostic must not appear as Earth-origin phase physics.");
     }
 
     [TestMethod]
@@ -48,6 +50,9 @@ public sealed class PlanetOriginRenderProjectionTests
 
         Assert.ThrowsExactly<InvalidOperationException>(() => experience.PublishEarthOrigin(legacy));
         Assert.ThrowsExactly<InvalidOperationException>(() => experience.PublishEarthOrigin(hot));
+        Assert.ThrowsExactly<InvalidOperationException>(() => experience.AdvanceClimate(1));
+        Assert.ThrowsExactly<InvalidOperationException>(() => experience.MoveOrbitInward());
+        Assert.ThrowsExactly<InvalidOperationException>(() => experience.ExportState());
         Assert.AreEqual(first.Origin, experience.CreateSnapshot().Origin);
         experience.SetSeed(914);
         Assert.IsNull(experience.CreateSnapshot().Origin, "A new planet seed must not inherit the old world's magma.");

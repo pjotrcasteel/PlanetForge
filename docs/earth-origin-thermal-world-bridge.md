@@ -58,3 +58,9 @@ and finite rates. Advance this single published world through crust formation,
 basins, oceans, weathering, chemistry and eventually life. Terrain revisions
 must come from canonical geology, not from the render material or a second
 planet state.
+
+Compatibility: the legacy `WaterPhaseSnapshot.BoilingPointKelvin` is set to
+`0.0` (unknown sentinel) in origin mode and `LiquidWaterStable` remains false
+until a composition/pressure-aware solver supplies a real phase proof. Climate
+controls and old save export reject while an origin epoch is active, instead
+of silently writing inconsistent state into the same rendered planet.
