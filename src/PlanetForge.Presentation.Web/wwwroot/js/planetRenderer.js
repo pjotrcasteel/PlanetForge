@@ -86,13 +86,21 @@ export function setPlanet(snapshot) {
     state.planetRadiusMeters = snapshot.physicalParameters.radiusMeters;
     state.atmosphereDensity = snapshot.atmosphereDensity;
     state.equilibriumTemperature = snapshot.physics.equilibriumTemperatureKelvin;
-    state.surfaceTemperature = state.generatorPreview ? 288.0 : snapshot.climate.surfaceTemperatureKelvin;
+    state.surfaceTemperature = state.generatorPreview ? 288.0 :
+        (snapshot.origin?.surfaceRockTemperatureKelvin ?? snapshot.climate.surfaceTemperatureKelvin);
+    state.meltFraction = state.generatorPreview ? 0.0 : (snapshot.origin?.meltFraction ?? 0.0);
     state.solarFlux = snapshot.physics.solarFluxWattsPerSquareMeter;
     state.liquidFraction = state.generatorPreview ? 1.0 : snapshot.water.liquidFraction;
     state.vaporFraction = state.generatorPreview ? 0.0 : snapshot.water.vaporFraction;
     state.seaIceFraction = state.generatorPreview ? 0.0 : (snapshot.climateFeedback?.seaIceFraction ?? snapshot.climateFeedback?.cryosphereFraction ?? state.seaIceFraction);
     state.landIceFraction = state.generatorPreview ? 0.0 : (snapshot.climateFeedback?.landIceFraction ?? snapshot.climateFeedback?.cryosphereFraction ?? state.landIceFraction);
     state.snowCoverFraction = state.generatorPreview ? 0.0 : (snapshot.climateFeedback?.snowCoverFraction ?? snapshot.climateFeedback?.cryosphereFraction ?? state.snowCoverFraction);
+    if (snapshot.origin) {
+        // An origin epoch cannot inherit ice from the unrelated Snowball model.
+        state.seaIceFraction = snapshot.water.iceFraction;
+        state.landIceFraction = snapshot.water.iceFraction;
+        state.snowCoverFraction = snapshot.water.iceFraction;
+    }
 
     const geometryKey = `${snapshot.seed}:${snapshot.physicalParameters.radiusMeters}:${snapshot.terrainRevision ?? 0}`;
     if (state.geometryKey !== geometryKey) {
@@ -233,7 +241,7 @@ function createState(canvas, gl, dotNetReference) {
         lastGeometryCommitMs: null, lastTerrainDrawSubmittedMs: null, lastGestureToTerrainDrawMs: null,
         pendingDrawStartedAt: null, lastGestureEndedAt: null, localElevationRangeMeters: null, localCellSpacingMeters: null,
         seaLevelMeters: 0, planetRadiusMeters: 6371000, atmosphereDensity: 0.6,
-        equilibriumTemperature: 255, surfaceTemperature: 288, solarFlux: 1361,
+        equilibriumTemperature: 255, surfaceTemperature: 288, solarFlux: 1361, meltFraction: 0,
         liquidFraction: 1, vaporFraction: 0, seaIceFraction: 1, landIceFraction: 1, snowCoverFraction: 1,
         globeAttributes: {
             position: gl.getAttribLocation(globeProgram, 'aPosition'),
@@ -249,6 +257,7 @@ function createState(canvas, gl, dotNetReference) {
             atmosphere: gl.getUniformLocation(globeProgram, 'uAtmosphere'),
             equilibriumTemperature: gl.getUniformLocation(globeProgram, 'uEquilibriumTemperature'),
             surfaceTemperature: gl.getUniformLocation(globeProgram, 'uSurfaceTemperature'),
+            meltFraction: gl.getUniformLocation(globeProgram, 'uMeltFraction'),
             solarFlux: gl.getUniformLocation(globeProgram, 'uSolarFlux'),
             liquidFraction: gl.getUniformLocation(globeProgram, 'uLiquidFraction'),
             vaporFraction: gl.getUniformLocation(globeProgram, 'uVaporFraction'),
@@ -268,6 +277,7 @@ function createState(canvas, gl, dotNetReference) {
             light: gl.getUniformLocation(localProgram, 'uLightDirection'),
             seaLevelMeters: gl.getUniformLocation(localProgram, 'uSeaLevelMeters'),
             surfaceTemperature: gl.getUniformLocation(localProgram, 'uSurfaceTemperature'),
+            meltFraction: gl.getUniformLocation(localProgram, 'uMeltFraction'),
             liquidFraction: gl.getUniformLocation(localProgram, 'uLiquidFraction'),
             vaporFraction: gl.getUniformLocation(localProgram, 'uVaporFraction'),
             objectMode: gl.getUniformLocation(localProgram, 'uObjectMode')
@@ -940,6 +950,7 @@ function renderGlobe(s) {
     gl.uniform1f(s.globeUniforms.atmosphere, s.atmosphereDensity);
     gl.uniform1f(s.globeUniforms.equilibriumTemperature, s.equilibriumTemperature);
     gl.uniform1f(s.globeUniforms.surfaceTemperature, s.surfaceTemperature);
+    gl.uniform1f(s.globeUniforms.meltFraction, s.meltFraction);
     gl.uniform1f(s.globeUniforms.solarFlux, s.solarFlux);
     gl.uniform1f(s.globeUniforms.liquidFraction, s.liquidFraction);
     gl.uniform1f(s.globeUniforms.vaporFraction, s.vaporFraction);
@@ -1006,6 +1017,7 @@ function renderLocal(s) {
     gl.uniform3f(s.localUniforms.light, 0.45, 0.82, 0.35);
     gl.uniform1f(s.localUniforms.seaLevelMeters, s.seaLevelMeters);
     gl.uniform1f(s.localUniforms.surfaceTemperature, s.surfaceTemperature);
+    gl.uniform1f(s.localUniforms.meltFraction, s.meltFraction);
     gl.uniform1f(s.localUniforms.liquidFraction, s.liquidFraction);
     gl.uniform1f(s.localUniforms.vaporFraction, s.vaporFraction);
 
@@ -1234,6 +1246,7 @@ uniform float uSeaLevelMeters;
 uniform float uAtmosphere;
 uniform float uEquilibriumTemperature;
 uniform float uSurfaceTemperature;
+uniform float uMeltFraction;
 uniform float uSolarFlux;
 uniform float uLiquidFraction;
 uniform float uVaporFraction;
@@ -1471,7 +1484,11 @@ void main() {
         // allowing both opaque surfaces causes z-fighting ocean speckles.
         // This mask uses the same physical elevation as oceanMaterial below.
         if (uLiquidFraction > 0.001 && elevationAboveSeaLevel < 0.0) discard;
-        outColor = vec4(barrenRockMaterial(radial, normal, vElevationMeters), 1.0);
+        vec3 bedrock = barrenRockMaterial(radial, normal, vElevationMeters);
+        // Bulk enthalpy-derived melt is global here. A spatial magma/crust mask
+        // must come later from the canonical geological material fields.
+        bedrock = mix(bedrock, vec3(0.76, 0.16, 0.025), clamp(uMeltFraction, 0.0, 1.0) * 0.72);
+        outColor = vec4(bedrock, 1.0);
         return;
     }
 
@@ -1493,6 +1510,7 @@ void main() {
     vec3 baseColor = terrainMaterial(radial, normal, elevationAboveSeaLevel, preBiological);
     float heat = smoothstep(315.0, 430.0, uSurfaceTemperature);
     baseColor = mix(baseColor, vec3(0.48, 0.25, 0.11), heat * 0.52);
+    baseColor = mix(baseColor, vec3(0.76, 0.16, 0.025), clamp(uMeltFraction, 0.0, 1.0) * 0.72);
     baseColor = mix(baseColor, vec3(0.56, 0.45, 0.31), clamp(uVaporFraction * 0.20, 0.0, 0.20));
     outColor = vec4(clamp(baseColor, 0.0, 1.0), 1.0);
 }`;
@@ -1519,6 +1537,7 @@ in float vElevationMeters;
 uniform vec3 uLightDirection;
 uniform float uSeaLevelMeters;
 uniform float uSurfaceTemperature;
+uniform float uMeltFraction;
 uniform float uLiquidFraction;
 uniform float uVaporFraction;
 uniform int uObjectMode;
@@ -1563,6 +1582,7 @@ void main() {
     float heat = smoothstep(315.0, 430.0, uSurfaceTemperature);
     if (vElevationMeters >= uSeaLevelMeters || uLiquidFraction <= 0.001) baseColor = mix(baseColor, vec3(0.48, 0.25, 0.11), heat * 0.76);
     baseColor = mix(baseColor, vec3(0.56, 0.45, 0.31), clamp(uVaporFraction * 0.22, 0.0, 0.22));
+    baseColor = mix(baseColor, vec3(0.76, 0.16, 0.025), clamp(uMeltFraction, 0.0, 1.0) * 0.72);
 
     vec3 color = baseColor * (0.18 + 0.82 * light);
     outColor = vec4(color, 1.0);

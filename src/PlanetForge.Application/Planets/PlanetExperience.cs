@@ -4,6 +4,7 @@ using PlanetForge.Application.Surface.Hydrology;
 using PlanetForge.Domain.Atmosphere;
 using PlanetForge.Domain.Climate;
 using PlanetForge.Domain.Hydrology;
+using PlanetForge.Domain.Origins;
 using PlanetForge.Domain.Physics;
 using PlanetForge.Domain.Planets;
 using PlanetForge.Domain.Surface;
@@ -63,6 +64,38 @@ public sealed class PlanetExperience(
     private LocalSurfaceCacheKey? cachedLocalSurfaceKey;
     private PlanetLocalSurfaceMesh? cachedLocalSurface;
     private ClimateFeedbackState? climateState;
+    private PlanetOriginEpochState? publishedEarthOrigin;
+
+    /// <summary>
+    /// Opt in one conserved Earth-origin epoch on the existing physical planet.
+    /// The currently playable climate experiment is untouched until enabled.
+    /// </summary>
+    public PlanetRenderSnapshot PublishEarthOrigin(PlanetOriginEpochState epoch)
+    {
+        ArgumentNullException.ThrowIfNull(epoch);
+        if (epoch.CoupledEnergy is null)
+        {
+            throw new InvalidOperationException("The main planet requires a coupled Earth-origin energy ledger.");
+        }
+
+        if (publishedEarthOrigin is not null && (epoch.Revision <= publishedEarthOrigin.Revision ||
+            epoch.Clock.YearsSinceSolarSystemFormation < publishedEarthOrigin.Clock.YearsSinceSolarSystemFormation))
+        {
+            throw new InvalidOperationException("The main planet only accepts a newer geological epoch.");
+        }
+
+        var previous = publishedEarthOrigin;
+        publishedEarthOrigin = epoch;
+        try
+        {
+            return CreateSnapshot();
+        }
+        catch
+        {
+            publishedEarthOrigin = previous;
+            throw;
+        }
+    }
 
     public PlanetRenderSnapshot CreateSnapshot() => CreateSnapshot(includeFullGlobalGeometry: false);
 
@@ -226,6 +259,7 @@ public sealed class PlanetExperience(
     public void SetSeed(int seed)
     {
         state.Reseed(seed);
+        publishedEarthOrigin = null;
         surfaceView = null;
         localAnchorDirection = null;
         cachedLocalSurfaceKey = null;
@@ -236,6 +270,7 @@ public sealed class PlanetExperience(
     public PlanetRenderSnapshot ResetEarthReference()
     {
         state.ResetEarthReference();
+        publishedEarthOrigin = null;
         climateState = null;
         return CreateSnapshot();
     }
@@ -255,6 +290,7 @@ public sealed class PlanetExperience(
     {
         ArgumentNullException.ThrowIfNull(restoredState);
         state.Reseed(restoredState.Seed);
+        publishedEarthOrigin = null;
         state.SetPhysicalParameters(restoredState.PhysicalParameters);
         state.SetAtmosphereParameters(restoredState.AtmosphereParameters);
         state.SetWaterParameters(restoredState.WaterParameters);
@@ -288,7 +324,7 @@ public sealed class PlanetExperience(
         // regional geology is published. A new atlas forces GPU water and rock
         // overlays to observe a different physical terrain generation.
         var terrainRevision = geologyRevision == 0 ? deformationRevision : HashCode.Combine(deformationRevision, geologyRevision);
-        return new PlanetRenderSnapshot(
+        var rendered = new PlanetRenderSnapshot(
             surfaceTiles,
             seaLevelMeters,
             atmosphereDensity,
@@ -303,6 +339,41 @@ public sealed class PlanetExperience(
             climateResult.Water,
             localSurface,
             terrainRevision);
+
+        return publishedEarthOrigin is null ? rendered : ProjectEarthOrigin(rendered, publishedEarthOrigin);
+    }
+
+    private PlanetRenderSnapshot ProjectEarthOrigin(PlanetRenderSnapshot rendered, PlanetOriginEpochState epoch)
+    {
+        var liquid = epoch.Water.GetMassKilograms(PlanetWaterReservoir.SurfaceLiquid);
+        var ice = epoch.Water.GetMassKilograms(PlanetWaterReservoir.SurfaceIce);
+        var vapor = epoch.Water.GetMassKilograms(PlanetWaterReservoir.AtmosphericVapor);
+        var accessibleWater = liquid + ice + vapor;
+        if (!double.IsFinite(accessibleWater))
+        {
+            throw new InvalidOperationException("The surface water projection requires finite H2O mass.");
+        }
+
+        var water = new WaterPhaseSnapshot(
+            ice, liquid, vapor,
+            accessibleWater > 0.0 ? ice / accessibleWater : 0.0,
+            accessibleWater > 0.0 ? liquid / accessibleWater : 0.0,
+            accessibleWater > 0.0 ? vapor / accessibleWater : 0.0,
+            rendered.Water.BoilingPointKelvin,
+            false); // Stability needs a pressure/EOS/phase proof, not the old Snowball model.
+        var temperatures = epoch.Temperatures!.Value;
+        var origin = new PlanetOriginRenderState(
+            epoch.Revision, epoch.Clock.YearsBeforePresent,
+            epoch.Rock.TemperatureKelvin, epoch.Rock.MeltFraction,
+            temperatures.AtmosphereTemperatureKelvin, temperatures.SurfaceRockTemperatureKelvin,
+            vapor, liquid, ice);
+
+        return rendered with
+        {
+            Water = water,
+            SeaLevelMeters = CalculateSeaLevelMeters(water),
+            Origin = origin
+        };
     }
 
     private IReadOnlyList<PlanetSurfaceTileMesh> CreateGlobalSurfaceTiles(bool fullGeometry, double radiusMeters)
