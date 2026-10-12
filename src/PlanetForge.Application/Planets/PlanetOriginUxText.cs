@@ -41,6 +41,11 @@ public static class PlanetOriginUxText
             return rock + " · STEAM PRESENT";
         }
 
+        if (origin.SurfaceIceMassKilograms > 0.0)
+        {
+            return rock + " · SURFACE ICE PRESENT";
+        }
+
         return rock + " · NO SURFACE WATER";
     }
 }
