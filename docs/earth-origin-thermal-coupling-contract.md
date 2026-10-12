@@ -63,6 +63,23 @@ credit, or lost across an external boundary, never both.
    orbital/local LOD describe the same world epoch. Preserve regional
    Hero archives and the canonical terrain publication gateway.
 
+## Epoch-ledger publication
+
+`PlanetOriginEpochState` wraps `PlanetOriginEnergyLedger`, so its published
+revision contains the same clock, interior timeline, environmental sensible
+stores, water inventory, relative phase enthalpy and radiative account. A
+successful `Advance` publishes one new immutable revision. `AdvanceSubsteps`
+accepts caller-supplied physical intervals and publishes them together as one
+revision; a failed or cancelled interval publishes none of them.
+
+Substep durations, fluxes and phase proposals are not inferred by the epoch
+state. The caller must recompute process inputs at each intermediate state.
+The current saturation component is an equilibrium diagnostic, not a process
+solver, so there is not yet an automatic saturation-crossing guard or a
+condensation timescale. The current epoch API also does not accept the former
+mass-only delivery/degassing/escape proposals: they must be restored only with
+explicit matter-energy transfer terms that preserve the global ledger.
+
 ## Integration sequence
 
 1. Calibrate effective dry atmospheric mass, H2O-vapour specific heat, liquid
@@ -71,14 +88,15 @@ credit, or lost across an external boundary, never both.
 2. Establish stellar luminosity/orbit history and outgoing-radiation boundary;
    constrain albedo, emissivity and the relationship between effective
    emission temperature and atmospheric/ocean/surface temperatures.
-3. Add an explicit **mass-and-energy-coupled** atmosphere/ocean exchange
-   (including sensible advection). Test phase reversibility, conservation,
-   mixed reservoirs, zero-mass stores and timestep subdivision.
+3. The ledger now carries mass, sensible and latent heat for the proposed
+   vapor/liquid/ice phase transitions, using a well-mixed effective-cp
+   approximation. Supply validated rates and test phase reversibility,
+   conservation, mixed reservoirs, zero-mass stores and substep convergence.
 4. Add pressure-dependent saturation/condensation kinetics, precipitation and
    ice mass/area consistency, then persistent oceans over canonical basins.
-5. Integrate coupled steps into `PlanetOriginEpochState`, under one
-   atomic epoch/revision transaction, with physically plausible Hadean
-   parameter ensembles and evidence bounds.
+5. Couple water delivery, mantle degassing and escape with explicit matter
+   enthalpy, then add physically plausible Hadean parameter ensembles and
+   evidence bounds. The epoch wrapper alone does not supply these process laws.
 6. Finally feed the resulting material states to the **existing** main
    planet, Hero region and LOD paths; visual molten-to-rock-to-water
    transitions must be outputs, never independent animation scripts.

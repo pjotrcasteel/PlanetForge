@@ -1,103 +1,84 @@
 namespace PlanetForge.Domain.Origins;
 
-public enum PlanetOriginWaterChangeKind
-{
-    ExternalDelivery = 0,
-    InternalTransfer = 1,
-    AtmosphericEscape = 2
-}
-
 /// <summary>
-/// A model-proposed transfer of existing H2O, explicit impact/accretion
-/// delivery, or vapour escaping to space. A proposal is not an automatic
-/// condensation or outgassing law: future calibrated physics determines it.
-/// </summary>
-public readonly record struct PlanetOriginWaterChange(
-    PlanetOriginWaterChangeKind Kind,
-    PlanetWaterReservoir Source,
-    PlanetWaterReservoir Destination,
-    double MassKilograms)
-{
-    public static PlanetOriginWaterChange Deliver(PlanetWaterReservoir destination, double massKilograms) =>
-        new(PlanetOriginWaterChangeKind.ExternalDelivery, default, destination, massKilograms);
-
-    public static PlanetOriginWaterChange Transfer(PlanetWaterReservoir source, PlanetWaterReservoir destination, double massKilograms) =>
-        new(PlanetOriginWaterChangeKind.InternalTransfer, source, destination, massKilograms);
-
-    public static PlanetOriginWaterChange EscapeAtmosphere(double massKilograms) =>
-        new(PlanetOriginWaterChangeKind.AtmosphericEscape, PlanetWaterReservoir.AtmosphericVapor, default, massKilograms);
-
-    internal PlanetWaterInventory Apply(PlanetWaterInventory inventory) => Kind switch
-    {
-        PlanetOriginWaterChangeKind.ExternalDelivery => inventory.Deliver(Destination, MassKilograms),
-        PlanetOriginWaterChangeKind.InternalTransfer => inventory.Transfer(Source, Destination, MassKilograms),
-        PlanetOriginWaterChangeKind.AtmosphericEscape => inventory.EscapeAtmosphericVapor(MassKilograms),
-        _ => throw new ArgumentOutOfRangeException(nameof(Kind), Kind, "Unknown Earth-origin water change.")
-    };
-}
-
-/// <summary>
-/// Inputs for one proposed physical epoch transition. The energy flux and
-/// water exchanges are inputs from separate calibrated process solvers;
-/// numerical iteration counts are never silently converted into years.
-/// </summary>
-public sealed record PlanetOriginEpochStep(
-    long ElapsedYears,
-    PlanetThermalEnergyFlux HeatFlux,
-    IReadOnlyList<PlanetOriginWaterChange> WaterChanges);
-
-/// <summary>
-/// One immutable publication candidate for Earth-origin thermal and volatile
-/// state. Atomically advances absolute geological age, internal energy and
-/// the existing mass-conserving H2O ledger. It changes neither Hero terrain
-/// nor the existing frozen-climate experiment until publication is integrated.
+/// One immutable publication candidate for Earth-origin state. A revision
+/// advances only when its complete interior, environment, water and radiation
+/// ledger advances successfully.
 /// </summary>
 public sealed class PlanetOriginEpochState
 {
-    public PlanetOriginEpochState(PlanetOriginThermalTimeline thermal, PlanetWaterInventory water)
-        : this(thermal, water, 0)
+    public PlanetOriginEpochState(PlanetOriginEnergyLedger energyLedger)
+        : this(energyLedger, 0)
     {
     }
 
-    private PlanetOriginEpochState(PlanetOriginThermalTimeline thermal, PlanetWaterInventory water, long revision)
+    private PlanetOriginEpochState(PlanetOriginEnergyLedger energyLedger, long revision)
     {
-        Thermal = thermal ?? throw new ArgumentNullException(nameof(thermal));
-        Water = water ?? throw new ArgumentNullException(nameof(water));
+        EnergyLedger = energyLedger ?? throw new ArgumentNullException(nameof(energyLedger));
         Revision = revision;
     }
 
-    public PlanetOriginThermalTimeline Thermal { get; }
+    public PlanetOriginEnergyLedger EnergyLedger { get; }
 
-    public PlanetWaterInventory Water { get; }
+    public PlanetOriginThermalTimeline Thermal => EnergyLedger.Interior;
+
+    public PlanetWaterEnvironmentalState Environment => EnergyLedger.Environment;
+
+    public PlanetWaterInventory Water => Environment.Water;
 
     public long Revision { get; }
 
-    public PlanetOriginClock Clock => Thermal.Clock;
+    public PlanetOriginClock Clock => EnergyLedger.Clock;
 
     public PlanetRockThermalState Rock => Thermal.Rock;
 
-    public double EnergyConservationResidualJoules => Thermal.EnergyBudget.ConservationResidualJoules;
+    public double EnergyConservationResidualJoules => EnergyLedger.ConservationResidualJoules;
 
     public double WaterConservationResidualKilograms => Water.ConservationResidualKilograms;
 
-    public PlanetOriginEpochState Advance(PlanetOriginEpochStep step, CancellationToken cancellationToken = default)
+    public PlanetOriginEpochState Advance(
+        PlanetOriginEnergyStep step,
+        CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(step);
-        ArgumentNullException.ThrowIfNull(step.WaterChanges);
-        cancellationToken.ThrowIfCancellationRequested();
+        return AdvanceSubsteps([step.ElapsedYears], (_, _, _) => step, cancellationToken);
+    }
 
-        // No partial publication: any failed flux, source inventory, epoch
-        // boundary or cancellation keeps the previous snapshot unchanged.
-        var nextThermal = Thermal.AdvanceYears(step.ElapsedYears, step.HeatFlux);
-        var nextWater = Water;
-
-        foreach (var change in step.WaterChanges)
+    /// <summary>
+    /// Evaluates and integrates solver-supplied substeps as one publication
+    /// revision. Each evaluator sees the previous candidate ledger and must
+    /// recompute its process inputs. This method does not infer saturation
+    /// thresholds or choose step sizes.
+    /// </summary>
+    public PlanetOriginEpochState AdvanceSubsteps(
+        IReadOnlyList<long> elapsedYearsBySubstep,
+        Func<PlanetOriginEnergyLedger, long, CancellationToken, PlanetOriginEnergyStep> evaluateStep,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(elapsedYearsBySubstep);
+        ArgumentNullException.ThrowIfNull(evaluateStep);
+        if (elapsedYearsBySubstep.Count == 0)
         {
-            cancellationToken.ThrowIfCancellationRequested();
-            nextWater = change.Apply(nextWater);
+            throw new ArgumentException("An epoch advance requires at least one physical step.", nameof(elapsedYearsBySubstep));
         }
 
         cancellationToken.ThrowIfCancellationRequested();
-        return new PlanetOriginEpochState(nextThermal, nextWater, checked(Revision + 1));
+        var nextEnergyLedger = EnergyLedger;
+        foreach (var elapsedYears in elapsedYearsBySubstep)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            ArgumentOutOfRangeException.ThrowIfNegative(elapsedYears);
+            var step = evaluateStep(nextEnergyLedger, elapsedYears, cancellationToken);
+            ArgumentNullException.ThrowIfNull(step);
+            if (step.ElapsedYears != elapsedYears)
+            {
+                throw new ArgumentException("The evaluated step duration must match its requested substep.", nameof(evaluateStep));
+            }
+
+            nextEnergyLedger = nextEnergyLedger.Advance(step, cancellationToken);
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
+        return new PlanetOriginEpochState(nextEnergyLedger, checked(Revision + 1));
     }
 }

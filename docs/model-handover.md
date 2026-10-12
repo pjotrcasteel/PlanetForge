@@ -1,6 +1,6 @@
 # PlanetForge — successor-developer handover
 
-**Verified snapshot:** 12 October 2026. **Repository:** https://github.com/pjotrcasteel/PlanetForge. **Live:** https://pjotrcasteel.github.io/PlanetForge/. **Main at handover:** `08aaff9c14325fc75ca39bfa4764455d22315584`. This is a dated snapshot: **re-query GitHub for current status before coding.**
+**Verified snapshot:** 12 October 2026. **Repository:** https://github.com/pjotrcasteel/PlanetForge. **Live:** https://pjotrcasteel.github.io/PlanetForge/. **Main at handover:** `8a18b66d8a462c717728d0882bb1db3e23d4dda5`. This is a dated snapshot: **re-query GitHub for current status before coding.**
 
 > **Mission:** An evidence-informed, deterministic reconstruction of **Earth's history from its formation and molten/magma-ocean conditions, through crust, water-bearing impacts and outgassing, atmospheric condensation, oceans, evolving geology and prebiotic conditions, stopping at the earliest *plausible* life**. A life-creation algorithm has *not* been scientifically established. The **live browser is still a separate artificial Snowball Climate Experiment**, not a playable Hadean Earth timeline. Do not conflate the two.
 
@@ -36,34 +36,31 @@
 | `PlanetEnvironmentalEnergyBudget` / `PlanetWaterEnvironmentalState` | Named atmosphere/ocean/near-surface sensible energy and relative phase enthalpy; not mantle energy |
 | `PlanetEnvironmentTemperatureModel` | Effective heat capacity = Σ(m×cp) and bulk diagnostic Kelvin; no greenhouse/lapse-rate model |
 | `PlanetRadiationBalanceModel` | Solar absorption at πR² and Stefan–Boltzmann emission at 4πR²; emission temperature is not automatically the ground T |
-| `PlanetOriginEpochState` | Immutable geological age + interior energy + water candidate; **not connected to live game, geography and climate yet** |
+| `PlanetOriginEpochState` | On `main`, advances interior energy and water; the in-progress branch integrates the global energy ledger under one revision. Neither is connected to live game, geography and climate yet. |
 
 Related: `PlanetCryosphereMassBudget` prevents making ice-covered area independent of frozen-water mass; physical ocean hypsometry and connected-area surveys are in Application and shared spherical domain geometry.
 
 **Past merged milestones:** #144 scientific scope; #145 scenario+clock; #146 interior heat; #147 water reservoirs; #149 rock latent melt; #150 thermal timeline; #151 saturation; #154 atomic epoch; #155 ice bound; #156 water-phase latent energy; #157 environmental stores; #158 heat capacity/temperatures; #159 radiation; plus the previously open thermal-coupling PRs #160/#161 and the atomic Earth-origin epoch world state integration now merged on `main`. Hydrology/ocean: #136–#142 and #152–#153. A **merged isolated model is not a completed coupled early-Earth simulator**.
 
-## OPEN PRs — verified 12 October 2026
+## PRs — verified 12 October 2026
 
-- Exactly **two** PRs remained open, both still draft/unmerged though the **full `Validate PlanetForge` workflow passed** for their specified head SHA. Review again before merging; successful past CI is not forever valid.
-
-- **[#160 — sensible heat carried by steam/liquid transfers](https://github.com/pjotrcasteel/PlanetForge/pull/160)**: head `adb1eb3e3dad73381ab97835c0e89824272b25bf`; successful run **38208102933**. Mass and sensible heat move together, with separately accounted latent heat. Supports only vapor/liquid; **ice's own thermal store not yet modeled**. Well-mixed effective-cp approximation, no precipitation kinetics.
-- **[#161 — radiative external-energy time integration](https://github.com/pjotrcasteel/PlanetForge/pull/161)**: head `2ad7f399163ea4799c62c4369cc936b15993f1b4`; successful run **38208298750**. Tracks stellar joules in, infrared joules out, named environmental emitting/absorbing stores, finite timesteps and rollback. **No calibrated early-Sun/atmospheric greenhouse/timeline**.
-
-**Immediate next-model task:** Re-fetch these exact PRs and CI, review source/test correctness, then mark ready and merge sequentially if still valid; check newer `main` deployments. Do *not* blindly merge older stale PRs.
+- No PRs are currently open. PRs #160 and #161 are merged; GitHub reports merge commits `54f5767` and `97fcae1`, respectively.
+- The current implementation branch is `feature/earth-origin-epoch-energy-ledger`, based on `main` at `8a18b66`. Its changes are unmerged and have only had the targeted domain test suite run so far.
 
 ### Merged PRs and follow-up
 
-- **[#160 — sensible heat carried by steam/liquid transfers](https://github.com/pjotrcasteel/PlanetForge/pull/160)**: merged into `main`. Mass and sensible heat move together, with separately accounted latent heat. Supports only vapor/liquid; **ice's own thermal store not yet modeled**. Well-mixed effective-cp approximation, no precipitation kinetics.
-- **[#161 — radiative external-energy time integration](https://github.com/pjotrcasteel/PlanetForge/pull/161)**: merged into `main`. Tracks stellar joules in, infrared joules out, named environmental emitting/absorbing stores, finite timesteps and rollback. **No calibrated early-Sun/atmospheric greenhouse/timeline**.
-- `PlanetOriginEpochState` (merged earlier as #154) atomically advances geological age, interior energy and conserved water inventory. It does not yet own environmental, radiative or latent-energy state.
+- **[#160 — sensible heat carried by steam/liquid transfers](https://github.com/pjotrcasteel/PlanetForge/pull/160)**: merged into `main`. Mass and sensible heat move together, with separately accounted latent heat; the well-mixed effective-cp approximation has no precipitation kinetics.
+- **[#161 — radiative external-energy time integration](https://github.com/pjotrcasteel/PlanetForge/pull/161)**: merged into `main`. Tracks stellar joules in, infrared joules out, named environmental emitting/absorbing stores, finite timesteps and rollback. There is no calibrated early-Sun/atmospheric greenhouse/timeline.
+- `PlanetOriginEpochState` (merged earlier as #154) originally advanced interior energy and conserved water independently.
 - **M1 (done): ice sensible-heat store.** `PlanetEnvironmentHeatReservoir.SurfaceIce` holds the sensible energy of frozen water; its diagnostic temperature uses ice mass × `IceSpecificHeatJoulesPerKilogramKelvin` (default 2,100 J/kg/K). `PlanetVaporLiquidSensibleTransport` was renamed `PlanetWaterPhaseSensibleTransport` and now covers melt, freeze, sublimation and deposition. `PlanetRadiativeEnvironmentState` no longer rebuilds the budget from three hard-coded stores (which would have silently dropped ice heat).
 
-**Next (M2):** one global energy ledger. Split `SurfaceHeatLossWatts` into interior→environment transfer (debit interior, credit environment) and direct loss to space, so interior + environment + latent + radiation close with one residual.
 - **M2 (done): `PlanetOriginEnergyLedger`.** One residual: `initial + impact + radiogenic + stellar − infrared − stored = 0`, where stored = interior + environmental sensible + relative latent. Interior heat reaches space only via the environment. Rejects heat into stores without matter, over-emission and cancellation without publishing. Fixed operator order per step (interior → radiation → phase changes).
 
-**Next (M3):** make `PlanetOriginEpochState` own the ledger (instead of only interior + water inventory) so one epoch revision covers clock, interior, environment, water and radiation; add substepping so a step cannot jump past saturation.
+**M3 (in progress on the branch above):** `PlanetOriginEpochState` now wraps the global energy ledger and publishes one revision across clock, interior, environment, water, phase enthalpy and radiation. Explicit solver-supplied substeps can be applied atomically as one revision. The state does **not** choose adaptive durations or detect saturation crossings: current saturation is only a pure-water equilibrium diagnostic, with no coupled pressure/temperature rate solver. The old mass-only `PlanetOriginWaterChange` epoch API was removed rather than silently bypassing the combined energy ledger; explicit delivery/outgassing/escape must be restored with well-defined material-energy transfers.
 
-**Immediate next-model task:** connect the new epoch/world-state primitives into the canonical Earth-origin scenario and then feed the coupled thermal, water and radiative state into the existing presentation path without replacing the preserved Hero terrain work.
+**M3 status (end of session):** local validation green — Domain 185/185, Application 125/125, Infrastructure 251/251 (Release; Domain needed `-p:NuGetAudit=false` because a private feed was unreachable for the NU1900 audit). The changes were left **uncommitted** on `feature/earth-origin-epoch-energy-ledger` because git staging/commit was denied in the non-interactive session. Resume: commit the four changed files (not `prompt/`), push, open PR to `main`, wait for the full Validate workflow including Playwright, merge.
+
+**Next model task:** complete M3 integration (commit/PR/CI/merge), then add a process-level step evaluator that can recompute fluxes from intermediate immutable ledger snapshots. Use it to implement saturation-aware bounded condensation only after the evaluator includes the relevant atmospheric composition, temperature and explicit phase enthalpy; do not treat an equilibrium diagnostic as kinetics. Keep Earth-origin state separate from the still-playable Snowball experiment.
 
 ## Hero-region/geology preservation — strict contract
 
@@ -97,11 +94,11 @@ npm test
 
 ## Recommended scientific next steps
 
-1. **Review/merge #160 and #161** after verifying latest head+CI and shared-energy compatibility. Keep their separate assumptions explicit.
-2. Design one conservation-tested coupled atmospheric/ocean/interior **enthalpy** formulation with explicit stellar/IR boundaries and mantle↔surface transfers, including water-mass sensible heat. Avoid large physical time steps that jump over changing saturation.
-3. Add composition- and pressure-constrained saturation/condensation, adaptive physical rates and mass+energy conservation through rainfall and ocean formation. Calibration needs sourced inputs; no implicit stage triggers.
+1. Complete and validate the epoch-owned global ledger integration; review any resulting PR and full CI before merge.
+2. Build an evaluator for atomic, solver-recomputed substeps, then couple saturation to an explicitly bounded atmosphere and phase enthalpy model. Add calibrated kinetics only with sourced assumptions; do not imply that substeps alone prevent crossing saturation.
+3. Restore explicit water delivery, mantle degassing and escape inside the unified epoch only with sensible/latent energy terms and a closed mass+energy ledger.
 4. Provide Hadean evidence-constrained initial conditions and uncertainty ensembles for accretion/impact heating, mantle heat/melt, volatile delivery and retention, young Sun, radiative boundary.
-5. Extend `PlanetOriginEpochState` to atomically own thermal, atmospheric, water, geology and hydrology state. Publish one canonical epoch consumed by Hero, orbital planet and local LOD; preserve old save schema and current climate experiment.
+5. Extend the canonical epoch to geology and hydrology only when they can publish atomically with the same state; preserve the existing Hero terrain work, old save schema and current climate experiment.
 6. Only after models justify it, show a genuinely evolving molten Earth → cooling crust → steam → rain → basin oceans → geological landscapes → *plausible* prebiotic/first-life conditions. Fix Snowball ice separately (#148). Avoid cosmetic tabs or scripted life.
 7. Later revisit Hero ridge realism (#162) and orbit-to-ground rivers/lakes/navigation (#163) on modern main, with mass conservation and iPhone visual validation.
 
@@ -109,6 +106,6 @@ npm test
 
 ## Copy-paste resume instruction
 
-> Continue `pjotrcasteel/PlanetForge` from GitHub's CURRENT `main`. Read this handover plus the science, thermal and Hero contracts. Check all open PRs and Actions runs; as of 2026-10-12, #160/#161 were CI-green but unmerged, and older #66/#81/#113/#134 were closed intentionally, their useful research preserved in #162/#163. The true product is a conserved, science-grounded Earth-origin timeline from molten formation to earliest plausible life; the live Snowball experiment is separate. Never rebuild Hero terrain, fake planet-wide geology or claim hidden physics is deployed. Implement narrow tested model steps; check global H2O/energy conservation; use existing canonical geography and LOD. Manage PRs, full CI and Pages validation, and request iPhone screenshots only for meaningful new deployed visuals.
+> Continue `pjotrcasteel/PlanetForge` from GitHub's current `main` and re-check live PRs and Actions. PRs #160/#161 are merged. The unmerged `feature/earth-origin-epoch-energy-ledger` branch wraps the global energy ledger in one immutable epoch revision and supports explicit atomic substeps; targeted domain tests passed, but full validation and review remain. Finish that milestone, then implement process-recomputed saturation substeps and correctly energy-coupled volatile delivery/degassing/escape. The true product is a conserved, science-grounded Earth-origin timeline from molten formation to earliest plausible life; the live Snowball experiment is separate. Never rebuild Hero terrain, fake planet-wide geology or claim hidden physics is deployed. Check global H2O/energy conservation; use existing canonical geography and LOD. Request iPhone screenshots only for meaningful new deployed visuals.
 
 **End of dated handover. Inspect GitHub live state before proceeding.**
