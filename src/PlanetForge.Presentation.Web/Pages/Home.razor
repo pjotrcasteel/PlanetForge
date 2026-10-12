@@ -21,9 +21,11 @@
         <div class="foundation-clock @(geologyActive ? "foundation-clock-geology" : "")" aria-live="polite">
             <strong>@FormatElapsedTime()</strong>
             <span>@FormatStageLabel()</span>
-            <small class="foundation-geology-preview" data-testid="planet-scenario-label" title="@CurrentScenarioName">@(snapshot?.Origin is not null ? PlanetOriginUxText.ScenarioLabel : geologyActive ? "EXPERIMENT / PHYSICAL TERRAIN" : "EXPERIMENT / CANONICAL TERRAIN")</small>
+            <small class="foundation-geology-preview" data-testid="planet-scenario-label" title="@CurrentScenarioName">@(airlessReferenceActive ? "AIRLESS ROCK · CONTROLLED THERMAL REFERENCE" : snapshot?.Origin is not null ? PlanetOriginUxText.ScenarioLabel : geologyActive ? "EXPERIMENT / PHYSICAL TERRAIN" : "EXPERIMENT / CANONICAL TERRAIN")</small>
             <div class="foundation-seed">
                 <small data-testid="planet-seed">SEED @CurrentSeed</small>
+                @if (!airlessReferenceActive)
+                {
                 <button class="foundation-generate" data-testid="geology-terrain-toggle" type="button"
                         aria-label="Toggle geological deformation in the main 3D planet"
                         aria-pressed="@(geologyActive ? "true" : "false")" disabled="@(isTransitioning || geologyLoading)"
@@ -33,6 +35,7 @@
                     <small data-testid="region-stream-status" aria-live="polite">@regionalStreamStatus</small>
                 }
                 <button class="foundation-generate" disabled="@(isTransitioning || geologyLoading)" aria-label="Generate new planet" @onclick="GeneratePlanetAsync">GENERATE</button>
+                }
             </div>
             @if (geologyActive && geologyTimeline is not null)
             {
@@ -66,13 +69,35 @@
                     </button>
                 </div>
             }
+            @if (airlessReferenceActive && snapshot?.Origin is { } thermal)
+            {
+                <div class="foundation-thermal-readout" data-testid="airless-reference-readout">
+                    <strong data-testid="airless-surface-temperature">SURFACE @($"{thermal.NearSurfaceRockTemperatureKelvin:0}") K</strong>
+                    <span data-testid="airless-mantle-temperature">INTERIOR @($"{thermal.BulkRockTemperatureKelvin:0}") K · MELT @($"{thermal.BulkRockMeltFraction:P1}")</span>
+                    <small data-testid="airless-elapsed">ELAPSED @TimeSpan.FromSeconds(airlessElapsedSeconds).ToString(@"hh\:mm") PHYSICAL TIME · REVISION @thermal.Revision</small>
+                    <small>UNIFORM ROCK-SURFACE REFERENCE · NO STEAM, OCEANS OR MODELED PRIMORDIAL CRUST</small>
+                    @if (!string.IsNullOrEmpty(airlessStatus))
+                    {
+                        <small role="status" data-testid="airless-status">@airlessStatus</small>
+                    }
+                </div>
+            }
             @if (!string.IsNullOrEmpty(geologyStatus))
             {
                 <small class="foundation-geology-status" role="status" data-testid="main-geology-status">@geologyStatus</small>
             }
         </div>
 
-        @if (!geologyActive && snapshot?.Origin is null)
+        @if (airlessReferenceActive)
+        {
+            <div class="foundation-controls foundation-thermal-controls">
+                <button class="foundation-next" data-testid="airless-advance" type="button"
+                        disabled="@airlessBusy" @onclick="AdvanceAirlessReferenceAsync">@(airlessBusy ? "INTEGRATING…" : "ADVANCE 1 HOUR")</button>
+                <button class="foundation-reference-reset" data-testid="airless-reset" type="button"
+                        disabled="@airlessBusy" @onclick="ResetAirlessReferenceAsync">RESET</button>
+            </div>
+        }
+        else if (!geologyActive && snapshot?.Origin is null)
         {
             <div class="foundation-controls">
                 <button class="foundation-next" disabled="@(isTransitioning || geologyLoading)" @onclick="AdvanceAsync">@FormatButtonLabel()</button>
@@ -110,10 +135,16 @@
     private IReadOnlyList<PlanetCrustEvolvingSnapshot>? geologyTimeline;
     private int geologyFrameIndex;
     private string geologyStatus = string.Empty;
+    private bool airlessReferenceActive;
+    private bool airlessBusy;
+    private int airlessElapsedSeconds;
+    private string airlessStatus = string.Empty;
     private double elapsedYears;
 
     private int CurrentSeed => run?.Mission.Planet.Seed ?? PlanetSeedCatalog.ShowcaseSeed;
-    private string CurrentScenarioName => snapshot?.Origin is not null ? PlanetScenarioCatalog.EarthOrigin.Name : PlanetScenarioCatalog.CurrentPlayable.Name;
+    private string CurrentScenarioName => airlessReferenceActive
+        ? "Airless radiative-conduction reference · not a calibrated early-Earth history"
+        : snapshot?.Origin is not null ? PlanetScenarioCatalog.EarthOrigin.Name : PlanetScenarioCatalog.CurrentPlayable.Name;
 
     protected override void OnInitialized()
     {
@@ -123,6 +154,15 @@
         ApplyRun(visualTestSeed.HasValue ? Run.StartNew(visualTestSeed.Value) : Run.StartNew());
         currentStage = FoundationStage.FrozenWorld;
         elapsedYears = 0.0;
+        // Opt-in main-globe science check, never the default or legacy mission.
+        // Only dry, airless physical rates are permitted by the process model.
+        airlessReferenceActive = new Uri(Navigation.Uri).Query.TrimStart('?')
+            .Split('&', StringSplitOptions.RemoveEmptyEntries)
+            .Contains("airlessReference=1", StringComparer.OrdinalIgnoreCase);
+        if (airlessReferenceActive)
+        {
+            snapshot = Experience.PublishOriginEpoch(PlanetAirlessCoolingReference.CreateInitial());
+        }
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -237,6 +277,63 @@
         }
 
         return null;
+    }
+
+    private async Task AdvanceAirlessReferenceAsync()
+    {
+        if (!airlessReferenceActive || airlessBusy) return;
+        airlessBusy = true;
+        airlessStatus = "INTEGRATING CONSERVED RADIATIVE AND CONDUCTIVE ENERGY…";
+        StateHasChanged();
+        await Task.Yield();
+
+        try
+        {
+            var next = PlanetAirlessCoolingReference.Advance(Experience, disposeCancellationTokenSource.Token);
+            snapshot = next;
+            await SyncPlanetAsync();
+            if (rendererModule is not null)
+            {
+                await rendererModule.InvokeVoidAsync("waitForVisibleTerrain", disposeCancellationTokenSource.Token);
+            }
+            airlessElapsedSeconds += PlanetAirlessCoolingReference.AdvanceSeconds;
+            airlessStatus = "ACCEPTED · RECOMPUTED FROM PHYSICAL HEAT STORES";
+        }
+        catch (Exception error) when (error is not OperationCanceledException)
+        {
+            airlessStatus = $"REFERENCE STEP FAILED: {error.Message}";
+        }
+        finally
+        {
+            airlessBusy = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task ResetAirlessReferenceAsync()
+    {
+        if (!airlessReferenceActive || airlessBusy) return;
+        airlessBusy = true;
+        StateHasChanged();
+        await Task.Yield();
+
+        try
+        {
+            Experience.ClearOriginEpoch();
+            snapshot = Experience.PublishOriginEpoch(PlanetAirlessCoolingReference.CreateInitial());
+            await SyncPlanetAsync();
+            airlessElapsedSeconds = 0;
+            airlessStatus = "RESET TO THE SAME CONSERVED INITIAL STATE";
+        }
+        catch (Exception error) when (error is not OperationCanceledException)
+        {
+            airlessStatus = $"REFERENCE RESET FAILED: {error.Message}";
+        }
+        finally
+        {
+            airlessBusy = false;
+            StateHasChanged();
+        }
     }
 
     private async Task GeneratePlanetAsync()
@@ -641,12 +738,14 @@
     }
 
     private string PlanetVisualClass()
-        => currentStage is FoundationStage.FrozenWorld or FoundationStage.MeltingWorld or FoundationStage.ActiveWaterCycle or FoundationStage.FirstLife or FoundationStage.MarineAnimals
+        => airlessReferenceActive ? "pre-vegetation-world" : currentStage is FoundationStage.FrozenWorld or FoundationStage.MeltingWorld or FoundationStage.ActiveWaterCycle or FoundationStage.FirstLife or FoundationStage.MarineAnimals
             ? "pre-vegetation-world"
             : string.Empty;
 
     private string FormatStageLabel()
     {
+        if (airlessReferenceActive && snapshot?.Origin is { } reference)
+            return PlanetOriginUxText.StateLabel(reference);
         if (snapshot?.Origin is { } origin) return PlanetOriginUxText.StateLabel(origin);
         var displayedStage = transitionStage ?? currentStage;
         return isTransitioning && transitionStage is not null
@@ -658,6 +757,7 @@
 
     private string FormatElapsedTime()
     {
+        if (airlessReferenceActive) return "HOT ROCK · AIRLESS REFERENCE";
         if (snapshot?.Origin is { } origin) return PlanetOriginUxText.GeologicalTime(origin);
         if (elapsedYears < 1_000.0)
         {
