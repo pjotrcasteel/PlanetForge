@@ -77,8 +77,19 @@ public sealed class PlanetThermalEnergyBudget
             throw new ArgumentOutOfRangeException(nameof(elapsedYears), "Elapsed years must be finite and nonnegative.");
         }
 
+        return AdvanceSeconds(elapsedYears * JulianYearSeconds, flux);
+    }
+
+    /// <summary>Integrates validated thermal power over an explicit physical second interval.</summary>
+    public PlanetThermalEnergyBudget AdvanceSeconds(double elapsedSeconds, PlanetThermalEnergyFlux flux)
+    {
+        if (!double.IsFinite(elapsedSeconds) || elapsedSeconds < 0.0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(elapsedSeconds), "Elapsed physical seconds must be finite and nonnegative.");
+        }
+
         flux.Validate();
-        var durationSeconds = elapsedYears * JulianYearSeconds;
+        var durationSeconds = elapsedSeconds;
         var impactJoules = flux.ImpactHeatingWatts * durationSeconds;
         var radiogenicJoules = flux.RadiogenicHeatingWatts * durationSeconds;
         var coolingJoules = flux.SurfaceHeatLossWatts * durationSeconds;
