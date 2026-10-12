@@ -39,7 +39,7 @@
                 <div class="foundation-geology-epochs" data-testid="main-geology-epochs" aria-label="Geological crust research timeline">
                     <button data-testid="main-geology-previous" aria-label="Older crust research epoch" type="button"
                             disabled="@(isTransitioning || geologyLoading || geologyFrameIndex == 0)"
-                            aria-busy="@(geologyLoadingDirection == -1)"
+                            aria-busy="@(geologyLoadingDirection == -1 ? "true" : "false")"
                             @onclick="() => SelectGeologyEpochAsync(-1)">
                         @if (geologyLoadingDirection == -1)
                         {
@@ -53,7 +53,7 @@
                     <strong data-testid="main-geology-epoch">@(geologyTimeline[geologyFrameIndex].Epoch.YearsBeforePresent / 1_000_000) Ma AGO</strong>
                     <button data-testid="main-geology-next" aria-label="Younger crust research epoch" type="button"
                             disabled="@(isTransitioning || geologyLoading || geologyFrameIndex == geologyTimeline.Count - 1)"
-                            aria-busy="@(geologyLoadingDirection == 1)"
+                            aria-busy="@(geologyLoadingDirection == 1 ? "true" : "false")"
                             @onclick="() => SelectGeologyEpochAsync(1)">
                         @if (geologyLoadingDirection == 1)
                         {
