@@ -168,3 +168,59 @@
 }
 
 .foundation-reference-reset:disabled { opacity: 0.60; }
+
+
+/* Keep the opt-in science HUD from swallowing the planet on narrow phones. */
+.foundation-clock.foundation-clock-thermal {
+    width: min(88vw, 370px);
+    box-sizing: border-box;
+    padding: 10px 12px;
+    gap: 3px;
+}
+
+.foundation-clock.foundation-clock-thermal > strong {
+    font-size: 0.83rem;
+    letter-spacing: 0.08em;
+    white-space: nowrap;
+}
+
+.foundation-clock.foundation-clock-thermal > span,
+.foundation-clock.foundation-clock-thermal > small {
+    white-space: normal;
+    text-align: center;
+    letter-spacing: 0.045em;
+}
+
+.foundation-clock.foundation-clock-thermal .foundation-thermal-readout {
+    width: 100%;
+    max-width: 100%;
+    gap: 3px;
+    padding-top: 5px;
+}
+
+.foundation-clock.foundation-clock-thermal .foundation-thermal-readout > small {
+    max-width: 100%;
+    line-height: 1.35;
+}
+
+.foundation-controls.foundation-thermal-controls {
+    display: flex;
+    flex-wrap: nowrap;
+    flex-direction: row;
+    justify-content: center;
+    align-items: center;
+    width: max-content;
+    max-width: 94vw;
+    gap: 8px;
+}
+
+.foundation-controls.foundation-thermal-controls .foundation-next {
+    min-width: 0;
+    min-height: 46px;
+    padding: 0 14px;
+}
+
+.foundation-controls.foundation-thermal-controls .foundation-reference-reset {
+    min-width: 65px;
+    flex-shrink: 0;
+}
