@@ -18,10 +18,10 @@
         <canvas id="planet-canvas" aria-label="Interactive simulated planet"></canvas>
         <canvas id="water-overlay-canvas" aria-hidden="true"></canvas>
 
-        <div class="foundation-clock @(geologyActive ? "foundation-clock-geology" : "")" aria-live="polite">
+        <div class="foundation-clock @(geologyActive ? "foundation-clock-geology" : airlessReferenceActive ? "foundation-clock-thermal" : "")" aria-live="polite">
             <strong>@FormatElapsedTime()</strong>
             <span>@FormatStageLabel()</span>
-            <small class="foundation-geology-preview" data-testid="planet-scenario-label" title="@CurrentScenarioName">@(airlessReferenceActive ? "AIRLESS ROCK · CONTROLLED THERMAL REFERENCE" : snapshot?.Origin is not null ? PlanetOriginUxText.ScenarioLabel : geologyActive ? "EXPERIMENT / PHYSICAL TERRAIN" : "EXPERIMENT / CANONICAL TERRAIN")</small>
+            <small class="foundation-geology-preview" data-testid="planet-scenario-label" title="@CurrentScenarioName">@(airlessReferenceActive ? "AIRLESS · ONE-ZONE PHYSICAL REFERENCE" : snapshot?.Origin is not null ? PlanetOriginUxText.ScenarioLabel : geologyActive ? "EXPERIMENT / PHYSICAL TERRAIN" : "EXPERIMENT / CANONICAL TERRAIN")</small>
             <div class="foundation-seed">
                 <small data-testid="planet-seed">SEED @CurrentSeed</small>
                 @if (!airlessReferenceActive)
@@ -74,8 +74,8 @@
                 <div class="foundation-thermal-readout" data-testid="airless-reference-readout">
                     <strong data-testid="airless-surface-temperature">SURFACE @($"{thermal.NearSurfaceRockTemperatureKelvin:0}") K</strong>
                     <span data-testid="airless-mantle-temperature">INTERIOR @($"{thermal.BulkRockTemperatureKelvin:0}") K · MELT @($"{thermal.BulkRockMeltFraction:P1}")</span>
-                    <small data-testid="airless-elapsed">ELAPSED @TimeSpan.FromSeconds(airlessElapsedSeconds).ToString(@"hh\:mm") PHYSICAL TIME · REVISION @thermal.Revision</small>
-                    <small>UNIFORM ROCK-SURFACE REFERENCE · NO STEAM, OCEANS OR MODELED PRIMORDIAL CRUST</small>
+                    <small data-testid="airless-elapsed">@TimeSpan.FromSeconds(airlessElapsedSeconds).ToString(@"hh\:mm") ELAPSED · REV @thermal.Revision</small>
+                    <small>REFERENCE TERRAIN · NO PRIMORDIAL CRUST</small>
                     @if (!string.IsNullOrEmpty(airlessStatus))
                     {
                         <small role="status" data-testid="airless-status">@airlessStatus</small>
@@ -287,7 +287,7 @@
     {
         if (!airlessReferenceActive || airlessBusy) return;
         airlessBusy = true;
-        airlessStatus = "INTEGRATING CONSERVED RADIATIVE AND CONDUCTIVE ENERGY…";
+        airlessStatus = "INTEGRATING HEAT TRANSFER…";
         StateHasChanged();
         await Task.Yield();
 
@@ -301,7 +301,7 @@
                 await rendererModule.InvokeVoidAsync("waitForVisibleTerrain", disposeCancellationTokenSource.Token);
             }
             airlessElapsedSeconds += PlanetAirlessCoolingReference.AdvanceSeconds;
-            airlessStatus = "ACCEPTED · RECOMPUTED FROM PHYSICAL HEAT STORES";
+            airlessStatus = "ACCEPTED · CONSERVATIVE HEAT STEP";
         }
         catch (Exception error) when (error is not OperationCanceledException)
         {
@@ -327,7 +327,7 @@
             snapshot = Experience.PublishOriginEpoch(PlanetAirlessCoolingReference.CreateInitial());
             await SyncPlanetAsync();
             airlessElapsedSeconds = 0;
-            airlessStatus = "RESET TO THE SAME CONSERVED INITIAL STATE";
+            airlessStatus = "RESET · ORIGINAL ENERGY RESTORED";
         }
         catch (Exception error) when (error is not OperationCanceledException)
         {
@@ -749,7 +749,7 @@
     private string FormatStageLabel()
     {
         if (airlessReferenceActive && snapshot?.Origin is { } reference)
-            return PlanetOriginUxText.StateLabel(reference);
+            return reference.BulkRockMeltFraction > 0.0 ? "PARTLY MOLTEN INTERIOR" : "SOLID INTERIOR · BULK MODEL";
         if (snapshot?.Origin is { } origin) return PlanetOriginUxText.StateLabel(origin);
         var displayedStage = transitionStage ?? currentStage;
         return isTransitioning && transitionStage is not null
@@ -761,7 +761,7 @@
 
     private string FormatElapsedTime()
     {
-        if (airlessReferenceActive) return "HOT ROCK · AIRLESS REFERENCE";
+        if (airlessReferenceActive) return "THERMAL REFERENCE";
         if (snapshot?.Origin is { } origin) return PlanetOriginUxText.GeologicalTime(origin);
         if (elapsedYears < 1_000.0)
         {
