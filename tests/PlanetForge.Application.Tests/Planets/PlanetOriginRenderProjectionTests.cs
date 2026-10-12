@@ -68,8 +68,8 @@ public sealed class PlanetOriginRenderProjectionTests
             .AdvanceCoupled(NoFluxStep(1)).AdvanceCoupled(NoFluxStep(1));
         var committed = experience.PublishEarthOrigin(later);
 
-        Assert.IsGreaterThan(later.Revision, initial.Revision);
-        Assert.IsGreaterThan(staleBranch.Revision, later.Revision);
+        Assert.AreEqual(2L, later.Revision);
+        Assert.AreEqual(3L, staleBranch.Revision);
         Assert.ThrowsExactly<InvalidOperationException>(() => experience.PublishEarthOrigin(staleBranch));
         Assert.AreEqual(committed.Origin, experience.CreateSnapshot().Origin);
     }
