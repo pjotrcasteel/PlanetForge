@@ -67,6 +67,34 @@ public sealed class PlanetSurfaceLodSelectorTests
     }
 
     [TestMethod]
+    public void Select_NearLocalTransition_RefinesCentralGeologyWithinSameTileBudget()
+    {
+        var selector = new PlanetSurfaceLodSelector(PlanetSurfaceLodOptions.Default);
+        var view = new PlanetSurfaceView(PlanetVector.UnitZ, 1.0045, 844, Math.PI / 4.2);
+
+        var tiles = selector.Select(view);
+
+        Assert.IsTrue(tiles.Any(tile => tile.Level == 7),
+            "Very near orbital views should resolve subregional bedrock before handing off to local patches.");
+        Assert.IsLessThanOrEqualTo(56, tiles.Count);
+        Assert.IsTrue(tiles.All(tile => tile.Level <= PlanetSurfaceLodOptions.Default.MaxLevel));
+        Assert.IsTrue(tiles.Any(tile => tile.Face == CubeFace.NegativeZ && tile.Level == 0),
+            "Far-side coarse tiles must remain present without creating a second planet.");
+    }
+
+    [TestMethod]
+    public void Select_MidOrbitAndFarOrbit_DoNotSpendBudgetOnUnseenLocalDetail()
+    {
+        var selector = new PlanetSurfaceLodSelector(PlanetSurfaceLodOptions.Default);
+        var middle = selector.Select(new PlanetSurfaceView(PlanetVector.UnitZ, 1.03, 844, Math.PI / 4.2));
+        var far = selector.Select(new PlanetSurfaceView(PlanetVector.UnitZ, 2.0, 844, Math.PI / 4.2));
+
+        Assert.IsTrue(middle.All(tile => tile.Level <= 5));
+        Assert.IsTrue(far.All(tile => tile.Level == 1));
+        Assert.AreEqual(24, far.Count);
+    }
+
+    [TestMethod]
     public void Select_CameraInsidePlanet_Throws()
     {
         var selector = new PlanetSurfaceLodSelector(PlanetSurfaceLodOptions.Default);
