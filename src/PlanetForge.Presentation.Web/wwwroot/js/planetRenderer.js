@@ -63,6 +63,23 @@ export function getPlanetCameraSnapshot() {
 
 export function setPlanet(snapshot) {
     if (!state) return;
+
+    // A new geological revision invalidates every cached GPU buffer. Verify
+    // replacement vertices are present BEFORE clearing the visible previous
+    // terrain; delta-only payloads are legal only for an unchanged revision.
+    const incomingKey = `${snapshot.seed}:${snapshot.physicalParameters.radiusMeters}:${snapshot.terrainRevision ?? 0}`;
+    if (state.geometryKey !== incomingKey) {
+        const local = snapshot.localSurface;
+        if (local) {
+            if (!local.positionsMeters?.length || !local.normals?.length || !local.elevationsMeters?.length) {
+                throw new Error('PlanetForge new geological epoch has no complete local terrain mesh.');
+            }
+        } else if (!snapshot.surfaceTiles?.length ||
+            snapshot.surfaceTiles.some(tile => !tile.positions?.length || !tile.normals?.length)) {
+            throw new Error('PlanetForge new geological epoch has missing orbital terrain geometry.');
+        }
+    }
+
     state.dirty = true;
     state.seed = snapshot.seed;
     state.seaLevelMeters = state.generatorPreview ? 0.0 : snapshot.seaLevelMeters;
@@ -116,6 +133,62 @@ export function setPlanet(snapshot) {
         activateSurfaceTiles(state, snapshot.surfaceTiles);
     }
     updateTerrainDetailHud(state);
+}
+
+// A Blazor JS interop acknowledgement proves only that buffers were sent,
+// not that a new geological epoch has reached Safari's active WebGL canvas.
+// Keep the selected epoch loading until the correct globe/local surface is
+// visibly present. Center and adjacent samples avoid treating a transparent
+// empty framebuffer as a successful GPU update (gl.getError can still be 0).
+export async function waitForVisibleTerrain() {
+    const s = state;
+    if (!s || !s.gl || s.gl.isContextLost()) {
+        throw new Error('The WebGL renderer is unavailable.');
+    }
+
+    const expectedKey = s.geometryKey;
+    const startedAt = performance.now();
+    let retriedSurfaceUpdate = false;
+    const pixel = new Uint8Array(4);
+
+    while (performance.now() - startedAt < 15_000) {
+        if (state !== s || s.geometryKey !== expectedKey) {
+            throw new Error('The planet changed while waiting for geological terrain.');
+        }
+        if (s.gl.isContextLost()) {
+            throw new Error('The WebGL context was lost while loading geological terrain.');
+        }
+
+        const hasGeometry = s.renderMode === 'local'
+            ? s.localSurface !== null && s.localSurface.vertexCount > 0
+            : s.tiles.length > 0;
+        if (hasGeometry && s.canvas.width > 0 && s.canvas.height > 0) {
+            renderCurrentView(s);
+            const gl = s.gl;
+            const w = s.canvas.width;
+            const h = s.canvas.height;
+            let visible = false;
+            for (const [u, v] of [[0.5, 0.5], [0.35, 0.5], [0.65, 0.5], [0.5, 0.35], [0.5, 0.65]]) {
+                gl.readPixels(Math.floor(w * u), Math.floor(h * v), 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixel);
+                visible ||= pixel[3] > 24;
+            }
+
+            if (visible && gl.getError() === gl.NO_ERROR) {
+                s.dirty = false;
+                return;
+            }
+        }
+
+        if (!retriedSurfaceUpdate && performance.now() - startedAt > 350 &&
+            !s.surfaceRequestInFlight && s.dotNetReference) {
+            scheduleSurfaceUpdate(s, 0);
+            retriedSurfaceUpdate = true;
+        }
+
+        await new Promise(resolve => setTimeout(resolve, 80));
+    }
+
+    throw new Error('No visible terrain frame was rendered for the selected geological epoch.');
 }
 
 export function dispose() {
