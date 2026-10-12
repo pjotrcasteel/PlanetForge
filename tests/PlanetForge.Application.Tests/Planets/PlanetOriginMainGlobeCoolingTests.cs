@@ -1,4 +1,5 @@
 using PlanetForge.Application.Planets;
+using PlanetForge.Application.Rendering;
 using PlanetForge.Application.Surface;
 using PlanetForge.Application.Surface.Hydrology;
 using PlanetForge.Domain.Origins;
