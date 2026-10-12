@@ -32,6 +32,7 @@ public sealed class PlanetOriginCanonicalSurfaceTests
         Assert.AreEqual(2.0e18 / exposed, projection.SurfaceWaterLiquidFraction, 1e-12);
         Assert.AreEqual(5.0e16 / exposed, projection.SurfaceWaterVaporFraction, 1e-12);
         Assert.AreEqual(1.0e17 / exposed, projection.SurfaceWaterIceFraction, 1e-12);
+        Assert.AreEqual(5.0e16 / (1.0e17 + 5.0e16), projection.AtmosphericSteamMassFraction, 1e-12);
         Assert.AreEqual(GravityMetersPerSecondSquared * (1.0e17 + 5.0e16) /
             (4.0 * Math.PI * EarthRadiusMeters * EarthRadiusMeters), projection.SurfacePressurePascals, 1e-10);
         Assert.AreEqual(3.0e20, epoch.Water.GetMassKilograms(PlanetWaterReservoir.DissolvedInMagma), 0.0);
