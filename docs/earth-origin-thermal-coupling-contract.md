@@ -131,6 +131,58 @@ proposal integrator that brackets changing saturation and energy budgets
 without crossing a threshold. Only later publish the coupled Earth-origin
 state into the canonical planetary terrain/water presentation path.
 
+## M4b — Explicit volatile matter and enthalpy exchange
+
+`PlanetOriginEnergyStep.VolatileChanges` may now carry **explicit** volatile
+material transactions in the coupled epoch ledger:
+
+- External hydrated-mantle/magma H2O delivery credits the existing interior
+  energy reservoir with the packet's separately documented material
+  enthalpy; optional direct external steam delivery credits atmospheric
+  sensible energy. The source is an **accretion/delivery event**, not
+  degassing-produced water.
+- Hydrated mantle H2O may be reclassified into dissolved magma H2O within
+  the same interior accounting reservoir. This is bookkeeping for an
+  externally selected mineral/magma process, **not** a claim that dissolution
+  or dehydration has zero reaction enthalpy; those reactions need an
+  explicitly calibrated chemical/material-enthalpy model.
+- Magma→steam outgassing debits **existing** magma-dissolved H2O mass and
+  an explicit positive enthalpy packet from the interior, and credits the
+  identical joules and water to the atmosphere. Heat is not added as an
+  invented second geothermal source.
+- Atmospheric escape debits existing vapor mass and its well-mixed bulk
+  sensible energy, proportional to the vapor's actual effective heat capacity
+  in the donor atmosphere; both cumulative lost mass and escaped material
+  energy are recorded externally, separately from infrared emission.
+
+Interior heat conservation now includes incoming and exported material
+enthalpy. The **planet-wide** ledger adds externally delivered material
+energy and subtracts material escape energy in the same residual as
+impact/radiogenic/stellar gains and infrared losses. Transactions are
+immutable proposals and all-or-nothing at the single coupled geological
+epoch publication boundary; tests cover chained accretion→outgassing→
+escape→condensation, cooling, zero-matter stores, overdraw and cancellation.
+
+**Important scientific boundary:** the carried enthalpy here uses the
+existing effective nonnegative sensible-energy reference, with relative
+water-phase latent enthalpy still handled by the existing phase model.
+It is **not** a calibrated absolute thermodynamic/chemical enthalpy of
+hydrous minerals, magma solubility, impact fragmentation, high-pressure
+supercritical steam, gas species or photochemical escape. In particular,
+the fixed rock enthalpy model does not yet vary its heat capacity with
+hydrous mineral/volatile inventory. Gas pressure, equilibrium chemistry,
+reaction enthalpy and energy-consuming escape mechanisms must be provided
+before automatic rates or Hadean conditions are allowed. If a process
+also heats material through the impact source, it must not count that
+same heating a second time as delivered material enthalpy.
+
+Operator order for a supplied physical interval is now **interior
+sources/export → material exchanges → external radiation → phase changes**.
+The caller must recompute process rates and radiation for each appropriate
+substep; this model does not detect saturation crossing, choose precipitation
+or publish a visually advancing Earth. The existing Hero/LOD and frozen
+climate experiment remain untouched.
+
 ## Integration sequence
 
 1. Calibrate effective dry atmospheric mass, H2O-vapour specific heat, liquid
