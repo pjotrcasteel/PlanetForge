@@ -27,6 +27,24 @@ public sealed class PlanetRadiativeEnvironmentStateTests
     }
 
     [TestMethod]
+    public void Advance_IceStoreEnergy_IsPreservedOrRadiatedButNeverDropped()
+    {
+        var initial = new PlanetRadiativeEnvironmentState(
+            new PlanetEnvironmentalEnergyBudget(1_000.0, 200.0, 500.0, 300.0));
+        var boundary = ConstantBoundary(absorbedWatts: 10.0, emittedWatts: 20.0);
+
+        var unrelated = initial.Advance(boundary, 5.0,
+            PlanetEnvironmentHeatReservoir.SurfaceRock, PlanetEnvironmentHeatReservoir.Atmosphere);
+        var iceEmits = initial.Advance(boundary, 5.0,
+            PlanetEnvironmentHeatReservoir.SurfaceIce, PlanetEnvironmentHeatReservoir.SurfaceIce);
+
+        Assert.AreEqual(300.0, unrelated.Environment.GetEnergyJoules(PlanetEnvironmentHeatReservoir.SurfaceIce), 0.0);
+        Assert.AreEqual(0.0, unrelated.ConservationResidualJoules, 0.0);
+        Assert.AreEqual(250.0, iceEmits.Environment.GetEnergyJoules(PlanetEnvironmentHeatReservoir.SurfaceIce), 0.0);
+        Assert.AreEqual(0.0, iceEmits.ConservationResidualJoules, 0.0);
+    }
+
+    [TestMethod]
     public void Advance_OneIntervalAndTwoHalfIntervals_AgreeForConstantBoundary()
     {
         var boundary = ConstantBoundary(absorbedWatts: 15.0, emittedWatts: 10.0);

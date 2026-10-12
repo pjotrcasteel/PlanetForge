@@ -54,8 +54,9 @@ public sealed class PlanetRadiativeEnvironmentState
             throw new ArgumentOutOfRangeException(nameof(elapsedSeconds), "Radiative duration must be finite and nonnegative.");
         }
 
-        var sourceEnergy = Environment.GetEnergyJoules(infraredEmissionReservoir);
-        var receiverEnergy = Environment.GetEnergyJoules(stellarAbsorptionReservoir);
+        // Validate both reservoirs before any arithmetic.
+        Environment.GetEnergyJoules(infraredEmissionReservoir);
+        Environment.GetEnergyJoules(stellarAbsorptionReservoir);
         RequirePower(boundary.AbsorbedStellarPowerWatts, nameof(boundary.AbsorbedStellarPowerWatts));
         RequirePower(boundary.EmittedThermalPowerWatts, nameof(boundary.EmittedThermalPowerWatts));
 
@@ -69,36 +70,8 @@ public sealed class PlanetRadiativeEnvironmentState
         RequirePower(nextAbsorbed, nameof(nextAbsorbed));
         RequirePower(nextEmitted, nameof(nextEmitted));
 
-        double atmosphere = Environment.GetEnergyJoules(PlanetEnvironmentHeatReservoir.Atmosphere);
-        double ocean = Environment.GetEnergyJoules(PlanetEnvironmentHeatReservoir.SurfaceOcean);
-        double rock = Environment.GetEnergyJoules(PlanetEnvironmentHeatReservoir.SurfaceRock);
-
-        var emittingEnergy = sourceEnergy +
-            (stellarAbsorptionReservoir == infraredEmissionReservoir ? incoming : 0.0) - outgoing;
-        if (!double.IsFinite(emittingEnergy) || emittingEnergy < 0.0)
-        {
-            throw new InvalidOperationException("Radiative heat loss exceeds the energy of the explicitly selected emitting reservoir.");
-        }
-
-        var absorbingEnergy = receiverEnergy + incoming -
-            (stellarAbsorptionReservoir == infraredEmissionReservoir ? outgoing : 0.0);
-        if (!double.IsFinite(absorbingEnergy) || absorbingEnergy < 0.0)
-        {
-            throw new InvalidOperationException("Radiative energy deposition must remain finite and nonnegative.");
-        }
-
-        if (stellarAbsorptionReservoir == PlanetEnvironmentHeatReservoir.Atmosphere) atmosphere = absorbingEnergy;
-        if (stellarAbsorptionReservoir == PlanetEnvironmentHeatReservoir.SurfaceOcean) ocean = absorbingEnergy;
-        if (stellarAbsorptionReservoir == PlanetEnvironmentHeatReservoir.SurfaceRock) rock = absorbingEnergy;
-
-        if (infraredEmissionReservoir != stellarAbsorptionReservoir)
-        {
-            if (infraredEmissionReservoir == PlanetEnvironmentHeatReservoir.Atmosphere) atmosphere = emittingEnergy;
-            if (infraredEmissionReservoir == PlanetEnvironmentHeatReservoir.SurfaceOcean) ocean = emittingEnergy;
-            if (infraredEmissionReservoir == PlanetEnvironmentHeatReservoir.SurfaceRock) rock = emittingEnergy;
-        }
-
-        var next = new PlanetEnvironmentalEnergyBudget(atmosphere, ocean, rock);
+        var next = Environment.ApplyExternalRadiation(
+            stellarAbsorptionReservoir, incoming, infraredEmissionReservoir, outgoing);
         cancellationToken.ThrowIfCancellationRequested();
         return new PlanetRadiativeEnvironmentState(next, InitialEnergyJoules, nextAbsorbed, nextEmitted);
     }
