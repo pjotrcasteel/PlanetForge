@@ -343,3 +343,38 @@
     font: 800 0.67rem ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
     letter-spacing: 0.05em;
 }
+
+
+/* The geology timeline is a main-planet inspection mode, not another
+   Snowball year counter. Keep the exact planet and touch controls visible
+   while allowing substantially more of the globe to remain unobstructed. */
+.foundation-clock.foundation-clock-geology > strong,
+.foundation-clock.foundation-clock-geology > span,
+.foundation-clock.foundation-clock-geology > .foundation-geology-preview,
+.foundation-clock.foundation-clock-geology .foundation-seed > small,
+.foundation-clock.foundation-clock-geology .foundation-seed > button[aria-label="Generate new planet"] {
+    display: none;
+}
+
+.foundation-clock.foundation-clock-geology {
+    min-width: 220px;
+    max-width: calc(100vw - 24px);
+    gap: 3px;
+    padding: 8px 12px;
+}
+
+.foundation-clock.foundation-clock-geology .foundation-seed {
+    margin: 0;
+    padding: 0;
+    border: 0;
+}
+
+.foundation-clock.foundation-clock-geology .foundation-geology-epochs {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+.foundation-clock.foundation-clock-geology .foundation-geology-status {
+    max-width: min(72vw, 300px);
+    line-height: 1.25;
+}

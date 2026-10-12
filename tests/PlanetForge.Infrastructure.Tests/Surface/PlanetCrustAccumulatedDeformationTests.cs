@@ -61,6 +61,40 @@ public sealed class PlanetCrustAccumulatedDeformationTests
     }
 
     [TestMethod]
+    [DataRow(24061984)]
+    [DataRow(346147916)]
+    public void Simulate_SixMillionYearResearchEpochs_ConserveMassAndProduceBoundedCrustElevation(int seed)
+    {
+        var catalog = PlanetCrustParcelCatalog.Create(seed);
+        var history = PlanetCrustOwnershipHistory.Create(catalog);
+        var timeline = new PlanetCrustAccumulatedDeformation().Simulate(catalog, history,
+            PlanetCrustAccumulatedDeformation.MaximumResearchSteps);
+
+        Assert.AreEqual(7, timeline.Count);
+        var originalBudget = timeline[0].TotalMaterialBudgetKilograms;
+        var changed = false;
+        for (var index = 0; index < timeline.Count; index++)
+        {
+            var snapshot = timeline[index];
+            Assert.AreEqual((6 - index) * 1_000_000L, snapshot.Epoch.YearsBeforePresent);
+            Assert.AreEqual(catalog.World, snapshot.World);
+            Assert.AreEqual(originalBudget, snapshot.TotalMaterialBudgetKilograms, originalBudget * 1e-12);
+            Assert.IsTrue(double.IsFinite(snapshot.MaximumAbsoluteSurfaceDisplacementMeters));
+            Assert.IsLessThanOrEqualTo(0.30 + 1e-12,
+                snapshot.Columns.Max(column => Math.Abs(column.AccumulatedLogAreaStrain)));
+            Assert.IsLessThan(1e-6,
+                snapshot.Columns.Max(column => Math.Abs(column.PressureBalanceResidualKilogramsPerSquareMeter)));
+            if (index > 0 && snapshot.MaximumAbsoluteSurfaceDisplacementMeters > 1e-8)
+            {
+                changed = true;
+            }
+        }
+
+        Assert.IsTrue(changed, "The bounded six-million-year chronology should physically evolve the crust.");
+        Assert.AreEqual(0, history.Transfers.Count, "Research comparison must not mutate the source ownership history.");
+    }
+
+    [TestMethod]
     public void Simulate_RepeatedSeedTimeline_IsDeterministicWithoutMutatingInputs()
     {
         var catalog = PlanetCrustParcelCatalog.Create(24061984);
