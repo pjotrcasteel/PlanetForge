@@ -82,6 +82,30 @@ public sealed class PlanetVaporLiquidSensibleTransportTests
     }
 
     [TestMethod]
+    public void Apply_EvaporatingLastOceanWater_TransfersEverySensibleJouleToSteam()
+    {
+        var parameters = Parameters with { NoncondensableAtmosphereMassKilograms = 0.0 };
+        var water = PlanetWaterInventory.Empty.Deliver(PlanetWaterReservoir.SurfaceLiquid, 5.0);
+        var before = new PlanetWaterEnvironmentalState(water,
+            new PlanetEnvironmentalEnergyBudget(0.0, 6.0e6, 30.0e6));
+
+        var after = PlanetVaporLiquidSensibleTransport.Apply(before, parameters,
+        [
+            new(new PlanetWaterPhaseTransition(PlanetWaterPhaseTransitionKind.Evaporate, 5.0, 2.0e6),
+                PlanetEnvironmentHeatReservoir.SurfaceRock)
+        ]);
+        var temperatures = PlanetEnvironmentTemperatureModel.Resolve(after, parameters);
+
+        Assert.IsNull(temperatures.OceanTemperatureKelvin);
+        Assert.AreEqual(0.0, after.Environment.GetEnergyJoules(PlanetEnvironmentHeatReservoir.SurfaceOcean), 0.0);
+        Assert.AreEqual(6.0e6, after.Environment.GetEnergyJoules(PlanetEnvironmentHeatReservoir.Atmosphere), 0.0);
+        Assert.AreEqual(20.0e6, after.Environment.GetEnergyJoules(PlanetEnvironmentHeatReservoir.SurfaceRock), 0.0);
+        Assert.AreEqual(10.0e6, after.RelativeLatentEnergyJoules, 0.0);
+        Assert.AreEqual(0.0, after.EnergyConservationResidualJoules, 0.0);
+        Assert.AreEqual(5.0, after.Water.GetMassKilograms(PlanetWaterReservoir.AtmosphericVapor), 0.0);
+    }
+
+    [TestMethod]
     public void Apply_InsufficientEnergyForEvaporation_RollsBackWaterAndHeatTogether()
     {
         var water = PlanetWaterInventory.Empty.Deliver(PlanetWaterReservoir.SurfaceLiquid, 100.0);
