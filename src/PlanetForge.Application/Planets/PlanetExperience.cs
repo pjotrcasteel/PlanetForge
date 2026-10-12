@@ -79,7 +79,9 @@ public sealed class PlanetExperience(
         }
 
         if (publishedEarthOrigin is not null && (epoch.Revision <= publishedEarthOrigin.Revision ||
-            epoch.Clock.YearsSinceSolarSystemFormation < publishedEarthOrigin.Clock.YearsSinceSolarSystemFormation))
+            epoch.Clock.YearsSinceSolarSystemFormation < publishedEarthOrigin.Clock.YearsSinceSolarSystemFormation ||
+            (epoch.Clock.YearsSinceSolarSystemFormation == publishedEarthOrigin.Clock.YearsSinceSolarSystemFormation &&
+                epoch.Clock.MicrosecondsIntoYear <= publishedEarthOrigin.Clock.MicrosecondsIntoYear)))
         {
             throw new InvalidOperationException("The main planet only accepts a newer geological epoch.");
         }

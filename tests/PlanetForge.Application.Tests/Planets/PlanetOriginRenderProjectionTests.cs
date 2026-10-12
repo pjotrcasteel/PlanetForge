@@ -58,6 +58,30 @@ public sealed class PlanetOriginRenderProjectionTests
         Assert.IsNull(experience.CreateSnapshot().Origin, "A new planet seed must not inherit the old world's magma.");
     }
 
+    [TestMethod]
+    public void PublishEarthOrigin_HigherRevisionButEarlierPhysicalClock_RejectsBranchRollback()
+    {
+        var experience = CreateExperience();
+        var initial = World(0.0);
+        var later = initial.AdvanceCoupled(NoFluxStep(10)).AdvanceCoupled(NoFluxStep(10));
+        var staleBranch = initial.AdvanceCoupled(NoFluxStep(1))
+            .AdvanceCoupled(NoFluxStep(1)).AdvanceCoupled(NoFluxStep(1));
+        var committed = experience.PublishEarthOrigin(later);
+
+        Assert.IsGreaterThan(later.Revision, initial.Revision);
+        Assert.IsGreaterThan(staleBranch.Revision, later.Revision);
+        Assert.ThrowsExactly<InvalidOperationException>(() => experience.PublishEarthOrigin(staleBranch));
+        Assert.AreEqual(committed.Origin, experience.CreateSnapshot().Origin);
+    }
+
+    private static PlanetOriginEnergyStep NoFluxStep(double seconds) => new(
+        PlanetOriginDuration.FromSeconds(seconds), 0.0, 0.0,
+        new PlanetInteriorHeatExport(0.0, PlanetEnvironmentHeatReservoir.Atmosphere),
+        new PlanetRadiativeExchange(
+            new PlanetRadiativeBalance(1.0, 0.0, 0.0, 0.0, 0.0),
+            PlanetEnvironmentHeatReservoir.Atmosphere,
+            PlanetEnvironmentHeatReservoir.Atmosphere), []);
+
     private static PlanetExperience CreateExperience()
     {
         var source = new FlatElevationSource();
