@@ -131,6 +131,51 @@ public sealed class PlanetCrustGlobalReliefAtlasTests
         Assert.AreEqual(1_000.0, provider.SampleElevationMeters(PlanetVector.UnitZ, Seed));
     }
 
+    [TestMethod]
+    public void PublishGlobalCrustResearchEpoch_ChangesCanonicalElevationAtHistoricalEpochsAndRestoresReference()
+    {
+        var timeline = Timeline(Seed);
+        var original = new FlatBedrock();
+        var provider = new PlanetTerrainRegionProvider(original);
+        var tileSampler = new PlanetSurfaceTileSampler(provider);
+        var localSampler = new PlanetLocalSurfacePatchSampler(provider);
+        var cache = new PlanetSurfaceMeshCache(new PlanetSurfaceMeshBuilder(tileSampler));
+        var tileId = new PlanetTileId(CubeFace.PositiveZ, 0, 0, 0);
+        var sourceAtStart = provider.CaptureSnapshot();
+
+        Assert.AreEqual(2_000_000L, timeline[0].Epoch.YearsBeforePresent);
+        Assert.AreEqual(1_000_000L, timeline[1].Epoch.YearsBeforePresent);
+        Assert.AreEqual(0L, timeline[2].Epoch.YearsBeforePresent);
+
+        var seen = new List<double>();
+        foreach (var frame in timeline)
+        {
+            var before = provider.Revision;
+            var revision = provider.PublishGlobalCrustResearchEpoch(frame);
+            Assert.AreEqual(before + 1, revision);
+            Assert.IsTrue(cache.GetOrBuild([tileId], 8, Seed, RadiusMeters).Single().IncludesGeometry,
+                "Each selected physical epoch must invalidate the orbital mesh cache.");
+
+            var atlas = new PlanetCrustGlobalReliefAtlas(frame);
+            var direction = frame.Columns.OrderByDescending(x => Math.Abs(x.SurfaceDisplacementMeters))
+                .First().GeographicDirection;
+            var expected = 1_000.0 + atlas.SampleDisplacementMeters(direction);
+            var actual = provider.SampleElevationMeters(direction, Seed);
+            Assert.AreEqual(expected, actual, 1e-8);
+            Assert.AreEqual(1_000.0, provider.SampleElevationMeters(direction, Seed + 1), 1e-8);
+            seen.Add(actual);
+
+            var local = localSampler.Sample(direction, 4_000.0, 8, Seed, RadiusMeters, CancellationToken.None);
+            Assert.AreEqual(actual, local.GetPoint(4, 4).ElevationMeters, 1e-6);
+            Assert.AreEqual(1_000.0, sourceAtStart.SampleElevationMeters(direction, Seed), 0.0);
+        }
+
+        Assert.IsTrue(seen[0] != seen[1] || seen[1] != seen[2],
+            "Different geological epochs must reveal a physically evolved height instead of a decorative animation.");
+        Assert.AreEqual(4L, provider.ClearGlobalCrustDeformation());
+        Assert.AreEqual(1_000.0, provider.SampleElevationMeters(PlanetVector.UnitZ, Seed), 0.0);
+    }
+
     private static IReadOnlyList<PlanetCrustEvolvingSnapshot> Timeline(int seed)
     {
         var catalog = PlanetCrustParcelCatalog.Create(seed);

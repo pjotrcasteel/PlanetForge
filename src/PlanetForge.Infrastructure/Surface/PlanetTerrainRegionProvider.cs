@@ -68,6 +68,19 @@ public sealed class PlanetTerrainRegionProvider(IPlanetElevationSource canonical
             throw new ArgumentException("Only an explicitly completed present-day research snapshot may be published.", nameof(snapshot));
         }
 
+        return PublishGlobalCrustResearchEpoch(snapshot);
+    }
+
+    /// <summary>
+    /// Explicit, research-only comparison of validated *geological terrain*
+    /// snapshots from a single forward crust-history reconstruction. Earlier
+    /// snapshots are not complete planetary climate/water epochs: callers
+    /// must label this a crust-deformation comparison, not time travel in the
+    /// playable world. The same source is published to orbit and local LOD.
+    /// </summary>
+    public long PublishGlobalCrustResearchEpoch(PlanetCrustEvolvingSnapshot snapshot)
+    {
+        ArgumentNullException.ThrowIfNull(snapshot);
         var atlas = new PlanetCrustGlobalReliefAtlas(snapshot);
         var elevation = new PlanetCrustGlobalReliefElevationSource(canonicalElevation, atlas);
         lock (publicationGate)

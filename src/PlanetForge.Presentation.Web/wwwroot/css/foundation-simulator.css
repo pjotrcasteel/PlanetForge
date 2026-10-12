@@ -308,3 +308,38 @@
         touch-action: manipulation;
     }
 }
+
+
+/* Physical geology is inspectable on the SAME planet: discrete, research-only
+   epochs; touch targets stay comfortably above iPhone's minimum hit area. */
+.foundation-geology-epochs {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    margin-top: 3px;
+    padding-top: 4px;
+}
+
+.foundation-geology-epochs button {
+    min-width: 36px;
+    min-height: 36px;
+    border: 1px solid rgba(146, 207, 159, 0.58);
+    border-radius: 10px;
+    color: #d9ecdb;
+    background: rgba(30, 78, 55, 0.9);
+    touch-action: manipulation;
+}
+
+.foundation-geology-epochs button:disabled {
+    opacity: 0.32;
+}
+
+.foundation-clock .foundation-geology-epochs strong {
+    color: #e9d4ad;
+    min-width: 88px;
+    text-align: center;
+    font: 800 0.67rem ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    letter-spacing: 0.05em;
+}

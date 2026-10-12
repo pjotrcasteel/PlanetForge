@@ -178,3 +178,54 @@ test('MainPlanet_MeltingWorld_PublishesPhysicallyPlacedOceanInBothGeologyModes',
     expect(physical.oceanLargestConnectedFraction).toBeGreaterThan(0.20);
     await page.screenshot({ path: testInfo.outputPath('main-planet-physical-oceans-geology-on.png'), fullPage: true });
 });
+
+
+test('MainPlanet_CrustResearchEpochs_ChangePhysicalGeometryAndKeepWaterCameraAlignedOnPhone', async ({ page }, testInfo) => {
+    test.setTimeout(300_000);
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto('/?visualTest=1');
+    await expect(page.locator('#planet-canvas')).toBeVisible({ timeout: 30_000 });
+    await page.waitForFunction(() => window.__planetForgeSurfaceTest?.getTerrainGeometryKey(), null, { timeout: 30_000 });
+    const canonical = await page.evaluate(() => window.__planetForgeSurfaceTest.getTerrainGeometryKey());
+
+    await page.getByTestId('geology-terrain-toggle').click();
+    await expect(page.getByTestId('main-geology-epochs')).toBeVisible({ timeout: 150_000 });
+    await expect(page.getByTestId('main-geology-epoch')).toHaveText('0 Ma AGO');
+    const present = await page.evaluate(() => window.__planetForgeSurfaceTest.getTerrainGeometryKey());
+    expect(present).not.toBe(canonical);
+
+    for (const [expected, filename] of [['1 Ma AGO', 'crust-research-1ma.png'], ['2 Ma AGO', 'crust-research-2ma.png']]) {
+        const before = await page.evaluate(() => window.__planetForgeSurfaceTest.getTerrainGeometryKey());
+        await page.getByTestId('main-geology-previous').click();
+        await expect(page.getByTestId('main-geology-epoch')).toHaveText(expected, { timeout: 150_000 });
+        await page.waitForFunction(old => window.__planetForgeSurfaceTest?.getTerrainGeometryKey() !== old,
+            before, { timeout: 30_000 });
+        const aligned = await page.evaluate(() => ({
+            geometryKey: window.__planetForgeSurfaceTest.getTerrainGeometryKey(),
+            mainYaw: window.__planetForgeSurfaceTest.getYaw(),
+            water: window.__planetForgeWaterTest?.camera(),
+            glError: window.__planetForgeSurfaceTest.measure().glError,
+            overflow: document.documentElement.scrollWidth - window.innerWidth,
+            buttons: [...document.querySelectorAll('.foundation-geology-epochs button')].map(x => x.getBoundingClientRect().height)
+        }));
+        expect(aligned.glError).toBe(0);
+        expect(aligned.overflow).toBeLessThanOrEqual(2);
+        expect(aligned.water?.terrainRevision).toBe(Number(aligned.geometryKey.split(':').at(-1)));
+        expect(aligned.water?.yaw).toBeCloseTo(aligned.mainYaw, 10);
+        expect(Math.min(...aligned.buttons)).toBeGreaterThanOrEqual(36);
+        await page.screenshot({ path: testInfo.outputPath(filename), fullPage: true });
+    }
+
+    await expect(page.getByTestId('main-geology-previous')).toBeDisabled();
+    await page.getByTestId('main-geology-next').click();
+    await expect(page.getByTestId('main-geology-epoch')).toHaveText('1 Ma AGO', { timeout: 150_000 });
+    await page.getByTestId('main-geology-next').click();
+    await expect(page.getByTestId('main-geology-epoch')).toHaveText('0 Ma AGO', { timeout: 150_000 });
+    await expect(page.getByTestId('main-geology-next')).toBeDisabled();
+
+    await page.getByTestId('geology-terrain-toggle').click();
+    await expect(page.getByTestId('main-geology-epochs')).toHaveCount(0, { timeout: 90_000 });
+    const restored = await page.evaluate(() => window.__planetForgeSurfaceTest.getTerrainGeometryKey());
+    expect(restored).not.toBe(present);
+    expect((await page.evaluate(() => window.__planetForgeSurfaceTest.measure())).glError).toBe(0);
+});

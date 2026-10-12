@@ -34,6 +34,18 @@
                 }
                 <button class="foundation-generate" disabled="@(isTransitioning || geologyLoading)" aria-label="Generate new planet" @onclick="GeneratePlanetAsync">GENERATE</button>
             </div>
+            @if (geologyActive && geologyTimeline is not null)
+            {
+                <div class="foundation-geology-epochs" data-testid="main-geology-epochs" aria-label="Geological crust research timeline">
+                    <button data-testid="main-geology-previous" aria-label="Older crust research epoch" type="button"
+                            disabled="@(isTransitioning || geologyLoading || geologyFrameIndex == 0)"
+                            @onclick="() => SelectGeologyEpochAsync(-1)">◀</button>
+                    <strong data-testid="main-geology-epoch">@(geologyTimeline[geologyFrameIndex].Epoch.YearsBeforePresent / 1_000_000) Ma AGO</strong>
+                    <button data-testid="main-geology-next" aria-label="Younger crust research epoch" type="button"
+                            disabled="@(isTransitioning || geologyLoading || geologyFrameIndex == geologyTimeline.Count - 1)"
+                            @onclick="() => SelectGeologyEpochAsync(1)">▶</button>
+                </div>
+            }
             @if (!string.IsNullOrEmpty(geologyStatus))
             {
                 <small class="foundation-geology-status" role="status" data-testid="main-geology-status">@geologyStatus</small>
@@ -70,6 +82,8 @@
     private bool isTransitioning;
     private bool geologyActive;
     private bool geologyLoading;
+    private IReadOnlyList<PlanetCrustEvolvingSnapshot>? geologyTimeline;
+    private int geologyFrameIndex;
     private string geologyStatus = string.Empty;
     private double elapsedYears;
 
@@ -217,6 +231,8 @@
             {
                 TerrainProvider.ClearGlobalCrustDeformation();
                 geologyActive = false;
+                geologyTimeline = null;
+                geologyFrameIndex = 0;
                 geologyStatus = string.Empty;
             }
 
@@ -269,6 +285,8 @@
             {
                 TerrainProvider.ClearGlobalCrustDeformation();
                 geologyActive = false;
+                geologyTimeline = null;
+                geologyFrameIndex = 0;
                 geologyStatus = "CANONICAL BEDROCK · GEOLOGY COMPARISON OFF";
             }
             else
@@ -285,8 +303,10 @@
 
                 var current = timeline[^1];
                 TerrainProvider.PublishGlobalCrustDeformation(current);
+                geologyTimeline = timeline;
+                geologyFrameIndex = timeline.Count - 1;
                 geologyActive = true;
-                geologyStatus = $"REAL ELEVATION · 2 MYR · UP TO {current.MaximumAbsoluteSurfaceDisplacementMeters:0} M LOCAL COLUMN";
+                geologyStatus = $"REAL ELEVATION · CRUST RESEARCH ONLY · UP TO {current.MaximumAbsoluteSurfaceDisplacementMeters:0} M";
             }
 
             snapshot = Experience.InvalidateTerrain();
@@ -298,11 +318,60 @@
             {
                 TerrainProvider.ClearGlobalCrustDeformation();
                 geologyActive = false;
+                geologyTimeline = null;
+                geologyFrameIndex = 0;
             }
 
             geologyStatus = $"GEOLOGY NOT AVAILABLE: {error.Message}";
             snapshot = Experience.InvalidateTerrain();
             await SyncPlanetAsync();
+        }
+        finally
+        {
+            geologyLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    /// <summary>
+    /// Select reconstructed physical crust heights from the same research
+    /// history, displayed through the single shared terrain provider at
+    /// orbital and local LOD. This does not advance the climate experiment.
+    /// </summary>
+    private async Task SelectGeologyEpochAsync(int offset)
+    {
+        if (isTransitioning || geologyLoading || !geologyActive || geologyTimeline is null)
+        {
+            return;
+        }
+
+        var nextIndex = geologyFrameIndex + offset;
+        if (nextIndex < 0 || nextIndex >= geologyTimeline.Count)
+        {
+            return;
+        }
+
+        geologyLoading = true;
+        StateHasChanged();
+        await Task.Yield();
+        try
+        {
+            var selected = geologyTimeline[nextIndex];
+            if (selected.World != PlanetWorldIdentity.CreateCurrent(CurrentSeed))
+            {
+                throw new InvalidOperationException("Crust research belongs to a different generated world.");
+            }
+
+            disposeCancellationTokenSource.Token.ThrowIfCancellationRequested();
+            TerrainProvider.PublishGlobalCrustResearchEpoch(selected);
+            geologyFrameIndex = nextIndex;
+            geologyStatus = $"REAL ELEVATION · CRUST RESEARCH ONLY · UP TO {selected.MaximumAbsoluteSurfaceDisplacementMeters:0} M";
+            snapshot = Experience.InvalidateTerrain();
+            await SyncPlanetAsync();
+        }
+        catch (Exception error) when (error is not OperationCanceledException)
+        {
+            geologyStatus = $"CRUST RESEARCH UNAVAILABLE: {error.Message}";
         }
         finally
         {
@@ -562,6 +631,8 @@
         {
             TerrainProvider.ClearGlobalCrustDeformation();
             geologyActive = false;
+            geologyTimeline = null;
+            geologyFrameIndex = 0;
         }
         if (regionalStreamingEnabled)
         {
