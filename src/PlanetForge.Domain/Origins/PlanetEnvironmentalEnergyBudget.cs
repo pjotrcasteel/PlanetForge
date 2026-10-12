@@ -155,6 +155,18 @@ public sealed class PlanetWaterEnvironmentalState
     public double EnergyConservationResidualJoules =>
         Environment.TotalEnergyJoules + RelativeLatentEnergyJoules - InitialCombinedEnergyJoules;
 
+    /// <summary>
+    /// Relocates existing sensible energy between two environmental stores.
+    /// Used only as part of a coupled mass-transfer candidate. The source
+    /// inventory is unchanged until the corresponding phase change succeeds.
+    /// </summary>
+    internal PlanetWaterEnvironmentalState TransferSensibleHeat(
+        PlanetEnvironmentHeatReservoir source, PlanetEnvironmentHeatReservoir destination, double joules)
+    {
+        var relocated = Environment.TransferHeat(source, destination, joules);
+        return new PlanetWaterEnvironmentalState(Water, relocated, RelativeLatentEnergyJoules, InitialCombinedEnergyJoules);
+    }
+
     public PlanetWaterEnvironmentalState Apply(
         IReadOnlyList<PlanetWaterPhaseHeatStep> steps, CancellationToken cancellationToken = default)
     {
