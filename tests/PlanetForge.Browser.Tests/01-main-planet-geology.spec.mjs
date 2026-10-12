@@ -240,3 +240,42 @@ test('MainPlanet_CrustResearchEpochs_ChangePhysicalGeometryAndKeepWaterCameraAli
     expect(restored).not.toBe(present);
     expect((await page.evaluate(() => window.__planetForgeSurfaceTest.measure())).glError).toBe(0);
 });
+
+
+test('MainPlanet_VisualTestMeasurement_InLocalModeActuallyRendersVisibleGround', async ({ page }, testInfo) => {
+    test.setTimeout(180_000);
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto('/?visualTest=1');
+    await expect(page.locator('#planet-canvas')).toBeVisible({ timeout: 30_000 });
+    await page.waitForFunction(() => window.__planetForgeSurfaceTest?.getLodStats(), null, { timeout: 30_000 });
+
+    await page.evaluate(() => window.__planetForgeSurfaceTest.setDistance(1.002));
+    await page.waitForFunction(() => {
+        const lod = window.__planetForgeSurfaceTest?.getLodStats();
+        return lod?.mode === 'local' && !lod.refining;
+    }, null, { timeout: 90_000 });
+
+    // Previously measure() ALWAYS called renderGlobe even in local mode.
+    // The empty orbit tile collection then cleared the canvas to black,
+    // falsely passing WebGL tests that asserted only glError == 0.
+    const visual = await page.evaluate(() => ({
+        lod: window.__planetForgeSurfaceTest.getLodStats(),
+        screen: window.__planetForgeSurfaceTest.measure(),
+        geometry: window.__planetForgeSurfaceTest.getTerrainGeometryKey()
+    }));
+    expect(visual.lod.mode).toBe('local');
+    expect(visual.lod.localCellSpacingMeters).toBeGreaterThan(0);
+    expect(visual.screen.glError).toBe(0);
+    expect(visual.screen.planetPixels).toBeGreaterThan(10_000);
+    expect(visual.geometry).toBeTruthy();
+    await page.screenshot({ path: testInfo.outputPath('local-terrain-actually-visible.png'), fullPage: true });
+
+    // Moving back to the globe must use the orbit renderer and leave no
+    // incorrectly retained local measurement state or WebGL errors.
+    await page.evaluate(() => window.__planetForgeSurfaceTest.setDistance(1.06));
+    await page.waitForFunction(() => {
+        const lod = window.__planetForgeSurfaceTest?.getLodStats();
+        return lod?.mode === 'globe' && !lod.refining;
+    }, null, { timeout: 60_000 });
+    expect((await page.evaluate(() => window.__planetForgeSurfaceTest.measure())).glError).toBe(0);
+});
