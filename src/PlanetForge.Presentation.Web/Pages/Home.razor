@@ -21,7 +21,7 @@
         <div class="foundation-clock @(geologyActive ? "foundation-clock-geology" : "")" aria-live="polite">
             <strong>@FormatElapsedTime()</strong>
             <span>@FormatStageLabel()</span>
-            <small class="foundation-geology-preview" data-testid="planet-scenario-label" title="@CurrentScenarioName">@(geologyActive ? "EXPERIMENT / PHYSICAL TERRAIN" : "EXPERIMENT / CANONICAL TERRAIN")</small>
+            <small class="foundation-geology-preview" data-testid="planet-scenario-label" title="@CurrentScenarioName">@(snapshot?.Origin is not null ? PlanetOriginUxText.ScenarioLabel : geologyActive ? "EXPERIMENT / PHYSICAL TERRAIN" : "EXPERIMENT / CANONICAL TERRAIN")</small>
             <div class="foundation-seed">
                 <small data-testid="planet-seed">SEED @CurrentSeed</small>
                 <button class="foundation-generate" data-testid="geology-terrain-toggle" type="button"
@@ -72,7 +72,7 @@
             }
         </div>
 
-        @if (!geologyActive)
+        @if (!geologyActive && snapshot?.Origin is null)
         {
             <div class="foundation-controls">
                 <button class="foundation-next" disabled="@(isTransitioning || geologyLoading)" @onclick="AdvanceAsync">@FormatButtonLabel()</button>
@@ -113,7 +113,7 @@
     private double elapsedYears;
 
     private int CurrentSeed => run?.Mission.Planet.Seed ?? PlanetSeedCatalog.ShowcaseSeed;
-    private string CurrentScenarioName => PlanetScenarioCatalog.CurrentPlayable.Name;
+    private string CurrentScenarioName => snapshot?.Origin is not null ? PlanetScenarioCatalog.EarthOrigin.Name : PlanetScenarioCatalog.CurrentPlayable.Name;
 
     protected override void OnInitialized()
     {
@@ -647,6 +647,7 @@
 
     private string FormatStageLabel()
     {
+        if (snapshot?.Origin is { } origin) return PlanetOriginUxText.StateLabel(origin);
         var displayedStage = transitionStage ?? currentStage;
         return isTransitioning && transitionStage is not null
             ? $"{StageName(currentStage)} → {StageName(displayedStage)}"
@@ -657,6 +658,7 @@
 
     private string FormatElapsedTime()
     {
+        if (snapshot?.Origin is { } origin) return PlanetOriginUxText.GeologicalTime(origin);
         if (elapsedYears < 1_000.0)
         {
             return $"YEAR {elapsedYears:0}";
