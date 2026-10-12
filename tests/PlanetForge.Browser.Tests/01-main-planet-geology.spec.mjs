@@ -279,3 +279,45 @@ test('MainPlanet_VisualTestMeasurement_InLocalModeActuallyRendersVisibleGround',
     }, null, { timeout: 60_000 });
     expect((await page.evaluate(() => window.__planetForgeSurfaceTest.measure())).glError).toBe(0);
 });
+
+
+test('MainPlanet_PhysicalLocalDetail_ResolvesRegionalBedrockWithinMobileMeshBudget', async ({ page }, testInfo) => {
+    test.setTimeout(180_000);
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto('/?visualTest=1');
+    await expect(page.locator('#planet-canvas')).toBeVisible({ timeout: 30_000 });
+    await page.waitForFunction(() => window.__planetForgeSurfaceTest?.getLodStats(), null, { timeout: 30_000 });
+
+    await page.evaluate(() => window.__planetForgeSurfaceTest.setDistance(1.0 + 3_000 / 6_371_000));
+    await page.waitForFunction(() => {
+        const detail = window.__planetForgeSurfaceTest?.getLodStats();
+        return detail?.mode === 'local' && !detail.refining;
+    }, null, { timeout: 90_000 });
+    const sample = await page.evaluate(() => ({
+        detail: window.__planetForgeSurfaceTest.getLodStats(),
+        pixels: window.__planetForgeSurfaceTest.measure(),
+        overflow: document.documentElement.scrollWidth - window.innerWidth
+    }));
+    expect(sample.detail.mode).toBe('local');
+    expect(sample.detail.localCellSpacingMeters).toBeGreaterThan(0);
+    expect(sample.detail.localCellSpacingMeters).toBeLessThan(500);
+    expect(sample.detail.localElevationRangeMeters).toBeGreaterThan(0);
+    expect(sample.pixels.planetPixels).toBeGreaterThan(10_000);
+    expect(sample.pixels.glError).toBe(0);
+    expect(sample.overflow).toBeLessThanOrEqual(2);
+    await page.screenshot({ path: testInfo.outputPath('3km-physical-regional-bedrock-24cells.png'), fullPage: true });
+
+    await page.evaluate(() => window.__planetForgeSurfaceTest.setDistance(1.0 + 100 / 6_371_000));
+    await page.waitForFunction(() => {
+        const detail = window.__planetForgeSurfaceTest?.getLodStats();
+        return detail?.mode === 'local' && !detail.refining && detail.localCellSpacingMeters < 25;
+    }, null, { timeout: 90_000 });
+    const close = await page.evaluate(() => ({
+        detail: window.__planetForgeSurfaceTest.getLodStats(),
+        pixels: window.__planetForgeSurfaceTest.measure()
+    }));
+    expect(close.detail.localCellSpacingMeters).toBeLessThan(25);
+    expect(close.pixels.planetPixels).toBeGreaterThan(10_000);
+    expect(close.pixels.glError).toBe(0);
+    await page.screenshot({ path: testInfo.outputPath('100m-physical-ground-bedrock-32cells.png'), fullPage: true });
+});

@@ -69,7 +69,9 @@ public sealed class PlanetExperienceSurfaceLodTests
 
         Assert.IsNotNull(snapshot.LocalSurface);
         Assert.AreEqual(0, snapshot.SurfaceTiles.Count);
-        Assert.AreEqual(512, snapshot.LocalSurface.TriangleCount);
+        Assert.AreEqual(2_048, snapshot.LocalSurface.TriangleCount);
+        Assert.IsLessThanOrEqualTo(2_048, snapshot.LocalSurface.TriangleCount,
+            "Adaptive ground sampling must remain within a strict mobile-friendly mesh budget.");
     }
 
     [TestMethod]
@@ -98,6 +100,22 @@ public sealed class PlanetExperienceSurfaceLodTests
 
         Assert.IsNotNull(snapshot.LocalSurface);
         Assert.AreEqual(1_152, snapshot.LocalSurface.TriangleCount);
+    }
+
+    [TestMethod]
+    public void UpdateSurfaceView_ThreeKilometresAboveEarth_UsesBoundedPhysicalRegionalDetail()
+    {
+        var experience = CreateExperience();
+        var cameraDistance = 1.0 + (3_000.0 / EarthRadiusMeters);
+        var view = new PlanetSurfaceView(PlanetVector.UnitZ, cameraDistance, 844, Math.PI / 4.2) { ViewportAspectRatio = 390.0 / 844.0 };
+
+        var snapshot = experience.UpdateSurfaceView(view);
+
+        Assert.IsNotNull(snapshot.LocalSurface);
+        Assert.AreEqual(1_152, snapshot.LocalSurface.TriangleCount,
+            "The medium field should sample actual 2–8 km bedrock rather than extrapolating 16-cell triangles.");
+        Assert.IsTrue(snapshot.LocalSurface.SizeMeters / 24.0 < 1_000.0,
+            "At this altitude the local mesh should sample canonical kilometre-scale bedrock at sub-km spacing.");
     }
 
     [TestMethod]

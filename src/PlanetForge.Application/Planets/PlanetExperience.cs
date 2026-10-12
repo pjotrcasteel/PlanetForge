@@ -22,9 +22,14 @@ public sealed class PlanetExperience(
     private const int SurfaceCellsPerAxis = 32;
     private const int AdaptiveSurfaceCellsPerAxis = 20;
     private const double OrbitalRefinementStartDistance = 1.35;
-    private const int CoarseLocalSurfaceCellsPerAxis = 16;
-    private const int MediumLocalSurfaceCellsPerAxis = 16;
-    private const int DetailedLocalSurfaceCellsPerAxis = 24;
+    // Retain the same sampled physical surface at every scale. Previous 16-cell
+    // coarse/medium patches under-resolved 2–8 km canonical rock relief near
+    // the globe-to-local handoff, creating soft triangular interpolation.
+    // 24/32 cells improve real sampled geometry without new noise, shader
+    // displacements or an unbounded mobile GPU/CPU tessellation budget.
+    private const int CoarseLocalSurfaceCellsPerAxis = 24;
+    private const int MediumLocalSurfaceCellsPerAxis = 24;
+    private const int DetailedLocalSurfaceCellsPerAxis = 32;
     private const int FineLocalSurfaceCellsPerAxis = 32;
     private const double MinimumLocalPatchSizeMeters = 16.0;
     private const double MaximumLocalViewAltitudeMeters = 20_000.0;

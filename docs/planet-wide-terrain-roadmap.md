@@ -411,3 +411,29 @@ insufficient: acceptance depends on the correct active framebuffer.
 Neither a high LOD number nor a nonblack frame proves geological
 realism. Real continent advection, evidence-based mountain morphology,
 and canonical orbit/local scientific LOD alignment remain open in #162.
+
+
+## A2.5e — Bounded local physical mesh sampling near the ground (PF 0.0.38.4)
+
+The actual iPhone Safari PF 0.0.38.2 screenshots show broad, soft
+interpolation near the coast and uplands. The canonical elevation source
+already contains deterministic, shared bedrock relief at 2–32 km scales.
+The local mesh previously sampled this same source on just **16 × 16**
+vertices/cells for the 3–20 km-altitude bands, creating large triangles
+that could not resolve narrower physically computed ridges and valleys.
+
+For the **existing local surface only**, increase the coarse/medium
+mesh to **24 × 24 cells** and detailed mesh to **32 × 32 cells**;
+the finest existing mesh stays **32 × 32**. Maximum resulting geometry
+remains **2048 triangles** per local patch, with no new noise fields,
+artificial elevation amplification, independent terrain system or
+changes to the 56-tile orbital mesh budget.
+
+Tests verify bounded triangle counts, sub-kilometre physical spacing
+near 3 km altitude and actual visible WebGL pixels on an iPhone-sized
+viewport at 3 km and 100 m, with screenshots and seeded elevation
+range. These are renderer fidelity gates, **not proof that the bedrock
+physics is sufficiently realistic**. The original Airy displacement,
+tectonic parcel provenance, global masses and water ledger remain
+unchanged. Evaluate iPhone Safari CPU/interaction cost and visible
+difference before accepting a larger mesh; revert if worse.
