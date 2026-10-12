@@ -50,6 +50,9 @@ public sealed record PlanetOriginEnergyStep(
         ExplicitDuration = duration;
     }
 
+    /// <summary>Explicit material transactions; no route is inferred from phase eligibility.</summary>
+    public IReadOnlyList<PlanetOriginVolatileExchange> VolatileChanges { get; init; } = [];
+
     public PlanetOriginDuration? ExplicitDuration { get; init; }
 
     public PlanetOriginDuration Duration
@@ -70,12 +73,13 @@ public sealed record PlanetOriginEnergyStep(
 /// One closed energy account for the whole planet: interior, environmental
 /// sensible stores and the relative latent enthalpy of water, with the
 /// absolute geological clock. The only external terms are impact and
-/// radiogenic heating, absorbed starlight and emitted infrared:
+/// radiogenic heating, absorbed starlight, delivered material enthalpy,
+/// emitted infrared and escaped material enthalpy:
 /// <code>
-/// stored(now) = stored(initial) + impact + radiogenic + stellar - infrared
+/// stored(now) = stored(initial) + impact + radiogenic + stellar + material in - infrared - material out
 /// </code>
 /// Within one step the operators are applied in a fixed order (interior
-/// sources and export, radiation, then phase changes). That is first-order
+/// sources and export, volatile material, radiation, then phase changes). That is first-order
 /// operator splitting: callers must keep steps short enough that the state
 /// does not cross a phase or saturation threshold inside one step.
 /// Any failure or cancellation leaves the previous ledger unchanged.
@@ -103,7 +107,9 @@ public sealed class PlanetOriginEnergyLedger
         double initialStoredEnergyJoules,
         double absorbedStellarJoules,
         double emittedInfraredJoules,
-        double exportedInteriorJoules)
+        double exportedInteriorJoules,
+        double materialDeliveredJoules,
+        double materialEscapedJoules)
     {
         Interior = interior;
         Environment = environment;
@@ -112,6 +118,8 @@ public sealed class PlanetOriginEnergyLedger
         CumulativeAbsorbedStellarEnergyJoules = absorbedStellarJoules;
         CumulativeEmittedInfraredEnergyJoules = emittedInfraredJoules;
         CumulativeInteriorExportJoules = exportedInteriorJoules;
+        CumulativeDeliveredMaterialEnergyJoules = materialDeliveredJoules;
+        CumulativeEscapedMaterialEnergyJoules = materialEscapedJoules;
     }
 
     public PlanetOriginThermalTimeline Interior { get; }
@@ -131,12 +139,19 @@ public sealed class PlanetOriginEnergyLedger
     /// <summary>Internal interior→environment transfer; not an external term.</summary>
     public double CumulativeInteriorExportJoules { get; }
 
+    /// <summary>Documented external enthalpy brought in by H2O-bearing material.</summary>
+    public double CumulativeDeliveredMaterialEnergyJoules { get; }
+
+    /// <summary>Enthalpy exported with escaping atmospheric H2O, separate from infrared.</summary>
+    public double CumulativeEscapedMaterialEnergyJoules { get; }
+
     public double StoredEnergyJoules => Interior.EnergyBudget.StoredEnergyJoules +
         Environment.Environment.TotalEnergyJoules + Environment.RelativeLatentEnergyJoules;
 
     public double ConservationResidualJoules => InitialStoredEnergyJoules +
         Interior.EnergyBudget.CumulativeImpactHeatJoules + Interior.EnergyBudget.CumulativeRadiogenicHeatJoules +
-        CumulativeAbsorbedStellarEnergyJoules - CumulativeEmittedInfraredEnergyJoules - StoredEnergyJoules;
+        CumulativeAbsorbedStellarEnergyJoules + CumulativeDeliveredMaterialEnergyJoules -
+        CumulativeEmittedInfraredEnergyJoules - CumulativeEscapedMaterialEnergyJoules - StoredEnergyJoules;
 
     public PlanetEnvironmentTemperatureSnapshot Temperatures =>
         PlanetEnvironmentTemperatureModel.Resolve(Environment, HeatCapacities);
@@ -145,6 +160,7 @@ public sealed class PlanetOriginEnergyLedger
     {
         ArgumentNullException.ThrowIfNull(step);
         ArgumentNullException.ThrowIfNull(step.PhaseChanges);
+        ArgumentNullException.ThrowIfNull(step.VolatileChanges);
         cancellationToken.ThrowIfCancellationRequested();
 
         // 1. Interior: sources in, exported heat out (the interior ledger
@@ -157,20 +173,27 @@ public sealed class PlanetOriginEnergyLedger
 
         // 2. The same joules arrive in the environment.
         var environmentBudget = Environment.Environment.Deposit(step.InteriorExport.Destination, exportedJoules);
+        var nextEnvironment = Environment.WithBoundaryExchange(environmentBudget, exportedJoules);
 
-        // 3. External radiation over the same physical interval.
+        // 3. Volatile material brings in explicitly sourced H2O and enthalpy,
+        // internally debits mantle heat when magma degasses, or leaves with
+        // atmospheric sensible energy. No flux of matter creates H2O.
+        var volatiles = PlanetOriginVolatileTransport.Apply(
+            nextInterior, nextEnvironment, HeatCapacities, step.VolatileChanges, cancellationToken);
+        nextInterior = volatiles.Interior;
+        nextEnvironment = volatiles.Environment;
+
+        // 4. Radiation is evaluated for the caller-supplied interval.
         var seconds = duration.TotalSeconds;
         var absorbed = RequireEnergy(step.Radiation.Balance.AbsorbedStellarPowerWatts * seconds, "absorbed starlight");
         var emitted = RequireEnergy(step.Radiation.Balance.EmittedThermalPowerWatts * seconds, "emitted infrared");
-        environmentBudget = environmentBudget.ApplyExternalRadiation(
+        environmentBudget = nextEnvironment.Environment.ApplyExternalRadiation(
             step.Radiation.AbsorbingReservoir, absorbed, step.Radiation.EmittingReservoir, emitted);
-
-        var boundaryNet = exportedJoules + absorbed - emitted;
-        var nextEnvironment = Environment.WithBoundaryExchange(environmentBudget, boundaryNet);
+        nextEnvironment = nextEnvironment.WithBoundaryExchange(environmentBudget, absorbed - emitted);
         // Heat must not be deposited in a store that holds no matter.
         PlanetEnvironmentTemperatureModel.Resolve(nextEnvironment, HeatCapacities);
 
-        // 4. Phase changes move mass, sensible and latent heat internally.
+        // 5. Phase changes move mass, sensible and latent heat internally.
         nextEnvironment = PlanetWaterPhaseSensibleTransport.Apply(
             nextEnvironment, HeatCapacities, step.PhaseChanges, cancellationToken);
 
@@ -178,7 +201,11 @@ public sealed class PlanetOriginEnergyLedger
         return new PlanetOriginEnergyLedger(nextInterior, nextEnvironment, HeatCapacities, InitialStoredEnergyJoules,
             RequireEnergy(CumulativeAbsorbedStellarEnergyJoules + absorbed, "cumulative starlight"),
             RequireEnergy(CumulativeEmittedInfraredEnergyJoules + emitted, "cumulative infrared"),
-            RequireEnergy(CumulativeInteriorExportJoules + exportedJoules, "cumulative interior export"));
+            RequireEnergy(CumulativeInteriorExportJoules + exportedJoules, "cumulative interior export"),
+            RequireEnergy(CumulativeDeliveredMaterialEnergyJoules + volatiles.ExternalMaterialInputJoules,
+                "cumulative delivered material enthalpy"),
+            RequireEnergy(CumulativeEscapedMaterialEnergyJoules + volatiles.ExternalMaterialEscapeJoules,
+                "cumulative escaped material enthalpy"));
     }
 
     private static double RequireEnergy(double joules, string name)
