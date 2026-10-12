@@ -240,3 +240,46 @@ test('MainPlanet_CrustResearchEpochs_ChangePhysicalGeometryAndKeepWaterCameraAli
     expect(restored).not.toBe(present);
     expect((await page.evaluate(() => window.__planetForgeSurfaceTest.measure())).glError).toBe(0);
 });
+
+
+test('MainPlanet_NearSurfaceLOD_RefinesGeologicalTerrainWithoutLosingLocalContinuityOnPhone', async ({ page }, testInfo) => {
+    test.setTimeout(240_000);
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto('/?visualTest=1');
+    await expect(page.locator('#planet-canvas')).toBeVisible({ timeout: 30_000 });
+    await page.waitForFunction(() => window.__planetForgeSurfaceTest?.getLodStats(), null, { timeout: 30_000 });
+
+    await page.evaluate(() => window.__planetForgeSurfaceTest.setDistance(1.0045));
+    await page.waitForFunction(() => {
+        const lod = window.__planetForgeSurfaceTest?.getLodStats();
+        return lod?.mode === 'globe' && lod.maximumLevel === 7 && !lod.refining;
+    }, null, { timeout: 90_000 });
+
+    const orbital = await page.evaluate(() => ({
+        lod: window.__planetForgeSurfaceTest.getLodStats(),
+        glError: window.__planetForgeSurfaceTest.measure().glError
+    }));
+    expect(orbital.lod.tileCount).toBeLessThanOrEqual(56);
+    expect(orbital.glError).toBe(0);
+    await page.screenshot({ path: testInfo.outputPath('near-surface-physical-lod7.png'), fullPage: true });
+
+    await page.evaluate(() => window.__planetForgeSurfaceTest.setDistance(1.002));
+    await page.waitForFunction(() => {
+        const lod = window.__planetForgeSurfaceTest?.getLodStats();
+        return lod?.mode === 'local' && !lod.refining;
+    }, null, { timeout: 90_000 });
+    const local = await page.evaluate(() => ({
+        lod: window.__planetForgeSurfaceTest.getLodStats(),
+        glError: window.__planetForgeSurfaceTest.measure().glError
+    }));
+    expect(local.lod.localCellSpacingMeters).toBeGreaterThan(0);
+    expect(local.glError).toBe(0);
+    await page.screenshot({ path: testInfo.outputPath('near-surface-local-continuity.png'), fullPage: true });
+
+    await page.evaluate(() => window.__planetForgeSurfaceTest.setDistance(1.03));
+    await page.waitForFunction(() => {
+        const lod = window.__planetForgeSurfaceTest?.getLodStats();
+        return lod?.mode === 'globe' && lod.maximumLevel <= 5 && !lod.refining;
+    }, null, { timeout: 90_000 });
+    expect((await page.evaluate(() => window.__planetForgeSurfaceTest.measure())).glError).toBe(0);
+});
