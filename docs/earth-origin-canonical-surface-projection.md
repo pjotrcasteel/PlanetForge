@@ -33,3 +33,15 @@ A true molten-world presentation must wait for spatially resolved crust surface 
 ## Next
 
 Implement an evidence-bounded thermal/radiative and volatile-rate proposer for `AdvanceCoupledAdaptive`, validate conservation and threshold behavior over real geological intervals, then publish its accepted snapshots through this bridge. Spatial crust formation/steam clouds/ocean placement can follow once the corresponding local models exist.
+
+## UX text and scientific honesty
+
+When the main planet receives a committed `Origin` snapshot, the existing HUD (not a new tab) switches from the legacy Snowball experiment copy to **Earth Origin · Physical Model**, shows the **absolute geological age** (for example `4.540 Ga AGO`), and derives visible stage text from its actual published reservoirs:
+
+- Bulk rock melt fraction indicates `MOLTEN INTERIOR`, `PARTLY MOLTEN INTERIOR`, or `SOLID INTERIOR · BULK MODEL`.
+- Real surface-liquid mass is labelled `SURFACE LIQUID PRESENT`, not a proven stable ocean; atmospheric H2O is `STEAM PRESENT`; ice mass is `SURFACE ICE PRESENT`.
+- No Earth-origin frame reuses the frozen experiment's `YEAR 0`, `FIRST LIFE`, or staged `NEXT` transitions. Legacy NEXT is hidden while an origin epoch is selected; the physical adaptive process driver must explicitly own geological advancement before a new control is enabled.
+- The crust must not be declared solidified from an average interior melt fraction. Dedicated spatial crust thickness/temperature and vetted phase checks are prerequisites for `FIRST CRUST`, `FIRST RAIN` or `OCEANS FORMING` wording.
+- Existing frozen-experiment and geological-research labels remain unchanged when `Origin` is absent.
+
+Copy lives in `PlanetOriginUxText`, with MSTest assertions that prevent the UI from converting unproven reservoir values into history milestones.
