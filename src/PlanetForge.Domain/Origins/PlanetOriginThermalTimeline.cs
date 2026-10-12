@@ -29,6 +29,10 @@ public sealed class PlanetOriginThermalTimeline
     public PlanetOriginThermalTimeline AdvanceYears(long elapsedYears, PlanetThermalEnergyFlux flux) =>
         Advance(PlanetOriginDuration.FromYears(elapsedYears), flux);
 
+    /// <summary>Moves water-carried enthalpy while keeping the geological clock fixed.</summary>
+    internal PlanetOriginThermalTimeline ExchangeMaterialEnthalpy(double incomingJoules, double exportedJoules) =>
+        new(Clock, EnergyBudget.ExchangeMaterialEnthalpy(incomingJoules, exportedJoules), rockModel);
+
     public PlanetOriginThermalTimeline Advance(PlanetOriginDuration duration, PlanetThermalEnergyFlux flux)
     {
         // Both clocks and thermal fluxes use exactly the same physical interval.
