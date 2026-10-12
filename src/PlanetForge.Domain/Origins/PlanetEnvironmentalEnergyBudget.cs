@@ -3,13 +3,16 @@ namespace PlanetForge.Domain.Origins;
 /// <summary>
 /// Separate *environmental* sensible-energy accounts. SurfaceRock denotes
 /// near-surface material, not the already modeled mantle/magma energy budget.
+/// SurfaceIce is the sensible energy of the frozen-water mass itself, so ice
+/// can carry heat when it melts, sublimates or forms from liquid or vapor.
 /// Initial energies and future heat fluxes require calibrated models.
 /// </summary>
 public enum PlanetEnvironmentHeatReservoir
 {
     Atmosphere = 0,
     SurfaceOcean = 1,
-    SurfaceRock = 2
+    SurfaceRock = 2,
+    SurfaceIce = 3
 }
 
 /// <summary>
@@ -18,11 +21,18 @@ public enum PlanetEnvironmentHeatReservoir
 /// </summary>
 public sealed class PlanetEnvironmentalEnergyBudget
 {
-    private const int ReservoirCount = 3;
+    private const int ReservoirCount = 4;
     private readonly double[] energies;
 
+    /// <summary>Creates a budget whose ice store holds no sensible energy.</summary>
     public PlanetEnvironmentalEnergyBudget(double atmosphereJoules, double oceanJoules, double surfaceRockJoules)
-        : this([atmosphereJoules, oceanJoules, surfaceRockJoules])
+        : this([atmosphereJoules, oceanJoules, surfaceRockJoules, 0.0])
+    {
+    }
+
+    public PlanetEnvironmentalEnergyBudget(
+        double atmosphereJoules, double oceanJoules, double surfaceRockJoules, double surfaceIceJoules)
+        : this([atmosphereJoules, oceanJoules, surfaceRockJoules, surfaceIceJoules])
     {
     }
 
@@ -82,9 +92,35 @@ public sealed class PlanetEnvironmentalEnergyBudget
         return new PlanetEnvironmentalEnergyBudget(copy);
     }
 
+    /// <summary>
+    /// Applies one interval of external radiation: stellar energy enters the
+    /// absorbing store and infrared energy leaves the emitting store. When both
+    /// are the same store only the net change is applied. Either store becoming
+    /// negative rejects the whole interval.
+    /// </summary>
+    internal PlanetEnvironmentalEnergyBudget ApplyExternalRadiation(
+        PlanetEnvironmentHeatReservoir absorbingReservoir, double absorbedJoules,
+        PlanetEnvironmentHeatReservoir emittingReservoir, double emittedJoules)
+    {
+        var absorbingIndex = ValidateReservoir(absorbingReservoir);
+        var emittingIndex = ValidateReservoir(emittingReservoir);
+        ValidateEnergy(absorbedJoules);
+        ValidateEnergy(emittedJoules);
+
+        var copy = (double[])energies.Clone();
+        copy[absorbingIndex] = AddFinite(copy[absorbingIndex], absorbedJoules);
+        copy[emittingIndex] -= emittedJoules;
+        if (!double.IsFinite(copy[emittingIndex]) || copy[emittingIndex] < 0.0)
+        {
+            throw new InvalidOperationException("Radiative heat loss exceeds the energy of the explicitly selected emitting reservoir.");
+        }
+
+        return new PlanetEnvironmentalEnergyBudget(copy);
+    }
+
     private static int ValidateReservoir(PlanetEnvironmentHeatReservoir reservoir)
     {
-        if (reservoir is < PlanetEnvironmentHeatReservoir.Atmosphere or > PlanetEnvironmentHeatReservoir.SurfaceRock)
+        if (reservoir is < PlanetEnvironmentHeatReservoir.Atmosphere or > PlanetEnvironmentHeatReservoir.SurfaceIce)
         {
             throw new ArgumentOutOfRangeException(nameof(reservoir), reservoir, "Unknown environmental heat reservoir.");
         }

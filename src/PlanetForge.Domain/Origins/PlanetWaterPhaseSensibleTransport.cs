@@ -1,29 +1,30 @@
 namespace PlanetForge.Domain.Origins;
 
 /// <summary>
-/// One vapor/liquid phase proposal. Its latent heat is assigned to the named
-/// environmental store, while advected sensible energy moves from the water's
-/// origin store to its destination store. No rate or eligibility is inferred.
-/// Ice is excluded until it has its own heat capacity/energy account.
+/// One phase proposal. Its latent heat is assigned to the named environmental
+/// store, while advected sensible energy moves from the water's origin store
+/// (atmosphere for vapor, ocean for liquid, ice store for ice) to its
+/// destination store. No rate or eligibility is inferred.
 /// </summary>
-public readonly record struct PlanetVaporLiquidHeatStep(
+public readonly record struct PlanetWaterPhaseSensibleHeatStep(
     PlanetWaterPhaseTransition Transition,
     PlanetEnvironmentHeatReservoir LatentHeatReservoir);
 
 /// <summary>
-/// Bounded, reversible-in-accounting coupling for vapor/liquid water mass and
-/// sensible heat. Uses donor bulk temperature and a well-mixed effective
-/// specific heat; the transferred sensible joules are credited unchanged to
-/// the receiving reservoir. Subsequent temperatures reflect mixing and the
-/// destination's different heat capacity. An equilibrium/phase enthalpy solver
-/// must eventually account for variable cp and pressure-dependent transitions.
+/// Bounded, reversible-in-accounting coupling for water mass and sensible heat
+/// across vapor, liquid and ice. Uses donor bulk temperature and a well-mixed
+/// effective specific heat; the transferred sensible joules are credited
+/// unchanged to the receiving reservoir. Subsequent temperatures reflect mixing
+/// and the destination's different heat capacity. An equilibrium/phase enthalpy
+/// solver must eventually account for variable cp and pressure-dependent
+/// transitions.
 /// </summary>
-public static class PlanetVaporLiquidSensibleTransport
+public static class PlanetWaterPhaseSensibleTransport
 {
     public static PlanetWaterEnvironmentalState Apply(
         PlanetWaterEnvironmentalState initial,
         PlanetEnvironmentHeatCapacityParameters properties,
-        IReadOnlyList<PlanetVaporLiquidHeatStep> steps,
+        IReadOnlyList<PlanetWaterPhaseSensibleHeatStep> steps,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(initial);
@@ -45,9 +46,7 @@ public static class PlanetVaporLiquidSensibleTransport
             if (step.Transition.MassKilograms > 0.0)
             {
                 var temperatures = PlanetEnvironmentTemperatureModel.Resolve(current, properties);
-                var sourceCapacity = source == PlanetEnvironmentHeatReservoir.Atmosphere
-                    ? temperatures.AtmosphereHeatCapacityJoulesPerKelvin
-                    : temperatures.OceanHeatCapacityJoulesPerKelvin;
+                var sourceCapacity = temperatures.GetHeatCapacityJoulesPerKelvin(source);
                 var donorEnergy = current.Environment.GetEnergyJoules(source);
                 if (sourceCapacity <= 0.0)
                 {
@@ -92,7 +91,18 @@ public static class PlanetVaporLiquidSensibleTransport
             PlanetWaterPhaseTransitionKind.Evaporate =>
                 (PlanetEnvironmentHeatReservoir.SurfaceOcean, PlanetEnvironmentHeatReservoir.Atmosphere,
                     properties.LiquidWaterSpecificHeatJoulesPerKilogramKelvin),
-            _ => throw new NotSupportedException(
-                "Only atmospheric vapor and surface liquid transport are supported until ice has its own sensible-energy reservoir.")
+            PlanetWaterPhaseTransitionKind.Freeze =>
+                (PlanetEnvironmentHeatReservoir.SurfaceOcean, PlanetEnvironmentHeatReservoir.SurfaceIce,
+                    properties.LiquidWaterSpecificHeatJoulesPerKilogramKelvin),
+            PlanetWaterPhaseTransitionKind.Melt =>
+                (PlanetEnvironmentHeatReservoir.SurfaceIce, PlanetEnvironmentHeatReservoir.SurfaceOcean,
+                    properties.IceSpecificHeatJoulesPerKilogramKelvin),
+            PlanetWaterPhaseTransitionKind.Sublimate =>
+                (PlanetEnvironmentHeatReservoir.SurfaceIce, PlanetEnvironmentHeatReservoir.Atmosphere,
+                    properties.IceSpecificHeatJoulesPerKilogramKelvin),
+            PlanetWaterPhaseTransitionKind.Deposit =>
+                (PlanetEnvironmentHeatReservoir.Atmosphere, PlanetEnvironmentHeatReservoir.SurfaceIce,
+                    properties.VaporSpecificHeatJoulesPerKilogramKelvin),
+            _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Unsupported water phase transition.")
         };
 }

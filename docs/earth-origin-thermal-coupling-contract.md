@@ -11,7 +11,8 @@ and issues #143 and #148.
 | Model | Energy owned | Energy that must not silently be assigned |
 | --- | --- | --- |
 | `PlanetThermalEnergyBudget` | Planet interior heat due to accretion, giant impacts, radioactive heating and cooling | The entire atmosphere/ocean's heat capacity or every outgoing infrared photon |
-| `PlanetEnvironmentalEnergyBudget` | Effective atmosphere, liquid-ocean and near-surface rock sensible energy | Mantle's whole thermal reservoir, frozen-water sensible energy not yet modeled |
+| `PlanetEnvironmentalEnergyBudget` | Effective atmosphere, liquid-ocean, near-surface rock and surface-ice sensible energy | Mantle's whole thermal reservoir |
+| `PlanetWaterPhaseSensibleTransport` | Sensible heat advected with H2O mass for all six vapor/liquid/ice transitions, plus latent heat in a named store | Rates, eligibility, or temperature-dependent cp |
 | `PlanetWaterEnvironmentalState` | Explicit H2O mass plus relative latent enthalpy exchanged with a named environmental store | A calibrated evaporation/precipitation rate, heat transported with water mass, or an absolute thermodynamic enthalpy reference |
 | `PlanetEnvironmentTemperatureModel` | Diagnostic bulk T from a mass-dependent effective C = sum(m×cp) and stored E | A cloud/greenhouse/lapse-rate or ocean stratification model, true equilibrium T without phase-composition enthalpy |
 | `PlanetRadiationBalanceModel` | Stellar energy crossing top-of-atmosphere in, net effective infrared energy leaving | A heat source/sink to assign automatically to the interior, ocean or atmosphere |

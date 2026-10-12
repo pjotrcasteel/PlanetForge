@@ -3,7 +3,7 @@ using PlanetForge.Domain.Origins;
 namespace PlanetForge.Domain.Tests.Origins;
 
 [TestClass]
-public sealed class PlanetVaporLiquidSensibleTransportTests
+public sealed class PlanetWaterPhaseSensibleTransportTests
 {
     private static PlanetEnvironmentHeatCapacityParameters Parameters => new(
         NoncondensableAtmosphereMassKilograms: 10.0,
@@ -17,7 +17,7 @@ public sealed class PlanetVaporLiquidSensibleTransportTests
     public void Apply_Condensation_AdvectsVaporSensibleHeatAndDepositsLatentHeatIntoOcean()
     {
         var before = CreateWorld();
-        var after = PlanetVaporLiquidSensibleTransport.Apply(before, Parameters,
+        var after = PlanetWaterPhaseSensibleTransport.Apply(before, Parameters,
         [
             new(new PlanetWaterPhaseTransition(PlanetWaterPhaseTransitionKind.Condense, 2.0, 2.0e6),
                 PlanetEnvironmentHeatReservoir.SurfaceOcean)
@@ -43,7 +43,7 @@ public sealed class PlanetVaporLiquidSensibleTransportTests
     public void Apply_Evaporation_TransfersOceanSensibleHeatInsteadOfCreatingWarmVapor()
     {
         var before = CreateWorld();
-        var after = PlanetVaporLiquidSensibleTransport.Apply(before, Parameters,
+        var after = PlanetWaterPhaseSensibleTransport.Apply(before, Parameters,
         [
             new(new PlanetWaterPhaseTransition(PlanetWaterPhaseTransitionKind.Evaporate, 2.0, 2.0e6),
                 PlanetEnvironmentHeatReservoir.SurfaceOcean)
@@ -66,7 +66,7 @@ public sealed class PlanetVaporLiquidSensibleTransportTests
         var before = new PlanetWaterEnvironmentalState(water,
             new PlanetEnvironmentalEnergyBudget(3.0e6, 0.0, 0.0));
 
-        var after = PlanetVaporLiquidSensibleTransport.Apply(before, parameters,
+        var after = PlanetWaterPhaseSensibleTransport.Apply(before, parameters,
         [
             new(new PlanetWaterPhaseTransition(PlanetWaterPhaseTransitionKind.Condense, 5.0, 2.0e6),
                 PlanetEnvironmentHeatReservoir.SurfaceOcean)
@@ -89,7 +89,7 @@ public sealed class PlanetVaporLiquidSensibleTransportTests
         var before = new PlanetWaterEnvironmentalState(water,
             new PlanetEnvironmentalEnergyBudget(0.0, 6.0e6, 30.0e6));
 
-        var after = PlanetVaporLiquidSensibleTransport.Apply(before, parameters,
+        var after = PlanetWaterPhaseSensibleTransport.Apply(before, parameters,
         [
             new(new PlanetWaterPhaseTransition(PlanetWaterPhaseTransitionKind.Evaporate, 5.0, 2.0e6),
                 PlanetEnvironmentHeatReservoir.SurfaceRock)
@@ -117,7 +117,7 @@ public sealed class PlanetVaporLiquidSensibleTransportTests
             SurfaceRockMassKilograms = 0.0
         };
 
-        Assert.ThrowsExactly<InvalidOperationException>(() => PlanetVaporLiquidSensibleTransport.Apply(before, parameters,
+        Assert.ThrowsExactly<InvalidOperationException>(() => PlanetWaterPhaseSensibleTransport.Apply(before, parameters,
         [
             new(new PlanetWaterPhaseTransition(PlanetWaterPhaseTransitionKind.Evaporate, 100.0, 2.0e6),
                 PlanetEnvironmentHeatReservoir.SurfaceOcean)
@@ -133,7 +133,7 @@ public sealed class PlanetVaporLiquidSensibleTransportTests
     {
         var before = CreateWorld();
 
-        Assert.ThrowsExactly<InvalidOperationException>(() => PlanetVaporLiquidSensibleTransport.Apply(before, Parameters,
+        Assert.ThrowsExactly<InvalidOperationException>(() => PlanetWaterPhaseSensibleTransport.Apply(before, Parameters,
         [
             new(new PlanetWaterPhaseTransition(PlanetWaterPhaseTransitionKind.Condense, 2.0, 2.0e6),
                 PlanetEnvironmentHeatReservoir.SurfaceOcean),
@@ -147,16 +147,85 @@ public sealed class PlanetVaporLiquidSensibleTransportTests
     }
 
     [TestMethod]
-    public void Apply_IceTransitionWithoutIceThermalStore_IsRejected()
+    public void Apply_FreezeThenMeltSameMass_RestoresMassAndEnergyExactly()
     {
         var before = CreateWorld();
 
-        Assert.ThrowsExactly<NotSupportedException>(() => PlanetVaporLiquidSensibleTransport.Apply(before, Parameters,
+        var frozen = PlanetWaterPhaseSensibleTransport.Apply(before, Parameters,
         [
-            new(new PlanetWaterPhaseTransition(PlanetWaterPhaseTransitionKind.Freeze, 1.0, 334_000.0),
+            new(new PlanetWaterPhaseTransition(PlanetWaterPhaseTransitionKind.Freeze, 5.0, 334_000.0),
+                PlanetEnvironmentHeatReservoir.SurfaceOcean)
+        ]);
+        var temperatures = PlanetEnvironmentTemperatureModel.Resolve(frozen, Parameters);
+
+        // Ocean 24 MJ over 80 kJ/K = 300 K. 5 kg of liquid carries 5*4000*300 = 6 MJ into the ice store.
+        Assert.AreEqual(5.0, frozen.Water.GetMassKilograms(PlanetWaterReservoir.SurfaceIce), 0.0);
+        Assert.AreEqual(6.0e6, frozen.Environment.GetEnergyJoules(PlanetEnvironmentHeatReservoir.SurfaceIce), 1e-6);
+        Assert.AreEqual(24.0e6 - 6.0e6 + 1.67e6,
+            frozen.Environment.GetEnergyJoules(PlanetEnvironmentHeatReservoir.SurfaceOcean), 1e-6);
+        Assert.AreEqual(6.0e6 / (5.0 * 2_100.0), temperatures.IceTemperatureKelvin!.Value, 1e-9,
+            "Moved joules are preserved; the different ice cp changes the diagnostic temperature.");
+        Assert.AreEqual(0.0, frozen.EnergyConservationResidualJoules, 1e-6);
+
+        var thawed = PlanetWaterPhaseSensibleTransport.Apply(frozen, Parameters,
+        [
+            new(new PlanetWaterPhaseTransition(PlanetWaterPhaseTransitionKind.Melt, 5.0, 334_000.0),
+                PlanetEnvironmentHeatReservoir.SurfaceOcean)
+        ]);
+
+        Assert.AreEqual(0.0, thawed.Water.GetMassKilograms(PlanetWaterReservoir.SurfaceIce), 0.0);
+        Assert.AreEqual(0.0, thawed.Environment.GetEnergyJoules(PlanetEnvironmentHeatReservoir.SurfaceIce), 0.0,
+            "Melting all ice must leave no ghost heat in the empty ice store.");
+        Assert.AreEqual(before.Environment.TotalEnergyJoules, thawed.Environment.TotalEnergyJoules, 1e-6);
+        Assert.AreEqual(before.Environment.GetEnergyJoules(PlanetEnvironmentHeatReservoir.SurfaceOcean),
+            thawed.Environment.GetEnergyJoules(PlanetEnvironmentHeatReservoir.SurfaceOcean), 1e-6);
+        Assert.AreEqual(0.0, thawed.RelativeLatentEnergyJoules, 1e-6);
+        Assert.AreEqual(0.0, thawed.Water.ConservationResidualKilograms, 0.0);
+    }
+
+    [TestMethod]
+    public void Apply_DepositionAndSublimation_CarrySensibleHeatBetweenAtmosphereAndIce()
+    {
+        var before = CreateWorld();
+
+        var deposited = PlanetWaterPhaseSensibleTransport.Apply(before, Parameters,
+        [
+            new(new PlanetWaterPhaseTransition(PlanetWaterPhaseTransitionKind.Deposit, 2.0, 2.83e6),
+                PlanetEnvironmentHeatReservoir.Atmosphere)
+        ]);
+
+        // Atmosphere capacity 10*1000 + 5*2000 = 20 kJ/K; 2 kg vapor carries 4 kJ/K / 20 kJ/K of 6 MJ.
+        Assert.AreEqual(1.2e6, deposited.Environment.GetEnergyJoules(PlanetEnvironmentHeatReservoir.SurfaceIce), 1e-6);
+        Assert.AreEqual(6.0e6 - 1.2e6 + 5.66e6,
+            deposited.Environment.GetEnergyJoules(PlanetEnvironmentHeatReservoir.Atmosphere), 1e-6);
+        Assert.AreEqual(-5.66e6, deposited.RelativeLatentEnergyJoules, 1e-6);
+        Assert.AreEqual(0.0, deposited.EnergyConservationResidualJoules, 1e-6);
+
+        var sublimated = PlanetWaterPhaseSensibleTransport.Apply(deposited, Parameters,
+        [
+            new(new PlanetWaterPhaseTransition(PlanetWaterPhaseTransitionKind.Sublimate, 2.0, 2.83e6),
+                PlanetEnvironmentHeatReservoir.Atmosphere)
+        ]);
+
+        Assert.AreEqual(0.0, sublimated.Environment.GetEnergyJoules(PlanetEnvironmentHeatReservoir.SurfaceIce), 0.0);
+        Assert.AreEqual(5.0, sublimated.Water.GetMassKilograms(PlanetWaterReservoir.AtmosphericVapor), 0.0);
+        Assert.AreEqual(before.Environment.TotalEnergyJoules, sublimated.Environment.TotalEnergyJoules, 1e-6);
+        Assert.AreEqual(0.0, sublimated.RelativeLatentEnergyJoules, 1e-6);
+        Assert.AreEqual(0.0, sublimated.EnergyConservationResidualJoules, 1e-6);
+    }
+
+    [TestMethod]
+    public void Apply_MeltMoreIceThanExists_RejectsWithoutMovingHeat()
+    {
+        var before = CreateWorld();
+
+        Assert.ThrowsExactly<InvalidOperationException>(() => PlanetWaterPhaseSensibleTransport.Apply(before, Parameters,
+        [
+            new(new PlanetWaterPhaseTransition(PlanetWaterPhaseTransitionKind.Melt, 1.0, 334_000.0),
                 PlanetEnvironmentHeatReservoir.SurfaceOcean)
         ]));
         Assert.AreEqual(0.0, before.Water.GetMassKilograms(PlanetWaterReservoir.SurfaceIce), 0.0);
+        Assert.AreEqual(24.0e6, before.Environment.GetEnergyJoules(PlanetEnvironmentHeatReservoir.SurfaceOcean), 0.0);
     }
 
     [TestMethod]
@@ -166,7 +235,7 @@ public sealed class PlanetVaporLiquidSensibleTransportTests
         using var cancellation = new CancellationTokenSource();
         cancellation.Cancel();
 
-        Assert.ThrowsExactly<OperationCanceledException>(() => PlanetVaporLiquidSensibleTransport.Apply(before, Parameters,
+        Assert.ThrowsExactly<OperationCanceledException>(() => PlanetWaterPhaseSensibleTransport.Apply(before, Parameters,
         [
             new(new PlanetWaterPhaseTransition(PlanetWaterPhaseTransitionKind.Condense, 2.0, 2.0e6),
                 PlanetEnvironmentHeatReservoir.SurfaceOcean)

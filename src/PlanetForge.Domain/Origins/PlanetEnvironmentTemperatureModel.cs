@@ -12,7 +12,8 @@ public readonly record struct PlanetEnvironmentHeatCapacityParameters(
     double VaporSpecificHeatJoulesPerKilogramKelvin,
     double LiquidWaterSpecificHeatJoulesPerKilogramKelvin,
     double SurfaceRockMassKilograms,
-    double SurfaceRockSpecificHeatJoulesPerKilogramKelvin)
+    double SurfaceRockSpecificHeatJoulesPerKilogramKelvin,
+    double IceSpecificHeatJoulesPerKilogramKelvin = 2_100.0)
 {
     public void Validate()
     {
@@ -22,6 +23,7 @@ public readonly record struct PlanetEnvironmentHeatCapacityParameters(
         RequirePositive(VaporSpecificHeatJoulesPerKilogramKelvin, nameof(VaporSpecificHeatJoulesPerKilogramKelvin));
         RequirePositive(LiquidWaterSpecificHeatJoulesPerKilogramKelvin, nameof(LiquidWaterSpecificHeatJoulesPerKilogramKelvin));
         RequirePositive(SurfaceRockSpecificHeatJoulesPerKilogramKelvin, nameof(SurfaceRockSpecificHeatJoulesPerKilogramKelvin));
+        RequirePositive(IceSpecificHeatJoulesPerKilogramKelvin, nameof(IceSpecificHeatJoulesPerKilogramKelvin));
     }
 
     private static void RequireNonnegative(double value, string name)
@@ -53,7 +55,19 @@ public readonly record struct PlanetEnvironmentTemperatureSnapshot(
     double SurfaceRockHeatCapacityJoulesPerKelvin,
     double? AtmosphereTemperatureKelvin,
     double? OceanTemperatureKelvin,
-    double? SurfaceRockTemperatureKelvin);
+    double? SurfaceRockTemperatureKelvin,
+    double IceHeatCapacityJoulesPerKelvin = 0.0,
+    double? IceTemperatureKelvin = null)
+{
+    public double GetHeatCapacityJoulesPerKelvin(PlanetEnvironmentHeatReservoir reservoir) => reservoir switch
+    {
+        PlanetEnvironmentHeatReservoir.Atmosphere => AtmosphereHeatCapacityJoulesPerKelvin,
+        PlanetEnvironmentHeatReservoir.SurfaceOcean => OceanHeatCapacityJoulesPerKelvin,
+        PlanetEnvironmentHeatReservoir.SurfaceRock => SurfaceRockHeatCapacityJoulesPerKelvin,
+        PlanetEnvironmentHeatReservoir.SurfaceIce => IceHeatCapacityJoulesPerKelvin,
+        _ => throw new ArgumentOutOfRangeException(nameof(reservoir), reservoir, "Unknown environmental heat reservoir.")
+    };
+}
 
 /// <summary>
 /// Pure diagnostic conversion of conserved environmental sensible energy to
@@ -85,12 +99,17 @@ public static class PlanetEnvironmentTemperatureModel
         var rockCapacity = CheckedCapacity(
             parameters.SurfaceRockMassKilograms,
             parameters.SurfaceRockSpecificHeatJoulesPerKilogramKelvin);
+        var iceCapacity = CheckedCapacity(
+            state.Water.GetMassKilograms(PlanetWaterReservoir.SurfaceIce),
+            parameters.IceSpecificHeatJoulesPerKilogramKelvin);
 
         return new PlanetEnvironmentTemperatureSnapshot(
             atmosphereCapacity, oceanCapacity, rockCapacity,
             ResolveTemperature(state.Environment.GetEnergyJoules(PlanetEnvironmentHeatReservoir.Atmosphere), atmosphereCapacity),
             ResolveTemperature(state.Environment.GetEnergyJoules(PlanetEnvironmentHeatReservoir.SurfaceOcean), oceanCapacity),
-            ResolveTemperature(state.Environment.GetEnergyJoules(PlanetEnvironmentHeatReservoir.SurfaceRock), rockCapacity));
+            ResolveTemperature(state.Environment.GetEnergyJoules(PlanetEnvironmentHeatReservoir.SurfaceRock), rockCapacity),
+            iceCapacity,
+            ResolveTemperature(state.Environment.GetEnergyJoules(PlanetEnvironmentHeatReservoir.SurfaceIce), iceCapacity));
     }
 
     private static double CheckedCapacity(double mass, double specificHeat)
