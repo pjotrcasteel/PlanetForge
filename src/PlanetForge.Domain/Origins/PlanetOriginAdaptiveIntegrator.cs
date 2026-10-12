@@ -15,7 +15,7 @@ public sealed record PlanetOriginAdaptiveIntegrationOptions(
     internal void Validate(PlanetEnvironmentHeatCapacityParameters heatCapacities)
     {
         if (MinimumSubstep.IsZero || MaximumSubstep.IsZero ||
-            PlanetOriginAdaptiveIntegrator.Ticks(MinimumSubstep) > PlanetOriginAdaptiveIntegrator.Ticks(MaximumSubstep))
+            PlanetOriginAdaptiveIntegrator.Compare(MinimumSubstep, MaximumSubstep) > 0)
         {
             throw new ArgumentOutOfRangeException(nameof(MinimumSubstep),
                 "Positive integration limits require minimum duration to be no greater than the maximum.");
@@ -53,19 +53,19 @@ internal static class PlanetOriginAdaptiveIntegrator
         cancellationToken.ThrowIfCancellationRequested();
         options.Validate(initial.HeatCapacities);
 
-        var remaining = Ticks(duration);
-        if (remaining == 0 || remaining < Ticks(options.MinimumSubstep))
+        var remaining = duration;
+        var minimum = options.MinimumSubstep;
+        var maximum = options.MaximumSubstep;
+        if (duration.IsZero || Compare(remaining, minimum) < 0)
         {
             throw new ArgumentOutOfRangeException(nameof(duration),
-                "The requested elapsed physical interval must be at least the minimum substep.");
+                "The requested physical interval must be at least the minimum substep.");
         }
 
-        var minimum = Ticks(options.MinimumSubstep);
-        var maximum = Ticks(options.MaximumSubstep);
         var current = initial;
         var accepted = 0;
 
-        while (remaining > 0)
+        while (!remaining.IsZero)
         {
             cancellationToken.ThrowIfCancellationRequested();
             if (accepted == options.MaximumAcceptedSubsteps)
@@ -73,28 +73,29 @@ internal static class PlanetOriginAdaptiveIntegrator
                 throw new InvalidOperationException("Adaptive integration exceeded its maximum accepted substep count.");
             }
 
-            var trialTicks = Math.Min(maximum, remaining);
-            // Reserve a representable final interval instead of leaving a
-            // fractional remainder shorter than the explicit minimum.
-            if (remaining > trialTicks && remaining - trialTicks < minimum)
+            var trial = Min(maximum, remaining);
+            // Exact remaining years + sub-year microseconds, with no overall
+            // long-microsecond conversion or geological-range overflow.
+            // Preserve a representable final interval instead of creating
+            // an inadmissibly short remainder.
+            if (Compare(remaining, trial) > 0 && Compare(Subtract(remaining, trial), minimum) < 0)
             {
-                trialTicks = remaining - minimum;
+                trial = Subtract(remaining, minimum);
             }
 
             var retries = 0;
             while (true)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                if (trialTicks < minimum)
+                if (Compare(trial, minimum) < 0)
                 {
                     throw new InvalidOperationException(
                         "Adaptive integration cannot advance without crossing its minimum physical timestep.");
                 }
 
-                var trialDuration = FromTicks(trialTicks);
-                var proposal = propose(current, trialDuration) ??
+                var proposal = propose(current, trial) ??
                     throw new InvalidOperationException("The physical process must supply a non-null coupled energy step.");
-                if (proposal.Duration != trialDuration)
+                if (proposal.Duration != trial)
                 {
                     throw new ArgumentException(
                         "A physical process must propose rates for the exact timestep requested by the integrator.",
@@ -117,15 +118,15 @@ internal static class PlanetOriginAdaptiveIntegrator
                     }
 
                     current = candidate;
-                    remaining -= trialTicks;
+                    remaining = Subtract(remaining, trial);
                     accepted++;
                     break;
                 }
-                catch (InvalidOperationException) when (trialTicks > minimum && retries < options.MaximumRefinementsPerAttempt)
+                catch (InvalidOperationException) when (Compare(trial, minimum) > 0 && retries < options.MaximumRefinementsPerAttempt)
                 {
                     // Only invalid physical candidates are retried. Incorrect
                     // units, durations or nonfinite inputs still fail loudly.
-                    trialTicks = Math.Max(minimum, trialTicks / 2);
+                    trial = Max(minimum, Half(trial));
                     retries++;
                 }
             }
@@ -135,27 +136,50 @@ internal static class PlanetOriginAdaptiveIntegrator
         return current;
     }
 
-    internal static long Ticks(PlanetOriginDuration duration)
+    /// <summary>
+    /// Exact chronological comparisons avoid overflowing a signed 64-bit
+    /// microsecond count when integrating more than ~292 Julian years.
+    /// </summary>
+    internal static int Compare(PlanetOriginDuration left, PlanetOriginDuration right)
     {
-        if (duration.WholeYears > long.MaxValue / PlanetOriginDuration.MicrosecondsPerJulianYear)
-        {
-            throw new ArgumentOutOfRangeException(nameof(duration),
-                "The chosen adaptive physical interval exceeds bounded integer microsecond resolution.");
-        }
-
-        var yearsTicks = duration.WholeYears * PlanetOriginDuration.MicrosecondsPerJulianYear;
-        if (duration.RemainingMicroseconds > long.MaxValue - yearsTicks)
-        {
-            throw new ArgumentOutOfRangeException(nameof(duration),
-                "The combined geological years and fractional time exceed integer microsecond resolution.");
-        }
-
-        return yearsTicks + duration.RemainingMicroseconds;
+        var years = left.WholeYears.CompareTo(right.WholeYears);
+        return years == 0 ? left.RemainingMicroseconds.CompareTo(right.RemainingMicroseconds) : years;
     }
 
-    private static PlanetOriginDuration FromTicks(long microseconds) =>
-        new(microseconds / PlanetOriginDuration.MicrosecondsPerJulianYear,
-            microseconds % PlanetOriginDuration.MicrosecondsPerJulianYear);
+    private static PlanetOriginDuration Min(PlanetOriginDuration left, PlanetOriginDuration right) =>
+        Compare(left, right) <= 0 ? left : right;
+
+    private static PlanetOriginDuration Max(PlanetOriginDuration left, PlanetOriginDuration right) =>
+        Compare(left, right) >= 0 ? left : right;
+
+    private static PlanetOriginDuration Subtract(PlanetOriginDuration left, PlanetOriginDuration right)
+    {
+        if (Compare(left, right) < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(right), "Cannot subtract more physical time than remains.");
+        }
+
+        var years = left.WholeYears - right.WholeYears;
+        var microseconds = left.RemainingMicroseconds - right.RemainingMicroseconds;
+        if (microseconds < 0)
+        {
+            years--;
+            microseconds += PlanetOriginDuration.MicrosecondsPerJulianYear;
+        }
+
+        return new PlanetOriginDuration(years, microseconds);
+    }
+
+    private static PlanetOriginDuration Half(PlanetOriginDuration duration)
+    {
+        // One odd whole year becomes one year's worth of microseconds in
+        // the fractional part BEFORE halving, preserving microsecond
+        // precision without converting the entire duration to ticks.
+        var years = duration.WholeYears / 2;
+        var remainder = ((duration.WholeYears % 2) * PlanetOriginDuration.MicrosecondsPerJulianYear +
+            duration.RemainingMicroseconds) / 2;
+        return new PlanetOriginDuration(years, remainder);
+    }
 
     private static void VerifyNoSaturationBoundaryCrossing(
         PlanetOriginEnergyLedger before,

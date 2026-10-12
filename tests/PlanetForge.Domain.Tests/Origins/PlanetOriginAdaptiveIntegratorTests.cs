@@ -124,13 +124,97 @@ public sealed class PlanetOriginAdaptiveIntegratorTests
     }
 
     [TestMethod]
-    public void AdvanceCoupledAdaptive_OverlongPhysicalHorizon_IsExplicitlyRejected()
+    public void AdvanceCoupledAdaptive_MillionYearHorizon_PreservesGeologicalClockWithoutMicrosecondOverflow()
     {
         var initial = World();
-        var huge = new PlanetOriginDuration(long.MaxValue / PlanetOriginDuration.MicrosecondsPerJulianYear + 1);
+        var horizon = new PlanetOriginDuration(1_000_000, 123_456L);
+        var options = new PlanetOriginAdaptiveIntegrationOptions(horizon, PlanetOriginDuration.FromSeconds(1.0),
+            MaximumAcceptedSubsteps: 1);
+        var calls = 0;
+
+        var advanced = initial.AdvanceCoupledAdaptive(horizon, options, (candidate, duration) =>
+        {
+            calls++;
+            Assert.AreEqual(horizon, duration);
+            return CoolingStep(duration, 0.0);
+        });
+
+        Assert.AreEqual(1, calls);
+        Assert.AreEqual(initial.Clock.YearsSinceSolarSystemFormation + 1_000_000L,
+            advanced.Clock.YearsSinceSolarSystemFormation);
+        Assert.AreEqual(123_456L, advanced.Clock.MicrosecondsIntoYear);
+        Assert.AreEqual(1L, advanced.Revision);
+        Assert.AreEqual(0.0, advanced.EnergyConservationResidualJoules, 1e-5);
+        AssertUnchanged(initial);
+    }
+
+    [TestMethod]
+    public void AdvanceCoupledAdaptive_ThousandYearInterval_PreservesExactSubyearTail()
+    {
+        var initial = World();
+        var horizon = new PlanetOriginDuration(1_000L, 1_000_001L);
+        var options = new PlanetOriginAdaptiveIntegrationOptions(
+            PlanetOriginDuration.FromYears(400), PlanetOriginDuration.FromYears(1));
+        var accepted = new List<PlanetOriginDuration>();
+
+        var result = initial.AdvanceCoupledAdaptive(horizon, options, (candidate, duration) =>
+        {
+            accepted.Add(duration);
+            return CoolingStep(duration, 0.0);
+        });
+
+        CollectionAssert.AreEqual(new[]
+        {
+            PlanetOriginDuration.FromYears(400),
+            PlanetOriginDuration.FromYears(400),
+            new PlanetOriginDuration(200, 1_000_001)
+        }, accepted);
+        Assert.AreEqual(initial.Clock.YearsSinceSolarSystemFormation + 1_000L,
+            result.Clock.YearsSinceSolarSystemFormation);
+        Assert.AreEqual(1_000_001L, result.Clock.MicrosecondsIntoYear);
+        Assert.AreEqual(1L, result.Revision);
+        Assert.AreEqual(0.0, result.EnergyConservationResidualJoules, 1e-5);
+        AssertUnchanged(initial);
+    }
+
+    [TestMethod]
+    public void AdvanceCoupledAdaptive_LongIntervalOverdraw_RefinesAcrossYearBoundaryAndReevaluatesRates()
+    {
+        var initial = World();
+        var horizon = PlanetOriginDuration.FromYears(1_000);
+        var options = new PlanetOriginAdaptiveIntegrationOptions(horizon, PlanetOriginDuration.FromYears(250));
+        var proposed = new List<PlanetOriginDuration>();
+
+        var result = initial.AdvanceCoupledAdaptive(horizon, options, (candidate, duration) =>
+        {
+            proposed.Add(duration);
+            var stored = candidate.Environment.Environment.GetEnergyJoules(PlanetEnvironmentHeatReservoir.Atmosphere);
+            return CoolingStep(duration, stored / (750.0 * PlanetThermalEnergyBudget.JulianYearSeconds));
+        });
+
+        CollectionAssert.AreEqual(new[]
+        {
+            PlanetOriginDuration.FromYears(1_000),
+            PlanetOriginDuration.FromYears(500),
+            PlanetOriginDuration.FromYears(500)
+        }, proposed);
+        Assert.AreEqual(initial.Clock.YearsSinceSolarSystemFormation + 1_000L,
+            result.Clock.YearsSinceSolarSystemFormation);
+        Assert.AreEqual(1L, result.Revision);
+        Assert.AreEqual(0.0, result.EnergyConservationResidualJoules, 1e-5);
+        AssertUnchanged(initial);
+    }
+
+    [TestMethod]
+    public void AdvanceCoupledAdaptive_IntervalPastPresent_IsRejectedWithoutPublishing()
+    {
+        var initial = World();
+        var beyondPresent = PlanetOriginDuration.FromYears(
+            PlanetOriginClock.EarthAccretionReferenceAgeYearsBeforePresent + 1);
+        var options = new PlanetOriginAdaptiveIntegrationOptions(beyondPresent, PlanetOriginDuration.FromYears(1));
 
         Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => initial.AdvanceCoupledAdaptive(
-            huge, Options(10, 1), (energy, duration) => CoolingStep(duration, 0.0)));
+            beyondPresent, options, (energy, duration) => CoolingStep(duration, 0.0)));
         AssertUnchanged(initial);
     }
 
