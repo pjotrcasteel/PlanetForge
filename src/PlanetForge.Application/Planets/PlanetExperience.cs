@@ -96,6 +96,23 @@ public sealed class PlanetExperience(
         }
     }
 
+    /// <summary>
+    /// Advance physical time through the existing bounded, conservative integrator and publish
+    /// the new main-planet snapshot only after every substep and terrain projection succeeds.
+    /// A caller must provide actual re-evaluated process rates; this method invents none.
+    /// </summary>
+    public PlanetRenderSnapshot AdvanceOriginEpochAdaptive(
+        PlanetOriginDuration duration,
+        PlanetOriginAdaptiveIntegrationOptions options,
+        Func<PlanetOriginEnergyLedger, PlanetOriginDuration, PlanetOriginEnergyStep> propose,
+        CancellationToken cancellationToken = default)
+    {
+        var current = originEpoch ?? throw new InvalidOperationException("Publish a coupled Earth-origin epoch before advancing geological time.");
+        var next = current.AdvanceCoupledAdaptive(duration, options, propose, cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
+        return PublishOriginEpoch(next);
+    }
+
     public PlanetRenderSnapshot ClearOriginEpoch()
     {
         originEpoch = null;
