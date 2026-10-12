@@ -16,6 +16,15 @@ and issues #143 and #148.
 | `PlanetWaterEnvironmentalState` | Explicit H2O mass plus relative latent enthalpy exchanged with a named environmental store | A calibrated evaporation/precipitation rate, heat transported with water mass, or an absolute thermodynamic enthalpy reference |
 | `PlanetEnvironmentTemperatureModel` | Diagnostic bulk T from a mass-dependent effective C = sum(m×cp) and stored E | A cloud/greenhouse/lapse-rate or ocean stratification model, true equilibrium T without phase-composition enthalpy |
 | `PlanetRadiationBalanceModel` | Stellar energy crossing top-of-atmosphere in, net effective infrared energy leaving | A heat source/sink to assign automatically to the interior, ocean or atmosphere |
+| `PlanetOriginEnergyLedger` | One closed account: interior + environmental sensible + relative latent energy, with impact/radiogenic/stellar in and infrared out | Choosing rates, step size or phase eligibility |
+
+**Resolved in `PlanetOriginEnergyLedger`:** the interior's `SurfaceHeatLossWatts`
+is used only as the interior→environment export (`PlanetInteriorHeatExport`),
+debited from the interior and credited to a named environmental store. Loss to
+space happens only through the environment's radiative boundary. Within one
+step, operators run in fixed order (interior, radiation, phase changes); this
+first-order splitting requires steps short enough not to cross a phase or
+saturation threshold.
 
 **Never double-count heat:** A mantle-to-surface conductive/convective transfer
 is an **internal** energy transfer; it decreases mantle energy and increases
