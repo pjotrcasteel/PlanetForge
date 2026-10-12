@@ -69,7 +69,7 @@ public sealed class PlanetExperienceSurfaceLodTests
 
         Assert.IsNotNull(snapshot.LocalSurface);
         Assert.AreEqual(0, snapshot.SurfaceTiles.Count);
-        Assert.AreEqual(2_048, snapshot.LocalSurface.TriangleCount);
+        Assert.AreEqual(1_152, snapshot.LocalSurface.TriangleCount);
         Assert.IsLessThanOrEqualTo(2_048, snapshot.LocalSurface.TriangleCount,
             "Adaptive ground sampling must remain within a strict mobile-friendly mesh budget.");
     }
@@ -90,7 +90,7 @@ public sealed class PlanetExperienceSurfaceLodTests
     }
 
     [TestMethod]
-    public void UpdateSurfaceView_HundredMetresAboveEarth_DoesNotUseFineGroundMesh()
+    public void UpdateSurfaceView_HundredMetresAboveEarth_UsesBoundedDetailedMesh()
     {
         var experience = CreateExperience();
         var cameraDistance = 1.0 + (100.0 / EarthRadiusMeters);
@@ -99,7 +99,7 @@ public sealed class PlanetExperienceSurfaceLodTests
         var snapshot = experience.UpdateSurfaceView(view);
 
         Assert.IsNotNull(snapshot.LocalSurface);
-        Assert.AreEqual(1_152, snapshot.LocalSurface.TriangleCount);
+        Assert.AreEqual(2_048, snapshot.LocalSurface.TriangleCount);
     }
 
     [TestMethod]
