@@ -93,6 +93,21 @@ public sealed class PlanetEnvironmentalEnergyBudget
     }
 
     /// <summary>
+    /// Credits heat that crossed into the environment from a separately
+    /// debited account (for example interior conduction). The caller owns the
+    /// matching debit; this method never creates energy by itself.
+    /// </summary>
+    internal PlanetEnvironmentalEnergyBudget Deposit(PlanetEnvironmentHeatReservoir reservoir, double joules)
+    {
+        var index = ValidateReservoir(reservoir);
+        ValidateEnergy(joules);
+        if (joules == 0.0) return this;
+        var copy = (double[])energies.Clone();
+        copy[index] = AddFinite(copy[index], joules);
+        return new PlanetEnvironmentalEnergyBudget(copy);
+    }
+
+    /// <summary>
     /// Applies one interval of external radiation: stellar energy enters the
     /// absorbing store and infrared energy leaves the emitting store. When both
     /// are the same store only the net change is applied. Either store becoming
@@ -201,6 +216,26 @@ public sealed class PlanetWaterEnvironmentalState
     {
         var relocated = Environment.TransferHeat(source, destination, joules);
         return new PlanetWaterEnvironmentalState(Water, relocated, RelativeLatentEnergyJoules, InitialCombinedEnergyJoules);
+    }
+
+    /// <summary>
+    /// Replaces the environmental energy after an exchange across the
+    /// environment's boundary (interior conduction, stellar input, infrared
+    /// loss). <paramref name="netBoundaryInputJoules"/> is the signed energy
+    /// that crossed the boundary, so this state's own phase-change residual
+    /// stays closed; the owning ledger records where the energy came from.
+    /// </summary>
+    internal PlanetWaterEnvironmentalState WithBoundaryExchange(
+        PlanetEnvironmentalEnergyBudget environment, double netBoundaryInputJoules)
+    {
+        ArgumentNullException.ThrowIfNull(environment);
+        var initial = InitialCombinedEnergyJoules + netBoundaryInputJoules;
+        if (!double.IsFinite(initial))
+        {
+            throw new ArgumentOutOfRangeException(nameof(netBoundaryInputJoules), "Boundary energy exchange must remain finite.");
+        }
+
+        return new PlanetWaterEnvironmentalState(Water, environment, RelativeLatentEnergyJoules, initial);
     }
 
     public PlanetWaterEnvironmentalState Apply(
