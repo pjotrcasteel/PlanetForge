@@ -32,7 +32,39 @@ public sealed record PlanetOriginEnergyStep(
     double RadiogenicHeatingWatts,
     PlanetInteriorHeatExport InteriorExport,
     PlanetRadiativeExchange Radiation,
-    IReadOnlyList<PlanetWaterPhaseSensibleHeatStep> PhaseChanges);
+    IReadOnlyList<PlanetWaterPhaseSensibleHeatStep> PhaseChanges)
+{
+    /// <summary>
+    /// Explicit high-resolution interval constructor. Legacy whole-year
+    /// steps keep their existing constructor and semantics.
+    /// </summary>
+    public PlanetOriginEnergyStep(
+        PlanetOriginDuration duration,
+        double impactHeatingWatts,
+        double radiogenicHeatingWatts,
+        PlanetInteriorHeatExport interiorExport,
+        PlanetRadiativeExchange radiation,
+        IReadOnlyList<PlanetWaterPhaseSensibleHeatStep> phaseChanges)
+        : this(0, impactHeatingWatts, radiogenicHeatingWatts, interiorExport, radiation, phaseChanges)
+    {
+        ExplicitDuration = duration;
+    }
+
+    public PlanetOriginDuration? ExplicitDuration { get; init; }
+
+    public PlanetOriginDuration Duration
+    {
+        get
+        {
+            if (ExplicitDuration.HasValue && ElapsedYears != 0)
+            {
+                throw new InvalidOperationException("An energy step cannot specify both elapsed whole years and an explicit duration.");
+            }
+
+            return ExplicitDuration ?? PlanetOriginDuration.FromYears(ElapsedYears);
+        }
+    }
+}
 
 /// <summary>
 /// One closed energy account for the whole planet: interior, environmental
@@ -117,7 +149,8 @@ public sealed class PlanetOriginEnergyLedger
 
         // 1. Interior: sources in, exported heat out (the interior ledger
         //    records the export as its surface loss).
-        var nextInterior = Interior.AdvanceYears(step.ElapsedYears, new PlanetThermalEnergyFlux(
+        var duration = step.Duration;
+        var nextInterior = Interior.Advance(duration, new PlanetThermalEnergyFlux(
             step.ImpactHeatingWatts, step.RadiogenicHeatingWatts, step.InteriorExport.Watts));
         var exportedJoules = nextInterior.EnergyBudget.CumulativeSurfaceHeatLossJoules -
             Interior.EnergyBudget.CumulativeSurfaceHeatLossJoules;
@@ -126,7 +159,7 @@ public sealed class PlanetOriginEnergyLedger
         var environmentBudget = Environment.Environment.Deposit(step.InteriorExport.Destination, exportedJoules);
 
         // 3. External radiation over the same physical interval.
-        var seconds = step.ElapsedYears * PlanetThermalEnergyBudget.JulianYearSeconds;
+        var seconds = duration.TotalSeconds;
         var absorbed = RequireEnergy(step.Radiation.Balance.AbsorbedStellarPowerWatts * seconds, "absorbed starlight");
         var emitted = RequireEnergy(step.Radiation.Balance.EmittedThermalPowerWatts * seconds, "emitted infrared");
         environmentBudget = environmentBudget.ApplyExternalRadiation(

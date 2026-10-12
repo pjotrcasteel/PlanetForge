@@ -97,6 +97,40 @@ composition, temperature and IAPWS validity. Do not invent condensation
 at a chosen chronological milestone or equate local LOD snapshots with
 this model-only epoch publication.
 
+## M4a — Deterministic sub-year energy and geological integration
+
+Physical process integration now accepts a `PlanetOriginDuration` containing
+whole Julian years and an exact microsecond remainder (365.25 days per year).
+`PlanetOriginClock` stores an integer-year absolute Solar System age and a
+microsecond offset **separately**, so one-second or one-hour steps remain
+representable after billions of years without floating-point timestamp drift.
+The legacy `YearsBeforePresent` and `PlanetGeologicalEpoch` remain
+whole-year geological labels rather than sub-year solver intervals.
+
+`PlanetOriginThermalTimeline.Advance(duration,...)`, the existing
+`PlanetThermalEnergyBudget.AdvanceSeconds`, and the coupled
+`PlanetOriginEnergyLedger` consume the **same explicit physical seconds** for
+impact/radiogenic inputs, interior export, stellar absorption and infrared
+emission. `PlanetOriginEpochState.AdvanceCoupled` permits positive sub-year
+duration steps and still commits one epoch revision only after all substeps
+succeed. Whole-year constructors remain valid for source compatibility.
+
+An interval submitted through `PlanetOriginDuration.FromSeconds` is rounded
+once to the nearest microsecond (half away from zero); an unrepresentably short
+positive interval is rejected. Longer intervals use whole years and a bounded
+remainder. No double-precision absolute geological timestamp is introduced.
+
+**Not yet physics-automatic:** creating sub-year intervals is not adaptive
+substepping or a pressure/saturation/greenhouse closure. Process solvers must
+still select the duration and provide physically valid, re-evaluated boundary
+powers and phase proposals. Region archives, physically calibrated erosion
+age and the live Snowball Climate Experiment are unchanged.
+
+Next: pressure/composition-aware atmospheric eligibility and an adaptive
+proposal integrator that brackets changing saturation and energy budgets
+without crossing a threshold. Only later publish the coupled Earth-origin
+state into the canonical planetary terrain/water presentation path.
+
 ## Integration sequence
 
 1. Calibrate effective dry atmospheric mass, H2O-vapour specific heat, liquid

@@ -26,13 +26,15 @@ public sealed class PlanetOriginThermalTimeline
 
     public PlanetRockThermalState Rock => rockModel.Resolve(EnergyBudget);
 
-    public PlanetOriginThermalTimeline AdvanceYears(long elapsedYears, PlanetThermalEnergyFlux flux)
+    public PlanetOriginThermalTimeline AdvanceYears(long elapsedYears, PlanetThermalEnergyFlux flux) =>
+        Advance(PlanetOriginDuration.FromYears(elapsedYears), flux);
+
+    public PlanetOriginThermalTimeline Advance(PlanetOriginDuration duration, PlanetThermalEnergyFlux flux)
     {
-        ArgumentOutOfRangeException.ThrowIfNegative(elapsedYears);
-        // Calculate both candidates before constructing the new state.
-        // A failed energy or clock step must leave the former epoch untouched.
-        var nextClock = Clock.AdvanceYears(elapsedYears);
-        var nextEnergy = EnergyBudget.Advance(elapsedYears, flux);
+        // Both clocks and thermal fluxes use exactly the same physical interval.
+        // Compute immutable candidates before either can be published.
+        var nextClock = Clock.Advance(duration);
+        var nextEnergy = EnergyBudget.AdvanceSeconds(duration.TotalSeconds, flux);
         return new PlanetOriginThermalTimeline(nextClock, nextEnergy, rockModel);
     }
 }
