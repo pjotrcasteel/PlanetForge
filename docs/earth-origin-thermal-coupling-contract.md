@@ -63,6 +63,40 @@ credit, or lost across an external boundary, never both.
    orbital/local LOD describe the same world epoch. Preserve regional
    Hero archives and the canonical terrain publication gateway.
 
+
+## M3 — Atomic coupled geological epoch publication
+
+The current model-level publication boundary is now implemented by
+`PlanetOriginEpochState(PlanetOriginEnergyLedger)` and
+`AdvanceCoupled(...)`. Its one revision references the **same** interior
+timeline, water inventory and environmental/latent/radiative ledger. The
+existing two-argument constructor remains for historic thermal/water state,
+but that mode cannot be advanced through the coupled ledger and the coupled
+mode rejects the former unaccounted thermal/water step.
+
+A publication can contain multiple explicitly supplied `PlanetOriginEnergyStep`
+substeps. Each supplies its own irradiation, impact/radiogenic power, interior
+export and phase proposals. The candidate state is advanced in isolation;
+any rejected power, water overdraw, reservoir with ghost heat, clock overflow
+or cancellation prevents *all* substeps from publishing. One accepted list
+increments the geological revision once.
+
+**Unresolved physical prerequisite:** subdividing caller-supplied steps is
+not yet an adaptive equilibrium solver. No substep limit, automatic
+saturation-crossing detection, precipitation kinetics, greenhouse closure,
+pressure/composition calibration or Hadean reference conditions is claimed.
+A later process integrator must recompute the radiation and phase rates
+at each physical boundary, detect impending thermodynamic thresholds and
+refine the step before proposing the next publication. Until then, the
+caller owns physically appropriate substep intervals. The existing Snowball
+Climate Experiment and main-planet render path remain separate.
+
+**Next:** implement a bounded saturation-aware process scheduler whose
+eligible phases and step constraints derive from explicit atmosphere pressure,
+composition, temperature and IAPWS validity. Do not invent condensation
+at a chosen chronological milestone or equate local LOD snapshots with
+this model-only epoch publication.
+
 ## Integration sequence
 
 1. Calibrate effective dry atmospheric mass, H2O-vapour specific heat, liquid
