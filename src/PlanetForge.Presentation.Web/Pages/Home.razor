@@ -336,6 +336,10 @@
 
             snapshot = Experience.InvalidateTerrain();
             await SyncPlanetAsync();
+            if (rendererModule is not null)
+            {
+                await rendererModule.InvokeVoidAsync("waitForVisibleTerrain", disposeCancellationTokenSource.Token);
+            }
         }
         catch (Exception error) when (error is not OperationCanceledException)
         {
