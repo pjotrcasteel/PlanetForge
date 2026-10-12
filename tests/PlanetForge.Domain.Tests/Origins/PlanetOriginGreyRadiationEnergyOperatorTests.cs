@@ -102,11 +102,10 @@ public sealed class PlanetOriginGreyRadiationEnergyOperatorTests
             afterBudget.GetEnergyJoules(PlanetEnvironmentHeatReservoir.SurfaceOcean), 0.0);
         Assert.AreEqual(originalBudget.GetEnergyJoules(PlanetEnvironmentHeatReservoir.SurfaceIce),
             afterBudget.GetEnergyJoules(PlanetEnvironmentHeatReservoir.SurfaceIce), 0.0);
-        Assert.AreEqual(0.0, original.Water.ConservationResidualKilograms, 0.0);
+        Assert.AreEqual(0.0, original.Environment.Water.ConservationResidualKilograms, 0.0);
         Assert.AreEqual(0.0, original.ConservationResidualJoules, 0.0);
         Assert.AreEqual(0L, original.Clock.MicrosecondsIntoYear);
-        Assert.AreEqual(original.Water.PlanetaryWaterMassKilograms,
-            original.Environment.Water.PlanetaryWaterMassKilograms, 0.0);
+        Assert.AreEqual(0.0, original.Environment.Water.PlanetaryWaterMassKilograms, 0.0);
         Assert.IsFalse(ReferenceEquals(original.Environment.Environment, trial.Environment),
             "A radiation trial must create a new immutable heat budget, not mutate the published one.");
     }
