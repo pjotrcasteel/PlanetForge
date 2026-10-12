@@ -346,8 +346,28 @@ public sealed class PlanetExperience(
         climateState = climateResult.State;
         var origin = originEpoch is null ? null : PlanetOriginSurfaceProjection.Create(
             originEpoch, state.PhysicalParameters.RadiusMeters, basePhysics.SurfaceGravityMetersPerSecondSquared);
-        var seaLevelMeters = CalculateSeaLevelMeters(origin?.SurfaceLiquidMassKilograms ?? climateResult.Water.LiquidMassKilograms);
-        var atmosphereDensity = CalculateAtmosphereDensity(origin?.SurfacePressurePascals ?? atmosphere.SurfacePressurePascals);
+        // Legacy climate remains available for the frozen-world experiment, but
+        // every canonical origin consumer must see water and gas masses from
+        // the same accepted epoch—not only the WebGL-specific Origin payload.
+        // Zero boiling point represents UNRESOLVED phase eligibility; a steam
+        // atmosphere is never proof of rain or stable surface liquid.
+        var water = origin is null ? climateResult.Water : new WaterPhaseSnapshot(
+            origin.SurfaceIceMassKilograms,
+            origin.SurfaceLiquidMassKilograms,
+            origin.AtmosphericSteamMassKilograms,
+            origin.SurfaceWaterIceFraction,
+            origin.SurfaceWaterLiquidFraction,
+            origin.SurfaceWaterVaporFraction,
+            0.0,
+            false);
+        var originAtmosphereMass = origin is null ? 0.0 : origin.DryGasMassKilograms + origin.AtmosphericSteamMassKilograms;
+        var renderedAtmosphere = origin is null ? atmosphere : atmosphere with
+        {
+            SurfacePressurePascals = origin.SurfacePressurePascals,
+            EarthAtmosphereMasses = originAtmosphereMass / EarthAtmosphereReference.TotalMassKilograms
+        };
+        var seaLevelMeters = CalculateSeaLevelMeters(water.LiquidMassKilograms);
+        var atmosphereDensity = CalculateAtmosphereDensity(renderedAtmosphere.SurfacePressurePascals);
         var radiusMeters = state.PhysicalParameters.RadiusMeters;
         var localSurface = CreateLocalSurface(radiusMeters);
         var surfaceTiles = localSurface is null
@@ -368,11 +388,11 @@ public sealed class PlanetExperience(
             state.PhysicalParameters,
             climateResult.Physics,
             state.AtmosphereParameters,
-            atmosphere,
+            renderedAtmosphere,
             climateResult.Climate,
             climateResult.Feedback,
             state.WaterParameters,
-            climateResult.Water,
+            water,
             localSurface,
             terrainRevision,
             origin);

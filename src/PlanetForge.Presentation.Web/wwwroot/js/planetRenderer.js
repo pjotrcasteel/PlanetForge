@@ -89,6 +89,7 @@ export function setPlanet(snapshot) {
     // The origin's actual surface-rock temperature replaces the legacy
     // frozen-climate temperature only when a coupled epoch is published.
     const origin = state.generatorPreview ? null : snapshot.origin;
+    state.originActive = Boolean(origin);
     state.surfaceTemperature = origin
         ? (origin.nearSurfaceRockTemperatureKelvin ?? 0.0)
         : (state.generatorPreview ? 288.0 : snapshot.climate.surfaceTemperatureKelvin);
@@ -236,7 +237,7 @@ function createState(canvas, gl, dotNetReference) {
         activePointers: new Map(), pinchDistance: null,
         lodTimer: null, lodSequence: 0, lastSurfaceRequestSignature: null, lastTerrainUpdateMs: null, lastGeometryPayloadCount: 0,
         surfaceRequestInFlight: false, surfaceRequestPending: false, dirty: true,
-        surfaceRequestsStarted: 0, surfaceRequestsCompleted: 0, surfaceResponsesSuperseded: 0,
+        surfaceRequestsStarted: 0, surfaceRequestsCompleted: 0, surfaceResponsesSuperseded: 0, originActive: false,
         lastGeometryCommitMs: null, lastTerrainDrawSubmittedMs: null, lastGestureToTerrainDrawMs: null,
         pendingDrawStartedAt: null, lastGestureEndedAt: null, localElevationRangeMeters: null, localCellSpacingMeters: null,
         seaLevelMeters: 0, planetRadiusMeters: 6371000, atmosphereDensity: 0.6,
@@ -921,7 +922,9 @@ function render() {
 }
 
 function isPreBiologicalSurface(s) {
-    return s.canvas.closest('.planet-stage')?.classList.contains('pre-vegetation-world') ?? false;
+    // Geological Earth-origin epochs predate the biology/vegetation model,
+    // irrespective of the unrelated frozen-world mission stage CSS.
+    return s.originActive || (s.canvas.closest('.planet-stage')?.classList.contains('pre-vegetation-world') ?? false);
 }
 
 function renderGlobe(s) {
