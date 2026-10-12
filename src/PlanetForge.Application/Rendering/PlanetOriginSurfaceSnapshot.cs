@@ -20,7 +20,8 @@ public sealed record PlanetOriginSurfaceSnapshot(
     double SurfacePressurePascals,
     double SurfaceWaterLiquidFraction,
     double SurfaceWaterVaporFraction,
-    double SurfaceWaterIceFraction);
+    double SurfaceWaterIceFraction,
+    double AtmosphericSteamMassFraction);
 
 /// <summary>
 /// Pure projection of one atomic geological epoch. This creates no water,
@@ -65,6 +66,7 @@ public static class PlanetOriginSurfaceProjection
             steam, liquid, ice, dryGas, pressure,
             exposedWater == 0.0 ? 0.0 : liquid / exposedWater,
             exposedWater == 0.0 ? 0.0 : steam / exposedWater,
-            exposedWater == 0.0 ? 0.0 : ice / exposedWater);
+            exposedWater == 0.0 ? 0.0 : ice / exposedWater,
+            atmosphereMass == 0.0 ? 0.0 : steam / atmosphereMass);
     }
 }
