@@ -1,6 +1,6 @@
 # PlanetForge — successor-developer handover
 
-**Verified snapshot:** 12 October 2026. **Repository:** https://github.com/pjotrcasteel/PlanetForge. **Live:** https://pjotrcasteel.github.io/PlanetForge/. **Main at handover:** `08aaff9c14325fc75ca39bfa4764455d22315584`. This is a dated snapshot: **re-query GitHub for current status before coding.**
+**Verified successor update:** 12 October 2026. **Repository:** https://github.com/pjotrcasteel/PlanetForge. **Live:** https://pjotrcasteel.github.io/PlanetForge/. **Latest validated science-code merge:** `501573dba221859bae1cc582c7f0931a2b0f05c4` (#169). All CI and GitHub Pages checks for that merge passed; subsequent documentation commits may advance the SHA. **Always re-query the current GitHub state before coding.**
 
 > **Mission:** An evidence-informed, deterministic reconstruction of **Earth's history from its formation and molten/magma-ocean conditions, through crust, water-bearing impacts and outgassing, atmospheric condensation, oceans, evolving geology and prebiotic conditions, stopping at the earliest *plausible* life**. A life-creation algorithm has *not* been scientifically established. The **live browser is still a separate artificial Snowball Climate Experiment**, not a playable Hadean Earth timeline. Do not conflate the two.
 
@@ -36,34 +36,41 @@
 | `PlanetEnvironmentalEnergyBudget` / `PlanetWaterEnvironmentalState` | Named atmosphere/ocean/near-surface sensible energy and relative phase enthalpy; not mantle energy |
 | `PlanetEnvironmentTemperatureModel` | Effective heat capacity = Σ(m×cp) and bulk diagnostic Kelvin; no greenhouse/lapse-rate model |
 | `PlanetRadiationBalanceModel` | Solar absorption at πR² and Stefan–Boltzmann emission at 4πR²; emission temperature is not automatically the ground T |
-| `PlanetOriginEpochState` | Immutable geological age + interior energy + water candidate; **not connected to live game, geography and climate yet** |
+| `PlanetOriginEpochState` | Immutable age/revision now owns the **same** coupled interior/environment/water/radiation ledger via `AdvanceCoupled`; not connected to live game geography/climate yet |
+| `PlanetOriginEnergyLedger` / `PlanetOriginDuration` | One closed relative energy account and exact microsecond/whole-year timebase; no automatic adaptive thermodynamic rates |
+| `PlanetOriginVolatileTransport` | Explicit accreted H2O, magma→steam material enthalpy, escape and conservation with relative latent accounting; no calibrated magma chemistry/steam EOS |
+| `PlanetMixedAtmosphereSaturation` | Dry-gas + vapor total and mole-fraction partial pressure; pure-water IAPWS-bounded **diagnostic only**, not condensation kinetics |
 
 Related: `PlanetCryosphereMassBudget` prevents making ice-covered area independent of frozen-water mass; physical ocean hypsometry and connected-area surveys are in Application and shared spherical domain geometry.
 
-**Past merged milestones:** #144 scientific scope; #145 scenario+clock; #146 interior heat; #147 water reservoirs; #149 rock latent melt; #150 thermal timeline; #151 saturation; #154 atomic epoch; #155 ice bound; #156 water-phase latent energy; #157 environmental stores; #158 heat capacity/temperatures; #159 radiation; plus the previously open thermal-coupling PRs #160/#161 and the atomic Earth-origin epoch world state integration now merged on `main`. Hydrology/ocean: #136–#142 and #152–#153. A **merged isolated model is not a completed coupled early-Earth simulator**.
+**Merged foundations:** #144–#161 as relevant; #160/#161 are **already merged**, followed by M1 surface-ice heat and M2 global energy ledger. Successor science milestones: **#164 (M3 atomic coupled epoch), #166 (M4a physical sub-year time), #168 (M4b volatile material energy), #169 (M4c mixed-atmosphere diagnostic)**. Hydrology/ocean #136–#142 and #152–#153 remain preserved. **Merged isolated models do not mean a coupled playable early-Earth simulation exists.**
 
-## OPEN PRs — verified 12 October 2026
+## Successor status — verified after M4c, 12 October 2026
 
-- Exactly **two** PRs remained open, both still draft/unmerged though the **full `Validate PlanetForge` workflow passed** for their specified head SHA. Review again before merging; successful past CI is not forever valid.
+**No open pull requests** after #169 merged (verify again whenever resuming). The earlier references in this handover to #160/#161 being draft/unmerged were **historical snapshots**, superseded by the confirmed GitHub merges.
 
-- **[#160 — sensible heat carried by steam/liquid transfers](https://github.com/pjotrcasteel/PlanetForge/pull/160)**: head `adb1eb3e3dad73381ab97835c0e89824272b25bf`; successful run **38208102933**. Mass and sensible heat move together, with separately accounted latent heat. Supports only vapor/liquid; **ice's own thermal store not yet modeled**. Well-mixed effective-cp approximation, no precipitation kinetics.
-- **[#161 — radiative external-energy time integration](https://github.com/pjotrcasteel/PlanetForge/pull/161)**: head `2ad7f399163ea4799c62c4369cc936b15993f1b4`; successful run **38208298750**. Tracks stellar joules in, infrared joules out, named environmental emitting/absorbing stores, finite timesteps and rollback. **No calibrated early-Sun/atmospheric greenhouse/timeline**.
+| Merged work | Verified baseline | What it actually delivers |
+| --- | --- | --- |
+| #160 / #161 | Previously CI-green; both merged | Sensible H2O phase transport and external radiative interval accounting, not Hadean calibration |
+| M1 / M2 | Merged before successor | Ice sensible-heat store and the single interior + environment + relative latent ledger |
+| [#164](https://github.com/pjotrcasteel/PlanetForge/pull/164) (M3) | CI 38219060756; Pages 38220225106 | One atomic coupled geological revision, water + interior + environmental + radiation with supplied substeps |
+| [#166](https://github.com/pjotrcasteel/PlanetForge/pull/166) (M4a) | CI 38221125939; Pages 38222017161 | Microsecond/Julian-year physical clock; same seconds used for interior/radiative integration |
+| [#168](https://github.com/pjotrcasteel/PlanetForge/pull/168) (M4b) | CI 38230367595; Pages 38231875375 | Conserved explicit delivered H2O, mantle↔magma bookkeeping, magma→steam enthalpy and steam escape, with typed source/loss accounting |
+| [#169](https://github.com/pjotrcasteel/PlanetForge/pull/169) (M4c) | CI 38232032740; Pages 38232774859 | Bounded hydrostatic **mixed** atmospheric pressure and mole-fraction steam partial-pressure/saturation potential; unsupported IAPWS regimes stay indeterminate |
 
-**Immediate next-model task:** Re-fetch these exact PRs and CI, review source/test correctness, then mark ready and merge sequentially if still valid; check newer `main` deployments. Do *not* blindly merge older stale PRs.
+**All listed CI runs completed successfully**, including .NET tests, WASM publish and Playwright. Pages runs above include live-boot smoke validation. Code SHA before this document update: `501573d`.
 
-### Merged PRs and follow-up
+The domain now supports proposing an explicit accounted sequence such as delivered hydrous material → dissolution into magma → outgassing steam → escape/condensation and conservative heat exchange. **The physical rates and eligibility to execute that sequence are not solved.** In particular, magma reaction enthalpy, high-pressure steam nonideal EOS/fugacity, atmospheric composition, greenhouse/vertical temperature, saturation crossing, precipitation, rainfall routing and early-Sun/impact chronology still require evidence-based models. Source: [mixed-atmosphere assumptions](earth-origin-mixed-atmosphere-diagnostic.md) and [thermal coupling contract](earth-origin-thermal-coupling-contract.md).
 
-- **[#160 — sensible heat carried by steam/liquid transfers](https://github.com/pjotrcasteel/PlanetForge/pull/160)**: merged into `main`. Mass and sensible heat move together, with separately accounted latent heat. Supports only vapor/liquid; **ice's own thermal store not yet modeled**. Well-mixed effective-cp approximation, no precipitation kinetics.
-- **[#161 — radiative external-energy time integration](https://github.com/pjotrcasteel/PlanetForge/pull/161)**: merged into `main`. Tracks stellar joules in, infrared joules out, named environmental emitting/absorbing stores, finite timesteps and rollback. **No calibrated early-Sun/atmospheric greenhouse/timeline**.
-- `PlanetOriginEpochState` (merged earlier as #154) atomically advances geological age, interior energy and conserved water inventory. It does not yet own environmental, radiative or latent-energy state.
-- **M1 (done): ice sensible-heat store.** `PlanetEnvironmentHeatReservoir.SurfaceIce` holds the sensible energy of frozen water; its diagnostic temperature uses ice mass × `IceSpecificHeatJoulesPerKilogramKelvin` (default 2,100 J/kg/K). `PlanetVaporLiquidSensibleTransport` was renamed `PlanetWaterPhaseSensibleTransport` and now covers melt, freeze, sublimation and deposition. `PlanetRadiativeEnvironmentState` no longer rebuilds the budget from three hard-coded stores (which would have silently dropped ice heat).
+### Authoritative next gates
 
-**Next (M2):** one global energy ledger. Split `SurfaceHeatLossWatts` into interior→environment transfer (debit interior, credit environment) and direct loss to space, so interior + environment + latent + radiation close with one residual.
-- **M2 (done): `PlanetOriginEnergyLedger`.** One residual: `initial + impact + radiogenic + stellar − infrared − stored = 0`, where stored = interior + environmental sensible + relative latent. Interior heat reaches space only via the environment. Rejects heat into stores without matter, over-emission and cancellation without publishing. Fixed operator order per step (interior → radiation → phase changes).
+1. Explicit composition and pressure-dependent H2O thermodynamics, high-temperature/nonideal regime detection, mineral/rock enthalpy and physically sourced initial-condition ensembles.
+2. A **conservation-tested adaptive process integrator** that reevaluates radiation, heat, vapor partial pressure and phase eligibility on short physical substeps; reject a step that crosses a saturation threshold rather than scripting rain.
+3. Atomic publication connecting *one* Earth-origin epoch to canonical geology, liquid-water inventory, hypsometry/basin connectivity, climate and the existing orbital/local LOD 0–3 surface. Preserve Hero region identity and research archives.
+4. Only then visually validate the main planet evolving through melt/cooling/outgassing/rain/basin oceans. Safari visual acceptance must include screenshot evidence; no separate Earth-origin fake world, extra tabs or invented white/blue masks.
+5. Revisit unresolved [#148](https://github.com/pjotrcasteel/PlanetForge/issues/148) Snowball cryosphere, [#162](https://github.com/pjotrcasteel/PlanetForge/issues/162) mountain realism, and [#163](https://github.com/pjotrcasteel/PlanetForge/issues/163) local river/lake continuity as independent, canonical-world work.
 
-**Next (M3):** make `PlanetOriginEpochState` own the ledger (instead of only interior + water inventory) so one epoch revision covers clock, interior, environment, water and radiation; add substepping so a step cannot jump past saturation.
-
-**Immediate next-model task:** connect the new epoch/world-state primitives into the canonical Earth-origin scenario and then feed the coupled thermal, water and radiative state into the existing presentation path without replacing the preserved Hero terrain work.
+**Issues #143, #165 and #167 remain useful scientific integration records**, not proof that all their requested physics is already done.
 
 ## Hero-region/geology preservation — strict contract
 
@@ -93,22 +100,16 @@ npm test
 
 `.github/workflows/csharp.yml`: PRs to `main` changing `src/**`, `tests/**`, solution/config/workflows; restore, build, JS syntax, .NET tests, WebAssembly publish, Chromium Playwright visual tests, artifacts `generator-visual-regression` / `planetforge-debug-web`. **Do not merge at the .NET green stage if Playwright is still running.** Inspect screenshot artifacts for actual visual work: an earlier trivial ocean pixel-count test passed while screenshot oceans were fragmented.
 
-`.github/workflows/pages.yml`: push to `main`, build/test/publish to GitHub Pages, replace base `/PlanetForge/`, embed authoritative `wwwroot/js/buildVersion.js` version and short Git SHA, run a deployed Playwright smoke check. User tests iPhone Safari on meaningful **deployed** visuals, not domain-only PRs. Last verified Pages main run at snapshot: **38208066033** succeeded for `08aaff9c`. `docs/**` is not included in the PR validation workflow path filter—documentation changes alone will not auto-trigger PR CI.
+`.github/workflows/pages.yml`: push to `main`, build/test/publish to GitHub Pages, replace base `/PlanetForge/`, embed authoritative `wwwroot/js/buildVersion.js` version and short Git SHA, run a deployed Playwright smoke check. User tests iPhone Safari on meaningful **deployed** visuals, not domain-only PRs. Latest successor-verified Pages run at this documentation update: **38232774859** succeeded for `501573d`. `docs/**` is not included in the PR validation workflow path filter—documentation changes alone will not auto-trigger PR CI.
 
 ## Recommended scientific next steps
 
-1. **Review/merge #160 and #161** after verifying latest head+CI and shared-energy compatibility. Keep their separate assumptions explicit.
-2. Design one conservation-tested coupled atmospheric/ocean/interior **enthalpy** formulation with explicit stellar/IR boundaries and mantle↔surface transfers, including water-mass sensible heat. Avoid large physical time steps that jump over changing saturation.
-3. Add composition- and pressure-constrained saturation/condensation, adaptive physical rates and mass+energy conservation through rainfall and ocean formation. Calibration needs sourced inputs; no implicit stage triggers.
-4. Provide Hadean evidence-constrained initial conditions and uncertainty ensembles for accretion/impact heating, mantle heat/melt, volatile delivery and retention, young Sun, radiative boundary.
-5. Extend `PlanetOriginEpochState` to atomically own thermal, atmospheric, water, geology and hydrology state. Publish one canonical epoch consumed by Hero, orbital planet and local LOD; preserve old save schema and current climate experiment.
-6. Only after models justify it, show a genuinely evolving molten Earth → cooling crust → steam → rain → basin oceans → geological landscapes → *plausible* prebiotic/first-life conditions. Fix Snowball ice separately (#148). Avoid cosmetic tabs or scripted life.
-7. Later revisit Hero ridge realism (#162) and orbit-to-ground rivers/lakes/navigation (#163) on modern main, with mass conservation and iPhone visual validation.
+Resume at the **authoritative next gates above**, using the current `main` commit and existing domain/terrain contracts. Don't repeat already-merged PRs #160/#161/#164/#166/#168/#169. Mixed-gas partial pressure is a diagnostic; it does **not** turn into rain by itself. The live home page is still the deliberately separate Snowball Climate Experiment.
 
 **User expectations:** They say “continue” and delegate concrete implementation, CI/CD and merges. Work independently, preserve already completed Hero work, show real incremental improvement when justified, explain accurately what is merged vs staged, and take time. No Wednesday/demo deadline takes priority over the foundation. The main physical 3D planet and its consistent LOD are paramount.
 
 ## Copy-paste resume instruction
 
-> Continue `pjotrcasteel/PlanetForge` from GitHub's CURRENT `main`. Read this handover plus the science, thermal and Hero contracts. Check all open PRs and Actions runs; as of 2026-10-12, #160/#161 were CI-green but unmerged, and older #66/#81/#113/#134 were closed intentionally, their useful research preserved in #162/#163. The true product is a conserved, science-grounded Earth-origin timeline from molten formation to earliest plausible life; the live Snowball experiment is separate. Never rebuild Hero terrain, fake planet-wide geology or claim hidden physics is deployed. Implement narrow tested model steps; check global H2O/energy conservation; use existing canonical geography and LOD. Manage PRs, full CI and Pages validation, and request iPhone screenshots only for meaningful new deployed visuals.
+> Continue `pjotrcasteel/PlanetForge` from CURRENT GitHub `main`; re-check branches, PRs, Actions and Pages first. #160/#161 and M1/M2/M3/M4a/M4b/M4c (through #169) were merged by 12 October 2026; do not rebuild those foundations. Read the Earth-origin science, thermal coupling, mixed-atmosphere and Hero terrain contracts. The playable Snowball experiment is separate from the scientifically bounded Earth-origin reconstruction. Next build pressure/composition/nonideal thermodynamics and adaptive conservation-tested phase eligibility, then connect one physical epoch to canonical geology, physical oceans, Hero and global/local LOD 0–3. Do not make scripted rain, arbitrary planets, cosmetic snow/ocean overlays, unsupported first life or extra diagnostic tabs. CI and Pages must pass before merges; ask for iPhone Safari screenshots only when meaningful physical visuals have genuinely changed.
 
 **End of dated handover. Inspect GitHub live state before proceeding.**
