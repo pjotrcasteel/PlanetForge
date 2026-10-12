@@ -143,8 +143,14 @@ internal static class PlanetOriginAdaptiveIntegrator
                 "The chosen adaptive physical interval exceeds bounded integer microsecond resolution.");
         }
 
-        return checked(duration.WholeYears * PlanetOriginDuration.MicrosecondsPerJulianYear +
-            duration.RemainingMicroseconds);
+        var yearsTicks = duration.WholeYears * PlanetOriginDuration.MicrosecondsPerJulianYear;
+        if (duration.RemainingMicroseconds > long.MaxValue - yearsTicks)
+        {
+            throw new ArgumentOutOfRangeException(nameof(duration),
+                "The combined geological years and fractional time exceed integer microsecond resolution.");
+        }
+
+        return yearsTicks + duration.RemainingMicroseconds;
     }
 
     private static PlanetOriginDuration FromTicks(long microseconds) =>
