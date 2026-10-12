@@ -11,6 +11,7 @@ The existing Earth-origin geological energy/water ledger can now be projected, o
 - The main renderer uses projected liquid/vapor and surface temperature in origin mode. It never reuses a frozen experiment's snow or ice geography. The global ice account alone cannot establish where any ice lies.
 - Bulk mantle melt fraction is explicitly **not** the areal fraction of surface lava or spatial crust thickness. Those require a region-based thermal/solidification model.
 - Failed publication restores the previous epoch. Re-seeding, loading a legacy save and resetting Earth detach origin; the legacy climate step cannot advance a bound origin clock.
+- `PlanetExperience.AdvanceOriginEpochAdaptive` advances using the **existing** bounded process callback/integrator and then attempts one atomic main-planet publication. Rejected or cancelled integration cannot show an intermediate geothermal state.
 
 ## Boundary and limitations
 
