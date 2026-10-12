@@ -181,7 +181,7 @@ test('MainPlanet_MeltingWorld_PublishesPhysicallyPlacedOceanInBothGeologyModes',
 
 
 test('MainPlanet_CrustResearchEpochs_ChangePhysicalGeometryAndKeepWaterCameraAlignedOnPhone', async ({ page }, testInfo) => {
-    test.setTimeout(300_000);
+    test.setTimeout(420_000);
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto('/?visualTest=1');
     await expect(page.locator('#planet-canvas')).toBeVisible({ timeout: 30_000 });
@@ -193,8 +193,18 @@ test('MainPlanet_CrustResearchEpochs_ChangePhysicalGeometryAndKeepWaterCameraAli
     await expect(page.getByTestId('main-geology-epoch')).toHaveText('0 Ma AGO');
     const present = await page.evaluate(() => window.__planetForgeSurfaceTest.getTerrainGeometryKey());
     expect(present).not.toBe(canonical);
+    const focusedHud = page.locator('.foundation-clock-geology');
+    await expect(focusedHud).toBeVisible();
+    expect((await focusedHud.boundingBox()).height).toBeLessThan(200);
+    await expect(page.getByRole('button', { name: 'Generate new planet' })).toBeHidden();
+    await expect(page.getByText('YEAR 0', { exact: true })).toBeHidden();
+    await expect(page.getByRole('button', { name: 'NEXT', exact: true })).toHaveCount(0);
 
-    for (const [expected, filename] of [['1 Ma AGO', 'crust-research-1ma.png'], ['2 Ma AGO', 'crust-research-2ma.png']]) {
+    for (const [expected, filename] of [
+        ['1 Ma AGO', 'crust-research-1ma.png'], ['2 Ma AGO', 'crust-research-2ma.png'],
+        ['3 Ma AGO', null], ['4 Ma AGO', null], ['5 Ma AGO', null],
+        ['6 Ma AGO', 'crust-research-6ma.png']
+    ]) {
         const before = await page.evaluate(() => window.__planetForgeSurfaceTest.getTerrainGeometryKey());
         await page.getByTestId('main-geology-previous').click();
         await expect(page.getByTestId('main-geology-epoch')).toHaveText(expected, { timeout: 150_000 });
@@ -213,18 +223,19 @@ test('MainPlanet_CrustResearchEpochs_ChangePhysicalGeometryAndKeepWaterCameraAli
         expect(aligned.water?.terrainRevision).toBe(Number(aligned.geometryKey.split(':').at(-1)));
         expect(aligned.water?.yaw).toBeCloseTo(aligned.mainYaw, 10);
         expect(Math.min(...aligned.buttons)).toBeGreaterThanOrEqual(36);
-        await page.screenshot({ path: testInfo.outputPath(filename), fullPage: true });
+        if (filename) await page.screenshot({ path: testInfo.outputPath(filename), fullPage: true });
     }
 
     await expect(page.getByTestId('main-geology-previous')).toBeDisabled();
     await page.getByTestId('main-geology-next').click();
-    await expect(page.getByTestId('main-geology-epoch')).toHaveText('1 Ma AGO', { timeout: 150_000 });
-    await page.getByTestId('main-geology-next').click();
-    await expect(page.getByTestId('main-geology-epoch')).toHaveText('0 Ma AGO', { timeout: 150_000 });
-    await expect(page.getByTestId('main-geology-next')).toBeDisabled();
+    await expect(page.getByTestId('main-geology-epoch')).toHaveText('5 Ma AGO', { timeout: 150_000 });
+    await expect(page.getByTestId('main-geology-previous')).toBeEnabled();
 
     await page.getByTestId('geology-terrain-toggle').click();
     await expect(page.getByTestId('main-geology-epochs')).toHaveCount(0, { timeout: 90_000 });
+    await expect(page.getByText('YEAR 0', { exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Generate new planet' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'NEXT', exact: true })).toBeVisible();
     const restored = await page.evaluate(() => window.__planetForgeSurfaceTest.getTerrainGeometryKey());
     expect(restored).not.toBe(present);
     expect((await page.evaluate(() => window.__planetForgeSurfaceTest.measure())).glError).toBe(0);

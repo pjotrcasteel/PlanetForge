@@ -355,3 +355,31 @@ revision-safe switches, and an iPhone-sized WebGL browser comparison with
 screenshots of 1 Ma and 2 Ma physical geometry. Scientific/geometric
 calibration, planet-wide process coupling and real Safari evaluation remain
 open before the research result is promoted to gameplay.
+
+
+## A2.5c — Mobile-first six-million-year geological research comparison
+
+The main planet's existing opt-in crust research timeline now uses **all six
+already bounded** annual-million-year steps supported by
+`PlanetCrustAccumulatedDeformation.MaximumResearchSteps`. Seven immutable
+snapshots correspond to **6 → 5 → 4 → 3 → 2 → 1 → 0 Ma**, sharing one seed,
+ownership history, material-budget invariants and the actual terrain provider
+for orbital and local LOD 0–3. Do not scale the resulting surface relief for
+the research comparison. The change expands the duration sampled by the
+existing pressure-balanced solver; it does not claim conservative moving
+spherical material polygons or complete dynamic mountains.
+
+When the comparison is active, the iPhone HUD hides unrelated Snowball-year,
+seed and planet-generation controls while keeping the geology toggle, physical
+epoch navigation and actual displacement visible. The unrelated
+Snowball NEXT action is unavailable during this research comparison, so
+climate-stage progression cannot be confused with geological time travel.
+Turning geology off restores the unchanged climate/generation interface. This is **not** a separate
+tab/planet or a separate simulation clock. All histories remain research-only:
+water, climate and Earth-origin physics are not rewound by these buttons.
+
+iPhone visual approval is still required: verify short HUD, LOD 0–3
+continuity, stable orbit/navigation, changed physical relief without a
+sudden artifact, and acceptable compute time when first enabling the longer
+research history. CI checks mass and pressure closure across all seven
+snapshots and records smartphone-sized screenshots at 1, 2 and 6 Ma.

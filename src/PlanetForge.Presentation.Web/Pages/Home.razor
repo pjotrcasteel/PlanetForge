@@ -18,7 +18,7 @@
         <canvas id="planet-canvas" aria-label="Interactive simulated planet"></canvas>
         <canvas id="water-overlay-canvas" aria-hidden="true"></canvas>
 
-        <div class="foundation-clock" aria-live="polite">
+        <div class="foundation-clock @(geologyActive ? "foundation-clock-geology" : "")" aria-live="polite">
             <strong>@FormatElapsedTime()</strong>
             <span>@FormatStageLabel()</span>
             <small class="foundation-geology-preview" data-testid="planet-scenario-label" title="@CurrentScenarioName">@(geologyActive ? "EXPERIMENT / PHYSICAL TERRAIN" : "EXPERIMENT / CANONICAL TERRAIN")</small>
@@ -52,9 +52,12 @@
             }
         </div>
 
-        <div class="foundation-controls">
-            <button class="foundation-next" disabled="@(isTransitioning || geologyLoading)" @onclick="AdvanceAsync">@FormatButtonLabel()</button>
-        </div>
+        @if (!geologyActive)
+        {
+            <div class="foundation-controls">
+                <button class="foundation-next" disabled="@(isTransitioning || geologyLoading)" @onclick="AdvanceAsync">@FormatButtonLabel()</button>
+            </div>
+        }
     </section>
 </main>
 
@@ -65,6 +68,7 @@
     private const int HydrologyFrameDelayMilliseconds = 260;
     private const int ScaffoldFrameDelayMilliseconds = 65;
     private const int ScaffoldFrameCount = 36;
+    private const int CrustResearchSteps = PlanetCrustAccumulatedDeformation.MaximumResearchSteps;
 
     private readonly CancellationTokenSource disposeCancellationTokenSource = new();
     private IJSObjectReference? archiveModule;
@@ -275,7 +279,7 @@
         }
 
         geologyLoading = true;
-        geologyStatus = geologyActive ? "RESTORING CANONICAL TERRAIN" : "RECONSTRUCTING 2 MYR OF GEOLOGY";
+        geologyStatus = geologyActive ? "RESTORING CANONICAL TERRAIN" : $"RECONSTRUCTING {CrustResearchSteps} MYR OF GEOLOGY";
         StateHasChanged();
         await Task.Delay(20, disposeCancellationTokenSource.Token);
 
@@ -294,7 +298,7 @@
                 var seed = CurrentSeed;
                 var catalog = PlanetCrustParcelCatalog.Create(seed);
                 var history = PlanetCrustOwnershipHistory.Create(catalog);
-                var timeline = new PlanetCrustAccumulatedDeformation().Simulate(catalog, history, 2);
+                var timeline = new PlanetCrustAccumulatedDeformation().Simulate(catalog, history, CrustResearchSteps);
                 disposeCancellationTokenSource.Token.ThrowIfCancellationRequested();
                 if (seed != CurrentSeed)
                 {
