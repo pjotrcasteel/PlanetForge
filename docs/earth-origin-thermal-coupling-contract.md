@@ -229,6 +229,51 @@ opting into the bounded approximation, older step APIs retain their
 historical behavior. No main-planet render paths, Hero regions or
 frozen-climate scenario behavior change here.
 
+## M4e — Adaptive candidate subdivision and fixed-epoch publication
+
+`PlanetOriginEpochState.AdvanceCoupledAdaptive(duration, options, propose)`
+is an **opt-in numerical orchestration entrypoint** for the existing canonical
+coupled thermal/water/radiation ledger. It never selects a physical process
+or invents rainfall. Its callback receives the latest *accepted unpublished*
+`PlanetOriginEnergyLedger` and an **exact**
+`PlanetOriginDuration`; the caller must recompute all physical rates,
+material source proposals and eligible water transitions **for that candidate
+and that requested physical interval**.
+
+The integrator takes explicit min/max positive substep durations, a maximum
+accepted-substep count, and a maximum refinement count. It initially tries
+the largest allowed interval (reserving a representable tail), then halves
+and **re-proposes from the unchanged candidate** if a modeled step would
+overdraw energy or break the supported physical boundary. It advances to the
+next candidate only when the trial is accepted. A wrong callback duration,
+nonfinite physical rates or invalid units are not silently reinterpreted.
+If refinement reaches the minimum without an admissible step, any later
+failure or cancellation occurs, or the step budget is exhausted, the
+entire geological epoch remains unpublished. Success publishes **one**
+revision, not one revision per internal accepted substep.
+
+Optional `SaturationSafety` uses the same well-mixed,
+caller-certified idealized liquid-vapour envelope introduced by M4d. For
+each candidate with steam, the integrator recomputes total pressure,
+mole-fraction H2O partial pressure and saturation from the **initial and
+final** candidate states, rejecting a step that changes between
+undersaturation and supersaturation without resolving the boundary.
+The M4d guard independently validates proposed condensation before and
+after sensible/latent heat changes. On a rejected boundary crossing the
+time interval is shortened, and the *physical process callback* must decide
+whether its new interval proposes a thermodynamically justified phase
+transfer. The integrator cannot implicitly condense or freeze any water.
+
+**Limitations:** endpoint sampling does not prove absence of nonmonotone
+interior threshold excursions, and half-stepping is a bounded local
+rejection strategy rather than a fully converged adaptive implicit
+thermodynamic solver. The external process must provide evidence-based
+rates, an appropriate pressure/EOS/lapse envelope and genuinely conservative
+phase proposals. A supercritical-steam atmosphere remains unsupported by
+the idealized liquid-vapour guard; this does not imply it precipitates.
+Neither Hero-region state nor current main-planet visuals are affected.
+No special new diagnostic UI is required.
+
 ## Integration sequence
 
 1. Calibrate effective dry atmospheric mass, H2O-vapour specific heat, liquid
