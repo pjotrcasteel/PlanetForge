@@ -179,15 +179,15 @@ internal static class PlanetOriginVolatileTransport
         }
 
         if ((change.MassKilograms == 0.0 && change.MaterialEnthalpyJoules != 0.0) ||
-            (change.Kind is PlanetOriginVolatileExchangeKind.HydratedMantleToMagma or
-                PlanetOriginVolatileExchangeKind.EscapeAtmosphericVapor && change.MaterialEnthalpyJoules != 0.0))
+            (change.Kind is (PlanetOriginVolatileExchangeKind.HydratedMantleToMagma or
+                PlanetOriginVolatileExchangeKind.EscapeAtmosphericVapor) && change.MaterialEnthalpyJoules != 0.0))
         {
             throw new ArgumentException("Volatile material cannot carry unaccounted heat or change energy without mass.", nameof(change));
         }
 
         if (change.MassKilograms > 0.0 &&
-            change.Kind is PlanetOriginVolatileExchangeKind.OutgasMagmaVapor or
-                PlanetOriginVolatileExchangeKind.AccreteAtmosphericVapor &&
+            change.Kind is (PlanetOriginVolatileExchangeKind.OutgasMagmaVapor or
+                PlanetOriginVolatileExchangeKind.AccreteAtmosphericVapor) &&
             change.MaterialEnthalpyJoules == 0.0)
         {
             throw new ArgumentException("Steam transfer requires an explicit positive carried sensible enthalpy.", nameof(change));
