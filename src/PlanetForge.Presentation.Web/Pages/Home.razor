@@ -95,12 +95,20 @@
                         disabled="@airlessBusy" @onclick="AdvanceAirlessReferenceAsync">@(airlessBusy ? "INTEGRATING…" : "ADVANCE 1 HOUR")</button>
                 <button class="foundation-reference-reset" data-testid="airless-reset" type="button"
                         disabled="@airlessBusy" @onclick="ResetAirlessReferenceAsync">RESET</button>
+                <button class="foundation-reference-reset" data-testid="airless-exit" type="button"
+                        disabled="@airlessBusy" @onclick="ExitAirlessReferenceAsync">BACK</button>
             </div>
         }
-        else if (!geologyActive && snapshot?.Origin is null)
+        else
         {
-            <div class="foundation-controls">
-                <button class="foundation-next" disabled="@(isTransitioning || geologyLoading)" @onclick="AdvanceAsync">@FormatButtonLabel()</button>
+            <div class="foundation-controls foundation-reference-entry">
+                @if (!geologyActive && snapshot?.Origin is null)
+                {
+                    <button class="foundation-next" disabled="@(isTransitioning || geologyLoading)" @onclick="AdvanceAsync">@FormatButtonLabel()</button>
+                }
+                <button class="foundation-reference-reset foundation-open-reference" data-testid="airless-enter" type="button"
+                        disabled="@(isTransitioning || geologyLoading || airlessBusy)"
+                        @onclick="EnterAirlessReferenceAsync">HOT ROCK TEST</button>
             </div>
         }
     </section>
@@ -281,6 +289,88 @@
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// Enter the already-tested, airless thermal reference from the main page,
+    /// including when a separate geological research overlay is active.
+    /// Keep one canonical planet and supply a complete first terrain snapshot.
+    /// </summary>
+    private async Task EnterAirlessReferenceAsync()
+    {
+        if (airlessReferenceActive || airlessBusy || geologyLoading || isTransitioning) return;
+        airlessBusy = true;
+        StateHasChanged();
+        await Task.Yield();
+
+        try
+        {
+            if (geologyActive)
+            {
+                TerrainProvider.ClearGlobalCrustDeformation();
+                geologyActive = false;
+                geologyTimeline = null;
+                geologyFrameIndex = 0;
+                geologyStatus = string.Empty;
+                _ = Experience.InvalidateTerrain();
+            }
+
+            _ = Experience.PublishOriginEpoch(PlanetAirlessCoolingReference.CreateInitial());
+            snapshot = Experience.CreateInitialRenderSnapshot();
+            await SyncPlanetAsync();
+            if (waterRendererModule is not null)
+            {
+                await waterRendererModule.InvokeVoidAsync("clearWaterCycle", disposeCancellationTokenSource.Token);
+            }
+
+            airlessReferenceActive = true;
+            airlessElapsedSeconds = 0;
+            airlessStatus = string.Empty;
+        }
+        catch (Exception error) when (error is not OperationCanceledException)
+        {
+            Experience.ClearOriginEpoch();
+            snapshot = Experience.CreateInitialRenderSnapshot();
+            await SyncPlanetAsync();
+            geologyStatus = $"THERMAL REFERENCE UNAVAILABLE: {error.Message}";
+        }
+        finally
+        {
+            airlessBusy = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task ExitAirlessReferenceAsync()
+    {
+        if (!airlessReferenceActive || airlessBusy) return;
+        airlessBusy = true;
+        StateHasChanged();
+        await Task.Yield();
+
+        try
+        {
+            Experience.ClearOriginEpoch();
+            snapshot = Experience.CreateInitialRenderSnapshot();
+            await SyncPlanetAsync();
+            if (waterRendererModule is not null)
+            {
+                await waterRendererModule.InvokeVoidAsync("clearWaterCycle", disposeCancellationTokenSource.Token);
+            }
+
+            airlessReferenceActive = false;
+            airlessElapsedSeconds = 0;
+            airlessStatus = string.Empty;
+        }
+        catch (Exception error) when (error is not OperationCanceledException)
+        {
+            airlessStatus = $"RETURN TO EXPERIMENT FAILED: {error.Message}";
+        }
+        finally
+        {
+            airlessBusy = false;
+            StateHasChanged();
+        }
     }
 
     private async Task AdvanceAirlessReferenceAsync()
