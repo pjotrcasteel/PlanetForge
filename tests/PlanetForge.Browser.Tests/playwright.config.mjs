@@ -3,7 +3,9 @@ import { defineConfig } from '@playwright/test';
 export default defineConfig({
   testDir: '.',
   timeout: 60_000,
-  fullyParallel: false,
+  // Allow Playwright to distribute independent test cases, not just whole files,
+  // across CI shards. Each runner still uses one browser worker.
+  fullyParallel: true,
   workers: 1,
   use: {
     baseURL: process.env.PLANETFORGE_BASE_URL ?? 'http://127.0.0.1:4173',
