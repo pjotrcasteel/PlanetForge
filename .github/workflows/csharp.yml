@@ -106,9 +106,9 @@ jobs:
             sleep 1
           done
           cd tests/PlanetForge.Browser.Tests
-          # All test groups run: each shard owns a disjoint part of the full suite.
-          # Keep one Playwright worker per runner to limit WASM/WebGL contention.
-          npx playwright test --shard=${{ matrix.shard }}/3
+          # A checked-in test manifest balances measured runtime and fails closed if a spec is unassigned.
+          # One Playwright worker per runner prevents WebGL resource contention.
+          node runBrowserShard.mjs ${{ matrix.shard }}
 
       - name: Upload visual regression artifacts
         if: always()
