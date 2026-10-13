@@ -80,7 +80,12 @@ public sealed class PlanetExperience(
     /// error restores both; the regional phase atlas can never be newer
     /// than the actual physical epoch or be accepted independently.
     /// </summary>
-    public PlanetRenderSnapshot PublishRegionalRock(PlanetOriginCanonicalRockCells candidate)
+    public PlanetRenderSnapshot PublishRegionalRock(PlanetOriginCanonicalRockCells candidate) => PublishRegionalRock(candidate, resetClock: false);
+
+    /// <summary>Explicitly restart a reference in one terrain/world transaction, without building an intermediate legacy globe.</summary>
+    public PlanetRenderSnapshot ResetRegionalRock(PlanetOriginCanonicalRockCells candidate) => PublishRegionalRock(candidate, resetClock: true);
+
+    private PlanetRenderSnapshot PublishRegionalRock(PlanetOriginCanonicalRockCells candidate, bool resetClock)
     {
         ArgumentNullException.ThrowIfNull(candidate);
         if (hypsometryCache is null)
@@ -90,7 +95,7 @@ public sealed class PlanetExperience(
             throw new InvalidOperationException("Canonical rock geometry must match the published planet radius.");
         if (candidate.Columns is not null && OriginSurfaceGateway is null)
             throw new InvalidOperationException("Depth-resolved rock requires the shared atomic origin/terrain gateway.");
-        return PublishOriginState(candidate.Epoch, candidate);
+        return PublishOriginState(candidate.Epoch, candidate, resetClock);
     }
 
     /// <summary>Publish a conserved epoch and restore legacy terrain when leaving column mode.</summary>
@@ -108,11 +113,11 @@ public sealed class PlanetExperience(
     private T ReadOriginConsistent<T>(Func<T> read) =>
         OriginSurfaceGateway is { } gateway ? gateway.ReadConsistent(read) : read();
 
-    private PlanetRenderSnapshot PublishOriginState(PlanetOriginEpochState? epoch, PlanetOriginCanonicalRockCells? rock)
+    private PlanetRenderSnapshot PublishOriginState(PlanetOriginEpochState? epoch, PlanetOriginCanonicalRockCells? rock, bool resetClock = false)
     {
         PlanetRenderSnapshot CommitWorld()
         {
-            if (epoch is not null && originEpoch is { } accepted && (epoch.Revision <= accepted.Revision ||
+            if (!resetClock && epoch is not null && originEpoch is { } accepted && (epoch.Revision <= accepted.Revision ||
                 epoch.Clock.YearsSinceSolarSystemFormation < accepted.Clock.YearsSinceSolarSystemFormation ||
                 (epoch.Clock.YearsSinceSolarSystemFormation == accepted.Clock.YearsSinceSolarSystemFormation &&
                     epoch.Clock.MicrosecondsIntoYear <= accepted.Clock.MicrosecondsIntoYear)))
@@ -165,6 +170,20 @@ public sealed class PlanetExperience(
         var next = current.AdvanceCoupledAdaptive(duration, options, propose, cancellationToken);
         cancellationToken.ThrowIfCancellationRequested();
         return PublishOriginEpoch(next);
+    }
+
+    private void ResetOriginState()
+    {
+        bool ClearState()
+        {
+            originEpoch = null;
+            spatialRockEpoch = null;
+            cachedSpatialRockProjection = null;
+            cachedSpatialRockField = null;
+            return true;
+        }
+        if (OriginSurfaceGateway is { } gateway) gateway.PublishOriginSurface(null, ClearState);
+        else ClearState();
     }
 
     public PlanetRenderSnapshot ClearOriginEpoch() => PublishOriginState(null, null);
@@ -333,7 +352,7 @@ public sealed class PlanetExperience(
 
     public void SetSeed(int seed)
     {
-        _ = ClearOriginEpoch();
+        ResetOriginState();
         state.Reseed(seed);
         surfaceView = null;
         localAnchorDirection = null;
@@ -344,7 +363,7 @@ public sealed class PlanetExperience(
 
     public PlanetRenderSnapshot ResetEarthReference()
     {
-        _ = ClearOriginEpoch();
+        ResetOriginState();
         state.ResetEarthReference();
         climateState = null;
         return CreateSnapshot();
@@ -365,7 +384,7 @@ public sealed class PlanetExperience(
     public PlanetRenderSnapshot RestoreState(PlanetExperienceState restoredState)
     {
         ArgumentNullException.ThrowIfNull(restoredState);
-        _ = ClearOriginEpoch();
+        ResetOriginState();
         state.Reseed(restoredState.Seed);
         state.SetPhysicalParameters(restoredState.PhysicalParameters);
         state.SetAtmosphereParameters(restoredState.AtmosphereParameters);

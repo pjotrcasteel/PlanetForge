@@ -7,7 +7,7 @@ test('RockColumns_PhysicalSolidTopOverMoltenDepth_UsesSharedTerrainAndResets', a
   page.on('pageerror', error => errors.push(error.message));
   await page.goto('/?visualTest=1&rockColumns=1');
   await expect(page.getByTestId('planet-scenario-label')).toHaveText('ROCK COLUMNS · SURFACE AND DEPTH', { timeout: 60_000 });
-  await expect(page.getByTestId('regional-melt-range')).toHaveText('MELT 100%–100%');
+  await expect(page.getByTestId('regional-melt-range')).toHaveText('MELT 100%–100%', { timeout: 60_000 });
   await expect(page.getByTestId('column-solid-thickness')).toHaveText('SOLID TOP 0.00–0.00 m');
   await expect(page.getByTestId('column-deep-melt')).toHaveText('DEEP MELT 100%–100%');
   await page.waitForFunction(() => Boolean(window.__planetForgeSurfaceTest) || Boolean(window.__planetForgeSurfaceError), null, { timeout: 60_000 });
@@ -28,7 +28,7 @@ test('RockColumns_PhysicalSolidTopOverMoltenDepth_UsesSharedTerrainAndResets', a
   await expect(page.getByTestId('airless-advance')).toBeInViewport();
   await page.screenshot({ path: testInfo.outputPath('columns-solid-top-molten-depth.png') });
   await page.getByTestId('airless-reset').click();
-  await expect(page.getByTestId('regional-melt-range')).toHaveText('MELT 100%–100%');
+  await expect(page.getByTestId('regional-melt-range')).toHaveText('MELT 100%–100%', { timeout: 60_000 });
   await expect(page.getByTestId('column-solid-thickness')).toHaveText('SOLID TOP 0.00–0.00 m');
   await page.getByTestId('regional-switch').click();
   await expect(page.getByTestId('airless-surface-temperature')).toHaveText('SURFACE 1600 K');

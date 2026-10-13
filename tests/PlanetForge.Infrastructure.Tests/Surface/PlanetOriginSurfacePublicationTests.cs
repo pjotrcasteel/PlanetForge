@@ -111,6 +111,9 @@ public sealed class PlanetOriginSurfacePublicationTests
         Assert.AreEqual(next.Epoch.Revision, after.SpatialRock!.Revision);
         Assert.AreSame(next.Epoch, experience.PublishedOriginEpoch);
         Assert.IsTrue(provider.SampleElevationMeters(PlanetVector.UnitZ, 1) < 0.0);
+        experience.ResetRegionalRock(initial);
+        Assert.AreSame(initial, experience.PublishedRegionalRock);
+        Assert.AreEqual(0.0, provider.SampleElevationMeters(PlanetVector.UnitZ, 1), 0.0);
         experience.ClearOriginEpoch();
         Assert.IsNull(experience.PublishedOriginEpoch);
         Assert.IsNull(experience.PublishedRegionalRock);
@@ -134,6 +137,21 @@ public sealed class PlanetOriginSurfacePublicationTests
         Assert.AreEqual(revision, provider.Revision);
         var snapshot = experience.CreateSnapshot();
         Assert.AreEqual(initial.Epoch.Revision, snapshot.SpatialRock!.Revision);
+    }
+
+    [TestMethod]
+    public void Experience_SetSeed_DoesNotSampleAnIntermediateLegacyGlobe()
+    {
+        var source = new CountingElevation();
+        var experience = CreateExperience(new PlanetTerrainRegionProvider(source));
+        experience.SetSeed(123);
+        Assert.AreEqual(0, source.Samples, "Initialization must reset state without building terrain that the next snapshot immediately replaces.");
+    }
+
+    private sealed class CountingElevation : IPlanetElevationSource
+    {
+        public int Samples { get; private set; }
+        public double SampleElevationMeters(PlanetVector direction, int seed) { Samples++; return 0.0; }
     }
 
     private static PlanetOriginCanonicalRockCells CreateWorld()

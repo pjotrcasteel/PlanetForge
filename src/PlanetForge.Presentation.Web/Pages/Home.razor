@@ -511,14 +511,14 @@
 
         try
         {
-            Experience.ClearOriginEpoch();
             if (regionalRockActive)
             {
-                var radius = Experience.CreateInitialRenderSnapshot().PhysicalParameters.RadiusMeters;
-                _ = Experience.PublishRegionalRock(CreateSelectedRockReference(radius));
+                var radius = snapshot!.PhysicalParameters.RadiusMeters;
+                _ = Experience.ResetRegionalRock(CreateSelectedRockReference(radius));
             }
             else
             {
+                Experience.ClearOriginEpoch();
                 _ = Experience.PublishOriginEpoch(PlanetAirlessCoolingReference.CreateInitial());
             }
 

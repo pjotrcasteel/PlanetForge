@@ -11,6 +11,7 @@ public sealed class PlanetOriginRockColumnElevationSource : IPlanetElevationSour
 {
     private readonly PlanetVector[] centers;
     private readonly double[] elevationMeters;
+    private readonly double? uniformElevationMeters;
 
     public PlanetOriginRockColumnElevationSource(PlanetOriginRockColumnField columns)
     {
@@ -18,11 +19,13 @@ public sealed class PlanetOriginRockColumnElevationSource : IPlanetElevationSour
         centers = columns.Columns.Select(c => PlanetSurfaceGridGeometry.GetCenterDirection(c.Id)).ToArray();
         elevationMeters = columns.Columns.Select(c =>
             c.ThicknessMeters(columns.Material, columns.Properties) - c.ReferenceThicknessMeters).ToArray();
+        uniformElevationMeters = elevationMeters.All(height => height == elevationMeters[0]) ? elevationMeters[0] : null;
     }
 
     public double SampleElevationMeters(PlanetVector direction, int seed)
     {
         var unit = PlanetVector.Normalize(direction);
+        if (uniformElevationMeters is { } height) return height;
         var weightedHeight = 0.0;
         var totalWeight = 0.0;
         for (var i = 0; i < centers.Length; i++)
