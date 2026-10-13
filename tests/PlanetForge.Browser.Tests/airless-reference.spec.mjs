@@ -7,7 +7,7 @@ test('AirlessReference_MainGlobe_AdvancesPhysicalSurfaceCoolingWithoutStoryStage
 
   await expect(page.getByTestId('planet-scenario-label')).toHaveText('AIRLESS · ONE-ZONE PHYSICAL REFERENCE', { timeout: 30_000 });
   await expect(page.getByTestId('airless-reference-readout')).toBeVisible();
-  await expect(page.getByTestId('airless-elapsed')).toContainText('00:00 ELAPSED');
+  await expect(page.getByTestId('airless-elapsed')).toContainText('T+0h');
   await expect(page.getByTestId('airless-surface-temperature')).toHaveText('SURFACE 1600 K');
   await expect(page.getByTestId('airless-mantle-temperature')).toContainText('MELT');
   await expect(page.getByRole('button', { name: 'ADVANCE 1 HOUR' })).toBeVisible();
@@ -23,7 +23,7 @@ test('AirlessReference_MainGlobe_AdvancesPhysicalSurfaceCoolingWithoutStoryStage
   await page.screenshot({ path: testInfo.outputPath('airless-reference-hot-rock.png') });
 
   await page.getByTestId('airless-advance').click();
-  await expect(page.getByTestId('airless-elapsed')).toContainText('01:00 ELAPSED', { timeout: 45_000 });
+  await expect(page.getByTestId('airless-elapsed')).toContainText('T+1h', { timeout: 45_000 });
   await expect(page.getByTestId('airless-surface-temperature')).not.toHaveText('SURFACE 1600 K');
   await expect(page.getByTestId('airless-status')).toContainText('ACCEPTED');
 
@@ -33,7 +33,7 @@ test('AirlessReference_MainGlobe_AdvancesPhysicalSurfaceCoolingWithoutStoryStage
   await page.screenshot({ path: testInfo.outputPath('airless-reference-cooled-rock.png') });
 
   await page.getByTestId('airless-reset').click();
-  await expect(page.getByTestId('airless-elapsed')).toContainText('00:00 ELAPSED', { timeout: 30_000 });
+  await expect(page.getByTestId('airless-elapsed')).toContainText('T+0h', { timeout: 30_000 });
   await expect(page.getByTestId('airless-surface-temperature')).toHaveText('SURFACE 1600 K');
 });
 
@@ -56,7 +56,7 @@ test('AirlessReference_RegularPlanet_OffersOneTapThermalModeAndReturnsWithoutRes
   await expect(page.getByTestId('airless-enter')).toHaveCount(0);
 
   await page.getByTestId('airless-advance').click();
-  await expect(page.getByTestId('airless-elapsed')).toContainText('01:00 ELAPSED', { timeout: 45_000 });
+  await expect(page.getByTestId('airless-elapsed')).toContainText('T+1h', { timeout: 45_000 });
 
   await page.getByTestId('airless-exit').click();
   await expect(page.getByText('SNOWBALL EXPERIMENT', { exact: true })).toBeVisible();
