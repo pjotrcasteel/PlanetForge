@@ -32,6 +32,42 @@ public sealed class PlanetFormationSimulationTests
     }
 
     [TestMethod]
+    public void Advance_MantleConvection_ChangesBasalFluxWithoutInventingEnergy()
+    {
+        var experience = CreateExperience();
+        PlanetFormationSimulation.Start(experience, 24061984);
+        var initial = experience.PublishedRegionalRock!;
+        var boundary = initial.SurfaceBoundary!.Value;
+        var physics = PlanetOriginMagmaConvection.Diagnose(boundary, initial.Columns!, initial.Epoch.Thermal);
+        Assert.IsTrue(physics.RayleighNumber > 1708);
+        Assert.IsTrue(physics.NusseltNumber > 1.0);
+        Assert.IsTrue(physics.EffectiveBoundaryThicknessMeters < 25);
+        Assert.IsTrue(physics.MeanUpwardHeatFluxWattsPerSquareMeter > 0);
+        var viscous = boundary with
+        {
+            MagmaConvection = PlanetOriginMagmaConvectionParameters.Reference with { DynamicViscosityPascalSeconds = 1.0 }
+        };
+        Assert.IsTrue(PlanetOriginMagmaConvection.Diagnose(viscous, initial.Columns, initial.Epoch.Thermal).NusseltNumber < physics.NusseltNumber);
+        var invalid = boundary with { MagmaConvection = PlanetOriginMagmaConvectionParameters.Reference with { DepthMeters = 0 } };
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => invalid.Validate());
+        var interval = PlanetOriginDuration.FromSeconds(1);
+        var settings = new PlanetOriginRockColumnIntegrationOptions(0.25, 1000);
+        var convecting = PlanetOriginRockColumnIntegrator.Advance(initial, interval, boundary, settings);
+        var reference = PlanetOriginRockColumnIntegrator.Advance(initial, interval, boundary with { MagmaConvection = null }, settings);
+        var last = initial.Columns.Columns[0].Layers.Count - 1;
+        Assert.AreNotEqual(reference.Columns!.Columns[0].Layers[last].StoredEnthalpyJoules,
+            convecting.Columns!.Columns[0].Layers[last].StoredEnthalpyJoules);
+        Assert.AreEqual(initial.Field.TotalActiveRockMassKilograms, convecting.Field.TotalActiveRockMassKilograms, 0.0);
+        Assert.AreEqual(0.0, convecting.Epoch.EnergyConservationResidualJoules,
+            convecting.Epoch.CoupledEnergy!.InitialStoredEnergyJoules * 1e-12);
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+        Assert.ThrowsExactly<OperationCanceledException>(() =>
+            PlanetOriginRockColumnIntegrator.Advance(initial, interval, boundary, settings, cancellation.Token));
+        Assert.AreSame(initial, experience.PublishedRegionalRock);
+    }
+
+    [TestMethod]
     public void Start_NewWorld_IsMoltenDryAndCanonicalBeforeFirstRender()
     {
         var experience = CreateExperience();
