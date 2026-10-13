@@ -19,6 +19,7 @@ const groups = [
     'magma-ocean.spec.mjs',
     'mobile-gestures.spec.mjs',
     'rock-columns.spec.mjs',
+    'rock-diagnostic-maps.spec.mjs',
     'terrain-geometry-cache.spec.mjs'
   ]
 ];

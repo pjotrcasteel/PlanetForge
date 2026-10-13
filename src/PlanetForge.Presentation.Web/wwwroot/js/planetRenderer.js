@@ -46,6 +46,17 @@ export function initialize(canvasId, snapshot, dotNetReference, generatorPreview
     }
 }
 
+// Diagnostic selection affects only fragment shading, never the canonical rock model.
+export function setRockDiagnosticMode(mode) {
+    const modes = { physical: 0, temperature: 1, melt: 2 };
+    if (!Object.hasOwn(modes, mode)) throw new RangeError('Unknown rock diagnostic mode.');
+    if (!state) return;
+    state.rockDiagnosticMode = modes[mode];
+    state.dirty = true;
+    renderCurrentView(state);
+    state.dirty = false;
+}
+
 // Read-only snapshot consumed by other render layers. Input and orbit motion
 // belong exclusively to the main renderer, not to each visual overlay.
 export function getPlanetCameraSnapshot() {
@@ -248,6 +259,7 @@ function createState(canvas, gl, dotNetReference) {
         surfaceRequestInFlight: false, surfaceRequestPending: false, dirty: true,
         surfaceRequestsStarted: 0, surfaceRequestsCompleted: 0, surfaceResponsesSuperseded: 0, originActive: false, airlessReference: false,
         thermalRadianceTexture: createThermalReferenceTexture(gl), depthColumnsActive: false,
+        rockDiagnosticMode: resolveRockDiagnosticMode(),
         spatialRockTexture: createEmptySpatialRockTexture(gl), spatialRockRevision: null, spatialRockActive: false,
         lastGeometryCommitMs: null, lastTerrainDrawSubmittedMs: null, lastGestureToTerrainDrawMs: null,
         pendingDrawStartedAt: null, lastGestureEndedAt: null, localElevationRangeMeters: null, localCellSpacingMeters: null,
@@ -272,6 +284,7 @@ function createState(canvas, gl, dotNetReference) {
             depthColumns: gl.getUniformLocation(globeProgram, 'uDepthColumns'),
             thermalRadiance: gl.getUniformLocation(globeProgram, 'uThermalRadianceTexture'),
             spatialRockActive: gl.getUniformLocation(globeProgram, 'uSpatialRockActive'),
+            rockDiagnosticMode: gl.getUniformLocation(globeProgram, 'uRockDiagnosticMode'),
             spatialRockTexture: gl.getUniformLocation(globeProgram, 'uSpatialRockTexture'),
             solarFlux: gl.getUniformLocation(globeProgram, 'uSolarFlux'),
             liquidFraction: gl.getUniformLocation(globeProgram, 'uLiquidFraction'),
@@ -298,6 +311,7 @@ function createState(canvas, gl, dotNetReference) {
             depthColumns: gl.getUniformLocation(localProgram, 'uDepthColumns'),
             thermalRadiance: gl.getUniformLocation(localProgram, 'uThermalRadianceTexture'),
             spatialRockActive: gl.getUniformLocation(localProgram, 'uSpatialRockActive'),
+            rockDiagnosticMode: gl.getUniformLocation(localProgram, 'uRockDiagnosticMode'),
             spatialRockTexture: gl.getUniformLocation(localProgram, 'uSpatialRockTexture'),
             localRockAnchor: gl.getUniformLocation(localProgram, 'uLocalRockAnchor'),
             liquidFraction: gl.getUniformLocation(localProgram, 'uLiquidFraction'),
@@ -334,6 +348,12 @@ function createEmptySpatialRockTexture(gl) {
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, 1, 1, 0, gl.RGBA,
         gl.UNSIGNED_BYTE, new Uint8Array([0, 0, 0, 255]));
     return texture;
+}
+
+// Explicit opt-in visualization: never alters canonical temperatures, phase or geometry.
+function resolveRockDiagnosticMode() {
+    const mode = new URLSearchParams(window.location.search).get('rockMap');
+    return mode === 'temperature' ? 1 : mode === 'melt' ? 2 : 0;
 }
 
 function updateSpatialRockTexture(s, atlas) {
@@ -1053,6 +1073,7 @@ function renderGlobe(s) {
     gl.uniform1f(s.globeUniforms.surfaceTemperature, s.surfaceTemperature);
     gl.uniform1i(s.globeUniforms.airlessReference, s.airlessReference ? 1 : 0);
     gl.uniform1i(s.globeUniforms.spatialRockActive, s.spatialRockActive ? 1 : 0);
+    gl.uniform1i(s.globeUniforms.rockDiagnosticMode, s.rockDiagnosticMode);
     gl.uniform1i(s.globeUniforms.depthColumns, s.depthColumnsActive ? 1 : 0);
     gl.activeTexture(gl.TEXTURE2);
     gl.bindTexture(gl.TEXTURE_2D, s.thermalRadianceTexture);
@@ -1136,6 +1157,7 @@ function renderLocal(s) {
     gl.uniform1f(s.localUniforms.surfaceTemperature, s.surfaceTemperature);
     gl.uniform1i(s.localUniforms.airlessReference, s.airlessReference ? 1 : 0);
     gl.uniform1i(s.localUniforms.spatialRockActive, s.spatialRockActive ? 1 : 0);
+    gl.uniform1i(s.localUniforms.rockDiagnosticMode, s.rockDiagnosticMode);
     gl.uniform1i(s.localUniforms.depthColumns, s.depthColumnsActive ? 1 : 0);
     gl.activeTexture(gl.TEXTURE2);
     gl.bindTexture(gl.TEXTURE_2D, s.thermalRadianceTexture);
@@ -1378,6 +1400,7 @@ uniform int uAirlessReference;
 uniform int uDepthColumns;
 ${thermalMaterialShader}
 uniform int uSpatialRockActive;
+uniform int uRockDiagnosticMode;
 uniform sampler2D uSpatialRockTexture;
 
 // RGBA8 stores Kelvin in two separate bytes. Interpolate *decoded* physical
@@ -1650,6 +1673,12 @@ void main() {
             vec2 uv = vec2(atan(radial.z, radial.x) / 6.28318530718 + 0.5,
                 asin(clamp(radial.y, -1.0, 1.0)) / 3.14159265359 + 0.5);
             vec2 physicalPhase = sampleRegionalRock(uv);
+            if (uRockDiagnosticMode != 0) {
+                float fraction = uRockDiagnosticMode == 1 ? clamp((physicalPhase.x - 500.0) / 2000.0, 0.0, 1.0) : clamp(physicalPhase.y, 0.0, 1.0);
+                vec3 diagnostic = uRockDiagnosticMode == 1 ? mix(vec3(0.04, 0.15, 0.55), vec3(0.98, 0.17, 0.03), fraction) : mix(vec3(0.12, 0.28, 0.88), vec3(0.95, 0.16, 0.08), fraction);
+                outColor = vec4(diagnostic, 1.0);
+                return;
+            }
             if (uDepthColumns == 1) {
                 outColor = vec4(phaseMaterial(physicalPhase, normalize(vPhysicalNormal),
                     normalize(uCameraPosition - vWorldPosition), normalize(uLightDirection), uSolarFlux), 1.0);
@@ -1738,6 +1767,7 @@ uniform int uAirlessReference;
 uniform int uDepthColumns;
 ${thermalMaterialShader}
 uniform int uSpatialRockActive;
+uniform int uRockDiagnosticMode;
 uniform sampler2D uSpatialRockTexture;
 
 // RGBA8 stores Kelvin in two separate bytes. Interpolate *decoded* physical
@@ -1798,6 +1828,12 @@ void main() {
             vec2 uv = vec2(atan(dir.z, dir.x) / 6.28318530718 + 0.5,
                 asin(clamp(dir.y, -1.0, 1.0)) / 3.14159265359 + 0.5);
             vec2 encoded = sampleRegionalRock(uv);
+            if (uRockDiagnosticMode != 0) {
+                float fraction = uRockDiagnosticMode == 1 ? clamp((encoded.x - 500.0) / 2000.0, 0.0, 1.0) : clamp(encoded.y, 0.0, 1.0);
+                vec3 diagnostic = uRockDiagnosticMode == 1 ? mix(vec3(0.04, 0.15, 0.55), vec3(0.98, 0.17, 0.03), fraction) : mix(vec3(0.12, 0.28, 0.88), vec3(0.95, 0.16, 0.08), fraction);
+                outColor = vec4(diagnostic, 1.0);
+                return;
+            }
             if (uDepthColumns == 1) {
                 outColor = vec4(phaseMaterial(encoded, normalize(vNormal), normalize(uLocalCameraPosition - vPositionMeters),
                     normalize(uLightDirection), uSolarFlux), 1.0);

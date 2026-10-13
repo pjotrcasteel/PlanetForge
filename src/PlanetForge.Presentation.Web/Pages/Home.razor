@@ -88,6 +88,26 @@
                         <span data-testid="column-solid-thickness">SOLID TOP @($"{columns.Columns.Min(c => c.SolidSurfaceThicknessMeters(columns.Material, columns.Properties)):0.00}")–@($"{columns.Columns.Max(c => c.SolidSurfaceThicknessMeters(columns.Material, columns.Properties)):0.00}") m</span>
                         <small data-testid="column-deep-melt">DEEP MELT @($"{columns.Columns.Min(c => c.Layers[^1].Resolve(columns.Material).MeltFraction):P0}")–@($"{columns.Columns.Max(c => c.Layers[^1].Resolve(columns.Material).MeltFraction):P0}")</small>
                     }
+                    @if (rockColumnsActive)
+                    {
+                        <div class="foundation-rock-map-controls" aria-label="Scientific rock diagnostic map">
+                            <label for="rock-map-select">MAP</label>
+                            <select id="rock-map-select" data-testid="rock-map-select" value="@rockDiagnosticMode"
+                                    @onchange="SetRockDiagnosticModeAsync">
+                                <option value="physical">Physical appearance</option>
+                                <option value="temperature">Surface temperature</option>
+                                <option value="melt">Surface melt fraction</option>
+                            </select>
+                            @if (rockDiagnosticMode == "temperature")
+                            {
+                                <small data-testid="rock-map-legend">BLUE ≤500 K · RED ≥2500 K</small>
+                            }
+                            else if (rockDiagnosticMode == "melt")
+                            {
+                                <small data-testid="rock-map-legend">BLUE 0% SOLID · RED 100% MOLTEN</small>
+                            }
+                        </div>
+                    }
                     <small class="foundation-thermal-limit">@(rockColumnsActive ? "DRY THIN SHELL · TECTONICS NOT MODELED" : magmaOceanActive ? "HYPOTHETICAL MOLTEN SURFACE · NOT CRUST" : regionalRockActive ? "DECLARED THERMAL CONTRAST · NOT CRUST" : "UNIFORM ROCK TEMP · CRUST NOT MODELED")</small>
                     @if (!string.IsNullOrEmpty(airlessStatus))
                     {
@@ -160,6 +180,7 @@
     private string geologyStatus = string.Empty;
     private bool airlessReferenceActive;
     private bool regionalRockActive;
+    private string rockDiagnosticMode = "physical";
     private bool rockColumnsSelected;
     private bool rockColumnsActive => rockColumnsSelected && regionalRockActive;
     private bool magmaOceanSelected;
@@ -180,10 +201,22 @@
         ? "Airless radiative-conduction reference · not a calibrated early-Earth history"
         : snapshot?.Origin is not null ? PlanetScenarioCatalog.EarthOrigin.Name : PlanetScenarioCatalog.CurrentPlayable.Name;
 
+    private async Task SetRockDiagnosticModeAsync(ChangeEventArgs args)
+    {
+        var mode = args.Value?.ToString();
+        if (mode is not ("physical" or "temperature" or "melt")) return;
+        rockDiagnosticMode = mode;
+        if (rendererModule is not null)
+            await rendererModule.InvokeVoidAsync("setRockDiagnosticMode", disposeCancellationTokenSource.Token, mode);
+    }
+
     protected override void OnInitialized()
     {
         regionalStreamingEnabled = new Uri(Navigation.Uri).Query.TrimStart('?').Split('&', StringSplitOptions.RemoveEmptyEntries)
             .Contains("regionalStreaming=1", StringComparer.OrdinalIgnoreCase);
+        var query = new Uri(Navigation.Uri).Query;
+        rockDiagnosticMode = query.Contains("rockMap=temperature", StringComparison.OrdinalIgnoreCase) ? "temperature"
+            : query.Contains("rockMap=melt", StringComparison.OrdinalIgnoreCase) ? "melt" : "physical";
         var visualTestSeed = GetVisualTestSeed();
         ApplyRun(visualTestSeed.HasValue ? Run.StartNew(visualTestSeed.Value) : Run.StartNew());
         currentStage = FoundationStage.FrozenWorld;
