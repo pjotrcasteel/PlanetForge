@@ -49,3 +49,10 @@ Read [column science/publication contract](../earth-origin-depth-resolved-rock-c
 User requests continuation with another model; new implementation is paused for this verified handoff. No background execution is promised.
 
 Local runtime recovery: use .NET 10.0.100 under `/tmp/pf-dotnet-stable` and a `/tmp` checkout for tests when workspace discovery fails. Local WASM task-host failures were environmental; GitHub full builds/publish succeeded. GitHub app Git-data writes avoid absent CLI push credentials. Production Playwright requires the configured HTTP proxy and absolute Pages URLs. User turns can invalidate transient tool-store/process IDs; recover from Git/files. Do not misclassify this as a product failure.
+
+
+## Depth-refinement numerical gate — implementation in progress
+
+Workstream `PF-EARTH-20261013-A` now includes an explicit per-column resolution sample (fully solid control-volume depth, first unresolved control-volume extent, radiating-cell Kelvin, and count of fully solid layers), plus a provisional four-grid depth/temperature screening helper. The archived independent 8/16/32/64-layer 4-hour observations are a regression fixture that **must fail this screening**; synthetic sufficiently resolved data demonstrate the positive case. Existing four-hour application test now cross-checks that the new sample corresponds to the same published canonical columns.
+
+This prevents mistaking the prior 0.81689 m eight-cell display for a depth-converged crust. **No physics fix or new release acceptance is claimed by this diagnostic-only change.** The measured case still has only one fully solid control volume, and its inferred front moves with mesh spacing. Next: executable independent spatial-refinement benchmark using matching initial state/clock/forcing with measured error budget, followed by radiating-boundary/front reconstruction and genuine convergence improvements. Do not expose `MeetsScreeningCriteria` as proof of scientific validation. Verify PR CI, merge, Pages and exact SHA before marking deployed.

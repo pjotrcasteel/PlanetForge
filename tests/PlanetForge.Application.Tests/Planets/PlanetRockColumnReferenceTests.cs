@@ -23,6 +23,13 @@ public sealed class PlanetRockColumnReferenceTests
         Assert.IsTrue(candidate.Columns!.Columns.All(c => c.Layers[0].Resolve(candidate.Columns.Material).MeltFraction == 0.0));
         Assert.IsTrue(candidate.Columns.Columns.All(c => c.Layers[^1].Resolve(candidate.Columns.Material).MeltFraction > 0.9));
         Assert.IsTrue(candidate.Columns.Columns.All(c => c.SolidSurfaceThicknessMeters(candidate.Columns.Material, candidate.Columns.Properties) > 0.0));
+        var diagnostic = PlanetOriginRockColumnResolutionSample.FromColumn(
+            candidate.Columns.Columns[0], candidate.Columns.Material, candidate.Columns.Properties);
+        Assert.AreEqual(8, diagnostic.LayerCount);
+        Assert.AreEqual(1, diagnostic.FullySolidTopLayers);
+        Assert.IsGreaterThan(0.0, diagnostic.UnresolvedCellWidthMeters);
+        Assert.AreEqual(candidate.Columns.Columns[0].SolidSurfaceThicknessMeters(candidate.Columns.Material, candidate.Columns.Properties),
+            diagnostic.FullySolidTopMeters, 1e-8);
         Assert.IsTrue(candidate.Columns.Columns.All(c => c.ThicknessMeters(candidate.Columns.Material, candidate.Columns.Properties) < c.ReferenceThicknessMeters));
         Assert.AreEqual(initial.Field.TotalActiveRockMassKilograms, candidate.Field.TotalActiveRockMassKilograms, initial.Field.TotalActiveRockMassKilograms * 1e-12);
         Assert.AreEqual(0.0, candidate.Epoch.EnergyConservationResidualJoules, candidate.Epoch.CoupledEnergy!.InitialStoredEnergyJoules * 1e-11);
