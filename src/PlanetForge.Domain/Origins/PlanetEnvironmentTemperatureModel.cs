@@ -15,8 +15,24 @@ public readonly record struct PlanetEnvironmentHeatCapacityParameters(
     double SurfaceRockSpecificHeatJoulesPerKilogramKelvin,
     double IceSpecificHeatJoulesPerKilogramKelvin = 2_100.0)
 {
+    /// <summary>
+    /// Opt-in canonical enthalpy semantics for the existing SurfaceRock store.
+    /// When present, these joules INCLUDE fusion heat and temperatures must
+    /// be recovered with the phase EOS, never divided by sensible capacity.
+    /// </summary>
+    public PlanetOriginSurfaceRockPhaseMaterial? SurfaceRockPhaseMaterial { get; init; }
+
     public void Validate()
     {
+        if (SurfaceRockPhaseMaterial is { } phase)
+        {
+            phase.Validate();
+            if (phase.SpecificHeatCapacityJoulesPerKilogramKelvin != SurfaceRockSpecificHeatJoulesPerKilogramKelvin)
+            {
+                throw new ArgumentException("Canonical and phase-aware surface rock must have the same specific heat.");
+            }
+        }
+
         RequireNonnegative(NoncondensableAtmosphereMassKilograms, nameof(NoncondensableAtmosphereMassKilograms));
         RequireNonnegative(SurfaceRockMassKilograms, nameof(SurfaceRockMassKilograms));
         RequirePositive(NoncondensableAtmosphereSpecificHeatJoulesPerKilogramKelvin, nameof(NoncondensableAtmosphereSpecificHeatJoulesPerKilogramKelvin));
@@ -107,9 +123,21 @@ public static class PlanetEnvironmentTemperatureModel
             atmosphereCapacity, oceanCapacity, rockCapacity,
             ResolveTemperature(state.Environment.GetEnergyJoules(PlanetEnvironmentHeatReservoir.Atmosphere), atmosphereCapacity),
             ResolveTemperature(state.Environment.GetEnergyJoules(PlanetEnvironmentHeatReservoir.SurfaceOcean), oceanCapacity),
-            ResolveTemperature(state.Environment.GetEnergyJoules(PlanetEnvironmentHeatReservoir.SurfaceRock), rockCapacity),
+            ResolveSurfaceRockTemperature(
+                state.Environment.GetEnergyJoules(PlanetEnvironmentHeatReservoir.SurfaceRock),
+                rockCapacity, parameters),
             iceCapacity,
             ResolveTemperature(state.Environment.GetEnergyJoules(PlanetEnvironmentHeatReservoir.SurfaceIce), iceCapacity));
+    }
+
+    private static double? ResolveSurfaceRockTemperature(
+        double joules, double capacityJoulesPerKelvin, PlanetEnvironmentHeatCapacityParameters parameters)
+    {
+        if (capacityJoulesPerKelvin == 0.0) return ResolveTemperature(joules, capacityJoulesPerKelvin);
+        return parameters.SurfaceRockPhaseMaterial is { } phase
+            ? new PlanetRockEnthalpyModel(phase.ToRockProperties(parameters.SurfaceRockMassKilograms))
+                .Resolve(joules).TemperatureKelvin
+            : ResolveTemperature(joules, capacityJoulesPerKelvin);
     }
 
     private static double CheckedCapacity(double mass, double specificHeat)
