@@ -1,6 +1,8 @@
 import { createOpticalBloom, renderOpticalBloom, disposeOpticalBloom } from './opticalBloom.js';
 import { createThermalRadianceData, thermalTextureSize, thermalMaterialShader } from './thermalRadiance.js?v=0.0.46.0';
 import { clearRetainedSurfaceGeometry, retainSurfaceGeometry } from './surfaceGeometryStore.js';
+import { bindPlanetCameraState, clearPlanetCameraState } from './planetCameraState.js';
+export { getPlanetCameraSnapshot } from './planetCameraState.js';
 
 let state;
 
@@ -49,6 +51,7 @@ export function initialize(canvasId, snapshot, dotNetReference, generatorPreview
         state.generatorPreview = generatorPreview;
         installInput(state);
         setPlanet(snapshot);
+        bindPlanetCameraState(state);
         installVisualTestApi();
         requestAnimationFrame(render);
     } catch (error) {
@@ -67,22 +70,6 @@ export function setRockDiagnosticMode(mode) {
     state.dirty = true;
     renderCurrentView(state);
     state.dirty = false;
-}
-
-// Read-only snapshot consumed by other render layers. Input and orbit motion
-// belong exclusively to the main renderer, not to each visual overlay.
-export function getPlanetCameraSnapshot() {
-    if (!state) return null;
-    return {
-        yaw: state.yaw,
-        pitch: state.pitch,
-        distance: state.distance,
-        mode: state.renderMode,
-        geometryKey: state.geometryKey,
-        seed: state.seed,
-        planetRadiusMeters: state.planetRadiusMeters,
-        seaLevelMeters: state.seaLevelMeters
-    };
 }
 
 export function setPlanet(snapshot) {
@@ -247,6 +234,7 @@ export function dispose() {
     clearRetainedSurfaceGeometry();
     if (window.__planetForgeSurfaceTest) delete window.__planetForgeSurfaceTest;
     if (window.__planetForgeSurfaceError) delete window.__planetForgeSurfaceError;
+    clearPlanetCameraState(state);
     state = null;
 }
 

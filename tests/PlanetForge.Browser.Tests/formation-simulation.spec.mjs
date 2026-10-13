@@ -135,3 +135,40 @@ test('Formation_SolidSkinAndResidualEmission_CoexistOnTheSameGlobe', async ({ pa
   expect(stats.darkFraction).toBeGreaterThan(.05);
   await page.screenshot({ path:testInfo.outputPath('formation-solid-skin-residual-glow.png') });
 });
+
+test('Formation_VersionedRendererAndWaterOverlay_KeepOneCameraAndTerrainRevision', async ({ page }) => {
+  await page.goto(url);
+  await expect(page.getByTestId('formation-step')).toBeEnabled({ timeout: 90000 });
+  const inspect = () => page.evaluate(async () => {
+    const current = await import('/js/planetRenderer.js?v=0.0.46.0');
+    const unversioned = await import('/js/planetRenderer.js');
+    const renderer = current.getPlanetCameraSnapshot();
+    const alternate = unversioned.getPlanetCameraSnapshot();
+    const overlay = window.__planetForgeWaterTest?.camera();
+    const main = window.__planetForgeSurfaceTest;
+    return { renderer, alternate, overlay,
+      terrainRevision: Number(main.getTerrainGeometryKey().split(':').at(-1)),
+      mainYaw: main.getYaw(), mainPitch: main.getPitch(), mainDistance: main.getDistance() };
+  });
+  for (const adjust of [
+    () => page.evaluate(() => window.__planetForgeSurfaceTest.setYaw(0.63)),
+    () => page.evaluate(() => window.__planetForgeSurfaceTest.setPitch(-0.28)),
+    () => page.evaluate(() => window.__planetForgeSurfaceTest.setDistance(2.7))
+  ]) {
+    await adjust();
+    const state = await inspect();
+    expect(state.renderer).toEqual(state.alternate);
+    expect(state.overlay).not.toBeNull();
+    expect(state.renderer.geometryKey).toBeTruthy();
+    expect(state.overlay.yaw).toBeCloseTo(state.mainYaw, 12);
+    expect(state.overlay.pitch).toBeCloseTo(state.mainPitch, 12);
+    expect(state.overlay.distance).toBeCloseTo(state.mainDistance, 12);
+    expect(state.overlay.terrainRevision).toBe(state.terrainRevision);
+  }
+  await page.getByTestId('formation-step').click();
+  await expect(page.getByTestId('formation-time')).toHaveText('T+00:00:01', { timeout: 90000 });
+  const advanced = await inspect();
+  expect(advanced.renderer).toEqual(advanced.alternate);
+  expect(advanced.overlay.terrainRevision).toBe(advanced.terrainRevision);
+  expect(advanced.renderer.geometryKey).toBeTruthy();
+});
