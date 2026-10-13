@@ -12,7 +12,7 @@ public partial class Home
     {
         get
         {
-            var seconds = (Experience.PublishedOriginEpoch?.Clock.MicrosecondsIntoYear ?? 0) / 1_000_000;
+            var seconds = Experience.PublishedOriginEpoch is { } epoch ? (long)PlanetFormationSimulation.ElapsedSeconds(epoch.Clock) : 0L;
             return $"T+{seconds / 3600:00}:{seconds / 60 % 60:00}:{seconds % 60:00}";
         }
     }

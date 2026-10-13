@@ -29,7 +29,7 @@ public static class PlanetFormationSimulation
         ArgumentNullException.ThrowIfNull(experience);
         if (seconds is < 1 or > 3600) throw new ArgumentOutOfRangeException(nameof(seconds));
         var current = experience.PublishedRegionalRock ?? throw new InvalidOperationException("Start the formation world before advancing it.");
-        var elapsed = current.Epoch.Clock.MicrosecondsIntoYear / 1_000_000.0;
+        var elapsed = ElapsedSeconds(current.Epoch.Clock);
         // Early surface freezing is a fast transient. Do not use the previous one-hour/30-second reference step to skip it.
         var cap = elapsed < 60.0 ? 0.25 : elapsed < 600.0 ? 1.0 : 5.0;
         var candidate = PlanetOriginRockColumnIntegrator.Advance(current, PlanetOriginDuration.FromSeconds(seconds),
@@ -37,6 +37,10 @@ public static class PlanetFormationSimulation
         cancellationToken.ThrowIfCancellationRequested();
         return experience.PublishRegionalRock(candidate);
     }
+
+    public static double ElapsedSeconds(PlanetOriginClock clock) =>
+        (clock.YearsSinceSolarSystemFormation - PlanetOriginClock.EarthAccretionReference.YearsSinceSolarSystemFormation) *
+        PlanetThermalEnergyBudget.JulianYearSeconds + clock.MicrosecondsIntoYear / 1_000_000.0;
 
     private static PlanetOriginRegionalAirlessParameters Boundary(double solarFlux) => new(PlanetVector.UnitX, solarFlux, 0.15, 0.9, 3.0, 25.0);
 }

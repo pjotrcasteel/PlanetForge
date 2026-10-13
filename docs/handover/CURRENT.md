@@ -10,6 +10,10 @@
 - Shared optics: Planck/CIE log radiance in a filterable RGBA16F lookup, fixed camera exposure, angular molten emissivity normalized to the physical grey epsilon, roughness/Fresnel/GGX reflection, and normalized optical bloom. Bloom is camera optics, **not atmosphere**. No authored lava/convection/fracture map or invented terrain. Display interpolation uses compact eight-neighbour Shepard support; only geometry stencils are cached.
 - Declared initial hypothesis: 2200 K funded shell with **25% conserved geographic enthalpy redistribution**, retaining every initial owned top cell above liquidus. This is hypothetical initial heat contrast, not simulated impact/convection. Early cap 0.25 s retains fast freezing; subsequent caps 1/5 s. Optical temperature and owned top melt remain distinct.
 
+## Cooling kernel follow-on
+
+The separate candidate reuses one immutable specific-enthalpy model per column, resolves old phase once, and carries accepted physical thickness from its flux validation. Native 30-second/384-column cooling publication allocates **437 MB versus 1.686 GB** at the frozen vertical-slice candidate (74% less), with bit-identical final enthalpy SHA-256, identical clock and energy residual. The reproducible tool is `tools/benchmarks/formation-cooling`; this is not browser/Safari timing. Domain/infrastructure regressions pass; full follow-on CI remains required. Elapsed playback/accuracy policy also uses the same absolute clock across Julian-year boundaries, rather than wrapping to zero. Keep the visual-slice CI head frozen while this independent performance work validates.
+
 ## Validation and release gates
 
 - Local scientific suites: 309 domain, 160 application, 263 infrastructure (732 total). New real-publication integration tests cover dry/molten first render, short-step phase/atlas evolution, exact clock, energy/mass conservation, funded hot depth, cancellation, replay and restart.

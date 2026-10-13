@@ -94,6 +94,16 @@ public sealed class PlanetRockColumnReferenceTests
         Assert.AreEqual(8, PlanetRockColumnReference.CreateInitial(6_371_000.0).Columns!.Properties.LayerCount);
     }
 
+    [TestMethod]
+    public void ElapsedSeconds_JulianYearBoundary_PreservesContinuousFormationTime()
+    {
+        var nearBoundary = PlanetOriginClock.EarthAccretionReference.Advance(
+            new PlanetOriginDuration(0, PlanetOriginDuration.MicrosecondsPerJulianYear - 500_000));
+        var afterBoundary = nearBoundary.Advance(PlanetOriginDuration.FromSeconds(1.0));
+        Assert.AreEqual(PlanetThermalEnergyBudget.JulianYearSeconds - 0.5, PlanetFormationSimulation.ElapsedSeconds(nearBoundary), 0.0);
+        Assert.AreEqual(PlanetThermalEnergyBudget.JulianYearSeconds + 0.5, PlanetFormationSimulation.ElapsedSeconds(afterBoundary), 0.0);
+    }
+
     private sealed class FlatElevation : IPlanetElevationSource
     {
         public double SampleElevationMeters(PlanetVector direction, int seed) => 0.0;
