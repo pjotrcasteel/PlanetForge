@@ -91,6 +91,29 @@ public sealed class PlanetOriginSurfaceRockPhaseFieldTests
     }
 
     [TestMethod]
+    public void Propose_RepeatedInputAndRates_ReplaysIdenticalMeltingAcrossAllCells()
+    {
+        var field = PlanetOriginSurfaceRockPhaseField.FromSolidCanonicalSurface(
+            CreateLedger(), new PlanetSurfaceGridLayout(2), RadiusMeters, Material);
+        var first = field.Propose(PlanetOriginDuration.FromSeconds(1.0),
+            (_, _) => new PlanetOriginSurfaceThermalRates(0.0, 20_000.0, 0.0));
+        var second = field.Propose(PlanetOriginDuration.FromSeconds(1.0),
+            (_, _) => new PlanetOriginSurfaceThermalRates(0.0, 20_000.0, 0.0));
+
+        Assert.AreEqual(first.Candidate.TotalStoredEnthalpyJoules, second.Candidate.TotalStoredEnthalpyJoules, 0.0);
+        Assert.AreEqual(first.AbsorbedStellarJoules, second.AbsorbedStellarJoules, 0.0);
+        for (var index = 0; index < field.Cells.Count; index++)
+        {
+            Assert.AreEqual(first.Candidate.Cells[index].StoredEnthalpyJoules,
+                second.Candidate.Cells[index].StoredEnthalpyJoules, 0.0);
+            Assert.AreEqual(first.Candidate.Cells[index].Resolve(Material).MeltFraction,
+                second.Candidate.Cells[index].Resolve(Material).MeltFraction, 0.0);
+        }
+
+        Assert.AreEqual(InitialTemperatureKelvin, field.Cells[0].Resolve(Material).TemperatureKelvin, 1e-9);
+    }
+
+    [TestMethod]
     public void FromSolidCanonicalSurface_HotSensibleOnlyReference_RejectsUnfundedLatentEnergy()
     {
         var ledger = CreateLedger(1_600.0);
