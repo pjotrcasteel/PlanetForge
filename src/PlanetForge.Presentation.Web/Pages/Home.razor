@@ -449,467 +449,611 @@
             airlessElapsedSeconds = 0;
             airlessStatus = string.Empty;
         }
-        catch (Exception error) when (error is not OperationCanc…25346 tokens truncated…ate bytes. Interpolate *decoded* physical
-// samples, never the packed channels (linear filtering corrupts byte carries).
-vec2 sampleRegionalRock(vec2 uv) {
-    ivec2 size = textureSize(uSpatialRockTexture, 0);
-    vec2 pixel = uv * vec2(size) - vec2(0.5);
-    ivec2 base = ivec2(floor(pixel));
-    vec2 fraction = fract(pixel);
-    vec2 weighted = vec2(0.0);
-    for (int dy = 0; dy < 2; dy++) {
-        for (int dx = 0; dx < 2; dx++) {
-            ivec2 cell = base + ivec2(dx, dy);
-            cell.x = (cell.x % size.x + size.x) % size.x;
-            cell.y = clamp(cell.y, 0, size.y - 1);
-            vec4 encoded = texelFetch(uSpatialRockTexture, cell, 0);
-            vec2 sampleValue = vec2(
-                (floor(encoded.r * 255.0 + 0.5) * 256.0 +
-                    floor(encoded.g * 255.0 + 0.5)) * 0.1,
-                encoded.b);
-            float weight = (dx == 0 ? 1.0 - fraction.x : fraction.x) *
-                (dy == 0 ? 1.0 - fraction.y : fraction.y);
-            weighted += sampleValue * weight;
+        catch (Exception error) when (error is not OperationCanceledException)
+        {
+            airlessStatus = $"RETURN TO EXPERIMENT FAILED: {error.Message}";
+        }
+        finally
+        {
+            airlessBusy = false;
+            StateHasChanged();
         }
     }
-    return weighted;
-}
 
-uniform float uSolarFlux;
-uniform float uLiquidFraction;
-uniform float uVaporFraction;
-uniform float uSeaIceFraction;
-uniform float uLandIceFraction;
-uniform float uSnowCoverFraction;
-uniform int uMode;
-uniform float uSeedPhase;
-out vec4 outColor;
+    private async Task AdvanceAirlessReferenceAsync()
+    {
+        if (!airlessReferenceActive || airlessBusy) return;
+        airlessBusy = true;
+        airlessStatus = "INTEGRATING HEAT TRANSFER…";
+        StateHasChanged();
+        await Task.Yield();
 
-float hash31(vec3 p) {
-    p = fract(p * 0.1031);
-    p += dot(p, p.yzx + 33.33);
-    return fract((p.x + p.y) * p.z);
-}
-
-float valueNoise(vec3 p) {
-    vec3 cell = floor(p);
-    vec3 local = fract(p);
-    vec3 f = local * local * (3.0 - (2.0 * local));
-    float n000 = hash31(cell + vec3(0.0, 0.0, 0.0));
-    float n100 = hash31(cell + vec3(1.0, 0.0, 0.0));
-    float n010 = hash31(cell + vec3(0.0, 1.0, 0.0));
-    float n110 = hash31(cell + vec3(1.0, 1.0, 0.0));
-    float n001 = hash31(cell + vec3(0.0, 0.0, 1.0));
-    float n101 = hash31(cell + vec3(1.0, 0.0, 1.0));
-    float n011 = hash31(cell + vec3(0.0, 1.0, 1.0));
-    float n111 = hash31(cell + vec3(1.0, 1.0, 1.0));
-    float nx00 = mix(n000, n100, f.x);
-    float nx10 = mix(n010, n110, f.x);
-    float nx01 = mix(n001, n101, f.x);
-    float nx11 = mix(n011, n111, f.x);
-    return mix(mix(nx00, nx10, f.y), mix(nx01, nx11, f.y), f.z);
-}
-
-float fbm(vec3 p) {
-    return valueNoise(p) * 0.56
-        + valueNoise((p * 2.07) + vec3(4.0, -7.0, 2.0)) * 0.29
-        + valueNoise((p * 4.21) + vec3(-3.0, 5.0, 8.0)) * 0.15;
-}
-
-vec3 terrainMaterial(vec3 radial, vec3 normal, float elevationAboveSeaLevel, bool preBiological) {
-    float elevation = max(elevationAboveSeaLevel, 0.0);
-    float slope = smoothstep(0.002, 0.038, vPhysicalSlope);
-    float steep = smoothstep(0.014, 0.075, vPhysicalSlope);
-    float cliff = smoothstep(0.070, 0.210, vPhysicalSlope);
-    float macro = valueNoise((radial * 6.0) + vec3(4.0, -2.0, 7.0));
-    float subtleVariation = (macro - 0.5) * 0.045;
-
-    vec3 lowland = preBiological ? vec3(0.36, 0.285, 0.195) : vec3(0.18, 0.38, 0.22);
-    vec3 upland = preBiological ? vec3(0.36, 0.31, 0.255) : vec3(0.39, 0.36, 0.22);
-    vec3 highland = preBiological ? vec3(0.46, 0.42, 0.36) : vec3(0.62, 0.65, 0.59);
-    vec3 ridge = preBiological ? vec3(0.255, 0.255, 0.245) : vec3(0.48, 0.48, 0.43);
-    vec3 beach = vec3(0.73, 0.64, 0.46);
-    vec3 coastalRock = vec3(0.30, 0.29, 0.27);
-    vec3 cliffRock = vec3(0.16, 0.17, 0.17);
-
-    vec3 material = mix(lowland, upland, smoothstep(500.0, 1650.0, elevation));
-    material = mix(material, highland, smoothstep(1500.0, 3600.0, elevation));
-    material = mix(material, ridge, steep * smoothstep(900.0, 3000.0, elevation) * 0.72);
-
-    float coastalBand = 1.0 - smoothstep(25.0, 780.0, elevation);
-    float beachStrength = coastalBand * (1.0 - smoothstep(0.002, 0.020, vPhysicalSlope));
-    float rockStrength = coastalBand * slope * (1.0 - cliff * 0.55);
-    float cliffStrength = coastalBand * cliff;
-    material = mix(material, beach, beachStrength * 0.92);
-    material = mix(material, coastalRock, rockStrength * 0.72);
-    material = mix(material, cliffRock, cliffStrength * 0.94);
-    float wetEdge = (1.0 - smoothstep(0.0, 180.0, elevation)) * (1.0 - smoothstep(0.002, 0.020, vPhysicalSlope));
-    material = mix(material, vec3(0.30, 0.27, 0.21), wetEdge * 0.24);
-    material *= 1.0 + subtleVariation;
-
-    vec3 lightDirection = normalize(uLightDirection);
-    float direct = max(dot(normal, lightDirection), 0.0);
-    float radialDirect = max(dot(radial, lightDirection), 0.0);
-    float faceDelta = clamp(direct - radialDirect, -0.45, 0.45);
-    float illumination = clamp(0.34 + (0.72 * smoothstep(0.0, 0.94, direct)) + (faceDelta * 0.24), 0.28, 1.10);
-    illumination *= 1.0 - (steep * 0.08) - (cliff * 0.14);
-    return material * illumination;
-}
-
-vec3 barrenRockMaterial(vec3 radial, vec3 terrainNormal, float elevationMeters) {
-    // Canonical elevation and physical slope define the geological provinces.
-    // Low-frequency noise contributes subtle mineral differences, never fake continents.
-    vec3 offset = vec3(uSeedPhase * 17.1, uSeedPhase * 11.3, uSeedPhase * -13.7);
-    float minerals = valueNoise(radial * 16.0 + offset);
-    float grains = valueNoise(radial * 78.0 + offset * 1.37);
-
-    float basin = 1.0 - smoothstep(-2600.0, 400.0, elevationMeters);
-    float plateau = smoothstep(450.0, 2400.0, elevationMeters);
-    float highland = smoothstep(2100.0, 5400.0, elevationMeters);
-    float physicalCliff = smoothstep(0.000004, 0.0015, vPhysicalSlope);
-
-    vec3 lowland = vec3(0.365, 0.215, 0.168);
-    vec3 dustyPlains = vec3(0.635, 0.350, 0.231);
-    vec3 upliftedRock = vec3(0.750, 0.478, 0.319);
-    vec3 ancientBedrock = vec3(0.515, 0.408, 0.343);
-    vec3 material = mix(dustyPlains, lowland, basin * 0.67);
-    material = mix(material, upliftedRock, plateau * 0.75);
-    material = mix(material, ancientBedrock, highland * 0.56);
-    material = mix(material, vec3(0.36, 0.290, 0.255), physicalCliff * 0.38);
-
-    float mineralVariation = (minerals - 0.5) * 0.16 + (grains - 0.5) * 0.095;
-    material *= 1.0 + mineralVariation;
-
-    float light = max(dot(normalize(terrainNormal), normalize(uLightDirection)), 0.0);
-    float radialLight = max(dot(radial, normalize(uLightDirection)), 0.0);
-    float reliefContrast = clamp((light - radialLight) * 1.2, -0.40, 0.40);
-    float illumination = clamp(0.39 + (0.64 * light) + reliefContrast, 0.25, 1.15);
-    illumination *= 1.0 - physicalCliff * 0.12;
-    return clamp(material * illumination, 0.0, 1.0);
-}
-
-vec4 oceanMaterial(vec3 radial, vec3 normal, float elevationAboveSeaLevel) {
-    if (elevationAboveSeaLevel >= 0.0 || uLiquidFraction <= 0.001) discard;
-
-    float depth = max(-elevationAboveSeaLevel, 0.0);
-    float shelf = 1.0 - smoothstep(220.0, 2100.0, depth);
-    float coast = 1.0 - smoothstep(0.0, 780.0, depth);
-    float deepening = smoothstep(1450.0, 3900.0, depth);
-
-    vec3 deepOcean = vec3(0.006, 0.052, 0.115);
-    vec3 midOcean = vec3(0.012, 0.125, 0.190);
-    vec3 shelfOcean = vec3(0.028, 0.255, 0.315);
-    vec3 coastalOcean = vec3(0.070, 0.390, 0.405);
-
-    vec3 color = mix(midOcean, deepOcean, deepening);
-    color = mix(color, shelfOcean, shelf * 0.86);
-    color = mix(color, coastalOcean, coast * 0.72);
-
-    float broadVariation = valueNoise((radial * 8.0) + vec3(3.0, -4.0, 8.0)) - 0.5;
-    float fineVariation = valueNoise((radial * 24.0) + vec3(-2.0, 9.0, 5.0)) - 0.5;
-    color += vec3(0.0, broadVariation * 0.008, broadVariation * 0.012);
-    color += vec3(0.0, fineVariation * 0.003, fineVariation * 0.005);
-
-    vec3 viewDirection = normalize(uCameraPosition - vWorldPosition);
-    vec3 lightDirection = normalize(uLightDirection);
-    float diffuse = 0.92 + (0.08 * max(dot(radial, lightDirection), 0.0));
-    float fresnel = pow(1.0 - max(dot(radial, viewDirection), 0.0), 3.6);
-    vec3 halfVectorInput = lightDirection + viewDirection;
-    float halfVectorLength = length(halfVectorInput);
-    float specular = 0.0;
-    if (halfVectorLength > 0.0001) {
-        vec3 halfVector = halfVectorInput / halfVectorLength;
-        specular = pow(max(dot(radial, halfVector), 0.0), 104.0) * 0.045;
+        try
+        {
+            if (regionalRockActive)
+            {
+                var current = Experience.PublishedRegionalRock ??
+                    throw new InvalidOperationException("Publish a canonical regional epoch first.");
+                var advanced = rockColumnsActive
+                    ? PlanetRockColumnReference.Advance(current, Experience.CreateSnapshot(), disposeCancellationTokenSource.Token)
+                    : PlanetRegionalCoolingReference.Advance(current, Experience.CreateSnapshot(), disposeCancellationTokenSource.Token);
+                snapshot = Experience.PublishRegionalRock(advanced);
+            }
+            else
+            {
+                snapshot = PlanetAirlessCoolingReference.Advance(Experience, disposeCancellationTokenSource.Token);
+            }
+            await SyncPlanetAsync();
+            if (rendererModule is not null)
+            {
+                await rendererModule.InvokeVoidAsync("waitForVisibleTerrain", disposeCancellationTokenSource.Token);
+            }
+            airlessElapsedSeconds += PlanetAirlessCoolingReference.AdvanceSeconds;
+            airlessStatus = "ACCEPTED";
+        }
+        catch (Exception error) when (error is not OperationCanceledException)
+        {
+            airlessStatus = $"REFERENCE STEP FAILED: {error.Message}";
+        }
+        finally
+        {
+            airlessBusy = false;
+            StateHasChanged();
+        }
     }
 
-    color *= diffuse;
-    color = mix(color, vec3(0.025, 0.085, 0.135), fresnel * 0.08);
-    color += vec3(specular * 0.60, specular * 0.76, specular);
-    return vec4(clamp(color, 0.0, 1.0), 1.0);
-}
+    private async Task ResetAirlessReferenceAsync()
+    {
+        if (!airlessReferenceActive || airlessBusy) return;
+        airlessBusy = true;
+        StateHasChanged();
+        await Task.Yield();
 
-vec4 cryosphereMaterial(vec3 radial, vec3 normal, float elevationAboveSeaLevel) {
-    bool ocean = elevationAboveSeaLevel < 0.0;
-    float elevation = max(elevationAboveSeaLevel, 0.0);
-    float latitudeDegrees = degrees(asin(clamp(abs(radial.y), 0.0, 1.0)));
-    float latitudeFactor = sin(radians(latitudeDegrees));
-    float macro = valueNoise((radial * 5.0) + vec3(4.0, -2.0, 7.0));
-    float meso = valueNoise((radial * 11.0) + vec3(-5.0, 4.0, 1.0));
-    float edgeNoise = (macro * 0.66) + (meso * 0.34);
+        try
+        {
+            Experience.ClearOriginEpoch();
+            if (regionalRockActive)
+            {
+                var radius = Experience.CreateInitialRenderSnapshot().PhysicalParameters.RadiusMeters;
+                _ = Experience.PublishRegionalRock(CreateSelectedRockReference(radius));
+            }
+            else
+            {
+                _ = Experience.PublishOriginEpoch(PlanetAirlessCoolingReference.CreateInitial());
+            }
 
-    float seaRetreat = pow(1.0 - clamp(uSeaIceFraction, 0.0, 1.0), 0.82);
-    float landRetreat = pow(1.0 - clamp(uLandIceFraction, 0.0, 1.0), 0.70);
-    float snowRetreat = pow(1.0 - clamp(uSnowCoverFraction, 0.0, 1.0), 0.78);
-    float localTemperature = uSurfaceTemperature - (18.0 * pow(latitudeFactor, 1.45)) - (elevation * 0.0065);
-    float highland = smoothstep(850.0, 2750.0, elevation);
-    float summit = smoothstep(4100.0, 6200.0, elevation);
-    float steep = smoothstep(0.010, 0.060, vPhysicalSlope);
-    float cliff = smoothstep(0.060, 0.190, vPhysicalSlope);
-    float warpedLatitude = latitudeDegrees + ((macro - 0.5) * 16.0) + (ocean ? 0.0 : clamp(elevation / 780.0, 0.0, 7.5));
-
-    float seaIceLine = mix(-25.0, 68.0, seaRetreat);
-    float seaSheet = smoothstep(seaIceLine - 1.5, seaIceLine + 5.0, warpedLatitude);
-    float seaPatch = valueNoise((radial * 9.0) + vec3(-3.0, 7.0, 4.0));
-    float seaFragmented = smoothstep(seaIceLine - 4.0, seaIceLine + 7.5, warpedLatitude)
-        * smoothstep(0.56, 0.70, seaPatch + (smoothstep(58.0, 84.0, warpedLatitude) * 0.09));
-    float seaCoverage = uSeaIceFraction >= 0.999 ? 1.0 : mix(seaSheet, seaFragmented, smoothstep(0.10, 0.52, seaRetreat));
-
-    float snowline = mix(-1400.0, 4400.0, snowRetreat);
-    float localSnowline = snowline + ((0.5 - macro) * 360.0) + ((0.5 - edgeNoise) * 620.0) + (cliff * 480.0);
-    float crestSnow = smoothstep(localSnowline - 280.0, localSnowline + 430.0, elevation);
-    crestSnow *= 1.0 - smoothstep(264.0, 271.0, localTemperature);
-    float polarLand = smoothstep(71.0, 87.0, warpedLatitude);
-    float polarPatch = valueNoise((radial * 8.0) + vec3(8.0, -5.0, 2.0));
-    float polarRemnant = polarLand * smoothstep(0.48, 0.67, polarPatch + (highland * 0.16) + (steep * 0.08));
-    float finalLandSurvival = max(crestSnow, max(polarRemnant, summit * 0.82));
-    finalLandSurvival *= 1.0 - (cliff * (1.0 - summit) * 0.62);
-    float landIceLine = mix(-25.0, 70.0, landRetreat);
-    float broadLandSheet = smoothstep(landIceLine - 2.5, landIceLine + 6.0, warpedLatitude);
-    float frozenWorldLand = max(broadLandSheet, smoothstep(-40.0, -8.0, warpedLatitude));
-    float landCoverage = (uLandIceFraction >= 0.999 && uSnowCoverFraction >= 0.999)
-        ? 1.0
-        : mix(frozenWorldLand, finalLandSurvival, smoothstep(0.08, 0.52, landRetreat));
-    float lowCoastalLand = 1.0 - smoothstep(120.0, 700.0, elevation);
-    float polarCoastalBridge = smoothstep(54.0, 76.0, warpedLatitude) * lowCoastalLand * smoothstep(0.28, 0.72, seaCoverage);
-    landCoverage = max(landCoverage, polarCoastalBridge);
-
-    float coverage = ocean ? smoothstep(0.16, 0.74, seaCoverage) : smoothstep(0.10, 0.80, landCoverage);
-    if (coverage < 0.025) discard;
-
-    float iceTexture = (macro * 0.68) + (meso * 0.32);
-    vec3 seaIce = mix(vec3(0.48, 0.64, 0.70), vec3(0.79, 0.87, 0.89), 0.47 + (iceTexture * 0.22));
-    vec3 landIce = mix(vec3(0.65, 0.69, 0.69), vec3(0.91, 0.92, 0.89), 0.44 + (iceTexture * 0.24));
-    vec3 snow = mix(vec3(0.81, 0.83, 0.81), vec3(0.98, 0.97, 0.93), 0.52 + (iceTexture * 0.17));
-    bool snowballWorld = uSeaIceFraction >= 0.999 && uLandIceFraction >= 0.999 && uSnowCoverFraction >= 0.999;
-    vec3 snowballIce = mix(vec3(0.69, 0.73, 0.73), vec3(0.94, 0.95, 0.92), 0.54 + (iceTexture * 0.18));
-    vec3 material = snowballWorld ? snowballIce : (ocean ? seaIce : mix(landIce, snow, clamp(crestSnow * 0.82, 0.0, 0.94)));
-
-    float direct = max(dot(normalize(normal), normalize(uLightDirection)), 0.0);
-    material *= clamp(0.62 + (0.42 * direct), 0.52, 1.08);
-    float alpha = coverage >= 0.98 ? 1.0 : clamp(smoothstep(0.05, 0.90, coverage) * 0.98, 0.0, 0.98);
-    return vec4(material, alpha);
-}
-
-void main() {
-    vec3 radial = normalize(vDirection);
-    vec3 normal = normalize(vNormal);
-    float elevationAboveSeaLevel = vElevationMeters - uSeaLevelMeters;
-
-    if (uMode == 1) {
-        float viewAlignment = clamp(abs(dot(normalize(vNormal), normalize(-vWorldPosition))), 0.0, 1.0);
-        float rim = pow(max(0.0, 1.0 - viewAlignment), 2.2);
-        float fluxGlow = clamp(sqrt(max(uSolarFlux, 1.0) / 1361.0), 0.65, 1.35);
-        float steam = clamp(uVaporFraction * 0.7, 0.0, 0.7);
-        vec3 atmosphereColor = mix(vec3(0.20, 0.72, 0.72), vec3(0.72, 0.78, 0.72), steam);
-        outColor = vec4(atmosphereColor, rim * 0.24 * uAtmosphere * fluxGlow);
-        return;
+            snapshot = Experience.CreateInitialRenderSnapshot();
+            await SyncPlanetAsync();
+            airlessElapsedSeconds = 0;
+            airlessStatus = "RESET";
+        }
+        catch (Exception error) when (error is not OperationCanceledException)
+        {
+            airlessStatus = $"REFERENCE RESET FAILED: {error.Message}";
+        }
+        finally
+        {
+            airlessBusy = false;
+            StateHasChanged();
+        }
     }
 
-    if (uMode == 5) {
-        // Geological bedrock beneath liquid sea level must not write depth
-        // before the sea-surface pass. At orbital distance, the 18-metre
-        // clearance between rock and water is below depth-buffer precision;
-        // allowing both opaque surfaces causes z-fighting ocean speckles.
-        // This mask uses the same physical elevation as oceanMaterial below.
-        if (uLiquidFraction > 0.001 && elevationAboveSeaLevel < 0.0) discard;
-        vec3 material = barrenRockMaterial(radial, normal, vElevationMeters);
-        if (uSpatialRockActive == 1) {
-            // The RGBA8 texture contains ONLY model-projected
-            // Kelvin and phase fraction, with no authored lava/noise mask.
-            vec2 uv = vec2(atan(radial.z, radial.x) / 6.28318530718 + 0.5,
-                asin(clamp(radial.y, -1.0, 1.0)) / 3.14159265359 + 0.5);
-            vec2 physicalPhase = sampleRegionalRock(uv);
-            if (uDepthColumns == 1) {
-                outColor = vec4(phaseMaterial(physicalPhase, normalize(vPhysicalNormal),
-                    normalize(uCameraPosition - vWorldPosition), normalize(uLightDirection), uSolarFlux), 1.0);
+    private async Task GeneratePlanetAsync()
+    {
+        if (isTransitioning || geologyLoading)
+        {
+            return;
+        }
+
+        BeginTransition(FoundationStage.FrozenWorld);
+        await Task.Yield();
+
+        try
+        {
+            var seed = CreateRandomSeed(CurrentSeed);
+            if (geologyActive)
+            {
+                TerrainProvider.ClearGlobalCrustDeformation();
+                geologyActive = false;
+                geologyTimeline = null;
+                geologyFrameIndex = 0;
+                geologyStatus = string.Empty;
+            }
+
+            if (regionalStreamingEnabled)
+            {
+                RegionStream.Reset();
+                regionalCatalogReady = false;
+            }
+            ApplyRun(Run.StartNew(seed));
+            if (regionalStreamingEnabled)
+            {
+                await LoadRegionalCatalogueAsync();
+            }
+            currentStage = FoundationStage.FrozenWorld;
+            elapsedYears = 0.0;
+            await SyncPlanetAsync();
+
+            if (waterRendererModule is not null)
+            {
+                await waterRendererModule.InvokeVoidAsync("clearWaterCycle", disposeCancellationTokenSource.Token);
+            }
+        }
+        finally
+        {
+            EndTransition();
+        }
+    }
+
+    /// <summary>
+    /// Compare baseline and physics-derived ACTUAL terrain on the same globe,
+    /// using the identical revision-aware IPlanetElevationSource at all LODs.
+    /// Builds the research field on demand to avoid a costly mobile startup.
+    /// No extra page, diagnostic shader, height multiplier or saved-world change.
+    /// </summary>
+    private async Task ToggleGeologyAsync()
+    {
+        if (isTransitioning || geologyLoading)
+        {
+            return;
+        }
+
+        geologyLoading = true;
+        geologyStatus = geologyActive ? "RESTORING CANONICAL TERRAIN" : $"RECONSTRUCTING {CrustResearchSteps} MYR OF GEOLOGY";
+        StateHasChanged();
+        await Task.Delay(20, disposeCancellationTokenSource.Token);
+
+        try
+        {
+            if (geologyActive)
+            {
+                TerrainProvider.ClearGlobalCrustDeformation();
+                geologyActive = false;
+                geologyTimeline = null;
+                geologyFrameIndex = 0;
+                geologyStatus = "CANONICAL BEDROCK · GEOLOGY COMPARISON OFF";
+            }
+            else
+            {
+                var seed = CurrentSeed;
+                var catalog = PlanetCrustParcelCatalog.Create(seed);
+                var history = PlanetCrustOwnershipHistory.Create(catalog);
+                var timeline = new PlanetCrustAccumulatedDeformation().Simulate(catalog, history, CrustResearchSteps);
+                disposeCancellationTokenSource.Token.ThrowIfCancellationRequested();
+                if (seed != CurrentSeed)
+                {
+                    return;
+                }
+
+                var current = timeline[^1];
+                TerrainProvider.PublishGlobalCrustDeformation(current);
+                geologyTimeline = timeline;
+                geologyFrameIndex = timeline.Count - 1;
+                geologyActive = true;
+                geologyStatus = $"REAL ELEVATION · CRUST RESEARCH ONLY · UP TO {current.MaximumAbsoluteSurfaceDisplacementMeters:0} M";
+            }
+
+            snapshot = Experience.InvalidateTerrain();
+            await SyncPlanetAsync();
+            if (rendererModule is not null)
+            {
+                await rendererModule.InvokeVoidAsync("waitForVisibleTerrain", disposeCancellationTokenSource.Token);
+            }
+        }
+        catch (Exception error) when (error is not OperationCanceledException)
+        {
+            if (geologyActive)
+            {
+                TerrainProvider.ClearGlobalCrustDeformation();
+                geologyActive = false;
+                geologyTimeline = null;
+                geologyFrameIndex = 0;
+            }
+
+            geologyStatus = $"GEOLOGY NOT AVAILABLE: {error.Message}";
+            snapshot = Experience.InvalidateTerrain();
+            await SyncPlanetAsync();
+        }
+        finally
+        {
+            geologyLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    /// <summary>
+    /// Select reconstructed physical crust heights from the same research
+    /// history, displayed through the single shared terrain provider at
+    /// orbital and local LOD. This does not advance the climate experiment.
+    /// </summary>
+    private async Task SelectGeologyEpochAsync(int offset)
+    {
+        if (isTransitioning || geologyLoading || !geologyActive || geologyTimeline is null)
+        {
+            return;
+        }
+
+        var nextIndex = geologyFrameIndex + offset;
+        if (nextIndex < 0 || nextIndex >= geologyTimeline.Count)
+        {
+            return;
+        }
+
+        geologyLoading = true;
+        geologyLoadingDirection = offset;
+        StateHasChanged();
+        // Let Safari paint the spinner before a potentially expensive WASM
+        // terrain rebuild blocks the main UI thread.
+        await Task.Delay(20, disposeCancellationTokenSource.Token);
+
+        var previousIndex = geologyFrameIndex;
+        try
+        {
+            var selected = geologyTimeline[nextIndex];
+            if (selected.World != PlanetWorldIdentity.CreateCurrent(CurrentSeed))
+            {
+                throw new InvalidOperationException("Crust research belongs to a different generated world.");
+            }
+
+            disposeCancellationTokenSource.Token.ThrowIfCancellationRequested();
+            TerrainProvider.PublishGlobalCrustResearchEpoch(selected);
+            snapshot = Experience.InvalidateTerrain();
+            await SyncPlanetAsync();
+
+            // Blazor returning from setPlanet only confirms the snapshot was
+            // accepted by JavaScript. A geological epoch isn't ready until
+            // the active orbit/local framebuffer actually draws terrain.
+            if (rendererModule is not null)
+            {
+                await rendererModule.InvokeVoidAsync("waitForVisibleTerrain", disposeCancellationTokenSource.Token);
+            }
+
+            geologyFrameIndex = nextIndex;
+            geologyStatus = $"REAL ELEVATION · CRUST RESEARCH ONLY · UP TO {selected.MaximumAbsoluteSurfaceDisplacementMeters:0} M";
+        }
+        catch (Exception error) when (error is not OperationCanceledException)
+        {
+            // Keep UI and the canonical published surface at the same epoch.
+            // A failed WebGL upload must never silently advertise new geology
+            // with an empty or stale planet on screen.
+            try
+            {
+                TerrainProvider.PublishGlobalCrustResearchEpoch(geologyTimeline[previousIndex]);
+                snapshot = Experience.InvalidateTerrain();
+                await SyncPlanetAsync();
+            }
+            catch (Exception restoreError)
+            {
+                geologyStatus = $"CRUST RESEARCH RESTORE FAILED: {restoreError.Message}";
                 return;
             }
-            float localKelvin = physicalPhase.x;
-            float localMelt = clamp(physicalPhase.y, 0.0, 1.0);
-            float incandescent = smoothstep(850.0, 1700.0, localKelvin);
-            vec3 hot = mix(vec3(0.58, 0.09, 0.02), vec3(1.0, 0.34, 0.06),
-                smoothstep(1200.0, 2000.0, localKelvin));
-            float moltenLight = incandescent * localMelt;
-            material = clamp(mix(material, hot, moltenLight * 0.86) + hot * moltenLight * 0.15, 0.0, 1.0);
-            // Liquid rock should not retain the color identity of a dry,
-            // existing terrain map. The actual physical melt fraction alone
-            // decides whether liquid optical material replaces that bedrock.
-            // Sub-cell mottling is ONLY a fixed material appearance, not a
-            // second heat field, simulated magma movement, or fake crust.
-            float liquidSurface = smoothstep(0.88, 0.995, localMelt);
-            float radiance = smoothstep(1850.0, 2550.0, localKelvin);
-            float mottling = 0.92 + 0.16 * fbm(radial * 28.0 + vec3(2.0, 5.0, 9.0));
-            vec3 magma = mix(vec3(0.66, 0.115, 0.015), vec3(1.0, 0.56, 0.12), radiance) * mottling;
-            material = mix(material, clamp(magma, 0.0, 1.0), liquidSurface);
-        } else if (uAirlessReference == 1) {
-            // Physically derived uniform near-surface temperature. This is
-            // DISPLAY tone mapping of thermal incandescence, NOT a simulated
-            // molten-area map, crust thickness, or extra heat source.
-            float visible = smoothstep(850.0, 1650.0, uSurfaceTemperature);
-            vec3 glow = mix(vec3(0.68, 0.065, 0.015), vec3(1.0, 0.38, 0.10),
-                smoothstep(1150.0, 1900.0, uSurfaceTemperature));
-            material = clamp(mix(material, glow, visible * 0.78) + glow * visible * 0.18, 0.0, 1.0);
+
+            geologyStatus = $"CRUST RESEARCH UNAVAILABLE: {error.Message}";
         }
-        outColor = vec4(material, 1.0);
-        return;
-    }
-
-    if (uMode == 3) {
-        outColor = oceanMaterial(radial, normal, elevationAboveSeaLevel);
-        return;
-    }
-
-    if (uMode == 4) {
-        outColor = cryosphereMaterial(radial, normal, elevationAboveSeaLevel);
-        return;
-    }
-
-    bool preBiological = uMode == 2;
-    if (elevationAboveSeaLevel < 0.0 && uLiquidFraction > 0.001) {
-        discard;
-    }
-
-    vec3 baseColor = terrainMaterial(radial, normal, elevationAboveSeaLevel, preBiological);
-    float heat = smoothstep(315.0, 430.0, uSurfaceTemperature);
-    baseColor = mix(baseColor, vec3(0.48, 0.25, 0.11), heat * 0.52);
-    baseColor = mix(baseColor, vec3(0.56, 0.45, 0.31), clamp(uVaporFraction * 0.20, 0.0, 0.20));
-    outColor = vec4(clamp(baseColor, 0.0, 1.0), 1.0);
-}`;
-
-const localVertexShaderSource = `#version 300 es
-precision highp float;
-in vec3 aPositionMeters;
-in vec3 aNormal;
-in float aElevationMeters;
-uniform mat4 uViewProjection;
-out vec3 vPositionMeters;
-out vec3 vNormal;
-out float vElevationMeters;
-void main() {
-    vPositionMeters = aPositionMeters;
-    vNormal = normalize(aNormal);
-    vElevationMeters = aElevationMeters;
-    gl_Position = uViewProjection * vec4(aPositionMeters, 1.0);
-}`;
-
-const localFragmentShaderSource = `#version 300 es
-precision highp float;
-precision highp int;
-in vec3 vPositionMeters;
-in vec3 vNormal;
-in float vElevationMeters;
-uniform vec3 uLightDirection;
-uniform vec3 uLocalCameraPosition;
-uniform float uSolarFlux;
-uniform float uSeaLevelMeters;
-uniform float uSurfaceTemperature;
-uniform int uAirlessReference;
-uniform int uDepthColumns;
-${thermalMaterialShader}
-uniform int uSpatialRockActive;
-uniform sampler2D uSpatialRockTexture;
-
-// RGBA8 stores Kelvin in two separate bytes. Interpolate *decoded* physical
-// samples, never the packed channels (linear filtering corrupts byte carries).
-vec2 sampleRegionalRock(vec2 uv) {
-    ivec2 size = textureSize(uSpatialRockTexture, 0);
-    vec2 pixel = uv * vec2(size) - vec2(0.5);
-    ivec2 base = ivec2(floor(pixel));
-    vec2 fraction = fract(pixel);
-    vec2 weighted = vec2(0.0);
-    for (int dy = 0; dy < 2; dy++) {
-        for (int dx = 0; dx < 2; dx++) {
-            ivec2 cell = base + ivec2(dx, dy);
-            cell.x = (cell.x % size.x + size.x) % size.x;
-            cell.y = clamp(cell.y, 0, size.y - 1);
-            vec4 encoded = texelFetch(uSpatialRockTexture, cell, 0);
-            vec2 sampleValue = vec2(
-                (floor(encoded.r * 255.0 + 0.5) * 256.0 +
-                    floor(encoded.g * 255.0 + 0.5)) * 0.1,
-                encoded.b);
-            float weight = (dx == 0 ? 1.0 - fraction.x : fraction.x) *
-                (dy == 0 ? 1.0 - fraction.y : fraction.y);
-            weighted += sampleValue * weight;
+        finally
+        {
+            geologyLoadingDirection = 0;
+            geologyLoading = false;
+            StateHasChanged();
         }
     }
-    return weighted;
-}
 
-uniform vec3 uLocalRockAnchor;
-uniform float uLiquidFraction;
-uniform float uVaporFraction;
-uniform int uObjectMode;
-out vec4 outColor;
-void main() {
-    float light = max(dot(normalize(vNormal), normalize(uLightDirection)), 0.0);
-    if (uObjectMode == 1) {
-        vec3 treeColor = vec3(0.055, 0.30, 0.12);
-        outColor = vec4(treeColor * (0.35 + 0.65 * light), 1.0);
-        return;
+    private static int CreateRandomSeed(int currentSeed)
+    {
+        int seed;
+        do
+        {
+            seed = Random.Shared.Next(1, int.MaxValue);
+        }
+        while (seed == currentSeed);
+
+        return seed;
     }
 
-    if (uObjectMode == 3) {
-        float elevation = vElevationMeters;
-        float elevationBand = smoothstep(300.0, 2800.0, elevation);
-        float highlandBand = smoothstep(2500.0, 6500.0, elevation);
-        float cliff = smoothstep(0.07, 0.62, 1.0 - max(normalize(vNormal).y, 0.0));
-        vec3 dustyPlains = vec3(0.60, 0.34, 0.22);
-        vec3 upliftedRock = vec3(0.71, 0.45, 0.31);
-        vec3 exposedBedrock = vec3(0.33, 0.27, 0.24);
-        vec3 material = mix(dustyPlains, upliftedRock, elevationBand * 0.75);
-        material = mix(material, exposedBedrock, clamp(cliff * 0.60 + highlandBand * 0.22, 0.0, 0.88));
-        float illumination = clamp(0.34 + (0.76 * light), 0.23, 1.13);
-        vec3 lit = material * illumination;
-        if (uSpatialRockActive == 1) {
-            // Local LOD patches are smaller than a physical thermal cell.
-            // Sample the exact global phase atlas at the geographic anchor.
-            vec3 dir = normalize(uLocalRockAnchor);
-            vec2 uv = vec2(atan(dir.z, dir.x) / 6.28318530718 + 0.5,
-                asin(clamp(dir.y, -1.0, 1.0)) / 3.14159265359 + 0.5);
-            vec2 encoded = sampleRegionalRock(uv);
-            if (uDepthColumns == 1) {
-                outColor = vec4(phaseMaterial(encoded, normalize(vNormal), normalize(uLocalCameraPosition - vPositionMeters),
-                    normalize(uLightDirection), uSolarFlux), 1.0);
-                return;
+    private async Task AdvanceAsync()
+    {
+        if (isTransitioning)
+        {
+            return;
+        }
+
+        switch (currentStage)
+        {
+            case FoundationStage.FrozenWorld:
+                await SimulateMeltingAsync();
+                break;
+            case FoundationStage.MeltingWorld:
+                await SimulateWaterCycleAsync();
+                break;
+            case FoundationStage.ActiveWaterCycle:
+                await SimulateScaffoldStageAsync(FoundationStage.FirstLife, 5_000_000.0);
+                break;
+            case FoundationStage.FirstLife:
+                await SimulateScaffoldStageAsync(FoundationStage.MarineAnimals, 50_000_000.0);
+                break;
+            case FoundationStage.MarineAnimals:
+                await SimulateScaffoldStageAsync(FoundationStage.LandVegetation, 100_000_000.0);
+                break;
+            case FoundationStage.LandVegetation:
+                await SimulateScaffoldStageAsync(FoundationStage.LandAnimals, 50_000_000.0);
+                break;
+            case FoundationStage.LandAnimals:
+                await ResetAsync();
+                break;
+            default:
+                throw new ArgumentOutOfRangeException();
+        }
+    }
+
+    private async Task SimulateMeltingAsync()
+    {
+        BeginTransition(FoundationStage.MeltingWorld);
+        try
+        {
+            Run.QueueIntervention(MissionInterventionType.ReleaseCapturedCarbon);
+            Run.QueueIntervention(MissionInterventionType.ReleaseCapturedCarbon);
+            Run.QueueIntervention(MissionInterventionType.DarkenSurface);
+            Run.QueueIntervention(MissionInterventionType.DarkenSurface);
+            var result = Run.SimulateCommit();
+
+            await Task.Delay(ClimateTransitionLeadInMilliseconds, disposeCancellationTokenSource.Token);
+            var displayStride = Math.Max(1, (int)Math.Ceiling(result.Frames.Count / (double)MaximumClimateDisplayFrames));
+            for (var frameIndex = 0; frameIndex < result.Frames.Count; frameIndex++)
+            {
+                var isFinalFrame = frameIndex == result.Frames.Count - 1;
+                if (!isFinalFrame && frameIndex % displayStride != 0)
+                {
+                    continue;
+                }
+
+                disposeCancellationTokenSource.Token.ThrowIfCancellationRequested();
+                var frame = result.Frames[frameIndex];
+                elapsedYears = frame.Year;
+                snapshot = frame.Planet;
+                await SyncPlanetAsync();
+                StateHasChanged();
+                await Task.Delay(ClimateFrameDelayMilliseconds, disposeCancellationTokenSource.Token);
             }
-            float localKelvin = encoded.x;
-            float melt = encoded.y;
-            float glow = smoothstep(850.0, 1700.0, localKelvin) * melt;
-            vec3 colour = mix(vec3(0.58, 0.09, 0.02), vec3(1.0, 0.34, 0.06),
-                smoothstep(1200.0, 2000.0, localKelvin));
-            lit = clamp(mix(lit, colour, glow * 0.86) + colour * glow * 0.15, 0.0, 1.0);
-            float liquidSurface = smoothstep(0.88, 0.995, melt);
-            float radiance = smoothstep(1850.0, 2550.0, localKelvin);
-            vec3 magma = mix(vec3(0.66, 0.115, 0.015), vec3(1.0, 0.56, 0.12), radiance);
-            lit = mix(lit, magma, liquidSurface);
-        } else if (uAirlessReference == 1) {
-            float visible = smoothstep(850.0, 1650.0, uSurfaceTemperature);
-            vec3 glow = mix(vec3(0.68, 0.065, 0.015), vec3(1.0, 0.38, 0.10),
-                smoothstep(1150.0, 1900.0, uSurfaceTemperature));
-            lit = clamp(mix(lit, glow, visible * 0.78) + glow * visible * 0.18, 0.0, 1.0);
+
+            ApplyRun(result.Run);
+            currentStage = FoundationStage.MeltingWorld;
+            elapsedYears = result.Run.Mission.MissionYearsElapsed;
         }
-        outColor = vec4(lit, 1.0);
-        return;
+        finally
+        {
+            EndTransition();
+        }
     }
 
-    bool preBiological = uObjectMode == 2;
-    vec3 deepOcean = vec3(0.035, 0.16, 0.23);
-    vec3 shallowOcean = vec3(0.06, 0.31, 0.36);
-    vec3 lowland = preBiological ? vec3(0.34, 0.30, 0.24) : vec3(0.18, 0.38, 0.22);
-    vec3 highland = preBiological ? vec3(0.42, 0.36, 0.29) : vec3(0.39, 0.36, 0.22);
-    vec3 peak = preBiological ? vec3(0.48, 0.43, 0.37) : vec3(0.62, 0.65, 0.59);
-    vec3 baseColor;
+    private async Task SimulateWaterCycleAsync()
+    {
+        if (run?.Era != PlanetRunEra.WaterWorld)
+        {
+            throw new InvalidOperationException("The deterministic melting transition did not reach Water World.");
+        }
 
-    if (uLiquidFraction > 0.001 && vElevationMeters < uSeaLevelMeters - 1500.0) baseColor = deepOcean;
-    else if (uLiquidFraction > 0.001 && vElevationMeters < uSeaLevelMeters) baseColor = shallowOcean;
-    else if (vElevationMeters < 1200.0) baseColor = lowland;
-    else if (vElevationMeters < 3500.0) baseColor = highland;
-    else baseColor = peak;
+        BeginTransition(FoundationStage.ActiveWaterCycle);
+        var startYear = elapsedYears;
+        try
+        {
+            var result = Run.SimulateWaterWorld(disposeCancellationTokenSource.Token);
+            foreach (var frame in result.Frames)
+            {
+                disposeCancellationTokenSource.Token.ThrowIfCancellationRequested();
+                elapsedYears = startYear + frame.Year;
+                StateHasChanged();
+                await Task.Delay(HydrologyFrameDelayMilliseconds, disposeCancellationTokenSource.Token);
+            }
 
-    float heat = smoothstep(315.0, 430.0, uSurfaceTemperature);
-    if (vElevationMeters >= uSeaLevelMeters || uLiquidFraction <= 0.001) baseColor = mix(baseColor, vec3(0.48, 0.25, 0.11), heat * 0.76);
-    baseColor = mix(baseColor, vec3(0.56, 0.45, 0.31), clamp(uVaporFraction * 0.22, 0.0, 0.22));
+            ApplyRun(result.Run);
+            currentStage = FoundationStage.ActiveWaterCycle;
+            await SyncPlanetAsync();
+            if (waterRendererModule is not null && result.Frames.Count > 0)
+            {
+                await waterRendererModule.InvokeVoidAsync("setWaterCycle", disposeCancellationTokenSource.Token, result.Frames[^1].State);
+            }
+        }
+        finally
+        {
+            EndTransition();
+        }
+    }
 
-    vec3 color = baseColor * (0.18 + 0.82 * light);
-    outColor = vec4(color, 1.0);
-}`;
+    private async Task SimulateScaffoldStageAsync(FoundationStage nextStage, double transitionYears)
+    {
+        BeginTransition(nextStage);
+        var startYear = elapsedYears;
+        try
+        {
+            for (var frame = 1; frame <= ScaffoldFrameCount; frame++)
+            {
+                disposeCancellationTokenSource.Token.ThrowIfCancellationRequested();
+                elapsedYears = startYear + (transitionYears * frame / ScaffoldFrameCount);
+                StateHasChanged();
+                await Task.Delay(ScaffoldFrameDelayMilliseconds, disposeCancellationTokenSource.Token);
+            }
+
+            currentStage = nextStage;
+        }
+        finally
+        {
+            EndTransition();
+        }
+    }
+
+    private async Task ResetAsync()
+    {
+        BeginTransition(FoundationStage.FrozenWorld);
+        try
+        {
+            if (regionalStreamingEnabled)
+            {
+                RegionStream.Reset();
+            }
+            ApplyRun(Run.Restart());
+            currentStage = FoundationStage.FrozenWorld;
+            elapsedYears = 0.0;
+            await SyncPlanetAsync();
+            if (waterRendererModule is not null)
+            {
+                await waterRendererModule.InvokeVoidAsync("clearWaterCycle", disposeCancellationTokenSource.Token);
+            }
+        }
+        finally
+        {
+            EndTransition();
+        }
+    }
+
+    private void BeginTransition(FoundationStage targetStage)
+    {
+        isTransitioning = true;
+        transitionStage = targetStage;
+        StateHasChanged();
+    }
+
+    private void EndTransition()
+    {
+        transitionStage = null;
+        isTransitioning = false;
+        StateHasChanged();
+    }
+
+    private void ApplyRun(PlanetRunSnapshot nextRun)
+    {
+        run = nextRun;
+        snapshot = nextRun.Mission.Planet;
+    }
+
+    private async Task SyncPlanetAsync()
+    {
+        if (snapshot is null)
+        {
+            return;
+        }
+
+        if (rendererModule is not null)
+        {
+            await rendererModule.InvokeVoidAsync("setPlanet", disposeCancellationTokenSource.Token, snapshot);
+        }
+
+    }
+
+    private string PlanetVisualClass()
+        => airlessReferenceActive ? "pre-vegetation-world" : currentStage is FoundationStage.FrozenWorld or FoundationStage.MeltingWorld or FoundationStage.ActiveWaterCycle or FoundationStage.FirstLife or FoundationStage.MarineAnimals
+            ? "pre-vegetation-world"
+            : string.Empty;
+
+    private string FormatStageLabel()
+    {
+        if (rockColumnsActive) return "SURFACE SOLIDIFICATION";
+        if (magmaOceanActive) return "MOLTEN SURFACE INITIAL CONDITION";
+        if (regionalRockActive) return "MELT AND CRYSTALLIZATION";
+        if (airlessReferenceActive && snapshot?.Origin is { } reference)
+            return reference.BulkRockMeltFraction > 0.0 ? "PARTLY MOLTEN INTERIOR" : "SOLID INTERIOR · BULK MODEL";
+        if (snapshot?.Origin is { } origin) return PlanetOriginUxText.StateLabel(origin);
+        var displayedStage = transitionStage ?? currentStage;
+        return isTransitioning && transitionStage is not null
+            ? $"{StageName(currentStage)} → {StageName(displayedStage)}"
+            : StageName(displayedStage);
+    }
+
+    private string FormatButtonLabel() => isTransitioning ? "SIMULATING…" : currentStage == FoundationStage.LandAnimals ? "RESET" : "NEXT";
+
+    private string FormatElapsedTime()
+    {
+        if (rockColumnsActive) return "ROCK FORMATION";
+        if (magmaOceanActive) return "MAGMA OCEAN";
+        if (regionalRockActive) return "REGIONAL ROCK";
+        if (airlessReferenceActive) return "THERMAL REFERENCE";
+        if (snapshot?.Origin is { } origin) return PlanetOriginUxText.GeologicalTime(origin);
+        if (elapsedYears < 1_000.0)
+        {
+            return $"YEAR {elapsedYears:0}";
+        }
+
+        if (elapsedYears < 1_000_000.0)
+        {
+            return $"{elapsedYears / 1_000.0:0.0} kyr";
+        }
+
+        return $"{elapsedYears / 1_000_000.0:0.0} Myr";
+    }
+
+    private static string StageName(FoundationStage stage)
+        => stage switch
+        {
+            FoundationStage.FrozenWorld => "SNOWBALL EXPERIMENT",
+            FoundationStage.MeltingWorld => "MELTING WORLD",
+            FoundationStage.ActiveWaterCycle => "ACTIVE WATER CYCLE",
+            FoundationStage.FirstLife => "FIRST LIFE",
+            FoundationStage.MarineAnimals => "MARINE ANIMALS",
+            FoundationStage.LandVegetation => "LAND VEGETATION",
+            FoundationStage.LandAnimals => "LAND ANIMALS",
+            _ => throw new ArgumentOutOfRangeException(nameof(stage), stage, null),
+        };
+
+    public async ValueTask DisposeAsync()
+    {
+        disposeCancellationTokenSource.Cancel();
+        if (geologyActive)
+        {
+            TerrainProvider.ClearGlobalCrustDeformation();
+            geologyActive = false;
+            geologyTimeline = null;
+            geologyFrameIndex = 0;
+        }
+        if (regionalStreamingEnabled)
+        {
+            RegionStream.Reset();
+        }
+        if (archiveModule is not null)
+        {
+            try
+            {
+                await archiveModule.DisposeAsync();
+            }
+            catch (JSDisconnectedException)
+            {
+                // Browser navigated away.
+            }
+        }
+        if (waterRendererModule is not null)
+        {
+            try
+            {
+                await waterRendererModule.InvokeVoidAsync("dispose", CancellationToken.None);
+                await waterRendererModule.DisposeAsync();
+            }
+            catch (JSDisconnectedException)
+            {
+            }
+        }
+
+        if (rendererModule is not null)
+        {
+            try
+            {
+                await rendererModule.InvokeVoidAsync("dispose", CancellationToken.None);
+                await rendererModule.DisposeAsync();
+            }
+            catch (JSDisconnectedException)
+            {
+            }
+        }
+
+        DisposeSurfaceLodReference();
+        disposeCancellationTokenSource.Dispose();
+    }
+
+    private enum FoundationStage
+    {
+        FrozenWorld,
+        MeltingWorld,
+        ActiveWaterCycle,
+        FirstLife,
+        MarineAnimals,
+        LandVegetation,
+        LandAnimals,
+    }
+}
