@@ -10,7 +10,7 @@ import { fileURLToPath } from 'node:url';
 const directory = dirname(fileURLToPath(import.meta.url));
 const groups = [
   ['01-main-planet-geology.spec.mjs'],
-  ['foundation.spec.mjs', 'airless-reference.spec.mjs', 'regional-rock.spec.mjs', 'formation-simulation.spec.mjs'],
+  ['foundation.spec.mjs', 'airless-reference.spec.mjs', 'regional-rock.spec.mjs'],
   [
     '00-geology-preview.spec.mjs',
     'camera-region-streaming.spec.mjs',
@@ -21,7 +21,8 @@ const groups = [
     'rock-columns.spec.mjs',
     'rock-diagnostic-maps.spec.mjs',
     'terrain-geometry-cache.spec.mjs'
-  ]
+  ],
+  ['formation-simulation.spec.mjs']
 ];
 
 const discovered = readdirSync(directory).filter(name => name.endsWith('.spec.mjs')).sort();
@@ -40,7 +41,7 @@ if (process.argv[2] === '--verify') {
 
 const shard = Number(process.argv[2]);
 if (!Number.isInteger(shard) || shard < 1 || shard > groups.length) {
-  console.error('Expected a browser shard number between 1 and 3.');
+  console.error('Expected a browser shard number between 1 and ${groups.length}.');
   process.exit(1);
 }
 
