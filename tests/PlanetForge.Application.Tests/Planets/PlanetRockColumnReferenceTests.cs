@@ -25,6 +25,11 @@ public sealed class PlanetRockColumnReferenceTests
         Assert.IsTrue(candidate.Columns.Columns.All(c => c.SolidSurfaceThicknessMeters(candidate.Columns.Material, candidate.Columns.Properties) > 0.0));
         var diagnostic = PlanetOriginRockColumnResolutionSample.FromColumn(
             candidate.Columns.Columns[0], candidate.Columns.Material, candidate.Columns.Properties);
+        var phaseWeighted = PlanetOriginRockColumnResolutionSample.EstimatePhaseWeightedFrontMeters(
+            candidate.Columns.Columns[0], candidate.Columns.Material, candidate.Columns.Properties);
+        Assert.IsTrue(double.IsFinite(phaseWeighted));
+        Assert.IsTrue(phaseWeighted >= diagnostic.FrontBoundsMeters.MinimumMeters);
+        Assert.IsTrue(phaseWeighted <= diagnostic.FrontBoundsMeters.MaximumMeters);
         Assert.AreEqual(8, diagnostic.LayerCount);
         Assert.AreEqual(1, diagnostic.FullySolidTopLayers);
         Assert.IsGreaterThan(0.0, diagnostic.UnresolvedCellWidthMeters);
@@ -38,6 +43,26 @@ public sealed class PlanetRockColumnReferenceTests
         var atlas = PlanetOriginSpatialSurfaceProjection.Create(candidate);
         Assert.IsTrue(atlas.HasDepthColumns);
         Assert.IsTrue(atlas.MeltFraction.All(f => f == 0.0f));
+    }
+
+    [TestMethod]
+    public void Advance_RefinedDepthGrid_ConservesCanonicalEnergyAndMass()
+    {
+        var source = new FlatElevation();
+        var experience = new PlanetExperience(new PlanetSurfaceMeshCache(new PlanetSurfaceMeshBuilder(new PlanetSurfaceTileSampler(source))),
+            new PlanetLocalSurfacePatchSampler(source), new PlanetLocalSurfaceMeshBuilder());
+        var conditions = experience.CreateSnapshot();
+        foreach (var layerCount in new[] { 8, 16, 32, 64 })
+        {
+            var initial = PlanetRockColumnReference.CreateInitial(6_371_000.0, layerCount);
+            var advanced = PlanetRockColumnReference.Advance(initial, conditions);
+            Assert.AreEqual(initial.Field.TotalActiveRockMassKilograms, advanced.Field.TotalActiveRockMassKilograms,
+                initial.Field.TotalActiveRockMassKilograms * 1e-12);
+            Assert.AreEqual(0.0, advanced.Epoch.EnergyConservationResidualJoules,
+                advanced.Epoch.CoupledEnergy!.InitialStoredEnergyJoules * 1e-11);
+            Assert.IsTrue(advanced.Columns!.Columns.All(column => column.Layers.All(layer =>
+                double.IsFinite(layer.StoredEnthalpyJoules) && layer.StoredEnthalpyJoules >= 0.0)));
+        }
     }
 
     [TestMethod]
@@ -66,6 +91,24 @@ public sealed class PlanetRockColumnReferenceTests
     {
         Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => PlanetRockColumnReference.CreateInitial(6_371_000.0, 1));
         Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => PlanetRockColumnReference.CreateInitial(6_371_000.0, 65));
+    }
+
+    [TestMethod]
+    public void Advance_ZeroElapsedTimeAcrossResolutions_PreservesFundedCanonicalState()
+    {
+        foreach (var layers in new[] { 8, 16, 32, 64 })
+        {
+            var initial = PlanetRockColumnReference.CreateInitial(6_371_000.0, layers);
+            var sample = PlanetOriginRockColumnResolutionSample.FromColumn(
+                initial.Columns!.Columns[0], initial.Columns.Material, initial.Columns.Properties);
+            sample.Validate();
+            Assert.AreEqual(layers, sample.LayerCount);
+            Assert.AreEqual(0, sample.FullySolidTopLayers);
+            Assert.AreEqual(0.0, sample.FullySolidTopMeters, 0.0);
+            Assert.IsGreaterThan(0.0, sample.UnresolvedCellWidthMeters);
+            Assert.IsTrue(initial.Columns.Columns.All(c => c.Layers.All(layer =>
+                layer.Resolve(initial.Columns.Material).MeltFraction > 0.99)));
+        }
     }
 
     private sealed class FlatElevation : IPlanetElevationSource

@@ -224,7 +224,6 @@ public sealed class PlanetOriginRockColumnField
             delta[0] += solar - infrared;
             absorbed += solar;
             emitted += infrared;
-            // Bound the explicit radiative Jacobian as well as conductive incidence.
             coupling[0] += 4.0 * boundary.InfraredEmissivity * PlanetRadiationBalanceModel.StefanBoltzmannWattsPerSquareMeterKelvinFourth *
                 Math.Pow(surfaceKelvin, 3) * column.AreaSquareMeters * seconds;
             var nextLayers = new PlanetOriginRockColumnLayer[phase.Length];

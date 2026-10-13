@@ -10,6 +10,8 @@ public readonly record struct PlanetOriginRockColumnResolutionSample(
 {
     public double UnresolvedCellWidthMeters => FirstUnresolvedCellBottomMeters - FullySolidTopMeters;
 
+    public bool HasUnresolvedFront => UnresolvedCellWidthMeters > 0.0;
+
     public static PlanetOriginRockColumnResolutionSample FromColumn(
         PlanetOriginRockColumn column, PlanetOriginSurfaceRockPhaseMaterial material,
         PlanetOriginRockColumnProperties properties)
@@ -37,6 +39,52 @@ public readonly record struct PlanetOriginRockColumnResolutionSample(
         if (!foundUnresolved) firstUnresolvedBottom = top;
         return new(properties.LayerCount, top, firstUnresolvedBottom,
             column.Layers[0].Resolve(material).TemperatureKelvin, solidLayers);
+    }
+
+    /// <summary>
+    /// Conservative front bounds from the contiguous fully solid layer region.
+    /// The actual solidification front is unresolved inside the next cell; this
+    /// interval must not be presented as a measured crust thickness.
+    /// </summary>
+    public (double MinimumMeters, double MaximumMeters) FrontBoundsMeters =>
+        (FullySolidTopMeters, FirstUnresolvedCellBottomMeters);
+
+    /// <summary>
+    /// Display-only center of the unresolved interval. It is not a physical
+    /// Stefan-front reconstruction and must not be used by the integrator.
+    /// </summary>
+    public double UnresolvedFrontMidpointMeters =>
+        (FullySolidTopMeters + FirstUnresolvedCellBottomMeters) * 0.5;
+
+    /// <summary>
+    /// A phase-volume-equivalent depth within the first unresolved cell.
+    /// Uses the local equilibrium melt fraction as a sub-cell solid-volume
+    /// proxy, not a resolved moving Stefan interface. The result is bounded
+    /// by the contiguous-solid surface depth and the next cell bottom.
+    /// </summary>
+    public static double EstimatePhaseWeightedFrontMeters(
+        PlanetOriginRockColumn column, PlanetOriginSurfaceRockPhaseMaterial material,
+        PlanetOriginRockColumnProperties properties)
+    {
+        ArgumentNullException.ThrowIfNull(column);
+        properties.Validate();
+        var fullySolidMeters = 0.0;
+        foreach (var layer in column.Layers)
+        {
+            var melt = layer.Resolve(material).MeltFraction;
+            var thickness = layer.VolumeCubicMeters(material, properties) / column.AreaSquareMeters;
+            if (melt == 0.0)
+            {
+                fullySolidMeters += thickness;
+                continue;
+            }
+
+            // The first unresolved layer bounds the connected solid region.
+            // A completely liquid top cell implies no attached solid crust.
+            return fullySolidMeters + thickness * (1.0 - melt);
+        }
+
+        return fullySolidMeters;
     }
 
     public void Validate()
@@ -84,7 +132,14 @@ public static class PlanetOriginRockColumnDepthRefinement
         var frontDifference = Math.Abs(last.FullySolidTopMeters - previous.FullySolidTopMeters);
         var temperatureDifference = Math.Abs(last.SurfaceTemperatureKelvin - previous.SurfaceTemperatureKelvin);
         var width = last.UnresolvedCellWidthMeters;
-        var meets = last.FullySolidTopLayers >= 3 && frontDifference <= maximumFrontDifferenceMeters &&
+        var everyGridHasUnresolvedFront = samples.All(sample => sample.HasUnresolvedFront);
+        // If the grids do not even agree on an interval containing the front,
+        // comparing their fully solid cell counts is insufficient evidence.
+        var commonLowerBound = samples.Max(sample => sample.FrontBoundsMeters.MinimumMeters);
+        var commonUpperBound = samples.Min(sample => sample.FrontBoundsMeters.MaximumMeters);
+        var intervalsOverlap = commonLowerBound <= commonUpperBound;
+        var meets = everyGridHasUnresolvedFront && intervalsOverlap && last.FullySolidTopLayers >= 3 &&
+            frontDifference <= maximumFrontDifferenceMeters &&
             temperatureDifference <= maximumSurfaceTemperatureDifferenceKelvin && width <= maximumFrontDifferenceMeters;
         return new(meets, frontDifference, temperatureDifference, width);
     }
