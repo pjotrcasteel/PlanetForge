@@ -47,7 +47,7 @@ public sealed class PlanetFormationSimulationTests
         {
             MagmaConvection = PlanetOriginMagmaConvectionParameters.Reference with { DynamicViscosityPascalSeconds = 1.0 }
         };
-        Assert.IsTrue(PlanetOriginMagmaConvection.Diagnose(viscous, initial.Columns, initial.Epoch.Thermal).NusseltNumber < physics.NusseltNumber);
+        Assert.IsTrue(PlanetOriginMagmaConvection.Diagnose(viscous, initial.Columns!, initial.Epoch.Thermal).NusseltNumber < physics.NusseltNumber);
         var invalid = boundary with { MagmaConvection = PlanetOriginMagmaConvectionParameters.Reference with { DepthMeters = 0 } };
         Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => invalid.Validate());
         var interval = PlanetOriginDuration.FromSeconds(1);
