@@ -2,6 +2,9 @@ using PlanetForge.Domain.Surface;
 
 namespace PlanetForge.Domain.Origins;
 
+/// <summary>A reconstructed emitting interface, with no owned mass or energy reservoir.</summary>
+public readonly record struct PlanetOriginRadiatingSurfacePhase(double TemperatureKelvin, double MeltFraction);
+
 /// <summary>
 /// Bounded dry-rock heat exchange. The selected sun direction is a known
 /// boundary condition, not a calibrated Hadean rotation or orbital history.
@@ -86,6 +89,19 @@ public sealed class PlanetOriginCanonicalRockCells
 
     public PlanetRockThermalState ResolveSurfacePhase(PlanetSurfaceGridCellId id) =>
         Columns?.ResolveSurface(id) ?? Field.Cells[Field.Layout.GetIndex(id)].Resolve(Field.Material);
+
+    /// <summary>
+    /// Equilibrium material at the emitting face. The top control volume is warmer than
+    /// this boundary; its volume melt fraction must not be assigned to the exposed skin.
+    /// This reconstructs an interface, without adding mass or a second enthalpy reservoir.
+    /// </summary>
+    public PlanetOriginRadiatingSurfacePhase ResolveRadiatingSurfacePhase(PlanetSurfaceGridCellId id)
+    {
+        var kelvin = ResolveRadiatingSurfaceTemperature(id);
+        var material = new PlanetRockEnthalpyModel(Field.Material.ToRockProperties(1.0));
+        var state = material.Resolve(material.CalculateStoredEnergyJoules(kelvin));
+        return new(state.TemperatureKelvin, state.MeltFraction);
+    }
 
     public PlanetOriginCanonicalRockCells Advance(
         PlanetOriginDuration interval, PlanetOriginRegionalAirlessParameters parameters,

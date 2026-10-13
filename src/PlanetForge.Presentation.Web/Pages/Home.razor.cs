@@ -55,7 +55,7 @@ public partial class Home
         try
         {
             await Task.Delay(16, disposeCancellationTokenSource.Token); // Present busy state before the bounded physics batch.
-            snapshot = PlanetFormationSimulation.Advance(Experience, formationStepSeconds, disposeCancellationTokenSource.Token);
+            snapshot = await PlanetFormationSimulation.AdvanceAsync(Experience, formationStepSeconds, disposeCancellationTokenSource.Token);
             await SyncPlanetAsync();
         }
         catch (OperationCanceledException) when (disposeCancellationTokenSource.IsCancellationRequested) { }

@@ -1,6 +1,8 @@
 import { createOpticalBloom, renderOpticalBloom, disposeOpticalBloom } from './opticalBloom.js';
-import { createThermalRadianceData, thermalTextureSize, thermalMaterialShader } from './thermalRadiance.js';
+import { createThermalRadianceData, thermalTextureSize, thermalMaterialShader } from './thermalRadiance.js?v=0.0.46.0';
 import { clearRetainedSurfaceGeometry, retainSurfaceGeometry } from './surfaceGeometryStore.js';
+import { bindPlanetCameraState, clearPlanetCameraState } from './planetCameraState.js';
+export { getPlanetCameraSnapshot } from './planetCameraState.js';
 
 let state;
 
@@ -35,10 +37,21 @@ export function initialize(canvasId, snapshot, dotNetReference, generatorPreview
 
     try {
         state = createState(canvas, gl, dotNetReference);
-        if (canvas.closest('.formation-simulation')) state.yaw = 0.95;
+        if (canvas.closest('.formation-simulation') && snapshot.spatialRock) {
+            // Start facing an actually funded warm region, rather than hiding all
+            // geographic contrast behind the globe. This changes only the camera.
+            const atlas = snapshot.spatialRock;
+            let hottest = 0;
+            for (let index = 1; index < atlas.temperatureKelvin.length; index++)
+                if (atlas.temperatureKelvin[index] > atlas.temperatureKelvin[hottest]) hottest = index;
+            const longitude = ((hottest % atlas.width + 0.5) / atlas.width - 0.5) * Math.PI * 2;
+            state.yaw = Math.PI * 0.5 - longitude;
+            state.pitch = ((Math.floor(hottest / atlas.width) + 0.5) / atlas.height - 0.5) * Math.PI;
+        }
         state.generatorPreview = generatorPreview;
         installInput(state);
         setPlanet(snapshot);
+        bindPlanetCameraState(state);
         installVisualTestApi();
         requestAnimationFrame(render);
     } catch (error) {
@@ -57,22 +70,6 @@ export function setRockDiagnosticMode(mode) {
     state.dirty = true;
     renderCurrentView(state);
     state.dirty = false;
-}
-
-// Read-only snapshot consumed by other render layers. Input and orbit motion
-// belong exclusively to the main renderer, not to each visual overlay.
-export function getPlanetCameraSnapshot() {
-    if (!state) return null;
-    return {
-        yaw: state.yaw,
-        pitch: state.pitch,
-        distance: state.distance,
-        mode: state.renderMode,
-        geometryKey: state.geometryKey,
-        seed: state.seed,
-        planetRadiusMeters: state.planetRadiusMeters,
-        seaLevelMeters: state.seaLevelMeters
-    };
 }
 
 export function setPlanet(snapshot) {
@@ -237,6 +234,7 @@ export function dispose() {
     clearRetainedSurfaceGeometry();
     if (window.__planetForgeSurfaceTest) delete window.__planetForgeSurfaceTest;
     if (window.__planetForgeSurfaceError) delete window.__planetForgeSurfaceError;
+    clearPlanetCameraState(state);
     state = null;
 }
 
@@ -317,6 +315,9 @@ function createState(canvas, gl, dotNetReference) {
             rockDiagnosticMode: gl.getUniformLocation(localProgram, 'uRockDiagnosticMode'),
             spatialRockTexture: gl.getUniformLocation(localProgram, 'uSpatialRockTexture'),
             localRockAnchor: gl.getUniformLocation(localProgram, 'uLocalRockAnchor'),
+            localRockEast: gl.getUniformLocation(localProgram, 'uLocalRockEast'),
+            localRockNorth: gl.getUniformLocation(localProgram, 'uLocalRockNorth'),
+            rockRadius: gl.getUniformLocation(localProgram, 'uRockRadius'),
             liquidFraction: gl.getUniformLocation(localProgram, 'uLiquidFraction'),
             vaporFraction: gl.getUniformLocation(localProgram, 'uVaporFraction'),
             objectMode: gl.getUniformLocation(localProgram, 'uObjectMode')
@@ -1174,6 +1175,9 @@ function renderLocal(s) {
     gl.uniform1i(s.localUniforms.spatialRockTexture, 1);
     const anchor = s.localRockAnchor ?? { x: 0, y: 1, z: 0 };
     gl.uniform3f(s.localUniforms.localRockAnchor, anchor.x, anchor.y, anchor.z);
+    gl.uniform3f(s.localUniforms.localRockEast, ...east);
+    gl.uniform3f(s.localUniforms.localRockNorth, ...north);
+    gl.uniform1f(s.localUniforms.rockRadius, s.planetRadiusMeters);
     gl.uniform1f(s.localUniforms.liquidFraction, s.liquidFraction);
     gl.uniform1f(s.localUniforms.vaporFraction, s.vaporFraction);
 
@@ -1804,6 +1808,9 @@ vec2 sampleRegionalRock(vec2 uv) {
 }
 
 uniform vec3 uLocalRockAnchor;
+uniform vec3 uLocalRockEast;
+uniform vec3 uLocalRockNorth;
+uniform float uRockRadius;
 uniform float uLiquidFraction;
 uniform float uVaporFraction;
 uniform int uObjectMode;
@@ -1829,9 +1836,10 @@ void main() {
         float illumination = clamp(0.34 + (0.76 * light), 0.23, 1.13);
         vec3 lit = material * illumination;
         if (uSpatialRockActive == 1) {
-            // Local LOD patches are smaller than a physical thermal cell.
-            // Sample the exact global phase atlas at the geographic anchor.
-            vec3 dir = normalize(uLocalRockAnchor);
+            // Reconstruct this fragment's geographic point in the shared tangent frame.
+            // Sampling only the anchor erased all thermal variation across an LOD patch.
+            vec3 dir = normalize(uLocalRockAnchor * (uRockRadius + vPositionMeters.y)
+                + uLocalRockEast * vPositionMeters.x + uLocalRockNorth * vPositionMeters.z);
             vec2 uv = vec2(atan(dir.z, dir.x) / 6.28318530718 + 0.5,
                 asin(clamp(dir.y, -1.0, 1.0)) / 3.14159265359 + 0.5);
             vec2 encoded = sampleRegionalRock(uv);

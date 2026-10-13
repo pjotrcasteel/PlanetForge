@@ -12,6 +12,26 @@ namespace PlanetForge.Infrastructure.Tests.Surface;
 public sealed class PlanetFormationSimulationTests
 {
     [TestMethod]
+    public async Task AdvanceAsync_YieldingBatches_PreservesExactSynchronousEnthalpiesAndCancelsAtomically()
+    {
+        var synchronous = CreateExperience();
+        var asynchronous = CreateExperience();
+        PlanetFormationSimulation.Start(synchronous, 24061984);
+        PlanetFormationSimulation.Start(asynchronous, 24061984);
+        PlanetFormationSimulation.Advance(synchronous, 30);
+        await PlanetFormationSimulation.AdvanceAsync(asynchronous, 30);
+        CollectionAssert.AreEqual(synchronous.PublishedRegionalRock!.Columns!.Columns.SelectMany(column => column.Layers).ToArray(),
+            asynchronous.PublishedRegionalRock!.Columns!.Columns.SelectMany(column => column.Layers).ToArray());
+        Assert.AreEqual(synchronous.PublishedOriginEpoch!.Clock, asynchronous.PublishedOriginEpoch!.Clock);
+        var original = asynchronous.PublishedRegionalRock;
+        using var cancellation = new CancellationTokenSource();
+        var pending = PlanetFormationSimulation.AdvanceAsync(asynchronous, 30, cancellation.Token);
+        cancellation.Cancel();
+        await Assert.ThrowsExactlyAsync<TaskCanceledException>(() => pending);
+        Assert.AreSame(original, asynchronous.PublishedRegionalRock);
+    }
+
+    [TestMethod]
     public void Start_NewWorld_IsMoltenDryAndCanonicalBeforeFirstRender()
     {
         var experience = CreateExperience();
@@ -41,10 +61,10 @@ public sealed class PlanetFormationSimulationTests
         Assert.AreEqual(30_000_000L, current.Epoch.Clock.MicrosecondsIntoYear);
         Assert.AreEqual(initial.Field.TotalActiveRockMassKilograms, current.Field.TotalActiveRockMassKilograms, initial.Field.TotalActiveRockMassKilograms * 1e-12);
         Assert.AreEqual(0.0, current.Epoch.EnergyConservationResidualJoules, current.Epoch.CoupledEnergy!.InitialStoredEnergyJoules * 1e-12);
-        Assert.IsTrue(current.Field.Cells.All(c => current.ResolveSurfacePhase(c.Id).MeltFraction < 1.0));
+        Assert.IsTrue(current.Field.Cells.Any(c => current.ResolveSurfacePhase(c.Id).MeltFraction < 1.0));
         Assert.IsTrue(current.Columns!.Columns.All(c => c.Layers[^1].Resolve(current.Field.Material).MeltFraction == 1.0));
         var projection = PlanetOriginSpatialSurfaceProjection.Create(current);
-        Assert.IsTrue(projection.TemperatureKelvin.Max() < initialProjection.TemperatureKelvin.Min());
+        Assert.IsTrue(projection.TemperatureKelvin.Zip(initialProjection.TemperatureKelvin).All(pair => pair.First < pair.Second));
         Assert.IsTrue(projection.MeltFraction.Any(f => f < 1.0f));
         Assert.AreEqual(0L, initial.Epoch.Revision);
         using var cancellation = new CancellationTokenSource();

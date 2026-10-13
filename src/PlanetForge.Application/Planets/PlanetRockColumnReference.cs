@@ -29,6 +29,14 @@ public static class PlanetRockColumnReference
     public static PlanetOriginCanonicalRockCells CreateResolvedInitial(double radiusMeters, int layerCount = 64, double solarIrradianceWattsPerSquareMeter = 1361.0, double contrastFraction = 0.08)
     {
         var funded = PlanetMagmaOceanReference.CreateInitial(radiusMeters, contrastFraction);
+        return CreateResolvedInitial(funded, layerCount, solarIrradianceWattsPerSquareMeter);
+    }
+
+    public static PlanetOriginCanonicalRockCells CreateResolvedInitial(PlanetOriginCanonicalRockCells funded, int layerCount = 64,
+        double solarIrradianceWattsPerSquareMeter = 1361.0)
+    {
+        ArgumentNullException.ThrowIfNull(funded);
+        if (funded.Columns is not null) throw new ArgumentException("Initial columns must partition an unpartitioned funded shell.", nameof(funded));
         var columns = PlanetOriginRockColumnField.Partition(funded.Field, new(layerCount, 3000.0, 2800.0, 3.0)
         {
             DepthGradingExponent = 2.0,

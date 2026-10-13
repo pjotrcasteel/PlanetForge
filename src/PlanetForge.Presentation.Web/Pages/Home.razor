@@ -30,11 +30,13 @@
                     @if (Experience.PublishedRegionalRock is { } world)
                     {
                         <span data-testid="formation-temperature">SURFACE @($"{world.Field.Cells.Min(c => world.ResolveRadiatingSurfaceTemperature(c.Id)):0}")–@($"{world.Field.Cells.Max(c => world.ResolveRadiatingSurfaceTemperature(c.Id)):0}") K</span>
+                        <span data-testid="formation-skin">SKIN MELT @($"{world.Field.Cells.Min(c => world.ResolveRadiatingSurfacePhase(c.Id).MeltFraction):P0}")–@($"{world.Field.Cells.Max(c => world.ResolveRadiatingSurfacePhase(c.Id).MeltFraction):P0}")</span>
                         <span data-testid="formation-melt">TOP MELT @($"{world.Field.Cells.Min(c => world.ResolveSurfacePhase(c.Id).MeltFraction):P0}")–@($"{world.Field.Cells.Max(c => world.ResolveSurfacePhase(c.Id).MeltFraction):P0}")</span>
                         <span data-testid="formation-revision">WORLD REV @world.Epoch.Revision</span>
                     }
                     <small>Dry cooling and surface crystallization. Atmosphere, water and life are future coupled processes.</small>
                     <small>Fixed-exposure thermal emission. Camera bloom is an optical effect; convection is not simulated.</small>
+                    <small>Seeded regional starting heat conserves the 2200 K mean shell energy. It is an initial-condition hypothesis.</small>
                 </details>
                 @if (!string.IsNullOrEmpty(formationStatus))
                 {
@@ -157,15 +159,15 @@
         @if (continuousSimulation)
         {
             <div class="formation-controls" aria-label="Simulation controls">
-                <button type="button" data-testid="formation-play" aria-pressed="@(formationPlaying ? "true" : "false")" @onclick="ToggleFormationPlayback">@(formationPlaying ? "Pause" : "Play")</button>
-                <button type="button" data-testid="formation-step" disabled="@(formationBusy || formationPlaying)" @onclick="AdvanceFormationAsync">
+                <button type="button" data-testid="formation-play" disabled="@(!formationRendererReady)" aria-pressed="@(formationPlaying ? "true" : "false")" @onclick="ToggleFormationPlayback">@(formationPlaying ? "Pause" : "Play")</button>
+                <button type="button" data-testid="formation-step" disabled="@(!formationRendererReady || formationBusy || formationPlaying)" @onclick="AdvanceFormationAsync">
                     @if (formationBusy) { <span class="foundation-epoch-spinner" aria-label="Simulating" /> }
                     else { <span>+@formationStepSeconds s</span> }
                 </button>
-                <select aria-label="Simulation time per step" data-testid="formation-speed" @bind="formationStepSeconds" disabled="@formationBusy">
+                <select aria-label="Simulation time per step" data-testid="formation-speed" @bind="formationStepSeconds" disabled="@(!formationRendererReady || formationBusy)">
                     <option value="1">1 s / step</option><option value="5">5 s / step</option><option value="30">30 s / step</option>
                 </select>
-                <button type="button" data-testid="formation-restart" disabled="@formationBusy" @onclick="RestartFormationAsync">Restart</button>
+                <button type="button" data-testid="formation-restart" disabled="@(!formationRendererReady || formationBusy)" @onclick="RestartFormationAsync">Restart</button>
             </div>
         }
         else if (airlessReferenceActive)
@@ -242,6 +244,7 @@
     private bool continuousSimulation;
     private bool formationPlaying;
     private bool formationBusy;
+    private bool formationRendererReady;
     private int formationSeed;
     private int formationStepSeconds = 1;
     private string formationStatus = string.Empty;
@@ -328,13 +331,18 @@
             return;
         }
 
-        rendererModule = await JsRuntime.InvokeAsync<IJSObjectReference>("import", disposeCancellationTokenSource.Token, "./js/planetRenderer.js");
+        rendererModule = await JsRuntime.InvokeAsync<IJSObjectReference>("import", disposeCancellationTokenSource.Token, "./js/planetRenderer.js?v=0.0.46.0");
         await rendererModule.InvokeVoidAsync("initialize", disposeCancellationTokenSource.Token, "planet-canvas", snapshot, GetOrCreateSurfaceLodReference());
 
-        waterRendererModule = await JsRuntime.InvokeAsync<IJSObjectReference>("import", disposeCancellationTokenSource.Token, "./js/waterOverlay.js");
+        waterRendererModule = await JsRuntime.InvokeAsync<IJSObjectReference>("import", disposeCancellationTokenSource.Token, "./js/waterOverlay.js?v=0.0.46.0");
         await waterRendererModule.InvokeVoidAsync("initialize", disposeCancellationTokenSource.Token, "water-overlay-canvas", "planet-canvas", snapshot.PhysicalParameters.RadiusMeters);
         await waterRendererModule.InvokeVoidAsync("clearWaterCycle", disposeCancellationTokenSource.Token);
-        if (continuousSimulation) formationLoopTask = RunFormationLoopAsync();
+        if (continuousSimulation)
+        {
+            formationRendererReady = true;
+            formationLoopTask = RunFormationLoopAsync();
+            StateHasChanged();
+        }
         if (regionalStreamingEnabled)
         {
             try

@@ -46,6 +46,8 @@ test('RockColumns_OpticalProjection_UsesTemperatureForSolidAndLiquidEmission', a
       cold: optics.emissionDisplayLinear(300),
       warm: optics.emissionDisplayLinear(1200),
       hot: optics.emissionDisplayLinear(2200),
+      sunlight: optics.stellarIrradianceLinear(1361),
+      doubledSunlight: optics.stellarIrradianceLinear(2722),
       ratio: optics.spectralRadiance(550, 2000) / optics.spectralRadiance(550, 1000)
     };
   });
@@ -53,6 +55,8 @@ test('RockColumns_OpticalProjection_UsesTemperatureForSolidAndLiquidEmission', a
   expect(radiance.hot.every((channel, i) => channel > radiance.warm[i])).toBe(true);
   expect(radiance.ratio).toBeGreaterThan(400_000);
   expect(radiance.ratio).toBeLessThan(600_000);
+  expect(radiance.sunlight.every(value => value > .05 && value < .2)).toBe(true);
+  for(let channel=0;channel<3;channel++) expect(radiance.doubledSunlight[channel]).toBeCloseTo(2* radiance.sunlight[channel],12);
 });
 
 test('ResolvedColumns_PC_CoolsFundedDepthAndResetsSharedPlanet', async ({ page }, testInfo) => {
