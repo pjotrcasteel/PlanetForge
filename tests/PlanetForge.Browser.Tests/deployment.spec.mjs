@@ -131,3 +131,27 @@ test('PublishedMagmaOcean_FundedWholeSurface_CoolsAndResetsOnCanonicalGlobe', as
   await expect(page.getByTestId('regional-melt-range')).toHaveText('MELT 100%–100%');
   expect(errors).toEqual([]);
 });
+
+test('PublishedRockColumns_SurfaceAndDepth_AdvancesCanonicalTerrainAndResets', async ({ page }) => {
+  const errors = [];
+  page.on('pageerror', error => errors.push(error.message));
+  await page.goto(process.env.PLANETFORGE_BASE_URL + '/?visualTest=1&rockColumns=1', { waitUntil: 'domcontentloaded' });
+  await expect(page.getByTestId('planet-scenario-label')).toHaveText('ROCK COLUMNS · SURFACE AND DEPTH', { timeout: 90_000 });
+  if (process.env.PLANETFORGE_EXPECTED_SHA)
+    await expect(page.locator('#planetforge-build-badge')).toContainText(process.env.PLANETFORGE_EXPECTED_SHA.slice(0, 7));
+  await expect(page.getByTestId('column-solid-thickness')).toHaveText('SOLID TOP 0.00–0.00 m');
+  await page.waitForFunction(() => Boolean(window.__planetForgeSurfaceTest) || Boolean(window.__planetForgeSurfaceError));
+  expect(await page.evaluate(() => window.__planetForgeSurfaceError ?? null)).toBeNull();
+  const key = await page.evaluate(() => window.__planetForgeSurfaceTest.getTerrainGeometryKey());
+  await page.getByTestId('airless-advance').click();
+  await expect(page.getByTestId('airless-elapsed')).toContainText('T+1h', { timeout: 90_000 });
+  await expect(page.getByTestId('airless-status')).toHaveText('ACCEPTED');
+  await expect(page.getByTestId('regional-melt-range')).not.toHaveText('MELT 100%–100%');
+  await expect(page.getByTestId('column-deep-melt')).toHaveText('DEEP MELT 100%–100%');
+  expect(await page.evaluate(() => window.__planetForgeSurfaceTest.getTerrainGeometryKey())).not.toBe(key);
+  expect((await page.evaluate(() => window.__planetForgeSurfaceTest.measure())).glError).toBe(0);
+  await page.getByTestId('airless-reset').click();
+  await expect(page.getByTestId('column-solid-thickness')).toHaveText('SOLID TOP 0.00–0.00 m');
+  await expect(page.getByTestId('regional-melt-range')).toHaveText('MELT 100%–100%');
+  expect(errors).toEqual([]);
+});

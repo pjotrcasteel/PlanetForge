@@ -1,3 +1,4 @@
+import { createThermalRadianceData, thermalTextureSize, thermalMaterialShader } from './thermalRadiance.js';
 import { clearRetainedSurfaceGeometry, retainSurfaceGeometry } from './surfaceGeometryStore.js';
 
 let state;
@@ -216,6 +217,7 @@ export function dispose() {
     state.scaleHud?.remove();
     state.detailHud?.remove();
     if (state.spatialRockTexture) state.gl.deleteTexture(state.spatialRockTexture);
+    if (state.thermalRadianceTexture) state.gl.deleteTexture(state.thermalRadianceTexture);
     state.gl.deleteProgram(state.globeProgram);
     state.gl.deleteProgram(state.localProgram);
     clearRetainedSurfaceGeometry();
@@ -245,6 +247,7 @@ function createState(canvas, gl, dotNetReference) {
         lodTimer: null, lodSequence: 0, lastSurfaceRequestSignature: null, lastTerrainUpdateMs: null, lastGeometryPayloadCount: 0,
         surfaceRequestInFlight: false, surfaceRequestPending: false, dirty: true,
         surfaceRequestsStarted: 0, surfaceRequestsCompleted: 0, surfaceResponsesSuperseded: 0, originActive: false, airlessReference: false,
+        thermalRadianceTexture: createThermalReferenceTexture(gl), depthColumnsActive: false,
         spatialRockTexture: createEmptySpatialRockTexture(gl), spatialRockRevision: null, spatialRockActive: false,
         lastGeometryCommitMs: null, lastTerrainDrawSubmittedMs: null, lastGestureToTerrainDrawMs: null,
         pendingDrawStartedAt: null, lastGestureEndedAt: null, localElevationRangeMeters: null, localCellSpacingMeters: null,
@@ -266,6 +269,8 @@ function createState(canvas, gl, dotNetReference) {
             equilibriumTemperature: gl.getUniformLocation(globeProgram, 'uEquilibriumTemperature'),
             surfaceTemperature: gl.getUniformLocation(globeProgram, 'uSurfaceTemperature'),
             airlessReference: gl.getUniformLocation(globeProgram, 'uAirlessReference'),
+            depthColumns: gl.getUniformLocation(globeProgram, 'uDepthColumns'),
+            thermalRadiance: gl.getUniformLocation(globeProgram, 'uThermalRadianceTexture'),
             spatialRockActive: gl.getUniformLocation(globeProgram, 'uSpatialRockActive'),
             spatialRockTexture: gl.getUniformLocation(globeProgram, 'uSpatialRockTexture'),
             solarFlux: gl.getUniformLocation(globeProgram, 'uSolarFlux'),
@@ -285,9 +290,13 @@ function createState(canvas, gl, dotNetReference) {
         localUniforms: {
             viewProjection: gl.getUniformLocation(localProgram, 'uViewProjection'),
             light: gl.getUniformLocation(localProgram, 'uLightDirection'),
+            camera: gl.getUniformLocation(localProgram, 'uLocalCameraPosition'),
+            solarFlux: gl.getUniformLocation(localProgram, 'uSolarFlux'),
             seaLevelMeters: gl.getUniformLocation(localProgram, 'uSeaLevelMeters'),
             surfaceTemperature: gl.getUniformLocation(localProgram, 'uSurfaceTemperature'),
             airlessReference: gl.getUniformLocation(localProgram, 'uAirlessReference'),
+            depthColumns: gl.getUniformLocation(localProgram, 'uDepthColumns'),
+            thermalRadiance: gl.getUniformLocation(localProgram, 'uThermalRadianceTexture'),
             spatialRockActive: gl.getUniformLocation(localProgram, 'uSpatialRockActive'),
             spatialRockTexture: gl.getUniformLocation(localProgram, 'uSpatialRockTexture'),
             localRockAnchor: gl.getUniformLocation(localProgram, 'uLocalRockAnchor'),
@@ -296,6 +305,19 @@ function createState(canvas, gl, dotNetReference) {
             objectMode: gl.getUniformLocation(localProgram, 'uObjectMode')
         }
     };
+}
+
+function createThermalReferenceTexture(gl) {
+    const texture = gl.createTexture();
+    gl.activeTexture(gl.TEXTURE2);
+    gl.bindTexture(gl.TEXTURE_2D, texture);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, thermalTextureSize, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, createThermalRadianceData());
+    gl.activeTexture(gl.TEXTURE0);
+    return texture;
 }
 
 function createEmptySpatialRockTexture(gl) {
@@ -315,6 +337,7 @@ function createEmptySpatialRockTexture(gl) {
 }
 
 function updateSpatialRockTexture(s, atlas) {
+    s.depthColumnsActive = Boolean(atlas?.hasDepthColumns);
     if (!atlas) {
         s.spatialRockActive = false;
         s.spatialRockRevision = null;
@@ -1021,7 +1044,7 @@ function renderGlobe(s) {
     // In geological inspection mode, a camera-relative raking light reveals slopes at every viewing angle.
     // Ordinary climate rendering retains the fixed world-space light direction.
     const rockLight = normalize([eye[0] + 0.65, eye[1] + 0.80, eye[2] - 0.35]);
-    gl.uniform3f(s.globeUniforms.light, ...(geologicalPreviewMode ? rockLight : [0.7, 0.35, 0.6]));
+    gl.uniform3f(s.globeUniforms.light, ...(s.depthColumnsActive ? [1, 0, 0] : geologicalPreviewMode ? rockLight : [0.7, 0.35, 0.6]));
     gl.uniform3f(s.globeUniforms.cameraPosition, eye[0], eye[1], eye[2]);
     gl.uniform1f(s.globeUniforms.seaLevelMeters, s.seaLevelMeters);
     gl.uniform1f(s.globeUniforms.planetRadiusMeters, s.planetRadiusMeters);
@@ -1030,6 +1053,10 @@ function renderGlobe(s) {
     gl.uniform1f(s.globeUniforms.surfaceTemperature, s.surfaceTemperature);
     gl.uniform1i(s.globeUniforms.airlessReference, s.airlessReference ? 1 : 0);
     gl.uniform1i(s.globeUniforms.spatialRockActive, s.spatialRockActive ? 1 : 0);
+    gl.uniform1i(s.globeUniforms.depthColumns, s.depthColumnsActive ? 1 : 0);
+    gl.activeTexture(gl.TEXTURE2);
+    gl.bindTexture(gl.TEXTURE_2D, s.thermalRadianceTexture);
+    gl.uniform1i(s.globeUniforms.thermalRadiance, 2);
     gl.activeTexture(gl.TEXTURE1);
     gl.bindTexture(gl.TEXTURE_2D, s.spatialRockTexture);
     gl.uniform1i(s.globeUniforms.spatialRockTexture, 1);
@@ -1096,11 +1123,23 @@ function renderLocal(s) {
     const preBiological = isPreBiologicalSurface(s);
 
     gl.uniformMatrix4fv(s.localUniforms.viewProjection, false, viewProjection);
-    gl.uniform3f(s.localUniforms.light, 0.45, 0.82, 0.35);
+    const anchorDirection = s.localRockAnchor ?? { x: 0, y: 1, z: 0 };
+    const up = normalize([anchorDirection.x, anchorDirection.y, anchorDirection.z]);
+    const east = normalize(cross(Math.abs(up[1]) < 0.99 ? [0, 1, 0] : [1, 0, 0], up));
+    const north = normalize(cross(up, east));
+    // The physical column boundary's sun is UnitX in geographic coordinates.
+    const localSun = s.depthColumnsActive ? [east[0], up[0], north[0]] : [0.45, 0.82, 0.35];
+    gl.uniform3f(s.localUniforms.light, ...localSun);
+    gl.uniform3f(s.localUniforms.camera, ...eye);
+    gl.uniform1f(s.localUniforms.solarFlux, s.solarFlux);
     gl.uniform1f(s.localUniforms.seaLevelMeters, s.seaLevelMeters);
     gl.uniform1f(s.localUniforms.surfaceTemperature, s.surfaceTemperature);
     gl.uniform1i(s.localUniforms.airlessReference, s.airlessReference ? 1 : 0);
     gl.uniform1i(s.localUniforms.spatialRockActive, s.spatialRockActive ? 1 : 0);
+    gl.uniform1i(s.localUniforms.depthColumns, s.depthColumnsActive ? 1 : 0);
+    gl.activeTexture(gl.TEXTURE2);
+    gl.bindTexture(gl.TEXTURE_2D, s.thermalRadianceTexture);
+    gl.uniform1i(s.localUniforms.thermalRadiance, 2);
     gl.activeTexture(gl.TEXTURE1);
     gl.bindTexture(gl.TEXTURE_2D, s.spatialRockTexture);
     gl.uniform1i(s.localUniforms.spatialRockTexture, 1);
@@ -1258,6 +1297,7 @@ in vec3 aNormal;
 uniform mat4 uModel;
 uniform mat4 uViewProjection;
 uniform float uPlanetRadiusMeters;
+uniform int uDepthColumns;
 uniform vec3 uCameraPosition;
 uniform float uSeaLevelMeters;
 uniform float uSeaIceFraction;
@@ -1312,7 +1352,7 @@ void main() {
     // The tangent component saturates smoothly while preserving small bedrock features.
     float tangentMagnitude = length(tangentNormal);
     float rockyRelief = 18.0 / (1.0 + (tangentMagnitude * 18.0 / 0.42));
-    vNormal = normalize(radial + (tangentNormal * (uMode == 5 ? rockyRelief : 12.0)));
+    vNormal = normalize(radial + (tangentNormal * (uMode == 5 ? (uDepthColumns == 1 ? 1.0 : rockyRelief) : 12.0)));
     vPhysicalSlope = clamp(1.0 - dot(physicalNormal, radial), 0.0, 0.5);
     vElevationMeters = elevationMeters;
     vWorldPosition = world.xyz;
@@ -1335,6 +1375,8 @@ uniform float uAtmosphere;
 uniform float uEquilibriumTemperature;
 uniform float uSurfaceTemperature;
 uniform int uAirlessReference;
+uniform int uDepthColumns;
+${thermalMaterialShader}
 uniform int uSpatialRockActive;
 uniform sampler2D uSpatialRockTexture;
 
@@ -1608,6 +1650,11 @@ void main() {
             vec2 uv = vec2(atan(radial.z, radial.x) / 6.28318530718 + 0.5,
                 asin(clamp(radial.y, -1.0, 1.0)) / 3.14159265359 + 0.5);
             vec2 physicalPhase = sampleRegionalRock(uv);
+            if (uDepthColumns == 1) {
+                outColor = vec4(phaseMaterial(physicalPhase, normalize(vPhysicalNormal),
+                    normalize(uCameraPosition - vWorldPosition), normalize(uLightDirection), uSolarFlux), 1.0);
+                return;
+            }
             float localKelvin = physicalPhase.x;
             float localMelt = clamp(physicalPhase.y, 0.0, 1.0);
             float incandescent = smoothstep(850.0, 1700.0, localKelvin);
@@ -1666,9 +1713,11 @@ in vec3 aPositionMeters;
 in vec3 aNormal;
 in float aElevationMeters;
 uniform mat4 uViewProjection;
+out vec3 vPositionMeters;
 out vec3 vNormal;
 out float vElevationMeters;
 void main() {
+    vPositionMeters = aPositionMeters;
     vNormal = normalize(aNormal);
     vElevationMeters = aElevationMeters;
     gl_Position = uViewProjection * vec4(aPositionMeters, 1.0);
@@ -1677,12 +1726,17 @@ void main() {
 const localFragmentShaderSource = `#version 300 es
 precision highp float;
 precision highp int;
+in vec3 vPositionMeters;
 in vec3 vNormal;
 in float vElevationMeters;
 uniform vec3 uLightDirection;
+uniform vec3 uLocalCameraPosition;
+uniform float uSolarFlux;
 uniform float uSeaLevelMeters;
 uniform float uSurfaceTemperature;
 uniform int uAirlessReference;
+uniform int uDepthColumns;
+${thermalMaterialShader}
 uniform int uSpatialRockActive;
 uniform sampler2D uSpatialRockTexture;
 
@@ -1744,6 +1798,11 @@ void main() {
             vec2 uv = vec2(atan(dir.z, dir.x) / 6.28318530718 + 0.5,
                 asin(clamp(dir.y, -1.0, 1.0)) / 3.14159265359 + 0.5);
             vec2 encoded = sampleRegionalRock(uv);
+            if (uDepthColumns == 1) {
+                outColor = vec4(phaseMaterial(encoded, normalize(vNormal), normalize(uLocalCameraPosition - vPositionMeters),
+                    normalize(uLightDirection), uSolarFlux), 1.0);
+                return;
+            }
             float localKelvin = encoded.x;
             float melt = encoded.y;
             float glow = smoothstep(850.0, 1700.0, localKelvin) * melt;

@@ -9,7 +9,10 @@ namespace PlanetForge.Application.Rendering;
 /// samples are not a second simulation state or a source of physical heat.
 /// </summary>
 public sealed record PlanetOriginSpatialSurfaceSnapshot(
-    long Revision, int Width, int Height, float[] TemperatureKelvin, float[] MeltFraction);
+    long Revision, int Width, int Height, float[] TemperatureKelvin, float[] MeltFraction)
+{
+    public bool HasDepthColumns { get; init; }
+}
 
 public static class PlanetOriginSpatialSurfaceProjection
 {
@@ -22,6 +25,8 @@ public static class PlanetOriginSpatialSurfaceProjection
         var field = region.Field;
         var centers = field.Cells.Select(c => PlanetSurfaceGridGeometry.GetCenterDirection(c.Id)).ToArray();
         var rock = field.Cells.Select(c => region.ResolveSurfacePhase(c.Id)).ToArray();
+        if (rock.Any(value => !double.IsFinite(value.TemperatureKelvin) || value.TemperatureKelvin < 0.0 || value.TemperatureKelvin > 6_553.5))
+            throw new InvalidOperationException("Physical surface temperature exceeds the declared RGBA8 display envelope; publication was rejected.");
         var temperatures = new float[AtlasWidth * AtlasHeight];
         var melts = new float[temperatures.Length];
 
@@ -97,6 +102,7 @@ public static class PlanetOriginSpatialSurfaceProjection
             }
         }
 
-        return new PlanetOriginSpatialSurfaceSnapshot(region.Epoch.Revision, AtlasWidth, AtlasHeight, temperatures, melts);
+        return new PlanetOriginSpatialSurfaceSnapshot(region.Epoch.Revision, AtlasWidth, AtlasHeight, temperatures, melts)
+        { HasDepthColumns = region.Columns is not null };
     }
 }
