@@ -1,89 +1,45 @@
 # PlanetForge — active continuation state
 
 **Workstream:** `PF-EARTH-20261013-A`  
-**Last documented:** 2026-10-13  
-**GitHub state checked at handover creation; RE-QUERY BEFORE ANY CODE OR RELEASE.**
+**Checkpoint:** 2026-10-13, after M2b/M2c release verification. Re-query GitHub before coding.
 
-## Baseline: deployed and validated
+## Latest verified release
 
-- GitHub: https://github.com/pjotrcasteel/PlanetForge
-- Latest independently checked main: `853a3790c53af82fae186e097afe79cfc88e0c54` (#203 docs); Pages run `38393339383` build/deploy/production smoke all passed. No open PRs at session restore; GitHub milestone collection is empty (roadmap is issue #196).
-- Science-code release `main` SHA: `74ba0612a6cd3169b6ec01972ebecce371cd5f5e` (#202); any later docs-only main SHA should be checked against this release
-- Displayed browser version: **PF 0.0.41.0**
-- GitHub Pages validation: **success**, run [38392739208](https://github.com/pjotrcasteel/PlanetForge/actions/runs/38392739208), including exact-SHA publish, deployment, and live-browser smoke. Source PR CI [38390183995](https://github.com/pjotrcasteel/PlanetForge/actions/runs/38390183995) also succeeded.
-- Main 3D planet: **new opt-in fully molten starting-state** at `?visualTest=1&magmaOcean=1`; original `?visualTest=1&regionalRock=1` regional contrast reference still exists. Regular `?visualTest=1` is the separate Snowball experiment, **not** the primordial-Earth timeline.
-- Human iPhone visual acceptance: **PF 0.0.40.2** thermal HUD/controls and T+1/T+2 accepted, but that earlier regional reference looked like tinted bedrock with one bright hotspot. **PF 0.0.41.0 magma-ocean visual quality is NOT YET HUMAN-ACCEPTED**: user was invited to inspect the new fully molten globe at T+0/T+1; wait for screenshots before closing the visible stage.
+- Repository: https://github.com/pjotrcasteel/PlanetForge
+- Source release `main`: `cf72231fcb7259534fd8d1ff78e0d2e9b8c2a0f0` ([PR #205](https://github.com/pjotrcasteel/PlanetForge/pull/205)). Later docs-only main commits must be independently checked; this SHA identifies the verified science/test code.
+- Displayed version: **PF 0.0.41.0**. #204/#205 changed thermal accounting, numerical admission and release checks; they did not introduce a new visible stage or change the existing zero-conductivity scenario.
+- Full PR CI: #204 run [38395003474](https://github.com/pjotrcasteel/PlanetForge/actions/runs/38395003474), #205 run [38396130480](https://github.com/pjotrcasteel/PlanetForge/actions/runs/38396130480), both **success** (build, .NET, WASM publish, full browser suite).
+- Pages: #204 `33d0191` run [38397777732](https://github.com/pjotrcasteel/PlanetForge/actions/runs/38397777732); #205 run [38398882086](https://github.com/pjotrcasteel/PlanetForge/actions/runs/38398882086), both **success**, including exact-SHA deployment and production browser smoke. #205 production smoke now includes the molten scenario.
+- Local .NET validation: **285 domain + 155 application + 254 infrastructure = 694 tests passed**. #205 CI independently passed the same tests and **41 browser regressions**; four production-only tests are intentionally skipped in PR CI and run on Pages.
+- No open implementation PRs at the release checkpoint. A final docs-only checkpoint PR may follow; inspect GitHub rather than assuming this source SHA is HEAD.
 
-## Completed work
+## Current milestone and human acceptance
 
-| PR | Verified outcome |
-| --- | --- |
-| [#195](https://github.com/pjotrcasteel/PlanetForge/pull/195) | Seam-safe spatial interpolation of existing thermal cells; merged |
-| [#197](https://github.com/pjotrcasteel/PlanetForge/pull/197) | Conservative lateral spherical heat exchange optional in canonical epoch; merged; existing visual scenario does **not** enable lateral conductivity |
-| [#198](https://github.com/pjotrcasteel/PlanetForge/pull/198) | Blazor isolated CSS loaded; compact iPhone HUD; merged |
-| [#199](https://github.com/pjotrcasteel/PlanetForge/pull/199) | Production smoke now checks version dynamically and verifies actual scoped CSS; merged |
-| [#200](https://github.com/pjotrcasteel/PlanetForge/pull/200) | iPhone viewport/control recovery and bounds/hit tests; merged and deployed as PF 0.0.40.2 |
-| [#201](https://github.com/pjotrcasteel/PlanetForge/pull/201) | Persistent cross-chat handover and PR checklist; merged and deployed |
-| [#202](https://github.com/pjotrcasteel/PlanetForge/pull/202) | PF 0.0.41.0: separately funded fully molten surface-shell initial scenario, main-globe liquid material, deterministic and browser tests; merged, production smoke green; **iPhone appearance pending acceptance** |
+- **M1 molten visual integrity:** implementation deployed; **iPhone Safari appearance remains pending**. Inspect the main globe at `?visualTest=1&magmaOcean=1`, T+0/T+1h. This is the funded fully molten reference added in #202, not the older regional contrast test or Snowball.
+- **M2 heat transport:** optional conservative lateral transport (#197), bidirectional vertical accounting (#204), and finite-capacity vertical stability/convergence tests (#205) are delivered. End-to-end adaptive spatial stepping and a documented coupled visual reference remain unfinished. Do not close the entire heat-transport milestone or claim magma convection.
+- **M3 primary crust:** not implemented. Effective solid/melt fractions are not mechanically persistent differentiated crust.
+- Last human planet feedback: PF 0.0.40.2 HUD/buttons/advance accepted, but the old regional globe looked like tinted bedrock plus one hotspot. No T+0/T+1h user acceptance of the new PF 0.0.41.0 magma-ocean appearance has been recorded. The user's later screenshot showed the ChatGPT activity indicator, not new planet feedback.
+- Developer production Chromium check at `853a379`: T+0 **2117–2309 K**, T+1h **1931–2057 K**, both **100% melt**, accepted step and no page errors. A 390 px Chromium viewport is not a real Safari measurement.
 
-**After #201 and #202:** persistent documentation is merged and verified; the PF 0.0.41.0 magma-ocean feature is also merged as `74ba0612`, with full PR CI and exact-head GitHub Pages smoke green. The explicit molten starting scenario at `?visualTest=1&magmaOcean=1` is **deployed but not yet iPhone visually approved**. The old `?regionalRock=1` and Snowball remain available. Read [scientific limitations](../earth-origin-magma-ocean-initial-reference.md).
+## Delivered this session
 
-## Current task: credible molten starting surface
+- #204: typed environmental→interior heat return, separate gross internal heat counters, matched debits/credits for hot and cold regions, history retained through volatile transfers, direct interval integration avoiding cumulative-export subtraction. Overdraw/nonfinite/cancellation fail without publication.
+- #205: vertical conduction must satisfy `conductance * duration / minimumHeatCapacity <= 0.5` for each cell **and the sum seen by the finite common mantle**. Sensible `mass * cp` conservatively bounds the fusion interval. Oversized steps are rejected, never clipped; exact-time timestep refinement converges in tests.
+- #205: permanent exact-SHA production smoke now enters the fully molten scenario, advances its canonical heat state, checks WebGL and resets; existing Snowball/regional checks remain.
+- Updated [energy contract](../earth-origin-thermal-coupling-contract.md). Historical details are preserved in [the original snapshot](PF-EARTH-20261013-A.md) and [the released heat-coupling snapshot](PF-EARTH-20261013-A-20261013-heat-coupling.md).
 
-User's visual feedback: the regional planet is mostly orange-tinted existing barren bedrock, plus one small brighter spot. This is not the target. Investigated source in `src/PlanetForge.Application/Planets/PlanetRegionalCoolingReference.cs`: initial surface starts at 1600 K, with material solidus 1300 K and liquidus 1900 K, then shifts only 1.2% of initial enthalpy into a small hotspot. This intentionally creates a scientific **contrast/reference** and a 48–100% melt range rather than a globally molten scenario. Renderer `src/PlanetForge.Presentation.Web/wwwroot/js/planetRenderer.js` uses melt-dependent orange blend over `barrenRockMaterial`, so molten regions currently look like reddish terrain, not a magma-dominated surface.
+## Architectural and scientific boundaries
 
-**Implemented and deployed (PF 0.0.41.0; iPhone acceptance pending):** separately funded molten surface-shell enthalpy starts at 2200 K, bulk mantle at 2400 K, with 8% conserved broad regional redistribution. Canonical 100% initial melt drives a liquid optical material, replacing earlier dry-bedrock tint. C#/Playwright physics/browser tests and Pages smoke are green. **NEXT:** evaluate user's new T+0/T+1h iPhone screenshots for whole-globe molten credibility, camera/LOD and UI correctness; fix any issues, then continue mantle-surface coupling and permanent **primary crust** in small physical steps. Avoid fake black crust masks, artist-created heat or hardcoded evolutionary times.
+One canonical coupled world owns clock, mass, enthalpy and accepted revision; orbital/local LOD 0–3 consume projections. Heat returned to the mantle is internal transport, not impact heat, matter delivery or negative space radiation. Preserve Hero geology, hydrology, archives, existing scenario behavior and terrain publication.
 
-The exact Earth Hadean thermal state is uncertain, so label this an explicit scenario/hypothesis with parameters, not the true history. Earth-scale magma circulation, deep convection, crust differentiation, steam EOS, outgassing, precipitation and first life remain future physical milestones.
+The current molten start is an explicit **dry/airless hypothetical active-shell reference**: approximately seven metres at the stated reference density, a separately funded 2200 K shell and 2400 K bulk mantle, with conserved regional initial redistribution. See [magma-ocean reference](../earth-origin-magma-ocean-initial-reference.md). It is not resolved deep magma convection, a calibrated Hadean atmosphere or Earth's unique history. Conductivity remains zero in existing visual references. Radiation, chemistry, volatile rates, clouds/rain, physical new oceans and earliest life remain later work.
 
-## Next ten high-level gates
+## Defects, risks and next steps
 
-See [roadmap issue #196](https://github.com/pjotrcasteel/PlanetForge/issues/196): (1) molten regional visual integrity, (2) spatial heat transport, (3) primary crust, (4) geology/tectonic regimes, (5) radiative hot atmosphere, (6) volatile delivery/outgassing, (7) physical clouds/rain, (8) oceans/lakes/rivers, (9) climate/ice/erosion, (10) prebiotic conditions. A named milestone may require multiple PRs. The initial **magma-ocean scenario** is needed before claiming stage 1 visually accepted.
+1. Obtain T+0/T+1h iPhone Safari screenshots of the molten mode and resolve actual visual/camera/control defects before declaring M1 accepted or changing the default. Keep the old partial-melt contrast at `?regionalRock=1` and Snowball at regular `?visualTest=1`.
+2. Add bounded spatial substep selection/re-evaluation with immutable ledger/field candidates, exact elapsed time, cancellation/rollback and one atomic publication. Vertical/lateral stability bounds do not prove full operator-split radiation convergence.
+3. Add a separately labelled coupled-conduction reference with explicit transport parameters and convergence measurements; do not inflate conductivity to select an artistic cooling time or call conduction convection.
+4. Begin conserved primary-crust columns: source mass/enthalpy, density, composition, thickness and stable material identity; distinguish unsegregated crystals from coherent crust, and account for remelting. Publish actual relief/material through the existing canonical planet/LOD gateway without pre-existing modern continents.
+5. Continue the ten-stage roadmap [#196](https://github.com/pjotrcasteel/PlanetForge/issues/196), science [#143](https://github.com/pjotrcasteel/PlanetForge/issues/143), and crust [#184](https://github.com/pjotrcasteel/PlanetForge/issues/184). Legacy Snowball cryosphere, Hero morphology, blurry/slow local LOD and river continuity remain tracked risks (#148/#162/#163); this session did not fix them.
 
-## Execution and communication
-
-- Developer has delegated implementation sequencing, CI/CD, merging/release and testing. Keep working until a meaningful **new visual inspection** is ready or a genuinely essential user decision is needed; don't request a repeated “continue.”
-- Scope: .NET 10, MSTest, Blazor WASM, WebGL2, Playwright, GitHub Actions/Pages. Preserve existing regional terrain/Hero geology and planet LOD 0–3.
-- Always build/test, run browser checks, merge green PR, verify Pages SHA/visible version/production smoke. If any check fails, fix in code and re-run.
-- Never assert future autonomous/background work unless a scheduling mechanism is explicitly used. Work synchronously when a session is active.
-- Each milestone's PR updates **this file**. Create a separate snapshot when handing off chats.
-
-## Active implementation — M2b, bidirectional mantle/surface heat (2026-10-13)
-
-- Branch: `feature/bidirectional-surface-interior-heat`; [PR #204](https://github.com/pjotrcasteel/PlanetForge/pull/204), code head `9b34ca425f69abfbccff51e093f420fc9233a95a`.
-- Implemented typed environmental heat return, distinct interior return counter,
-  signed local Fourier gradient and both-direction canonical publication. Existing
-  zero-conductivity visual scenarios and rendered version remain unchanged.
-- Added conservation/mixed-region/replay/equilibrium/overdraw tests. PR CI `38395003474` has passed build/.NET/publish; full browser result still pending at this documentation checkpoint.
-- Local .NET 10.0.401 domain/application compilation passed. Full WASM build
-  encountered local MSBuild task-host startup failure; MSTest reported discovery
-  failure (zero tests is **not** validation). Full GitHub CI remains the release gate.
-- Risks: explicit steps still require a gradient/equilibration stability bound;
-  no full-depth convection, persistent crust, atmospheric physics or Safari approval.
-- Exact next steps: full PR CI and review; fix failures; merge only after full
-  browser suite succeeds; verify Pages exact SHA. Then implement phase-aware
-  regional conduction stability/convergence and a documented opt-in coupled
-  reference; retain the existing magma-ocean user visual gate.
-
-## Prepared follow-on — M2c, finite-capacity conduction stability
-
-- Branch: `feature/vertical-conduction-stability`, based on #204; do not merge
-  before #204 and full follow-on CI succeed.
-- Added a 0.5 explicit conduction-coupling bound for each surface cell and the
-  aggregate common mantle; minimum sensible `mass * cp` also bounds the fusion
-  interval. Reject oversized intervals before publication, never clip flux.
-- Local .NET 10.0.100: **285 domain tests and 155 application tests passed**.
-  Moving test execution to `/tmp` resolved the workspace assembly-discovery
-  problem; local WASM task-host startup remains environment-limited.
-- Added exact-SHA production smoke for the magma-ocean route, physical advance
-  and reset. The previous Pages smoke only covered Snowball and regional rock.
-- Independent production Chromium check at `853a379`: T+0 2117–2309 K,
-  T+1h 1931–2057 K, both 100% melt, accepted canonical step, no page errors.
-  This is **not iPhone Safari acceptance**, nor a claimed crust/steam milestone.
-- Next: finish both PR release gates, update this checkpoint with actual merge
-  SHA/Pages results, then obtain user T+0/T+1h iPhone screenshots of the fully
-  molten scenario before advancing its visual material or enabling a default.
-- Model next: bounded regional substep selection/re-evaluation, a documented
-  coupled conduction reference, then conserved primary-crust columns and
-  thickness. Neither these bounds nor latent solid mass imply differentiated,
-  persistent primordial crust or fully simulated magma convection.
+Local runtime note: system dotnet was absent. .NET 10.0.100 was installed for verification; running test projects from a `/tmp` checkout solved workspace test-discovery failures. Local WASM MSBuild task-host startup remained environment-limited; full GitHub build/publish/browser gates passed. Do not turn these local issues into product changes or ask the user for credentials: GitHub app Git-data operations supplied branch/commit/PR writes when CLI push had no credential. Production browser networking required the configured HTTP proxy. Use the absolute Pages URL for smoke; local browser test root-relative paths otherwise target the wrong GitHub Pages location.
