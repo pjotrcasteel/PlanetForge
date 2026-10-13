@@ -20,4 +20,5 @@ public sealed record PlanetRenderSnapshot(
     WaterPhaseSnapshot Water,
     PlanetLocalSurfaceMesh? LocalSurface = null,
     int TerrainRevision = 0,
-    PlanetOriginSurfaceSnapshot? Origin = null);
+    PlanetOriginSurfaceSnapshot? Origin = null,
+    PlanetOriginSpatialSurfaceSnapshot? SpatialRock = null);

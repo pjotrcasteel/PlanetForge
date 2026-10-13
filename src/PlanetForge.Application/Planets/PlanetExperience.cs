@@ -65,9 +65,49 @@ public sealed class PlanetExperience(
     private PlanetLocalSurfaceMesh? cachedLocalSurface;
     private ClimateFeedbackState? climateState;
     private PlanetOriginEpochState? originEpoch;
+    private PlanetOriginCanonicalRockCells? spatialRockEpoch;
+    private PlanetOriginSpatialSurfaceSnapshot? cachedSpatialRockProjection;
+    private PlanetOriginSurfaceRockPhaseField? cachedSpatialRockField;
 
     /// <summary>Immutable Earth-origin epoch projected onto the canonical main planet, when selected.</summary>
     public PlanetOriginEpochState? PublishedOriginEpoch => originEpoch;
+
+    /// <summary>Accepted physical regional rock field with the same canonical epoch revision.</summary>
+    public PlanetOriginCanonicalRockCells? PublishedRegionalRock => spatialRockEpoch;
+
+    /// <summary>
+    /// Commits the regional and planetary views together. Any projection
+    /// error restores both; the regional phase atlas can never be newer
+    /// than the actual physical epoch or be accepted independently.
+    /// </summary>
+    public PlanetRenderSnapshot PublishRegionalRock(PlanetOriginCanonicalRockCells candidate)
+    {
+        ArgumentNullException.ThrowIfNull(candidate);
+        if (hypsometryCache is null)
+            throw new InvalidOperationException("Regional rock publication requires real terrain hypsometry.");
+
+        var previous = originEpoch;
+        var previousRock = spatialRockEpoch;
+        var previousAtlas = cachedSpatialRockProjection;
+        var previousField = cachedSpatialRockField;
+        try
+        {
+            // Preserve the established monotonic publication contract.
+            _ = PublishOriginEpoch(candidate.Epoch);
+            spatialRockEpoch = candidate;
+            cachedSpatialRockField = null;
+            cachedSpatialRockProjection = null;
+            return CreateSnapshot();
+        }
+        catch
+        {
+            originEpoch = previous;
+            spatialRockEpoch = previousRock;
+            cachedSpatialRockProjection = previousAtlas;
+            cachedSpatialRockField = previousField;
+            throw;
+        }
+    }
 
     /// <summary>
     /// Publishes an already conserved, energy-coupled candidate using the real terrain and water-volume model.
@@ -92,14 +132,17 @@ public sealed class PlanetExperience(
         var physics = PlanetPhysicsCalculator.Calculate(state.PhysicalParameters);
         _ = PlanetOriginSurfaceProjection.Create(epoch, state.PhysicalParameters.RadiusMeters, physics.SurfaceGravityMetersPerSecondSquared);
         var previous = originEpoch;
+        var previousRegional = spatialRockEpoch;
         try
         {
             originEpoch = epoch;
+            spatialRockEpoch = null;
             return CreateSnapshot();
         }
         catch
         {
             originEpoch = previous;
+            spatialRockEpoch = previousRegional;
             throw;
         }
     }
@@ -124,6 +167,9 @@ public sealed class PlanetExperience(
     public PlanetRenderSnapshot ClearOriginEpoch()
     {
         originEpoch = null;
+        spatialRockEpoch = null;
+        cachedSpatialRockProjection = null;
+        cachedSpatialRockField = null;
         return CreateSnapshot();
     }
 
@@ -395,7 +441,23 @@ public sealed class PlanetExperience(
             water,
             localSurface,
             terrainRevision,
-            origin);
+            origin,
+            CreateSpatialRockProjection());
+    }
+
+    private PlanetOriginSpatialSurfaceSnapshot? CreateSpatialRockProjection()
+    {
+        if (spatialRockEpoch is not { } region) return null;
+        if (!ReferenceEquals(originEpoch, region.Epoch))
+            throw new InvalidOperationException("Regional rock must have the same revision as the canonical world.");
+        if (!ReferenceEquals(cachedSpatialRockField, region.Field) ||
+            cachedSpatialRockProjection is null || cachedSpatialRockProjection.Revision != originEpoch.Revision)
+        {
+            cachedSpatialRockProjection = PlanetOriginSpatialSurfaceProjection.Create(region);
+            cachedSpatialRockField = region.Field;
+        }
+
+        return cachedSpatialRockProjection;
     }
 
     private IReadOnlyList<PlanetSurfaceTileMesh> CreateGlobalSurfaceTiles(bool fullGeometry, double radiusMeters)
