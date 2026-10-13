@@ -26,7 +26,7 @@ public static class PlanetRockColumnReference
     }
 
     /// <summary>Opt-in surface-focused numerical reference; not the released eight-layer reference or calibrated Earth cooling.</summary>
-    public static PlanetOriginCanonicalRockCells CreateResolvedInitial(double radiusMeters, int layerCount = 64)
+    public static PlanetOriginCanonicalRockCells CreateResolvedInitial(double radiusMeters, int layerCount = 64, double solarIrradianceWattsPerSquareMeter = 1361.0)
     {
         var funded = PlanetMagmaOceanReference.CreateInitial(radiusMeters);
         var columns = PlanetOriginRockColumnField.Partition(funded.Field, new(layerCount, 3000.0, 2800.0, 3.0)
@@ -35,7 +35,9 @@ public static class PlanetRockColumnReference
             UseRadiatingInterface = true,
             UseImplicitDepthTransport = true
         });
-        return new(funded.Epoch, columns.Aggregate, columns);
+        var boundary = new PlanetOriginRegionalAirlessParameters(PlanetVector.UnitX, solarIrradianceWattsPerSquareMeter, 0.15, 0.9, 3.0, 25.0);
+        boundary.Validate();
+        return new(funded.Epoch, columns.Aggregate, columns) { SurfaceBoundary = boundary };
     }
 
     public static PlanetOriginCanonicalRockCells Advance(PlanetOriginCanonicalRockCells current,

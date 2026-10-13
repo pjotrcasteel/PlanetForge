@@ -21,7 +21,7 @@
         <div class="foundation-clock @(geologyActive ? "foundation-clock-geology" : airlessReferenceActive ? "foundation-clock-thermal" : "")" aria-live="polite">
             <strong>@FormatElapsedTime()</strong>
             <span>@FormatStageLabel()</span>
-            <small class="foundation-geology-preview" data-testid="planet-scenario-label" title="@CurrentScenarioName">@(rockColumnsActive ? "ROCK COLUMNS · SURFACE AND DEPTH" : magmaOceanActive ? "MAGMA OCEAN · CONSERVED MOLTEN REFERENCE" : regionalRockActive ? "REGIONAL ROCK · CONSERVED PHASE REFERENCE" : airlessReferenceActive ? "AIRLESS · ONE-ZONE PHYSICAL REFERENCE" : snapshot?.Origin is not null ? PlanetOriginUxText.ScenarioLabel : geologyActive ? "EXPERIMENT / PHYSICAL TERRAIN" : "EXPERIMENT / CANONICAL TERRAIN")</small>
+            <small class="foundation-geology-preview" data-testid="planet-scenario-label" title="@CurrentScenarioName">@(resolvedColumnsActive ? "RESOLVED COLUMNS · THERMAL FRONT" : rockColumnsActive ? "ROCK COLUMNS · SURFACE AND DEPTH" : magmaOceanActive ? "MAGMA OCEAN · CONSERVED MOLTEN REFERENCE" : regionalRockActive ? "REGIONAL ROCK · CONSERVED PHASE REFERENCE" : airlessReferenceActive ? "AIRLESS · ONE-ZONE PHYSICAL REFERENCE" : snapshot?.Origin is not null ? PlanetOriginUxText.ScenarioLabel : geologyActive ? "EXPERIMENT / PHYSICAL TERRAIN" : "EXPERIMENT / CANONICAL TERRAIN")</small>
             <div class="foundation-seed">
                 <small data-testid="planet-seed">SEED @CurrentSeed</small>
                 @if (!airlessReferenceActive)
@@ -74,8 +74,8 @@
                 <div class="foundation-thermal-readout" data-testid="airless-reference-readout">
                     @if (regionalRockActive && Experience.PublishedRegionalRock is { } region)
                     {
-                        <strong data-testid="regional-temperature-range">SURFACE @($"{region.Field.Cells.Min(x => region.ResolveSurfacePhase(x.Id).TemperatureKelvin):0}")–@($"{region.Field.Cells.Max(x => region.ResolveSurfacePhase(x.Id).TemperatureKelvin):0}") K</strong>
-                        <span data-testid="regional-melt-range">MELT @($"{region.Field.Cells.Min(x => region.ResolveSurfacePhase(x.Id).MeltFraction):P0}")–@($"{region.Field.Cells.Max(x => region.ResolveSurfacePhase(x.Id).MeltFraction):P0}")</span>
+                        <strong data-testid="regional-temperature-range">@(resolvedColumnsActive ? "FACE" : "SURFACE") @($"{region.Field.Cells.Min(x => region.ResolveRadiatingSurfaceTemperature(x.Id)):0}")–@($"{region.Field.Cells.Max(x => region.ResolveRadiatingSurfaceTemperature(x.Id)):0}") K</strong>
+                        <span data-testid="regional-melt-range">@(resolvedColumnsActive ? "TOP CELL MELT" : "MELT") @($"{region.Field.Cells.Min(x => region.ResolveSurfacePhase(x.Id).MeltFraction):P0}")–@($"{region.Field.Cells.Max(x => region.ResolveSurfacePhase(x.Id).MeltFraction):P0}")</span>
                     }
                     else
                     {
@@ -86,6 +86,11 @@
                     @if (rockColumnsActive && Experience.PublishedRegionalRock?.Columns is { } columns)
                     {
                         <span data-testid="column-solid-thickness">SOLID TOP @($"{columns.Columns.Min(c => c.SolidSurfaceThicknessMeters(columns.Material, columns.Properties)):0.00}")–@($"{columns.Columns.Max(c => c.SolidSurfaceThicknessMeters(columns.Material, columns.Properties)):0.00}") m</span>
+                        @if (resolvedColumnsActive && Experience.PublishedRegionalRock is { } resolved)
+                        {
+                            <small data-testid="column-front-depth">SOLIDUS @($"{columns.Columns.Min(c => GetSolidusDepth(resolved, c)):0.000}")–@($"{columns.Columns.Max(c => GetSolidusDepth(resolved, c)):0.000}") m · 64 LAYERS</small>
+                            <small data-testid="column-front-limit">INTERPOLATED THERMAL FRONT · NOT MECHANICAL CRUST</small>
+                        }
                         <small data-testid="column-deep-melt">DEEP MELT @($"{columns.Columns.Min(c => c.Layers[^1].Resolve(columns.Material).MeltFraction):P0}")–@($"{columns.Columns.Max(c => c.Layers[^1].Resolve(columns.Material).MeltFraction):P0}")</small>
                     }
                     @if (rockColumnsActive)
@@ -181,6 +186,8 @@
     private bool airlessReferenceActive;
     private bool regionalRockActive;
     private string rockDiagnosticMode = "physical";
+    private bool resolvedColumnsSelected;
+    private bool resolvedColumnsActive => resolvedColumnsSelected && rockColumnsActive;
     private bool rockColumnsSelected;
     private bool rockColumnsActive => rockColumnsSelected && regionalRockActive;
     private bool magmaOceanSelected;
@@ -226,7 +233,10 @@
         airlessReferenceActive = new Uri(Navigation.Uri).Query.TrimStart('?')
             .Split('&', StringSplitOptions.RemoveEmptyEntries)
             .Contains("airlessReference=1", StringComparer.OrdinalIgnoreCase);
-        rockColumnsSelected = new Uri(Navigation.Uri).Query.TrimStart('?')
+        resolvedColumnsSelected = new Uri(Navigation.Uri).Query.TrimStart('?')
+            .Split('&', StringSplitOptions.RemoveEmptyEntries)
+            .Contains("resolvedColumns=1", StringComparer.OrdinalIgnoreCase);
+        rockColumnsSelected = resolvedColumnsSelected || new Uri(Navigation.Uri).Query.TrimStart('?')
             .Split('&', StringSplitOptions.RemoveEmptyEntries)
             .Contains("rockColumns=1", StringComparer.OrdinalIgnoreCase);
         magmaOceanSelected = new Uri(Navigation.Uri).Query.TrimStart('?')
@@ -416,8 +426,13 @@
     }
 
     private PlanetOriginCanonicalRockCells CreateSelectedRockReference(double radius) => rockColumnsSelected
-        ? PlanetRockColumnReference.CreateInitial(radius)
+        ? resolvedColumnsSelected
+            ? PlanetRockColumnReference.CreateResolvedInitial(radius, 64, Experience.CreateInitialRenderSnapshot().Physics.SolarFluxWattsPerSquareMeter)
+            : PlanetRockColumnReference.CreateInitial(radius)
         : magmaOceanSelected ? PlanetMagmaOceanReference.CreateInitial(radius) : PlanetRegionalCoolingReference.CreateInitial(radius);
+
+    private static double GetSolidusDepth(PlanetOriginCanonicalRockCells region, PlanetOriginRockColumn column) =>
+        column.ReconstructSolidusDepthMeters(region.Field.Material, region.Columns!.Properties, region.ResolveRadiatingSurfaceTemperature(column.Id));
 
     private async Task SwitchRockReferenceAsync()
     {
@@ -478,6 +493,7 @@
             airlessReferenceActive = false;
             regionalRockActive = false;
             rockColumnsSelected = false;
+            resolvedColumnsSelected = false;
             magmaOceanSelected = false;
             airlessElapsedSeconds = 0;
             airlessStatus = string.Empty;
