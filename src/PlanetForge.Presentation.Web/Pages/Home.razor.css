@@ -368,3 +368,76 @@
 .foundation-clock.foundation-clock-thermal .foundation-thermal-readout [data-testid="regional-melt-range"] {
     font-size: 0.64rem;
 }
+
+
+/* With the generated scoped CSS linked, keep the airless science instruments
+   above the globe instead of covering its center on iPhone Safari. A single
+   compact readout row separates melt range from the epoch clock. */
+@media (max-width: 640px) {
+    .foundation-clock.foundation-clock-thermal {
+        top: calc(env(safe-area-inset-top, 0px) + 6px);
+        box-sizing: border-box;
+        width: min(calc(100vw - 20px), 360px);
+        min-width: 0;
+        max-width: 360px;
+        gap: 2px;
+        padding: 6px 10px;
+        pointer-events: none;
+        -webkit-text-size-adjust: 100%;
+        text-size-adjust: 100%;
+    }
+
+    .foundation-clock.foundation-clock-thermal > strong {
+        font-size: 0.76rem;
+        line-height: 1.1;
+        letter-spacing: 0.06em;
+    }
+
+    .foundation-clock.foundation-clock-thermal > .foundation-geology-preview {
+        max-width: 100%;
+        font-size: 0.55rem;
+        line-height: 1.15;
+        letter-spacing: 0.015em;
+        overflow-wrap: anywhere;
+    }
+
+    .foundation-clock.foundation-clock-thermal .foundation-thermal-readout {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        align-items: center;
+        column-gap: 8px;
+        row-gap: 2px;
+        width: 100%;
+        padding-top: 4px;
+    }
+
+    .foundation-clock.foundation-clock-thermal .foundation-thermal-readout > strong {
+        grid-column: 1 / -1;
+        font-size: 0.78rem;
+        line-height: 1.15;
+        white-space: nowrap;
+    }
+
+    .foundation-clock.foundation-clock-thermal .foundation-thermal-readout > span {
+        grid-column: 1;
+        font-size: 0.62rem;
+        line-height: 1.2;
+        white-space: nowrap;
+    }
+
+    .foundation-clock.foundation-clock-thermal .foundation-thermal-readout > small[data-testid="airless-elapsed"] {
+        grid-column: 2;
+        font-size: 0.59rem;
+        line-height: 1.2;
+        white-space: nowrap;
+    }
+
+    .foundation-clock.foundation-clock-thermal .foundation-thermal-readout > .foundation-thermal-limit,
+    .foundation-clock.foundation-clock-thermal .foundation-thermal-readout > small[role="status"] {
+        grid-column: 1 / -1;
+        max-width: 100%;
+        font-size: 0.55rem;
+        white-space: normal;
+        line-height: 1.2;
+    }
+}
