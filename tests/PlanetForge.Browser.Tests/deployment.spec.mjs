@@ -53,7 +53,7 @@ test('DeployedPlanetForge_ExposesHotRockReferenceAndPhysicalCooling', async ({ p
   const badge = page.locator('#planetforge-build-badge');
   // The smoke suite must validate each deployed release without carrying
   // a stale prior-version assertion into the next release.
-  const visibleVersion = (await page.title()).match(/^PlanetForge ([\\d.]+) — Planetary Simulation$/)?.[1];
+  const visibleVersion = (await page.title()).match(/^PlanetForge ([0-9.]+) — Planetary Simulation$/)?.[1];
   expect(visibleVersion).toBeTruthy();
   await expect(badge).toContainText(`PF ${visibleVersion} · `);
   if (process.env.PLANETFORGE_EXPECTED_SHA) {
