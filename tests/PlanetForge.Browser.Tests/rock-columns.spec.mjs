@@ -54,3 +54,35 @@ test('RockColumns_OpticalProjection_UsesTemperatureForSolidAndLiquidEmission', a
   expect(radiance.ratio).toBeGreaterThan(400_000);
   expect(radiance.ratio).toBeLessThan(600_000);
 });
+
+test('ResolvedColumns_PC_CoolsFundedDepthAndResetsSharedPlanet', async ({ page }, testInfo) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  const errors = [];
+  page.on('pageerror', error => errors.push(error.message));
+  await page.goto('/?visualTest=1&resolvedColumns=1');
+  await expect(page.getByTestId('planet-scenario-label')).toHaveText('RESOLVED COLUMNS · THERMAL FRONT', { timeout: 60_000 });
+  await expect(page.getByTestId('regional-temperature-range')).toContainText('FACE');
+  await expect(page.getByTestId('regional-melt-range')).toHaveText('TOP CELL MELT 100%–100%');
+  await expect(page.getByTestId('column-solid-thickness')).toHaveText('SOLID TOP 0.00–0.00 m');
+  await expect(page.getByTestId('column-front-depth')).toContainText('64 LAYERS');
+  await page.waitForFunction(() => Boolean(window.__planetForgeSurfaceTest), null, { timeout: 60_000 });
+  const original = await page.evaluate(() => window.__planetForgeSurfaceTest.getTerrainGeometryKey());
+  await page.screenshot({ path: testInfo.outputPath('resolved-columns-pc-initial.png') });
+  for (let hour = 1; hour <= 4; hour++) {
+    await page.getByTestId('airless-advance').click();
+    await expect(page.getByTestId('airless-elapsed')).toContainText(`T+${hour}h`, { timeout: 60_000 });
+    await expect(page.getByTestId('airless-status')).toHaveText('ACCEPTED');
+  }
+  await expect(page.getByTestId('regional-melt-range')).toHaveText('TOP CELL MELT 0%–0%');
+  await expect(page.getByTestId('column-front-depth')).not.toContainText('SOLIDUS 0.000–0.000');
+  await expect(page.getByTestId('column-deep-melt')).toHaveText('DEEP MELT 100%–100%');
+  expect(await page.evaluate(() => window.__planetForgeSurfaceTest.getTerrainGeometryKey())).not.toBe(original);
+  expect((await page.evaluate(() => window.__planetForgeSurfaceTest.measure())).glError).toBe(0);
+  await page.getByTestId('rock-map-select').selectOption('temperature');
+  await expect(page.getByTestId('airless-elapsed')).toContainText('T+4h');
+  await page.screenshot({ path: testInfo.outputPath('resolved-columns-pc-four-hours.png') });
+  await page.getByTestId('airless-reset').click();
+  await expect(page.getByTestId('airless-elapsed')).toContainText('T+0h', { timeout: 60_000 });
+  await expect(page.getByTestId('regional-melt-range')).toHaveText('TOP CELL MELT 100%–100%');
+  expect(errors).toEqual([]);
+});

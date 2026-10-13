@@ -72,6 +72,8 @@ public sealed class PlanetRockColumnReferenceTests
     public void Advance_ResolvedReference_ProjectsRadiatingFaceAndPreservesOwnedMaterialAndInitialRelease()
     {
         var initial = PlanetRockColumnReference.CreateResolvedInitial(6_371_000.0);
+        Assert.IsTrue(initial.SurfaceBoundary.HasValue);
+        Assert.IsTrue(initial.Field.Cells.All(c => initial.ResolveRadiatingSurfaceTemperature(c.Id) <= initial.ResolveSurfacePhase(c.Id).TemperatureKelvin));
         var source = new FlatElevation();
         var experience = new PlanetExperience(new PlanetSurfaceMeshCache(new PlanetSurfaceMeshBuilder(new PlanetSurfaceTileSampler(source))),
             new PlanetLocalSurfacePatchSampler(source), new PlanetLocalSurfaceMeshBuilder());
