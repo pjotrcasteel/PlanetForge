@@ -18,92 +18,104 @@ public static class PlanetOriginSpatialSurfaceProjection
 {
     private const int AtlasWidth = 256;
     private const int AtlasHeight = 128;
+    private const int DisplayNeighbors = 8;
+
+    private static readonly object StencilGate = new();
+    private static (int Level, int[] Indices, double[] Weights)? cachedStencil;
 
     public static PlanetOriginSpatialSurfaceSnapshot Create(PlanetOriginCanonicalRockCells region)
     {
         ArgumentNullException.ThrowIfNull(region);
         var field = region.Field;
-        var centers = field.Cells.Select(c => PlanetSurfaceGridGeometry.GetCenterDirection(c.Id)).ToArray();
         var rock = field.Cells.Select(c => region.ResolveSurfacePhase(c.Id) with
         { TemperatureKelvin = region.ResolveRadiatingSurfaceTemperature(c.Id) }).ToArray();
-        if (rock.Any(value => !double.IsFinite(value.TemperatureKelvin) || value.TemperatureKelvin < 0.0 || value.TemperatureKelvin > 6_553.5))
+        if (rock.Any(value => !double.IsFinite(value.TemperatureKelvin) || value.TemperatureKelvin < 0.0 || value.TemperatureKelvin > 6553.5))
             throw new InvalidOperationException("Physical surface temperature exceeds the declared RGBA8 display envelope; publication was rejected.");
+        var stencil = GetStencil(field.Layout);
         var temperatures = new float[AtlasWidth * AtlasHeight];
         var melts = new float[temperatures.Length];
-
-        const int neighborCount = 4;
-        Span<int> nearest = stackalloc int[neighborCount];
-        Span<double> proximity = stackalloc double[neighborCount];
-
-        for (var y = 0; y < AtlasHeight; y++)
+        for (var pixel = 0; pixel < temperatures.Length; pixel++)
         {
-            var latitude = (((y + 0.5) / AtlasHeight) - 0.5) * Math.PI;
-            var sinLat = Math.Sin(latitude);
-            var cosLat = Math.Cos(latitude);
-            for (var x = 0; x < AtlasWidth; x++)
+            var weightSum = 0.0;
+            var temperatureSum = 0.0;
+            var meltSum = 0.0;
+            var minimumTemperature = double.PositiveInfinity;
+            var maximumTemperature = double.NegativeInfinity;
+            var minimumMelt = 1.0;
+            var maximumMelt = 0.0;
+            for (var slot = 0; slot < DisplayNeighbors; slot++)
             {
-                var longitude = (((x + 0.5) / AtlasWidth) - 0.5) * 2.0 * Math.PI;
-                var unit = new PlanetVector(cosLat * Math.Cos(longitude), sinLat, cosLat * Math.Sin(longitude));
-                // Reconstruct the *display* field from nearby physical cell centers.
-                // Dot products are spherical: no artificial seams at cube faces or longitude wrap.
-                // Physical cell enthalpy and its conservation ledger are never changed.
+                var address = pixel * DisplayNeighbors + slot;
+                var weight = stencil.Weights[address];
+                if (weight == 0.0) continue;
+                var state = rock[stencil.Indices[address]];
+                weightSum += weight;
+                temperatureSum += weight * state.TemperatureKelvin;
+                meltSum += weight * state.MeltFraction;
+                minimumTemperature = Math.Min(minimumTemperature, state.TemperatureKelvin);
+                maximumTemperature = Math.Max(maximumTemperature, state.TemperatureKelvin);
+                minimumMelt = Math.Min(minimumMelt, state.MeltFraction);
+                maximumMelt = Math.Max(maximumMelt, state.MeltFraction);
+            }
+            temperatures[pixel] = (float)Math.Clamp(temperatureSum / weightSum, minimumTemperature, maximumTemperature);
+            melts[pixel] = (float)Math.Clamp(meltSum / weightSum, minimumMelt, maximumMelt);
+        }
+        return new(region.Epoch.Revision, AtlasWidth, AtlasHeight, temperatures, melts) { HasDepthColumns = region.Columns is not null };
+    }
 
-                nearest.Fill(-1);
-                proximity.Fill(double.NegativeInfinity);
-                for (var cellIndex = 0; cellIndex < centers.Length; cellIndex++)
+    // Geometry-only, one-entry bounded cache. No temperature/phase/epoch is cached here.
+    // Eulerian cell addresses and spherical display interpolation are invariant as the rock cools.
+    private static (int Level, int[] Indices, double[] Weights) GetStencil(PlanetSurfaceGridLayout layout)
+    {
+        lock (StencilGate)
+        {
+            if (cachedStencil is { } cached && cached.Level == layout.Level) return cached;
+            var centres = Enumerable.Range(0, layout.CellCount).Select(i => PlanetSurfaceGridGeometry.GetCenterDirection(layout.GetCell(i))).ToArray();
+            var indices = new int[AtlasWidth * AtlasHeight * DisplayNeighbors];
+            var weights = new double[indices.Length];
+            Span<int> nearest = stackalloc int[DisplayNeighbors + 1];
+            Span<double> proximity = stackalloc double[DisplayNeighbors + 1];
+            for (var y = 0; y < AtlasHeight; y++)
+            {
+                var latitude = (((y + 0.5) / AtlasHeight) - 0.5) * Math.PI;
+                for (var x = 0; x < AtlasWidth; x++)
                 {
-                    var dot = PlanetVector.Dot(unit, centers[cellIndex]);
-                    for (var slot = 0; slot < neighborCount; slot++)
+                    var longitude = (((x + 0.5) / AtlasWidth) - 0.5) * 2.0 * Math.PI;
+                    var unit = new PlanetVector(Math.Cos(latitude) * Math.Cos(longitude), Math.Sin(latitude), Math.Cos(latitude) * Math.Sin(longitude));
+                    nearest.Fill(-1);
+                    proximity.Fill(double.NegativeInfinity);
+                    for (var cell = 0; cell < centres.Length; cell++)
                     {
-                        if (dot <= proximity[slot]) continue;
-                        for (var shift = neighborCount - 1; shift > slot; shift--)
+                        var dot = PlanetVector.Dot(unit, centres[cell]);
+                        for (var slot = 0; slot <= DisplayNeighbors; slot++)
                         {
-                            proximity[shift] = proximity[shift - 1];
-                            nearest[shift] = nearest[shift - 1];
+                            if (dot <= proximity[slot]) continue;
+                            for (var shift = DisplayNeighbors; shift > slot; shift--)
+                            {
+                                proximity[shift] = proximity[shift - 1];
+                                nearest[shift] = nearest[shift - 1];
+                            }
+                            proximity[slot] = dot;
+                            nearest[slot] = cell;
+                            break;
                         }
-                        proximity[slot] = dot;
-                        nearest[slot] = cellIndex;
-                        break;
+                    }
+                    for (var slot = 0; slot < DisplayNeighbors; slot++)
+                    {
+                        var address = (y * AtlasWidth + x) * DisplayNeighbors + slot;
+                        indices[address] = nearest[slot];
+                        if (nearest[slot] < 0) { weights[address] = 0.0; continue; }
+                        var distance = Math.Max(1e-12, 1.0 - proximity[slot]);
+                        var support = Math.Max(1e-12, 1.0 - proximity[DisplayNeighbors]);
+                        // Compact Shepard support goes to zero as a cell enters/leaves the neighbourhood.
+                        // Avoid visible four-neighbour boundaries without adding a new physical heat/phase field.
+                        weights[address] = proximity[0] >= 1.0 - 1e-12 ? (slot == 0 ? 1.0 : 0.0)
+                            : Math.Pow(Math.Max(0.0, 1.0 / distance - 1.0 / support), 2.0);
                     }
                 }
-
-                var i = y * AtlasWidth + x;
-                if (proximity[0] >= 1.0 - 1e-12)
-                {
-                    temperatures[i] = checked((float)rock[nearest[0]].TemperatureKelvin);
-                    melts[i] = checked((float)rock[nearest[0]].MeltFraction);
-                    continue;
-                }
-
-                var weightSum = 0.0;
-                var temperatureSum = 0.0;
-                var meltSum = 0.0;
-                var minimumTemperature = double.PositiveInfinity;
-                var maximumTemperature = double.NegativeInfinity;
-                var minimumMelt = 1.0;
-                var maximumMelt = 0.0;
-                for (var slot = 0; slot < neighborCount; slot++)
-                {
-                    var neighbor = nearest[slot];
-                    if (neighbor < 0) continue;
-                    var weight = 1.0 / Math.Pow(Math.Max(1e-12, 1.0 - proximity[slot]), 2.0);
-                    var temperature = rock[neighbor].TemperatureKelvin;
-                    var melt = rock[neighbor].MeltFraction;
-                    weightSum += weight;
-                    temperatureSum += weight * temperature;
-                    meltSum += weight * melt;
-                    minimumTemperature = Math.Min(minimumTemperature, temperature);
-                    maximumTemperature = Math.Max(maximumTemperature, temperature);
-                    minimumMelt = Math.Min(minimumMelt, melt);
-                    maximumMelt = Math.Max(maximumMelt, melt);
-                }
-
-                temperatures[i] = checked((float)Math.Clamp(temperatureSum / weightSum, minimumTemperature, maximumTemperature));
-                melts[i] = checked((float)Math.Clamp(meltSum / weightSum, minimumMelt, maximumMelt));
             }
+            cachedStencil = (layout.Level, indices, weights);
+            return cachedStencil.Value;
         }
-
-        return new PlanetOriginSpatialSurfaceSnapshot(region.Epoch.Revision, AtlasWidth, AtlasHeight, temperatures, melts)
-        { HasDepthColumns = region.Columns is not null };
     }
 }

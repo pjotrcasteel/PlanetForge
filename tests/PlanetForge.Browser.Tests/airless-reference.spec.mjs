@@ -38,7 +38,7 @@ test('AirlessReference_MainGlobe_AdvancesPhysicalSurfaceCoolingWithoutStoryStage
 });
 
 test('AirlessReference_DefaultPlanetRemainsFrozenClimateExperiment', async ({ page }) => {
-  await page.goto('/?visualTest=1');
+  await page.goto('/?visualTest=1&legacy=1');
   await expect(page.getByText('SNOWBALL EXPERIMENT', { exact: true })).toBeVisible({ timeout: 30_000 });
   await expect(page.getByRole('button', { name: 'NEXT' })).toBeVisible();
   await expect(page.getByTestId('airless-reference-readout')).toHaveCount(0);
@@ -46,7 +46,7 @@ test('AirlessReference_DefaultPlanetRemainsFrozenClimateExperiment', async ({ pa
 });
 
 test('AirlessReference_RegularPlanet_OffersOneTapThermalModeAndReturnsWithoutResettingSeed', async ({ page }) => {
-  await page.goto('/?visualTest=1');
+  await page.goto('/?visualTest=1&legacy=1');
   const beforeSeed = await page.getByTestId('planet-seed').textContent();
   await expect(page.getByTestId('airless-enter')).toBeVisible({ timeout: 30_000 });
 
@@ -67,7 +67,7 @@ test('AirlessReference_RegularPlanet_OffersOneTapThermalModeAndReturnsWithoutRes
 });
 
 test('AirlessReference_GeologicalResearchMode_CanSwitchToThermalWithoutOldCrustOverlay', async ({ page }) => {
-  await page.goto('/?visualTest=1');
+  await page.goto('/?visualTest=1&legacy=1');
   await page.getByTestId('geology-terrain-toggle').click();
   await expect(page.getByTestId('main-geology-epochs')).toBeVisible({ timeout: 90_000 });
 

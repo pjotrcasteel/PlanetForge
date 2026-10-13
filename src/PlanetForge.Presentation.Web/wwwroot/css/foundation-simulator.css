@@ -406,3 +406,38 @@
 @media (prefers-reduced-motion: reduce) {
     .foundation-epoch-spinner { animation: none; border-color: #e2f3de; border-right-color: transparent; }
 }
+
+
+/* The primary formation experience: one world, compact readout, time controls only. */
+.formation-simulation .formation-hud {
+    position: absolute; z-index: 10; top: calc(env(safe-area-inset-top, 0px) + 22px); left: 24px;
+    display: flex; flex-direction: column; gap: 7px; max-width: min(330px, calc(100vw - 48px));
+    padding: 16px 20px; color: #f3e6cf; border: 1px solid #ad804c40; border-radius: 16px;
+    background: #0c1011cf; backdrop-filter: blur(12px); font-family: system-ui, sans-serif;
+}
+.formation-hud .formation-brand { color: #c4a376; letter-spacing: .22em; font-size: 10px; }
+.formation-hud > strong { font-size: 19px; font-weight: 500; }
+.formation-hud > span { color: #bcb6a9; font-size: 13px; font-variant-numeric: tabular-nums; }
+.formation-details { color: #bcb6a9; font-size: 12px; }
+.formation-details summary { cursor: pointer; width: fit-content; padding: 3px 0; }
+.formation-details[open] { display: flex; flex-direction: column; gap: 8px; }
+.formation-details span, .formation-details small { display: block; margin-top: 8px; line-height: 1.5; }
+.formation-details small { max-width: 270px; color: #928d83; }
+.formation-controls {
+    position: absolute; z-index: 10; bottom: calc(env(safe-area-inset-bottom, 0px) + 38px); left: 50%; transform: translateX(-50%);
+    display: flex; align-items: center; gap: 8px; padding: 8px; border-radius: 16px; border: 1px solid #ad804c40;
+    background: #0c1011e8; font-family: system-ui, sans-serif;
+}
+.formation-controls button, .formation-controls select {
+    min-height: 42px; border: 0; border-radius: 10px; padding: 9px 14px; background: #282721; color: #ece5d7;
+    font: inherit; font-size: 13px; cursor: pointer; white-space: nowrap;
+}
+.formation-controls button:first-child { background: #d29850; color: #18130d; min-width: 72px; }
+.formation-controls button:disabled, .formation-controls select:disabled { opacity: .5; cursor: progress; }
+.formation-controls button:focus-visible, .formation-controls select:focus-visible, .formation-details summary:focus-visible { outline: 2px solid #e8ae69; outline-offset: 3px; }
+@media (max-width: 600px) {
+    .formation-simulation .formation-hud { top: calc(env(safe-area-inset-top, 0px) + 12px); left: 12px; padding: 12px 15px; }
+    .formation-hud > strong { font-size: 16px; }
+    .formation-controls { gap: 5px; padding: 6px; }
+    .formation-controls button, .formation-controls select { padding: 8px 10px; font-size: 12px; }
+}

@@ -1,115 +1,30 @@
 # PlanetForge — active continuation state
 
-**Workstream:** `PF-EARTH-20261013-A`  
-**Checkpoint:** 2026-10-13, autonomous solidification batch. Always re-query GitHub.
+**Workstream:** PF-EARTH-20261013-A. **Strategy:** vertical scientific/rendering slices; one continuous canonical formation world.
 
-## Current authoritative status — supersedes historical checkpoints below
+## Verified base and candidate
 
-- **Merged source:** `12fdc68825f518e7719e10147471b76fb238652b`, PF **0.0.44.0 candidate**, [solver #219](https://github.com/pjotrcasteel/PlanetForge/pull/219) then [resolved main-planet #220](https://github.com/pjotrcasteel/PlanetForge/pull/220). Both full CI runs passed; #220 run **38444603756** passed **729 .NET + 48 browser regressions**, with five production-only checks skipped until deployment.
-- **Last independently verified production at session start:** `a8b3b77a8750ecfd7ea43d7aaa0805c1ac165b9c`, PF **0.0.43.0**, Pages **38441045724** succeeded. Do not infer that the new version is live from its merge.
-- **New Pages run:** **38446290792**, exact source `12fdc68`, was **pending** at this checkpoint behind model-only Pages **38445648525** (`dfa1499`). Full exact-SHA production gates and resolved-reference live smoke are **not yet verified**. Re-query, do not redeploy unnecessarily or claim live/human acceptance.
-- **Implementation:** opt-in graded-depth radiating-face/implicit enthalpy solver; compensated layer/environment/mantle flux accumulation; thermal-front reconstruction; resolved main-planet reference at `?visualTest=1&resolvedColumns=1`, initialized forcing, consistent face-temperature atlas and separate material/front HUD. The default chronology and old eight-layer reference remain preserved.
-- **Evidence:** independent full 384-cell 64/128 refinement maximum front difference **0.514 mm**, face difference **0.522 K** at four hours. Native 64-layer run ~5.3 s; actual exact-artifact PC Chromium advance/reset regression **1.8 min**. No real Safari acceptance or beautiful molten visual claim.
-- **Next:** verify Pages 38446290792 and `PF 0.0.44.0 · 12fdc68`; run resolved-reference exact-SHA live smoke. Then visual check seed 24061984, T+0/1/4h, physical and diagnostic maps, PC primary/iPhone secondary. Continue composition/provenance, coherence/rheology and conservative moving material before genuine tectonic relief. Do not manufacture texture/mountains.
-- Read [solidification experiment snapshot](PF-EARTH-20261013-A-20261013-solidification.md). The previous uniform-grid defect fixture stays in CI; the old 0.82 m coarse display is not a crust prediction. Spatial agreements are bounded model checks, not absolute front error or calibrated Earth history.
+- Base main `317b5b9ce3584f5a0cb3f17217fe44ec96bcce98` is documentation over source `12fdc68825f518e7719e10147471b76fb238652b`, PF **0.0.44.0**. Pages **38446290792** completed successfully; build/deploy/exact-SHA production checks passed. Real-device visual acceptance remains open.
+- **PF 0.0.45.0 candidate:** primary page starts directly with funded molten depth columns and **never starts the unrelated FrozenWorldMission**. Play/pause, short physical steps and same-seed restart replace stage/reference buttons. Scientific details are collapsed. Explicit old references/legacy remain available for regression/research, not primary navigation.
+- `PlanetFormationSimulation` advances the existing `PlanetExperience.PublishedRegionalRock`; same canonical energy/mass/depth/clock feeds the shared main/local atlas and real contraction terrain source. No scripted oceans/life or second timeline.
+- Shared optics: Planck/CIE log radiance in a filterable RGBA16F lookup, fixed camera exposure, angular molten emissivity normalized to the physical grey epsilon, roughness/Fresnel/GGX reflection, and normalized optical bloom. Bloom is camera optics, **not atmosphere**. No authored lava/convection/fracture map or invented terrain. Display interpolation uses compact eight-neighbour Shepard support; only geometry stencils are cached.
+- Declared initial hypothesis: 2200 K funded shell with **25% conserved geographic enthalpy redistribution**, retaining every initial owned top cell above liquidus. This is hypothetical initial heat contrast, not simulated impact/convection. Early cap 0.25 s retains fast freezing; subsequent caps 1/5 s. Optical temperature and owned top melt remain distinct.
 
-## Historical checkpoints (retain for scientific provenance)
+## Validation and release gates
 
-## Historical PF 0.0.42.0 release record
+- Local scientific suites: 309 domain, 160 application, 263 infrastructure (732 total). New real-publication integration tests cover dry/molten first render, short-step phase/atlas evolution, exact clock, energy/mass conservation, funded hot depth, cancellation, replay and restart.
+- Initial independent browser pass: molten primary startup, evolving single clock, pause/restart and orbit/local rendering passed. Revised exposure/interpolation/portrait checks are pending their final run and full CI. Do not confuse local captures with production or human acceptance.
+- Candidate **is not live** until its full build/.NET/browser gates, merge, exact-SHA Pages and new primary-formation production smoke pass. Legacy tests use explicit `legacy=1`; the new primary path has dedicated PC/portrait/LOD regressions and production smoke.
+- **Next action:** finish candidate CI, inspect actual physical T+0/30/120 s PC captures, merge only after technical gates, verify correct visible version and source SHA. Request human inspection at the default main URL with `seed=24061984`, same camera: T+0, 5, 30, 120 s; Play/pause/restart and orbit/local. PC primary, Safari secondary.
 
-- Source/main release: **`e26d31ac62df9a8399f740536751254bed08719a`**, [PR #209](https://github.com/pjotrcasteel/PlanetForge/pull/209), displayed **PF 0.0.42.0**. This docs checkpoint may advance the badge SHA; verify current main and Pages independently.
-- Full corrected PR CI [38411066125](https://github.com/pjotrcasteel/PlanetForge/actions/runs/38411066125): build, JS validation, **294 domain + 157 application + 260 infrastructure = 711 .NET tests**, WASM publish, **43 browser regressions passed**. Five production-only tests skipped in PR CI run on Pages.
-- Pages [38413685773](https://github.com/pjotrcasteel/PlanetForge/actions/runs/38413685773): build/deploy and **five exact-SHA production checks succeeded**, including new column advance/reset.
-- #207 (`3444391`, CI `38404431115`, Pages `38407076968`) and corrected #208 (`6231961`, CI `38410587096`, Pages `38412299210`) also succeeded and are merged. No open implementation PRs at this checkpoint; a docs-only recovery PR follows. Recheck current GitHub state.
-- Main-globe reference: https://pjotrcasteel.github.io/PlanetForge/?visualTest=1&rockColumns=1 . Prior magma (`magmaOcean=1`), partial melt (`regionalRock=1`), uniform and Snowball references remain preserved; this is opt-in, not the default playable chronology.
+## Accepted development direction
 
-## Milestone / human acceptance
+Every major milestone couples physical process → canonical state → main-planet effect → scientific/rendering tests → meaningful visual acceptance. Numerical work alone cannot complete a visual milestone. Batch coherent features and continue independent work during CI. Preserve one ongoing simulation; no user-facing state-selection buttons or fake era timers.
 
-- **M1 visual integrity:** PF 0.0.41.0 / `033f306` was **REJECTED** in the user's iPhone screenshots at T+0/1/2/3/11h: orange mottled sphere and inherited rocky relief returning. PF 0.0.42.0 appearance/performance is **not yet accepted on iPhone Safari**. Do not confuse desktop Chromium with Safari acceptance.
-- **M2 heat transport:** previous lateral/vertical conservation and admission bounds remain. Columns add depth conduction, top-only radiation and bounded exact-time re-evaluation. Full-depth magma convection, layer-consistent lateral advection, long-time error-controlled integration and calibrated atmospheric transport remain unfinished.
-- **M3 primary crust:** thermal depth-column foundation and its shared terrain bridge are released. A thermally solid top is **not** differentiated, mechanically coherent, persistent moving crust. Tectonic stresses/material transport, mountains and volcanic genesis are not implemented by this release.
-- User requires real layers → crust/material → tectonic deformation through the existing terrain/Hero engine → water/atmosphere/climate → eventually a lush living planet. No cosmetic stage changes, prebuilt primordial continents or fake terrain. The lush ecosystem goal extends beyond the ten-stage earliest-life roadmap; do not rush animals/plants into it.
-- User also reports interrupted ChatGPT streaming and long waits. Preserve work in GitHub; the cause of client delivery failures is undiagnosed and is distinct from PlanetForge defects. Do not ask the user to repeat development instructions or promise work after the active session ends.
+Following molten appearance: persistent material/crust; coupled volatiles/steam/atmosphere; actual crust mechanics/volcanoes/mountains; snow/ice; condensation/rain/connected lakes/rivers/oceans; climate-shaped environments; soil/ecology/life. These are directional slices with prerequisites, not implemented promises. Reuse Hero/hydrology/climate and the shared terrain gateways.
 
-## Delivered contracts
+## Remaining physical/visual limits
 
-The **same funded SurfaceRock** mass/enthalpy is partitioned into immutable Eulerian layers inside `PlanetOriginCanonicalRockCells`, with one ledger, clock and accepted world. Radiation/stellar heat act on the top; internal Fourier heat has matched debits/credits; the bottom exchanges with the finite mantle. Phase/density determine actual volume and thermal solid surface thickness; funded heat can remelt it. No extra heat/material account.
+The current default remains a **dry, airless ~7 m conducting shell**, not calibrated whole-Earth formation or deep convective magma. The initial sphere is physically smooth; fine lava currents, differentiated/coherent crust, crust transport and mountains are absent. Optical material parameters are explicit hypotheses, not calibrated spectral data. Do not fake these processes to make the globe attractive. Real PC/Safari appearance is a human gate.
 
-The globe/local material atlas resolves the top layer. Actual thickness minus initial thickness drives the shared terrain source, without inherited modern relief or height amplification. `IPlanetOriginSurfacePublication` serializes world/terrain/snapshot reads/publication; projection failures restore accepted state and geometry revision identifiers are never reused. Leaving restores the prior terrain; independent geology cannot overwrite active columns. Explicit reference restart is atomic, and initialization no longer builds an unused intermediate globe.
-
-Eight layers, densities 3000/2800 kg/m³, conductivity 3 W/(m K), declared 25 m bottom boundary, albedo 0.15/emissivity 0.9 and 30 s accuracy cap define a **hypothetical dry/airless thin-shell experiment**, not calibrated Earth cooling. Admission re-evaluates conduction/radiative Jacobian on every immutable substep, floors to microsecond ticks and integrates the exact remainder; no partial publication or clipping. Column-only optical emission uses Planck/CIE projection at actual top Kelvin for solid and liquid, fixed exposure and declared neutral reflection.
-
-Read [column science/publication contract](../earth-origin-depth-resolved-rock-columns.md), [Hero integration](../hero-terrain-integration-contract.md), [dated depth checkpoint](PF-EARTH-20261013-A-20261013-rock-columns.md), [released heat snapshot](PF-EARTH-20261013-A-20261013-heat-coupling.md) and [original history](PF-EARTH-20261013-A.md).
-
-## Verification / defects / risks
-
-- Independent exact PR build: all three targeted browser tests passed (catalogue startup, four-hour physical freezing + reset/switch, temperature-driven emission). Both WebGL programs compile/link. T+0: **2117–2309 K, 100% top/deep melt, 0 m solid top**. T+4h: **1036–1049 K, 0% top melt, 0.82 m solid top, 100% deep melt**. Controls fit; orbit and ground use the same physical source; no WebGL errors.
-- These are model diagnostics, not accepted beautiful convection/mountain visuals. The airless emitting sphere is nearly uniform initially and dark when cooled. The linear RGBA8 emission lookup can lose faint incandescence; reflection/roughness is uncalibrated. Physical temperatures must not be changed to fix appearance.
-- **Measured accuracy blocker:** independent 4 h / 5 s cap depth refinement gives solid-top thickness **0.81689 / 0.40845 / 0.20422 / 0.10211 m** at 8/16/32/64 layers; surface ranges **1037–1051 / 839–854 / 775–798 / 808–832 K**. The front diagnostic equals one cell and is not converged. Conservation remains within 1.5e-13 relative global energy. This scratch experiment is not a CI test; its protocol/results are preserved in the dated snapshot. Do not interpret 0.82 m as a quantitative primary-crust prediction. Time convergence is tested, depth-spatial accuracy is not established. Constant-pressure phase material, fixed composition and planar thin-shell geometry (depth/radius <= 0.001) are explicit restrictions.
-- Epoch-level aggregate rock temperature is a bulk enthalpy diagnostic. Future boundary models must consume the owned top-layer phase, retain depth state, and not silently downgrade through epoch-only stepping. Core/full-mantle structure, pressure-dependent crystallization, chemical differentiation and atmospheric/wet physics remain unresolved.
-- First #208 CI failed a legacy catalogue-startup timeout; first #209 upload contained corrupted Razor text and was caught before release; corrected #209 then exposed too-short reset waits. All were investigated/fixed; corrected full CI and production gates passed. Large uploads must be read individually and all blobs compared to local bytes before accepting source validation.
-- Legacy Hero morphology, local LOD blur/performance, cryosphere and river continuity risks remain (#148/#162/#163). No new save/archive schema or physical column persistence is claimed.
-
-## Platform and validation agreement (2026-10-13)
-
-**PC is the primary target platform.** iPhone Safari is a convenient rapid inspection device, not the design target or evidence of PC correctness. Responsive WebGL, input handling, performance and quality must also be validated on desktop PC (mouse/keyboard, larger viewport, high LOD). A successful iPhone inspection is valuable but does not substitute for PC browser regression/performance acceptance. Every visible release should specify the iPhone quick check and, when relevant, a separate PC-specific quality check. Continue using fixed seed and matched camera/time screenshots; preserve Hero and LOD 0–3.
-
-## Active depth-refinement work
-
-The `feature/depth-refinement-reproducibility` branch adds an explicit 8/16/32/64 layer-count research parameter to the rock-column reference and initial-state mass/enthalpy regression checks. It **does not fix** the documented nonconverged solidification front or change the released 8-layer behavior. Run full CI, then use the reproducible resolutions to investigate and repair depth/front accuracy before interpreting primary crust thickness. No version bump or visual-check request for a nonvisual scientific tooling PR.
-
-## Exact next steps
-
-1. Verify this docs checkpoint/main/Pages; inspect any new user Safari feedback at T+0, T+1h, T+4h, reset and orbit/local navigation. Appearance acceptance remains open; do not switch the default prematurely.
-2. Formalize the measured 8/16/32/64 refinement experiment as a scientific regression gate; resolve the strongly layer-dependent solid-front/surface temperature before geological calibration. Improve/control the radiating boundary, depth mesh and front reconstruction; layer-count choice alone is not a physics fix. Improve surface optical precision/calibration independently of physical state; no cloud/noise geology substitute.
-3. Extend conserved primary material genesis: composition/provenance, owned material identity, mass/sensible/fusion enthalpy and volume through formation/remelting, then rheology/coherence, buoyancy and mechanical-work accounting. Preserve depth ownership in every coupled process and snapshot.
-4. Couple conservative moving material and uncertain tectonic regimes to the existing terrain/Hero/erosion gateways. Existing modern crust research catalogues and imposed plate kinematics are not primordial genesis. Only actual deformation may create mountains; sub-metre contraction cannot be exaggerated into them.
-5. Continue roadmap [#196](https://github.com/pjotrcasteel/PlanetForge/issues/196), science #143 and crust #184; later atmosphere/volatiles/rain/water/climate/chemistry/life must close the same canonical accounts. Keep CURRENT.md in substantial PRs and preserve dated decisions.
-
-User requests continuation with another model; new implementation is paused for this verified handoff. No background execution is promised.
-
-Local runtime recovery: use .NET 10.0.100 under `/tmp/pf-dotnet-stable` and a `/tmp` checkout for tests when workspace discovery fails. Local WASM task-host failures were environmental; GitHub full builds/publish succeeded. GitHub app Git-data writes avoid absent CLI push credentials. Production Playwright requires the configured HTTP proxy and absolute Pages URLs. User turns can invalidate transient tool-store/process IDs; recover from Git/files. Do not misclassify this as a product failure.
-
-
-## Depth-refinement numerical gate — implementation in progress
-
-Workstream `PF-EARTH-20261013-A` now includes an explicit per-column resolution sample (fully solid control-volume depth, first unresolved control-volume extent, radiating-cell Kelvin, and count of fully solid layers), plus a provisional four-grid depth/temperature screening helper. The archived independent 8/16/32/64-layer 4-hour observations are a regression fixture that **must fail this screening**; synthetic sufficiently resolved data demonstrate the positive case. Existing four-hour application test now cross-checks that the new sample corresponds to the same published canonical columns.
-
-This prevents mistaking the prior 0.81689 m eight-cell display for a depth-converged crust. **No physics fix or new release acceptance is claimed by this diagnostic-only change.** The measured case still has only one fully solid control volume, and its inferred front moves with mesh spacing. Next: executable independent spatial-refinement benchmark using matching initial state/clock/forcing with measured error budget, followed by radiating-boundary/front reconstruction and genuine convergence improvements. Do not expose `MeetsScreeningCriteria` as proof of scientific validation. Verify PR CI, merge, Pages and exact SHA before marking deployed.
-
-
-## Executable depth-refinement experiment (follow-on validation PR)
-
-A separate follow-on branch runs the *real canonical rock integrator* from matched initially molten 8/16/32/64-layer grids for four hours at a 5 s step cap, with a six-cell geographic layout solely to keep CI bounded. It asserts identical canonical elapsed time, energy conservation, no source-state publication and the spatial-resolution screen's current failure. Every sample is collected from actual depth layers. This complements the dated 384-cell independent experiment without claiming the six-cell globe matches the original geographic radiation pattern. **Pending CI and comparison:** this is a scientific defect reproduction, not a repaired boundary/front solver.
-
-
-## PF-DEVEX-01 — CI/CD throughput optimization (2026-10-13)
-
-A non-physics implementation increment introduces one fast build/.NET/WASM job and **three parallel Playwright shards**, each consuming that exact build artifact. The previous single-runner 43-browser-test stage took 19m16s; full original PR validation 38418506407 passed 715 .NET tests. All browser tests and the separate five production smoke tests remain required. A narrower Pages `push.paths` filter avoids deploying documentation/test-only changes; manual dispatch remains possible. Release milestones should batch meaningful changes on a branch and merge only after full CI, instead of serially waiting for independent micro-PR deployments.
-
-See [development validation pipeline](../development-validation-pipeline.md) for architecture, measured baseline, acceptance and tradeoffs. Do **not** claim the new shard duration/coverage or deployment filter as validated until PF-DEVEX-01's own PR checks complete. Resume depth-boundary/front accuracy after this pipeline work; do not alter the canonical physical model to speed up CI.
-
-
-## Autonomous development batch policy (2026-10-13)
-
-The user explicitly rejected one-change/one-report/one-`continue` cycles. Treat a milestone as a coherent deliverable spanning implementation, regression tests, scientific evidence, CI, and production verification where applicable. Keep implementing independent parts while CI runs, rather than waiting for a user message or repeatedly updating the branch just to cancel an in-flight run. Avoid unnecessary commits after CI starts; freeze a candidate SHA for full validation. Report only a validated deployed visually meaningful release, a genuine blocker/decision, or a substantive completed batch. PC remains the target; iPhone is a quick visual gate. Never claim background work outside the active session. The current batch comprises diagnostic visualization (PR #217), physically interpretable legends and selector, plus the separate depth-front accuracy investigation. A passing diagnostic map does not fix the nonconverged solidification front.
-
-
-## Solidification solver batch — 2026-10-13 (PF-EARTH-20261013-A)
-
-Production main was independently verified at `a8b3b77` / PF 0.0.43.0; Pages run 38441045724 succeeded. PR #218 corrected invariant-only CI run 38441982546 succeeded. This batch adds opt-in quadratic mass-depth grading (up to 128 layers), a conductive/radiative massless surface-face balance, conservative backward-Euler phase-enthalpy transport with damped tridiagonal Newton solve, and a centre-interpolated solidus diagnostic. Layer/environment/mantle accumulation retains rounding corrections; existing conservation tolerances were not relaxed. Legacy eight-layer reference and UI remain selected as before.
-
-`PlanetRockColumnReference.CreateResolvedInitial` exposes the 64-layer research candidate; accepted forcing drives face-temperature projection through the existing globe/local atlas while material melt remains owned by the top control volume. This API is not selected in the shipped UI. No version bump, visual release or human acceptance is claimed by this nonvisual foundation.
-
-Matched six-cell, initially uniform 2200 K, four-hour / 5 s cap, k=3 W/(m K), 25 m mantle boundary, dry/airless experiment: implicit 32/64/128 solidus reconstruction = **0.06517757 / 0.06481704 / 0.06507348 m**; radiating face = **827.82226 / 828.50570 / 828.49750 K**; finest unresolved-cell width **0.01083677 m**. Fine-grid regression requires <1 mm reconstructed-front agreement, <1 K face agreement, >3 fully solid cells and <12 mm unresolved width. These are bounded numerical checks at one location, not calibrated primary crust or proof of geological convergence. The old uniform-grid nonconvergence fixture remains.
-
-Independent 32-layer explicit 0.25 s reference at one hour: implicit 120/30/5 s caps give top-cell errors **3.17948 / 0.81737 / 0.14393 K**. Local tests at initial candidate: 309 domain + 160 application passed; infrastructure/full GitHub CI must be checked independently. Application regression advances the 384-cell candidate for four hours, checks conserved mass/energy, solid top over molten depth, accepted forcing and bounded face-temperature atlas; old reference remains 8 layers.
-
-Restrictions: frozen beginning-of-step geometry, first-order time integration, explicit finite mantle coupling, prescribed constant-pressure phase material, no convection/lateral motion/composition/mechanical crust. Reconstructed solidus is an interpolation diagnostic, not a tracked sharp material front. The massless face has no enthalpy or material ownership. Initial resolved factory has no accepted boundary forcing until its first advance, so initial optics retain the cell temperature; fix explicit initialization forcing before enabling its UI. Next visual milestone: opt-in main-globe resolved reference with initialized face forcing, explicit front/mush uncertainty labels, PC performance, browser reset/orbit/local regression and exact-SHA deployment; then human visual gate.
-
-
-## Resolved main-planet candidate (follow-on to solver #219)
-
-PF 0.0.44.0 candidate adds **`?visualTest=1&resolvedColumns=1`**, explicitly opt-in. The resolved factory initializes its dry/airless forcing before the first render; FACE reports reconstructed radiation temperature while TOP CELL MELT reports owned material. The main planet and local atlas consume that face temperature without changing enthalpy/mass, and the existing terrain gateway consumes real column contraction. The HUD distinguishes fully solid top cells from interpolated SOLIDUS depth; neither is mechanical crust. No new tabs, manufactured relief, convection texture or default chronology switch.
-
-The added 1440×900 PC browser regression checks initial melt/depth, four funded cooling advances, thermal front, molten bottom, geometry revision, WebGL, diagnostic selector without time reset, and reset. CI, exact-SHA Pages and real-device acceptance remain pending until independently verified. On deployment, fixed seed 24061984; T+0h/1h/4h in physical then temperature/melt maps, same angle. Expect a thermally derived emitting surface cooling to dark rock with a centimetre-scale lid above molten depth, **not mountains or visible convection**. Check PC interaction/load time and orbit/local consistency; iPhone is secondary. This addresses numerical physics and diagnostics; final molten optical quality is still open.
+Depth-refinement/conservation evidence remains in [solidification snapshot](PF-EARTH-20261013-A-20261013-solidification.md). Earlier releases, failures and architecture survive in [archived checkpoint history](PF-EARTH-20261013-A-20261013-pre-vertical-history.md) and the earlier dated handovers. Shader/detail texture must never substitute for funded physical heat, material or topography.

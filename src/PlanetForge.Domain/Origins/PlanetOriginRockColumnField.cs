@@ -183,13 +183,14 @@ public sealed partial class PlanetOriginRockColumnField
         foreach (var column in Columns)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var thickness = column.Layers.Select(layer => layer.VolumeCubicMeters(Material, Properties) / column.AreaSquareMeters).ToArray();
             if (Properties.UseImplicitDepthTransport)
             {
+                var bottomWidth = column.Layers[^1].VolumeCubicMeters(Material, Properties) / column.AreaSquareMeters;
                 mantleConductance += boundary.ConductivityWattsPerMeterKelvin * column.AreaSquareMeters /
-                    (boundary.ConductiveBoundaryThicknessMeters + thickness[^1] * 0.5);
+                    (boundary.ConductiveBoundaryThicknessMeters + bottomWidth * 0.5);
                 continue;
             }
+            var thickness = column.Layers.Select(layer => layer.VolumeCubicMeters(Material, Properties) / column.AreaSquareMeters).ToArray();
             var incidence = new double[thickness.Length];
             for (var depth = 0; depth < thickness.Length - 1; depth++)
             {

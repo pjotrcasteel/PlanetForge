@@ -13,7 +13,7 @@ test.beforeEach(async ({ page }) => {
 });
 
 test('PlanetStages_ReloadUsesShowcaseAndGenerateCreatesNewWorld', async ({ page }) => {
-  await page.goto('/?visualTest=1');
+  await page.goto('/?visualTest=1&legacy=1');
   const seedLabel = page.getByTestId('planet-seed');
   await expect(page.getByText('SNOWBALL EXPERIMENT', { exact: true })).toBeVisible({ timeout: 20_000 });
   await expect(page.getByRole('button', { name: 'NEXT' })).toBeVisible();
@@ -36,7 +36,7 @@ test('PlanetStages_ReloadUsesShowcaseAndGenerateCreatesNewWorld', async ({ page 
 });
 
 test('GeneratorQualityGate_RendersMeltedShowcaseFromMultipleAngles', async ({ page }, testInfo) => {
-  await page.goto('/?visualTest=1');
+  await page.goto('/?visualTest=1&legacy=1');
   await page.waitForFunction(() => Boolean(window.__planetForgeSurfaceTest), null, { timeout: 15_000 });
   await page.getByRole('button', { name: 'NEXT' }).click();
   await expect(page.getByText('MELTING WORLD', { exact: true })).toBeVisible({ timeout: 45_000 });
@@ -405,7 +405,7 @@ test('TerrainLab_RegionalWatersheds_ThreeSeeds_ShowConnectedRealDrainage', async
 
 for (const seed of [24061984, 346147916, 579460630]) {
   test(`GeneratorQualityGate_Seed${seed}_RendersMultipleOrbitalAngles`, async ({ page }, testInfo) => {
-    await page.goto(`/?visualTest=1&seed=${seed}`);
+    await page.goto(`/?visualTest=1&legacy=1&seed=${seed}`);
     await expect(page.getByTestId('planet-seed')).toHaveText(`SEED ${seed}`, { timeout: 30_000 });
     await page.waitForFunction(() => Boolean(window.__planetForgeSurfaceTest) || Boolean(window.__planetForgeSurfaceError), null, { timeout: 40_000 });
     expect(await page.evaluate(() => window.__planetForgeSurfaceError ?? null)).toBeNull();
@@ -432,7 +432,7 @@ for (const seed of [24061984, 346147916, 579460630]) {
 }
 
 test('OrbitalZoom_RequestsHigherLodAndRestoresCoarseGlobe', async ({ page }, testInfo) => {
-  await page.goto('/?visualTest=1');
+  await page.goto('/?visualTest=1&legacy=1');
   await page.waitForFunction(() => Boolean(window.__planetForgeSurfaceTest), null, { timeout: 30_000 });
 
   const initial = await page.evaluate(() => window.__planetForgeSurfaceTest.getLodStats());
@@ -480,7 +480,7 @@ test('OrbitalZoom_RequestsHigherLodAndRestoresCoarseGlobe', async ({ page }, tes
 
 
 test('GeologicalRegionStore_IndexedDbPersistsPerPlanetEpochAndSurvivesReload', async ({ page }) => {
-  await page.goto('/?visualTest=1');
+  await page.goto('/?visualTest=1&legacy=1');
   const key = 'planetforge/geology/v1/G18:S24061984:F4:L5:X14:Y18/YBP:50000000';
   const other = 'planetforge/geology/v1/G18:S24061984:F4:L5:X14:Y18/YBP:0';
   try {

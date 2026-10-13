@@ -36,7 +36,7 @@ test('RegionalRock_PhaseDrivenGlobe_AdvancesConservedMaterialWithoutFictionalCru
 });
 
 test('RegionalRock_ExistingOneZoneSimulation_CanSwitchWithoutChangingMainPlanet', async ({ page }) => {
-  await page.goto('/?visualTest=1');
+  await page.goto('/?visualTest=1&legacy=1');
   await expect(page.getByTestId('airless-enter')).toBeVisible({ timeout: 45_000 });
   await page.getByTestId('airless-enter').click();
   await expect(page.getByTestId('airless-surface-temperature')).toHaveText('SURFACE 1600 K');

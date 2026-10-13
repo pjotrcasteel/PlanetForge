@@ -1,3 +1,4 @@
+import { createOpticalBloom, renderOpticalBloom, disposeOpticalBloom } from './opticalBloom.js';
 import { createThermalRadianceData, thermalTextureSize, thermalMaterialShader } from './thermalRadiance.js';
 import { clearRetainedSurfaceGeometry, retainSurfaceGeometry } from './surfaceGeometryStore.js';
 
@@ -34,6 +35,7 @@ export function initialize(canvasId, snapshot, dotNetReference, generatorPreview
 
     try {
         state = createState(canvas, gl, dotNetReference);
+        if (canvas.closest('.formation-simulation')) state.yaw = 0.95;
         state.generatorPreview = generatorPreview;
         installInput(state);
         setPlanet(snapshot);
@@ -229,6 +231,7 @@ export function dispose() {
     state.detailHud?.remove();
     if (state.spatialRockTexture) state.gl.deleteTexture(state.spatialRockTexture);
     if (state.thermalRadianceTexture) state.gl.deleteTexture(state.thermalRadianceTexture);
+    disposeOpticalBloom(state.gl, state.opticalBloom);
     state.gl.deleteProgram(state.globeProgram);
     state.gl.deleteProgram(state.localProgram);
     clearRetainedSurfaceGeometry();
@@ -258,7 +261,7 @@ function createState(canvas, gl, dotNetReference) {
         lodTimer: null, lodSequence: 0, lastSurfaceRequestSignature: null, lastTerrainUpdateMs: null, lastGeometryPayloadCount: 0,
         surfaceRequestInFlight: false, surfaceRequestPending: false, dirty: true,
         surfaceRequestsStarted: 0, surfaceRequestsCompleted: 0, surfaceResponsesSuperseded: 0, originActive: false, airlessReference: false,
-        thermalRadianceTexture: createThermalReferenceTexture(gl), depthColumnsActive: false,
+        thermalRadianceTexture: createThermalReferenceTexture(gl), depthColumnsActive: false, opticalBloom: null,
         rockDiagnosticMode: resolveRockDiagnosticMode(),
         spatialRockTexture: createEmptySpatialRockTexture(gl), spatialRockRevision: null, spatialRockActive: false,
         lastGeometryCommitMs: null, lastTerrainDrawSubmittedMs: null, lastGestureToTerrainDrawMs: null,
@@ -329,7 +332,7 @@ function createThermalReferenceTexture(gl) {
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, thermalTextureSize, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, createThermalRadianceData());
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA16F, thermalTextureSize, 1, 0, gl.RGBA, gl.FLOAT, createThermalRadianceData());
     gl.activeTexture(gl.TEXTURE0);
     return texture;
 }
@@ -1021,6 +1024,10 @@ function largestOceanConnectedArea(mask, width, height) {
 function renderCurrentView(s) {
     if (s.renderMode === 'local' && s.localSurface) renderLocal(s);
     else renderGlobe(s);
+    if (s.depthColumnsActive && s.rockDiagnosticMode === 0) {
+        s.opticalBloom ??= createOpticalBloom(s.gl, createProgram);
+        renderOpticalBloom(s.gl, s.canvas, s.opticalBloom);
+    }
 }
 
 function render() {
