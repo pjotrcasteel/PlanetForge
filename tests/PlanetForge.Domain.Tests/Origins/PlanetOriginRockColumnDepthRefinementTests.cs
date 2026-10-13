@@ -67,6 +67,24 @@ public sealed class PlanetOriginRockColumnDepthRefinementTests
     }
 
     [TestMethod]
+    public void Screen_NarrowFinestCellsButDisjointCoarseFrontIntervals_Rejects()
+    {
+        PlanetOriginRockColumnResolutionSample[] samples =
+        [
+            new(8, 0.10, 0.12, 900, 3),
+            new(16, 0.10, 0.12, 900, 4),
+            new(32, 0.50, 0.51, 900, 8),
+            new(64, 0.50, 0.51, 900, 16)
+        ];
+
+        var screen = PlanetOriginRockColumnDepthRefinement.Screen(samples);
+        Assert.IsFalse(screen.MeetsScreeningCriteria,
+            "A matching finest-grid pair cannot hide a contradictory coarser front interval.");
+        Assert.AreEqual(0.0, screen.FinestFrontDifferenceMeters);
+        Assert.AreEqual(0.0, screen.FinestSurfaceTemperatureDifferenceKelvin);
+    }
+
+    [TestMethod]
     public void Screen_OutOfOrderOrNonPhysicalSamples_Rejects()
     {
         PlanetOriginRockColumnResolutionSample[] samples =
