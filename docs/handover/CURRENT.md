@@ -11,7 +11,7 @@
 - Full PR CI: #204 run [38395003474](https://github.com/pjotrcasteel/PlanetForge/actions/runs/38395003474), #205 run [38396130480](https://github.com/pjotrcasteel/PlanetForge/actions/runs/38396130480), both **success** (build, .NET, WASM publish, full browser suite).
 - Pages: #204 `33d0191` run [38397777732](https://github.com/pjotrcasteel/PlanetForge/actions/runs/38397777732); #205 run [38398882086](https://github.com/pjotrcasteel/PlanetForge/actions/runs/38398882086), both **success**, including exact-SHA deployment and production browser smoke. #205 production smoke now includes the molten scenario.
 - Local .NET validation: **285 domain + 155 application + 254 infrastructure = 694 tests passed**. #205 CI independently passed the same tests and **41 browser regressions**; four production-only tests are intentionally skipped in PR CI and run on Pages.
-- New implementation branch: `feature/depth-resolved-rock-columns`, based on verified main `033f306`. Domain foundation locally tested; full PR CI, merge and Pages are pending. Inspect GitHub for its PR/status.
+- Open foundation [PR #207](https://github.com/pjotrcasteel/PlanetForge/pull/207), head `adab79a4a41766728f1b1eab4b24ebd3029f16c8`, full CI run `38404431115` in progress. Follow-up branch `feature/column-terrain-publication` adds atomic terrain/world publication; merge/Pages remain pending. Query current PR status.
 
 ## Current milestone and human acceptance
 
@@ -29,6 +29,8 @@
 - Phase/density determine actual column volume and thermal solid surface thickness. A solid top can coexist with molten material below and remelt under funded heat. Fully solid material is NOT yet mechanically coherent crust.
 - Explicit steps bound conduction plus the top radiative Jacobian against minimum sensible capacity; donor overdraw, unsupported aggregate lateral mixing, nonfinite states and cancellation reject without changing the original state.
 - Local checks: **292 domain + 155 application + 254 infrastructure = 701 passed**. Seven new tests cover partition/conservation, surface-only cooling, internal diffusion, solid lid above melt, contraction, funded remelting, rejection/cancellation and exact-time convergence/replay. Full GitHub/browser checks are pending; the deployed application has not changed.
+- Follow-up: shared canonical terrain now derives physical column contraction without inherited relief; top-phase atlas uses the radiating layer. World/terrain/snapshot publication is serialized and rolls back on failure, with unique geometry revisions even for failed trials. Clearing/reset restores prior terrain and independent geology cannot overwrite active origin columns.
+- Follow-up local validation: **292 domain + 156 application + 258 infrastructure = 706 tests passed**. Full CI/browser/Pages and a new visual scenario are still pending.
 - Contract: [depth-resolved rock columns](../earth-origin-depth-resolved-rock-columns.md). No user visual check is useful for this domain-only increment.
 
 ## Delivered this session
@@ -47,7 +49,7 @@ The current molten start is an explicit **dry/airless hypothetical active-shell 
 ## Defects, risks and next steps
 
 1. Complete full PR CI for the column foundation; merge only after all gates pass, then verify exact-SHA Pages. Update this file with actual results.
-2. Connect top-layer temperature/melt and density-derived physical elevation to the existing shared orbital/local terrain gateway. Publish physics, elevation and render projections atomically; failed candidate generation must restore accepted state without cache-revision reuse. Start without inherited modern continents or relief; do not exaggerate sub-metre contraction into mountains.
+2. Complete the shared physical terrain publication PR/gates. Add an explicitly labelled depth-column reference on the main globe using bounded spatial substeps; expose surface and subsurface distinctions without extra diagnostic tabs. No pre-existing modern relief or exaggerated contraction.
 3. Add bounded spatial substep re-evaluation with exact elapsed time, cancellation and one final publication. A depth-column reference must state transport parameters and thin-shell/airless limitations, not call conduction convection.
 4. Continue from thermal solid material to genuinely persistent crust: composition, differentiation, material motion, strength/rheology and tectonic work before claiming mountain formation. Preserve Hero/erosion/hydrology as consumers of physically generated terrain. Optical research was parked locally and is not implemented or released; do not substitute it for genesis.
 5. Continue the ten-stage roadmap [#196](https://github.com/pjotrcasteel/PlanetForge/issues/196), science [#143](https://github.com/pjotrcasteel/PlanetForge/issues/143), and crust [#184](https://github.com/pjotrcasteel/PlanetForge/issues/184). Legacy Snowball cryosphere, Hero morphology, blurry/slow local LOD and river continuity remain tracked risks (#148/#162/#163); this session did not fix them.

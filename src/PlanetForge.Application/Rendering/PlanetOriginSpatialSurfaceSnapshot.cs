@@ -21,7 +21,7 @@ public static class PlanetOriginSpatialSurfaceProjection
         ArgumentNullException.ThrowIfNull(region);
         var field = region.Field;
         var centers = field.Cells.Select(c => PlanetSurfaceGridGeometry.GetCenterDirection(c.Id)).ToArray();
-        var rock = field.Cells.Select(c => c.Resolve(field.Material)).ToArray();
+        var rock = field.Cells.Select(c => region.ResolveSurfacePhase(c.Id)).ToArray();
         var temperatures = new float[AtlasWidth * AtlasHeight];
         var melts = new float[temperatures.Length];
 
