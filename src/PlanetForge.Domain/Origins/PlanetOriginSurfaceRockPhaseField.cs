@@ -89,6 +89,14 @@ public sealed partial class PlanetOriginSurfaceRockPhaseField
     public double TotalActiveRockMassKilograms { get; }
     public double TotalStoredEnthalpyJoules { get; }
 
+    internal static PlanetOriginSurfaceRockPhaseField FromOwnedColumns(
+        PlanetOriginSurfaceRockPhaseField source, IReadOnlyList<PlanetOriginRockColumn> columns)
+    {
+        var cells = columns.Select(column => new PlanetOriginSurfaceRockPhaseCell(
+            column.Id, column.AreaSquareMeters, column.MassKilograms, column.StoredEnthalpyJoules)).ToArray();
+        return new PlanetOriginSurfaceRockPhaseField(source.Material, source.Layout, source.PlanetRadiusMeters, cells);
+    }
+
     public static PlanetOriginSurfaceRockPhaseField FromSolidCanonicalSurface(
         PlanetOriginEnergyLedger canonicalEnergy,
         PlanetSurfaceGridLayout layout,

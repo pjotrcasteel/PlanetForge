@@ -9,7 +9,8 @@
 1. **[CURRENT.md](CURRENT.md)** — brief actively maintained state, exact production release, recent user acceptance, current PR, blockers, and next action. Read this first.
 2. **[Latest heat-coupling release snapshot](PF-EARTH-20261013-A-20261013-heat-coupling.md)** — 2026-10-13 verified #204/#205 release, scientific boundaries and exact continuation order. Preserve and also read the [original snapshot](PF-EARTH-20261013-A.md) for earlier decisions and visual feedback.
 3. **[CONTINUE.md](CONTINUE.md)** — paste-ready prompt to resume autonomously.
-4. [Roadmap issue #196](https://github.com/pjotrcasteel/PlanetForge/issues/196), [scientific issue #143](https://github.com/pjotrcasteel/PlanetForge/issues/143), [scientific foundation](../earth-origin-scientific-foundation.md), [older long-form model handover](../model-handover.md).
+4. [Depth-column scientific/architectural contract](../earth-origin-depth-resolved-rock-columns.md) — active formation foundation and declared limitations.
+5. [Roadmap issue #196](https://github.com/pjotrcasteel/PlanetForge/issues/196), [scientific issue #143](https://github.com/pjotrcasteel/PlanetForge/issues/143), [scientific foundation](../earth-origin-scientific-foundation.md), [older long-form model handover](../model-handover.md).
 
 ## Update protocol (not optional for substantial milestones)
 
