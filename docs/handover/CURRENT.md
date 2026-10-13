@@ -1,9 +1,21 @@
 # PlanetForge — active continuation state
 
 **Workstream:** `PF-EARTH-20261013-A`  
-**Checkpoint:** 2026-10-13, PF 0.0.42.0 depth-column reference released. Always re-query GitHub.
+**Checkpoint:** 2026-10-13, autonomous solidification batch. Always re-query GitHub.
 
-## Latest verified release
+## Current authoritative status — supersedes historical checkpoints below
+
+- **Merged source:** `12fdc68825f518e7719e10147471b76fb238652b`, PF **0.0.44.0 candidate**, [solver #219](https://github.com/pjotrcasteel/PlanetForge/pull/219) then [resolved main-planet #220](https://github.com/pjotrcasteel/PlanetForge/pull/220). Both full CI runs passed; #220 run **38444603756** passed **729 .NET + 48 browser regressions**, with five production-only checks skipped until deployment.
+- **Last independently verified production at session start:** `a8b3b77a8750ecfd7ea43d7aaa0805c1ac165b9c`, PF **0.0.43.0**, Pages **38441045724** succeeded. Do not infer that the new version is live from its merge.
+- **New Pages run:** **38446290792**, exact source `12fdc68`, was **pending** at this checkpoint behind model-only Pages **38445648525** (`dfa1499`). Full exact-SHA production gates and resolved-reference live smoke are **not yet verified**. Re-query, do not redeploy unnecessarily or claim live/human acceptance.
+- **Implementation:** opt-in graded-depth radiating-face/implicit enthalpy solver; compensated layer/environment/mantle flux accumulation; thermal-front reconstruction; resolved main-planet reference at `?visualTest=1&resolvedColumns=1`, initialized forcing, consistent face-temperature atlas and separate material/front HUD. The default chronology and old eight-layer reference remain preserved.
+- **Evidence:** independent full 384-cell 64/128 refinement maximum front difference **0.514 mm**, face difference **0.522 K** at four hours. Native 64-layer run ~5.3 s; actual exact-artifact PC Chromium advance/reset regression **1.8 min**. No real Safari acceptance or beautiful molten visual claim.
+- **Next:** verify Pages 38446290792 and `PF 0.0.44.0 · 12fdc68`; run resolved-reference exact-SHA live smoke. Then visual check seed 24061984, T+0/1/4h, physical and diagnostic maps, PC primary/iPhone secondary. Continue composition/provenance, coherence/rheology and conservative moving material before genuine tectonic relief. Do not manufacture texture/mountains.
+- Read [solidification experiment snapshot](PF-EARTH-20261013-A-20261013-solidification.md). The previous uniform-grid defect fixture stays in CI; the old 0.82 m coarse display is not a crust prediction. Spatial agreements are bounded model checks, not absolute front error or calibrated Earth history.
+
+## Historical checkpoints (retain for scientific provenance)
+
+## Historical PF 0.0.42.0 release record
 
 - Source/main release: **`e26d31ac62df9a8399f740536751254bed08719a`**, [PR #209](https://github.com/pjotrcasteel/PlanetForge/pull/209), displayed **PF 0.0.42.0**. This docs checkpoint may advance the badge SHA; verify current main and Pages independently.
 - Full corrected PR CI [38411066125](https://github.com/pjotrcasteel/PlanetForge/actions/runs/38411066125): build, JS validation, **294 domain + 157 application + 260 infrastructure = 711 .NET tests**, WASM publish, **43 browser regressions passed**. Five production-only tests skipped in PR CI run on Pages.
