@@ -3,7 +3,7 @@
 **Platform:** PC-first; iPhone Safari is the quick validation device.  
 **Scope:** main globe and local terrain, read-only, opt-in, no new physics.
 
-Use `?visualTest=1&rockColumns=1&rockMap=temperature` or `?visualTest=1&rockColumns=1&rockMap=melt`. Without `rockMap`, the physical material renderer is unchanged.
+Use the **MAP** selector in the rock-column HUD to switch modes without resetting time, or start directly with `?visualTest=1&rockColumns=1&rockMap=temperature` or `?visualTest=1&rockColumns=1&rockMap=melt`. Without `rockMap`, the physical material renderer is unchanged.
 
 - **Temperature:** blue = 500 K or colder, red = 2500 K or hotter; intermediate temperatures linearly interpolated in display space. The legend is fixed across snapshots; this is **not** a calibrated blackbody appearance.
 - **Melt fraction:** blue = fully solid (0), red = fully molten (1); intermediate values linearly interpolated. This is phase, **not** solid thickness or mechanical crust.
