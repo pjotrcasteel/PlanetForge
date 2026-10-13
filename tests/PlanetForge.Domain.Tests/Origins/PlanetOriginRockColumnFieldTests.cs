@@ -172,7 +172,38 @@ public sealed class PlanetOriginRockColumnFieldTests
         AssertConservation(refined);
     }
 
-    private static PlanetOriginCanonicalRockCells CreateState(double conductivity = 3.0)
+    [TestMethod]
+    public void DepthRefinement_FourHourMatchedRun_ExposesUnresolvedThermalFront()
+    {
+        // Actual model integration, not recorded data. Reduce only the geographic
+        // grid (to the six cube faces); depth physics, per-area rock mass,
+        // mantle, radiation, elapsed time and substep cap remain identical.
+        PlanetOriginRockColumnResolutionSample[] samples = new PlanetOriginRockColumnResolutionSample[4];
+        var depths = new[] { 8, 16, 32, 64 };
+        for (var i = 0; i < depths.Length; i++)
+        {
+            var initial = CreateState(layerCount: depths[i], gridLevel: 0);
+            var cooled = PlanetOriginRockColumnIntegrator.Advance(initial, PlanetOriginDuration.FromSeconds(14_400.0),
+                Boundary with { SolarIrradianceWattsPerSquareMeter = 1_361.0 },
+                new PlanetOriginRockColumnIntegrationOptions(5.0, 10_000));
+            Assert.AreEqual(14_400_000_000L, cooled.Epoch.Clock.MicrosecondsIntoYear);
+            Assert.AreEqual(0L, initial.Epoch.Revision);
+            AssertConservation(cooled);
+            Assert.AreEqual(initial.Field.TotalActiveRockMassKilograms, cooled.Field.TotalActiveRockMassKilograms,
+                initial.Field.TotalActiveRockMassKilograms * 1e-12);
+            samples[i] = PlanetOriginRockColumnResolutionSample.FromColumn(
+                cooled.Columns!.Columns[0], cooled.Columns.Material, cooled.Columns.Properties);
+            Assert.AreEqual(depths[i], samples[i].LayerCount);
+            Console.WriteLine($"Depth={depths[i]}, fully solid={samples[i].FullySolidTopMeters:F6} m, " +
+                $"unresolved cell={samples[i].UnresolvedCellWidthMeters:F6} m, " +
+                $"surface={samples[i].SurfaceTemperatureKelvin:F2} K");
+        }
+        var screen = PlanetOriginRockColumnDepthRefinement.Screen(samples);
+        Assert.IsFalse(screen.MeetsScreeningCriteria,
+            "Current coarse thermal columns must not be represented as a converged quantitative primary-crust front.");
+    }
+
+    private static PlanetOriginCanonicalRockCells CreateState(double conductivity = 3.0, int layerCount = 8, int gridLevel = 2)
     {
         var mantle = new PlanetRockEnthalpyModel(new PlanetRockThermalProperties(4e24, 1_200.0, 400_000.0, 1_300.0, 1_900.0));
         var interior = new PlanetOriginThermalTimeline(PlanetOriginClock.EarthAccretionReference,
@@ -182,8 +213,8 @@ public sealed class PlanetOriginRockColumnFieldTests
         var environment = new PlanetWaterEnvironmentalState(PlanetWaterInventory.Empty, new PlanetEnvironmentalEnergyBudget(0.0, 0.0, energy));
         var capacity = new PlanetEnvironmentHeatCapacityParameters(0.0, 1_000.0, 2_000.0, 4_200.0, mass, 850.0) { SurfaceRockPhaseMaterial = Material };
         var ledger = new PlanetOriginEnergyLedger(interior, environment, capacity);
-        var field = PlanetOriginSurfaceRockPhaseField.FromCanonicalPhaseSurface(ledger, new PlanetSurfaceGridLayout(2), Radius);
-        var columns = PlanetOriginRockColumnField.Partition(field, new PlanetOriginRockColumnProperties(8, 3_000.0, 2_800.0, conductivity));
+        var field = PlanetOriginSurfaceRockPhaseField.FromCanonicalPhaseSurface(ledger, new PlanetSurfaceGridLayout(gridLevel), Radius);
+        var columns = PlanetOriginRockColumnField.Partition(field, new PlanetOriginRockColumnProperties(layerCount, 3_000.0, 2_800.0, conductivity));
         return new PlanetOriginCanonicalRockCells(new PlanetOriginEpochState(ledger), field, columns);
     }
 }
