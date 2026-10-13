@@ -93,6 +93,14 @@ public sealed class PlanetOriginSurfaceRockPhaseField
         PlanetOriginSurfaceRockPhaseMaterial material)
     {
         material.Validate();
+        ArgumentNullException.ThrowIfNull(canonicalEnergy);
+        if (material.SpecificHeatCapacityJoulesPerKilogramKelvin !=
+            canonicalEnergy.HeatCapacities.SurfaceRockSpecificHeatJoulesPerKilogramKelvin)
+        {
+            throw new InvalidOperationException(
+                "Canonical SurfaceRock heat capacity must match the phase material; changing material properties requires a conserved migration.");
+        }
+
         var sensible = PlanetOriginSurfaceThermalField.Partition(canonicalEnergy, layout, planetRadiusMeters);
         var values = new PlanetOriginSurfaceRockPhaseCell[sensible.Cells.Count];
         for (var i = 0; i < values.Length; i++)
