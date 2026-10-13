@@ -130,6 +130,7 @@ export function setPlanet(snapshot) {
         }
 
         state.renderMode = 'local';
+        state.localRockAnchor = snapshot.localSurface.anchorDirection;
         activateLocalSurface(state, snapshot.localSurface);
         updateLocalScaleHud(state);
         updateTerrainDetailHud(state);
@@ -138,6 +139,7 @@ export function setPlanet(snapshot) {
 
     state.renderMode = 'globe';
     state.localCameraAltitudeMeters = null;
+    state.localRockAnchor = null;
     updateLocalScaleHud(state);
     const surfaceKey = snapshot.surfaceTiles.map(tile => tile.key).join('|');
     if (state.surfaceKey !== surfaceKey) {
@@ -236,7 +238,7 @@ function createState(canvas, gl, dotNetReference) {
     const localProgram = createProgram(gl, localVertexShaderSource, localFragmentShaderSource);
     return {
         canvas, gl, dotNetReference, globeProgram, localProgram, generatorPreview: false, renderMode: 'globe', geometryKey: null,
-        surfaceKey: null, tileBufferCache: new Map(), tiles: [], localSurface: null,
+        surfaceKey: null, tileBufferCache: new Map(), tiles: [], localSurface: null, localRockAnchor: null,
         yaw: -0.65, pitch: 0.24, distance: initialOrbitDistance(canvas), localYaw: -0.65, localPitch: geologicalPreviewMode ? 1.30 : 0.72,
         localCameraAltitudeMeters: null, scaleHud: createLocalScaleHud(canvas), detailHud: createTerrainDetailHud(canvas),
         activePointers: new Map(), pinchDistance: null,
@@ -286,6 +288,9 @@ function createState(canvas, gl, dotNetReference) {
             seaLevelMeters: gl.getUniformLocation(localProgram, 'uSeaLevelMeters'),
             surfaceTemperature: gl.getUniformLocation(localProgram, 'uSurfaceTemperature'),
             airlessReference: gl.getUniformLocation(localProgram, 'uAirlessReference'),
+            spatialRockActive: gl.getUniformLocation(localProgram, 'uSpatialRockActive'),
+            spatialRockTexture: gl.getUniformLocation(localProgram, 'uSpatialRockTexture'),
+            localRockAnchor: gl.getUniformLocation(localProgram, 'uLocalRockAnchor'),
             liquidFraction: gl.getUniformLocation(localProgram, 'uLiquidFraction'),
             vaporFraction: gl.getUniformLocation(localProgram, 'uVaporFraction'),
             objectMode: gl.getUniformLocation(localProgram, 'uObjectMode')
@@ -1078,10 +1083,13 @@ function renderLocal(s) {
     gl.uniform3f(s.localUniforms.light, 0.45, 0.82, 0.35);
     gl.uniform1f(s.localUniforms.seaLevelMeters, s.seaLevelMeters);
     gl.uniform1f(s.localUniforms.surfaceTemperature, s.surfaceTemperature);
-    // Local LOD currently lacks geographic phase sampling; do not falsely
-    // paint an averaged orange surface when only the orbital phase atlas
-    // is supported. Keep existing real elevation and bedrock visible.
-    gl.uniform1i(s.localUniforms.airlessReference, (s.airlessReference && !s.spatialRockActive) ? 1 : 0);
+    gl.uniform1i(s.localUniforms.airlessReference, s.airlessReference ? 1 : 0);
+    gl.uniform1i(s.localUniforms.spatialRockActive, s.spatialRockActive ? 1 : 0);
+    gl.activeTexture(gl.TEXTURE1);
+    gl.bindTexture(gl.TEXTURE_2D, s.spatialRockTexture);
+    gl.uniform1i(s.localUniforms.spatialRockTexture, 1);
+    const anchor = s.localRockAnchor ?? { x: 0, y: 1, z: 0 };
+    gl.uniform3f(s.localUniforms.localRockAnchor, anchor.x, anchor.y, anchor.z);
     gl.uniform1f(s.localUniforms.liquidFraction, s.liquidFraction);
     gl.uniform1f(s.localUniforms.vaporFraction, s.vaporFraction);
 
@@ -1623,6 +1631,9 @@ uniform vec3 uLightDirection;
 uniform float uSeaLevelMeters;
 uniform float uSurfaceTemperature;
 uniform int uAirlessReference;
+uniform int uSpatialRockActive;
+uniform sampler2D uSpatialRockTexture;
+uniform vec3 uLocalRockAnchor;
 uniform float uLiquidFraction;
 uniform float uVaporFraction;
 uniform int uObjectMode;
@@ -1647,7 +1658,21 @@ void main() {
         material = mix(material, exposedBedrock, clamp(cliff * 0.60 + highlandBand * 0.22, 0.0, 0.88));
         float illumination = clamp(0.34 + (0.76 * light), 0.23, 1.13);
         vec3 lit = material * illumination;
-        if (uAirlessReference == 1) {
+        if (uSpatialRockActive == 1) {
+            // Local LOD patches are smaller than a physical thermal cell.
+            // Sample the exact global phase atlas at the geographic anchor.
+            vec3 dir = normalize(uLocalRockAnchor);
+            vec2 uv = vec2(atan(dir.z, dir.x) / 6.28318530718 + 0.5,
+                asin(clamp(dir.y, -1.0, 1.0)) / 3.14159265359 + 0.5);
+            vec4 encoded = texture(uSpatialRockTexture, uv);
+            float localKelvin = (floor(encoded.r * 255.0 + 0.5) * 256.0 +
+                floor(encoded.g * 255.0 + 0.5)) * 0.1;
+            float melt = encoded.b;
+            float glow = smoothstep(850.0, 1700.0, localKelvin) * melt;
+            vec3 colour = mix(vec3(0.58, 0.09, 0.02), vec3(1.0, 0.34, 0.06),
+                smoothstep(1200.0, 2000.0, localKelvin));
+            lit = clamp(mix(lit, colour, glow * 0.86) + colour * glow * 0.15, 0.0, 1.0);
+        } else if (uAirlessReference == 1) {
             float visible = smoothstep(850.0, 1650.0, uSurfaceTemperature);
             vec3 glow = mix(vec3(0.68, 0.065, 0.015), vec3(1.0, 0.38, 0.10),
                 smoothstep(1150.0, 1900.0, uSurfaceTemperature));
