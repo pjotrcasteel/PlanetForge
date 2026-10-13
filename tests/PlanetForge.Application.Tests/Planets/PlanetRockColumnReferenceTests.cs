@@ -46,6 +46,26 @@ public sealed class PlanetRockColumnReferenceTests
     }
 
     [TestMethod]
+    public void Advance_RefinedDepthGrid_ConservesCanonicalEnergyAndMass()
+    {
+        var source = new FlatElevation();
+        var experience = new PlanetExperience(new PlanetSurfaceMeshCache(new PlanetSurfaceMeshBuilder(new PlanetSurfaceTileSampler(source))),
+            new PlanetLocalSurfacePatchSampler(source), new PlanetLocalSurfaceMeshBuilder());
+        var conditions = experience.CreateSnapshot();
+        foreach (var layerCount in new[] { 8, 16, 32, 64 })
+        {
+            var initial = PlanetRockColumnReference.CreateInitial(6_371_000.0, layerCount);
+            var advanced = PlanetRockColumnReference.Advance(initial, conditions);
+            Assert.AreEqual(initial.Field.TotalActiveRockMassKilograms, advanced.Field.TotalActiveRockMassKilograms,
+                initial.Field.TotalActiveRockMassKilograms * 1e-12);
+            Assert.AreEqual(0.0, advanced.Epoch.EnergyConservationResidualJoules,
+                advanced.Epoch.CoupledEnergy!.InitialStoredEnergyJoules * 1e-11);
+            Assert.IsTrue(advanced.Columns!.Columns.All(column => column.Layers.All(layer =>
+                double.IsFinite(layer.StoredEnthalpyJoules) && layer.StoredEnthalpyJoules >= 0.0)));
+        }
+    }
+
+    [TestMethod]
     public void CreateInitial_DepthRefinement_PreservesFundedMassEnthalpyAndInitialSurfaceState()
     {
         var baseline = PlanetRockColumnReference.CreateInitial(6_371_000.0);
