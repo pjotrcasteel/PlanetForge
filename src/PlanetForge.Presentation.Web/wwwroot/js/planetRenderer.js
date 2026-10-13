@@ -308,15 +308,22 @@ function updateSpatialRockTexture(s, atlas) {
     }
 
     if (s.spatialRockActive && s.spatialRockRevision === revision) return;
-    const data = new Float32Array(width * height * 2);
+    // RGBA8 is guaranteed for WebGL2 on iPhone Safari. Temperature is
+    // encoded in two bytes at 0.1 K display precision, and local melt in
+    // one byte; canonical conserved enthalpy remains full-precision .NET.
+    const data = new Uint8Array(width * height * 4);
     for (let index = 0; index < width * height; index++) {
         const kelvin = temperatureKelvin[index];
         const phase = meltFraction[index];
-        if (!Number.isFinite(kelvin) || kelvin < 0 || !Number.isFinite(phase) || phase < 0 || phase > 1) {
-            throw new Error('Regional phase texture contains unphysical temperature or melt values.');
+        if (!Number.isFinite(kelvin) || kelvin < 0 || kelvin > 6553.5 ||
+            !Number.isFinite(phase) || phase < 0 || phase > 1) {
+            throw new Error('Regional phase texture contains out-of-range temperature or melt values.');
         }
-        data[index * 2] = kelvin;
-        data[index * 2 + 1] = phase;
+        const quantized = Math.round(kelvin * 10.0);
+        data[index * 4] = quantized >>> 8;
+        data[index * 4 + 1] = quantized & 255;
+        data[index * 4 + 2] = Math.round(phase * 255.0);
+        data[index * 4 + 3] = 255;
     }
 
     const { gl } = s;
@@ -326,7 +333,7 @@ function updateSpatialRockTexture(s, atlas) {
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RG32F, width, height, 0, gl.RG, gl.FLOAT, data);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, width, height, 0, gl.RGBA, gl.UNSIGNED_BYTE, data);
     const error = gl.getError();
     if (error !== gl.NO_ERROR) throw new Error('Could not upload canonical rock phase field to WebGL: ' + error);
     s.spatialRockRevision = revision;
@@ -1542,13 +1549,14 @@ void main() {
         if (uLiquidFraction > 0.001 && elevationAboveSeaLevel < 0.0) discard;
         vec3 material = barrenRockMaterial(radial, normal, vElevationMeters);
         if (uSpatialRockActive == 1) {
-            // The RG floating-point atlas contains ONLY model-projected
+            // The RGBA8 texture contains ONLY model-projected
             // Kelvin and phase fraction, with no authored lava/noise mask.
             vec2 uv = vec2(atan(radial.z, radial.x) / 6.28318530718 + 0.5,
                 asin(clamp(radial.y, -1.0, 1.0)) / 3.14159265359 + 0.5);
-            vec2 physicalPhase = texture(uSpatialRockTexture, uv).rg;
-            float localKelvin = physicalPhase.x;
-            float localMelt = clamp(physicalPhase.y, 0.0, 1.0);
+            vec4 physicalPhase = texture(uSpatialRockTexture, uv);
+            float localKelvin = (floor(physicalPhase.r * 255.0 + 0.5) * 256.0 +
+                floor(physicalPhase.g * 255.0 + 0.5)) * 0.1;
+            float localMelt = clamp(physicalPhase.b, 0.0, 1.0);
             float incandescent = smoothstep(850.0, 1700.0, localKelvin);
             vec3 hot = mix(vec3(0.58, 0.09, 0.02), vec3(1.0, 0.34, 0.06),
                 smoothstep(1200.0, 2000.0, localKelvin));
