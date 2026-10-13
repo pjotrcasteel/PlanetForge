@@ -50,11 +50,11 @@ See [roadmap issue #196](https://github.com/pjotrcasteel/PlanetForge/issues/196)
 
 ## Active implementation — M2b, bidirectional mantle/surface heat (2026-10-13)
 
-- Branch: `feature/bidirectional-surface-interior-heat`; PR to be created.
+- Branch: `feature/bidirectional-surface-interior-heat`; [PR #204](https://github.com/pjotrcasteel/PlanetForge/pull/204), code head `9b34ca425f69abfbccff51e093f420fc9233a95a`.
 - Implemented typed environmental heat return, distinct interior return counter,
   signed local Fourier gradient and both-direction canonical publication. Existing
   zero-conductivity visual scenarios and rendered version remain unchanged.
-- Added conservation/mixed-region/replay/equilibrium/overdraw tests; not yet CI-verified.
+- Added conservation/mixed-region/replay/equilibrium/overdraw tests. PR CI `38395003474` has passed build/.NET/publish; full browser result still pending at this documentation checkpoint.
 - Local .NET 10.0.401 domain/application compilation passed. Full WASM build
   encountered local MSBuild task-host startup failure; MSTest reported discovery
   failure (zero tests is **not** validation). Full GitHub CI remains the release gate.
@@ -64,3 +64,26 @@ See [roadmap issue #196](https://github.com/pjotrcasteel/PlanetForge/issues/196)
   browser suite succeeds; verify Pages exact SHA. Then implement phase-aware
   regional conduction stability/convergence and a documented opt-in coupled
   reference; retain the existing magma-ocean user visual gate.
+
+## Prepared follow-on — M2c, finite-capacity conduction stability
+
+- Branch: `feature/vertical-conduction-stability`, based on #204; do not merge
+  before #204 and full follow-on CI succeed.
+- Added a 0.5 explicit conduction-coupling bound for each surface cell and the
+  aggregate common mantle; minimum sensible `mass * cp` also bounds the fusion
+  interval. Reject oversized intervals before publication, never clip flux.
+- Local .NET 10.0.100: **285 domain tests and 155 application tests passed**.
+  Moving test execution to `/tmp` resolved the workspace assembly-discovery
+  problem; local WASM task-host startup remains environment-limited.
+- Added exact-SHA production smoke for the magma-ocean route, physical advance
+  and reset. The previous Pages smoke only covered Snowball and regional rock.
+- Independent production Chromium check at `853a379`: T+0 2117–2309 K,
+  T+1h 1931–2057 K, both 100% melt, accepted canonical step, no page errors.
+  This is **not iPhone Safari acceptance**, nor a claimed crust/steam milestone.
+- Next: finish both PR release gates, update this checkpoint with actual merge
+  SHA/Pages results, then obtain user T+0/T+1h iPhone screenshots of the fully
+  molten scenario before advancing its visual material or enabling a default.
+- Model next: bounded regional substep selection/re-evaluation, a documented
+  coupled conduction reference, then conserved primary-crust columns and
+  thickness. Neither these bounds nor latent solid mass imply differentiated,
+  persistent primordial crust or fully simulated magma convection.

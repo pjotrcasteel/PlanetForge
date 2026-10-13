@@ -104,3 +104,30 @@ test('PublishedRegionalRock_ShowsCanonicalPhaseAndAdvancesWithoutFakeCrust', asy
   await expect(page.getByTestId('airless-status')).toContainText('ACCEPTED');
   expect(errors).toEqual([]);
 });
+
+test('PublishedMagmaOcean_FundedWholeSurface_CoolsAndResetsOnCanonicalGlobe', async ({ page }) => {
+  const errors = [];
+  page.on('pageerror', error => errors.push(error.message));
+  await page.goto(process.env.PLANETFORGE_BASE_URL + '/?visualTest=1&magmaOcean=1', { waitUntil: 'domcontentloaded' });
+  await expect(page.getByTestId('planet-scenario-label'))
+    .toHaveText('MAGMA OCEAN · CONSERVED MOLTEN REFERENCE', { timeout: 90_000 });
+  await expect(page.getByTestId('regional-melt-range')).toHaveText('MELT 100%–100%');
+  await page.waitForFunction(() => Boolean(window.__planetForgeSurfaceTest) || Boolean(window.__planetForgeSurfaceError));
+  expect(await page.evaluate(() => window.__planetForgeSurfaceError ?? null)).toBeNull();
+  const initial = await page.getByTestId('regional-temperature-range').textContent();
+  const badge = page.locator('#planetforge-build-badge');
+  if (process.env.PLANETFORGE_EXPECTED_SHA)
+    await expect(badge).toContainText(process.env.PLANETFORGE_EXPECTED_SHA.slice(0, 7));
+
+  await page.getByTestId('airless-advance').click();
+  await expect(page.getByTestId('airless-elapsed')).toContainText('T+1h', { timeout: 90_000 });
+  await expect(page.getByTestId('airless-status')).toContainText('ACCEPTED');
+  await expect(page.getByTestId('regional-temperature-range')).not.toHaveText(initial);
+  const measurements = await page.evaluate(() => window.__planetForgeSurfaceTest.measure());
+  expect(measurements.planetPixels).toBeGreaterThan(10_000);
+  expect(measurements.glError).toBe(0);
+  await page.getByTestId('airless-reset').click();
+  await expect(page.getByTestId('airless-elapsed')).toContainText('T+0h');
+  await expect(page.getByTestId('regional-melt-range')).toHaveText('MELT 100%–100%');
+  expect(errors).toEqual([]);
+});

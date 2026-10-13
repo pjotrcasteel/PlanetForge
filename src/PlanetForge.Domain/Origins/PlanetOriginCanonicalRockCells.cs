@@ -78,6 +78,7 @@ public sealed class PlanetOriginCanonicalRockCells
             throw new InvalidOperationException("Regional airless radiation cannot represent atmospheric or wet epochs.");
         }
 
+        VerifyInteriorConductionStability(interval, parameters, ledger.Interior, cancellationToken);
         var seconds = interval.TotalSeconds;
         var area = 4.0 * Math.PI * Field.PlanetRadiusMeters * Field.PlanetRadiusMeters;
         var interiorTemp = ledger.Interior.Rock.TemperatureKelvin;
@@ -120,6 +121,34 @@ public sealed class PlanetOriginCanonicalRockCells
         var nextEpoch = Epoch.AdvanceCoupled(step, cancellationToken);
         cancellationToken.ThrowIfCancellationRequested();
         return new PlanetOriginCanonicalRockCells(nextEpoch, lateralField);
+    }
+
+    private void VerifyInteriorConductionStability(
+        PlanetOriginDuration interval, PlanetOriginRegionalAirlessParameters parameters,
+        PlanetOriginThermalTimeline interior, CancellationToken cancellationToken)
+    {
+        if (parameters.ConductivityWattsPerMeterKelvin == 0.0) return;
+        var conductancePerArea = parameters.ConductivityWattsPerMeterKelvin / parameters.ConductiveBoundaryThicknessMeters;
+        var integratedConductance = 0.0;
+        foreach (var cell in Field.Cells)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var conductanceSeconds = conductancePerArea * cell.AreaSquareMeters * interval.TotalSeconds;
+            var capacity = cell.ActiveRockMassKilograms * Field.Material.SpecificHeatCapacityJoulesPerKilogramKelvin;
+            VerifyThermalCoupling(conductanceSeconds, capacity);
+            integratedConductance += conductanceSeconds;
+        }
+
+        // The common interior is another finite-capacity node, coupled to ALL cells.
+        // Sensible cp is a conservative lower bound even across the fusion interval.
+        VerifyThermalCoupling(integratedConductance, interior.MinimumRockHeatCapacityJoulesPerKelvin);
+    }
+
+    private static void VerifyThermalCoupling(double conductanceSeconds, double minimumCapacity)
+    {
+        var coupling = conductanceSeconds / minimumCapacity;
+        if (!double.IsFinite(minimumCapacity) || minimumCapacity <= 0.0 || !double.IsFinite(coupling) || coupling > 0.5)
+            throw new InvalidOperationException("Interior conduction exceeds its explicit thermal stability bound; subdivide the physical duration.");
     }
 
     private static void CheckInvariant(PlanetOriginEpochState epoch, PlanetOriginSurfaceRockPhaseField field)

@@ -122,14 +122,58 @@ public sealed class PlanetOriginCanonicalRockCellsTests
         Assert.AreEqual(0.0, hot.Epoch.CoupledEnergy!.CumulativeInteriorImportJoules, 0.0);
     }
 
+    [TestMethod]
+    public void Advance_HeatStepOvershootsBeforeEnergyOverdraw_RejectsThermalInstability()
+    {
+        var state = CreateCanonical(interiorKelvin: 1_500.0);
+        var parameters = ConductionOnly() with { ConductivityWattsPerMeterKelvin = 1e9 };
+        var error = Assert.ThrowsExactly<InvalidOperationException>(() => state.Advance(PlanetOriginDuration.FromSeconds(1.0), parameters));
+        StringAssert.Contains(error.Message, "stability bound");
+        Assert.AreEqual(0L, state.Epoch.Revision);
+    }
+
+    [TestMethod]
+    public void Advance_SmallCommonMantle_RejectsAggregateInteriorCoupling()
+    {
+        var state = CreateCanonical(interiorMass: 1e8);
+        var error = Assert.ThrowsExactly<InvalidOperationException>(() => state.Advance(PlanetOriginDuration.FromSeconds(1.0), ConductionOnly()));
+        StringAssert.Contains(error.Message, "stability bound");
+        Assert.AreEqual(0L, state.Epoch.Revision);
+    }
+
+    [TestMethod]
+    public void Advance_SubdividedConduction_ConvergesAndStaysWithinInitialThermalBounds()
+    {
+        var initial = CreateCanonical(interiorKelvin: 1_500.0);
+        var parameters = ConductionOnly() with { ConductivityWattsPerMeterKelvin = 1e5 };
+        double TemperatureAt(int count)
+        {
+            var state = initial;
+            for (var i = 0; i < count; i++)
+                state = state.Advance(PlanetOriginDuration.FromSeconds(1.0 / count), parameters);
+            var temperature = state.Field.Cells[0].Resolve(Material).TemperatureKelvin;
+            Assert.IsTrue(temperature > 1_500.0 && temperature < 1_600.0);
+            Assert.AreEqual(1_000_000L, state.Epoch.Clock.MicrosecondsIntoYear);
+            Assert.AreEqual(0.0, state.Epoch.EnergyConservationResidualJoules, initial.Epoch.CoupledEnergy!.InitialStoredEnergyJoules * 1e-12);
+            return temperature;
+        }
+
+        var coarse = TemperatureAt(1);
+        var medium = TemperatureAt(2);
+        var fine = TemperatureAt(4);
+        var reference = TemperatureAt(1_000);
+        Assert.IsLessThan(Math.Abs(coarse - reference), Math.Abs(medium - reference));
+        Assert.IsLessThan(Math.Abs(medium - reference), Math.Abs(fine - reference));
+    }
+
     private static PlanetOriginRegionalAirlessParameters ConductionOnly() =>
         new(new PlanetVector(1.0, 0.0, 0.0), 0.0, 0.0, 0.0, 3.0, 25.0);
 
-    private static PlanetOriginCanonicalRockCells CreateCanonical(bool withVapor = false, double interiorKelvin = 1_750.0)
+    private static PlanetOriginCanonicalRockCells CreateCanonical(bool withVapor = false, double interiorKelvin = 1_750.0, double interiorMass = 4.0e24)
     {
         var mass = 1.0e19;
         var rock = new PlanetRockEnthalpyModel(new PlanetRockThermalProperties(
-            4.0e24, 1_200.0, 400_000.0, 1_300.0, 1_900.0));
+            interiorMass, 1_200.0, 400_000.0, 1_300.0, 1_900.0));
         var interior = new PlanetOriginThermalTimeline(PlanetOriginClock.EarthAccretionReference,
             new PlanetThermalEnergyBudget(rock.CalculateStoredEnergyJoules(interiorKelvin)), rock);
         var inventory = withVapor ? PlanetWaterInventory.Empty.Deliver(PlanetWaterReservoir.AtmosphericVapor, 1.0e15)
