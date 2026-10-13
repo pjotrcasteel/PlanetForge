@@ -1615,6 +1615,16 @@ void main() {
                 smoothstep(1200.0, 2000.0, localKelvin));
             float moltenLight = incandescent * localMelt;
             material = clamp(mix(material, hot, moltenLight * 0.86) + hot * moltenLight * 0.15, 0.0, 1.0);
+            // Liquid rock should not retain the color identity of a dry,
+            // existing terrain map. The actual physical melt fraction alone
+            // decides whether liquid optical material replaces that bedrock.
+            // Sub-cell mottling is ONLY a fixed material appearance, not a
+            // second heat field, simulated magma movement, or fake crust.
+            float liquidSurface = smoothstep(0.88, 0.995, localMelt);
+            float radiance = smoothstep(1850.0, 2550.0, localKelvin);
+            float mottling = 0.92 + 0.16 * fbm(radial * 28.0 + vec3(2.0, 5.0, 9.0));
+            vec3 magma = mix(vec3(0.66, 0.115, 0.015), vec3(1.0, 0.56, 0.12), radiance) * mottling;
+            material = mix(material, clamp(magma, 0.0, 1.0), liquidSurface);
         } else if (uAirlessReference == 1) {
             // Physically derived uniform near-surface temperature. This is
             // DISPLAY tone mapping of thermal incandescence, NOT a simulated
@@ -1740,6 +1750,10 @@ void main() {
             vec3 colour = mix(vec3(0.58, 0.09, 0.02), vec3(1.0, 0.34, 0.06),
                 smoothstep(1200.0, 2000.0, localKelvin));
             lit = clamp(mix(lit, colour, glow * 0.86) + colour * glow * 0.15, 0.0, 1.0);
+            float liquidSurface = smoothstep(0.88, 0.995, melt);
+            float radiance = smoothstep(1850.0, 2550.0, localKelvin);
+            vec3 magma = mix(vec3(0.66, 0.115, 0.015), vec3(1.0, 0.56, 0.12), radiance);
+            lit = mix(lit, magma, liquidSurface);
         } else if (uAirlessReference == 1) {
             float visible = smoothstep(850.0, 1650.0, uSurfaceTemperature);
             vec3 glow = mix(vec3(0.68, 0.065, 0.015), vec3(1.0, 0.38, 0.10),
