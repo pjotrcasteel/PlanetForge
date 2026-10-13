@@ -25,6 +25,10 @@ public static class PlanetOriginSpatialSurfaceProjection
         var temperatures = new float[AtlasWidth * AtlasHeight];
         var melts = new float[temperatures.Length];
 
+        const int neighborCount = 4;
+        Span<int> nearest = stackalloc int[neighborCount];
+        Span<double> proximity = stackalloc double[neighborCount];
+
         for (var y = 0; y < AtlasHeight; y++)
         {
             var latitude = (((y + 0.5) / AtlasHeight) - 0.5) * Math.PI;
@@ -37,9 +41,7 @@ public static class PlanetOriginSpatialSurfaceProjection
                 // Reconstruct the *display* field from nearby physical cell centers.
                 // Dot products are spherical: no artificial seams at cube faces or longitude wrap.
                 // Physical cell enthalpy and its conservation ledger are never changed.
-                const int neighborCount = 4;
-                Span<int> nearest = stackalloc int[neighborCount];
-                Span<double> proximity = stackalloc double[neighborCount];
+
                 nearest.Fill(-1);
                 proximity.Fill(double.NegativeInfinity);
                 for (var cellIndex = 0; cellIndex < centers.Length; cellIndex++)
