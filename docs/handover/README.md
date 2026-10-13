@@ -28,3 +28,17 @@ See [CURRENT.md](CURRENT.md) for the latest verified snapshot and check `main` b
 Repository: https://github.com/pjotrcasteel/PlanetForge
 
 Published app: https://pjotrcasteel.github.io/PlanetForge/
+
+## Release versioning and human visual feedback protocol (2026-10-13 agreement)
+
+These are mandatory for **every feature release** in workstream `PF-EARTH-20261013-A`:
+
+1. **Bump the PlanetForge version with the feature release**, consistently in application metadata, displayed UI, and any generated version identifiers. Verify that the iPhone-visible version and deployed production commit correspond to the exact release. A change is not release-complete if it ships under the previous version.
+2. Verify **full CI** (build, automated tests and browser regressions), merge to `main`, successful GitHub Pages build/deploy, and **production smoke checks for the exact main SHA**. Never present draft/unmerged code as live. Avoid redundant notifications for a release already reported.
+3. **Every meaningful visible release must have a specific human visual inspection request**. Tell the user exactly what changed, what to test, which URL/feature flag to open, which seed and simulation times to use, and what expected behavior and likely defects to look for. Prefer fixed seed `24061984`, same camera angle/zoom, before/after screenshots; preserve Hero and LOD 0–3.
+4. **Use the user's screenshots and observations as engineering input** for the next milestone: compare expected vs observed, identify plausible root causes, record acceptance/rejection and actionable issues in CURRENT.md and a dated handover, then prioritize fixes. Do not interpret passing CI as proof of acceptable visual quality on iPhone Safari.
+5. Only notify for **new, validated, meaningfully visible main-planet deployments**. Model-only PRs, documentation, previously tested oceans and nonvisual physics changes are not reasons to request another visual check. If nothing qualifies, do not notify.
+6. Tailor checks to the feature: for changed Snowball ice rendering, ask for **Year 0 and melting Year 50** at the same seed/angle; for molten/rock columns, use declared T+0h/T+1h/T+4h as appropriate; for terrain and hydrology, inspect mountains, rivers, lakes and coastline continuity. Always invite observations on iPhone load time, blurry zoom/LOD, flicker, HUD overlap and off-globe rivers where relevant.
+7. The visual inspection is a **feedback gate**, not an excuse to halt engineering between milestones. Continue implementation, diagnosis and CI/deployment autonomously until a genuine user decision or visual acceptance is required.
+
+This protocol records the user's explicit request that every release include both a correct visible version and precise testing guidance, so the next development direction is driven by real device feedback.
