@@ -224,3 +224,47 @@
     min-width: 65px;
     flex-shrink: 0;
 }
+
+
+/* Science entry is discoverable from the regular planet, including geology mode. */
+.foundation-controls.foundation-reference-entry {
+    display: flex;
+    flex-wrap: nowrap;
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    width: max-content;
+    max-width: 94vw;
+}
+
+.foundation-reference-entry .foundation-next {
+    min-width: 120px;
+    min-height: 46px;
+    padding: 0 20px;
+}
+
+.foundation-reference-entry .foundation-open-reference {
+    min-height: 46px;
+    padding: 0 15px;
+    border-color: rgba(244, 169, 103, 0.70);
+    background: rgba(68, 29, 13, 0.94);
+    color: #ffe9cf;
+    letter-spacing: 0.045em;
+    white-space: nowrap;
+}
+
+.foundation-controls.foundation-thermal-controls {
+    gap: 6px;
+}
+
+.foundation-controls.foundation-thermal-controls .foundation-next {
+    padding: 0 11px;
+    font-size: 0.65rem;
+}
+
+.foundation-controls.foundation-thermal-controls .foundation-reference-reset {
+    min-width: 54px;
+    padding: 0 10px;
+    font-size: 0.59rem;
+}
