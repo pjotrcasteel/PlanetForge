@@ -101,6 +101,17 @@ public sealed class PlanetOriginSurfaceRockPhaseFieldTests
     }
 
     [TestMethod]
+    public void FromSolidCanonicalSurface_DifferentMaterialHeatCapacity_RejectsFalseTemperatureInterpretation()
+    {
+        var ledger = CreateLedger();
+        var mismatched = Material with { SpecificHeatCapacityJoulesPerKilogramKelvin = HeatCapacity * 1.2 };
+        Assert.ThrowsExactly<InvalidOperationException>(() =>
+            PlanetOriginSurfaceRockPhaseField.FromSolidCanonicalSurface(
+                ledger, new PlanetSurfaceGridLayout(1), RadiusMeters, mismatched));
+        Assert.AreEqual(InitialTemperatureKelvin, ledger.Temperatures.SurfaceRockTemperatureKelvin!.Value, 0.0);
+    }
+
+    [TestMethod]
     public void Propose_InsufficientEnergyInvalidRatesOrCancellation_PreservesInput()
     {
         var field = PlanetOriginSurfaceRockPhaseField.FromSolidCanonicalSurface(
