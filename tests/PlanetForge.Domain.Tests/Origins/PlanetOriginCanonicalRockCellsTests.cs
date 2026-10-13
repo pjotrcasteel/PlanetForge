@@ -66,13 +66,72 @@ public sealed class PlanetOriginCanonicalRockCellsTests
         Assert.AreEqual(0L, state.Epoch.Revision);
     }
 
-    private static PlanetOriginCanonicalRockCells CreateCanonical(bool withVapor = false)
+    [TestMethod]
+    public void Advance_HotSurface_ReturnsHeatToMantleWithoutExternalSource()
+    {
+        var start = CreateCanonical(interiorKelvin: 1_500.0);
+        var next = start.Advance(PlanetOriginDuration.FromSeconds(1.0), ConductionOnly());
+        var initialLedger = start.Epoch.CoupledEnergy!;
+        var nextLedger = next.Epoch.CoupledEnergy!;
+        var returned = nextLedger.CumulativeInteriorImportJoules;
+
+        Assert.IsGreaterThan(0.0, returned);
+        Assert.AreEqual(0.0, nextLedger.CumulativeInteriorExportJoules, 0.0);
+        Assert.AreEqual(initialLedger.Interior.EnergyBudget.StoredEnergyJoules + returned,
+            nextLedger.Interior.EnergyBudget.StoredEnergyJoules, returned * 1e-5);
+        Assert.AreEqual(start.Field.TotalStoredEnthalpyJoules - returned, next.Field.TotalStoredEnthalpyJoules,
+            start.Field.TotalStoredEnthalpyJoules * 1e-12);
+        Assert.AreEqual(initialLedger.StoredEnergyJoules, nextLedger.StoredEnergyJoules, initialLedger.StoredEnergyJoules * 1e-12);
+        Assert.AreEqual(0.0, next.Epoch.EnergyConservationResidualJoules, initialLedger.StoredEnergyJoules * 1e-12);
+        Assert.AreEqual(0.0, nextLedger.Interior.EnergyBudget.ConservationResidualJoules, initialLedger.StoredEnergyJoules * 1e-12);
+        Assert.IsTrue(next.Field.Cells.All(cell => cell.Resolve(Material).TemperatureKelvin < 1_600.0));
+    }
+
+    [TestMethod]
+    public void Advance_MixedHotColdRegions_TracksBothDirectionsAndReplays()
+    {
+        var original = CreateCanonical(interiorKelvin: 1_600.0);
+        var field = original.Field.RedistributeInitialEnergy(cell =>
+            (1.0 + PlanetSurfaceGridGeometry.GetCenterDirection(cell.Id).X) * cell.ActiveRockMassKilograms,
+            original.Field.TotalStoredEnthalpyJoules * 0.1);
+        var start = new PlanetOriginCanonicalRockCells(original.Epoch, field);
+        var next = start.Advance(PlanetOriginDuration.FromSeconds(1.0), ConductionOnly());
+        var replay = start.Advance(PlanetOriginDuration.FromSeconds(1.0), ConductionOnly());
+        var ledger = next.Epoch.CoupledEnergy!;
+
+        Assert.IsGreaterThan(0.0, ledger.CumulativeInteriorExportJoules);
+        Assert.IsGreaterThan(0.0, ledger.CumulativeInteriorImportJoules);
+        Assert.AreEqual(start.Field.TotalStoredEnthalpyJoules + ledger.CumulativeInteriorExportJoules - ledger.CumulativeInteriorImportJoules,
+            next.Field.TotalStoredEnthalpyJoules, start.Field.TotalStoredEnthalpyJoules * 1e-12);
+        CollectionAssert.AreEqual(next.Field.Cells.ToArray(), replay.Field.Cells.ToArray());
+        Assert.AreEqual(0.0, next.Epoch.EnergyConservationResidualJoules, ledger.InitialStoredEnergyJoules * 1e-12);
+        Assert.AreEqual(0L, start.Epoch.Revision);
+        Assert.AreEqual(0.0, start.Epoch.CoupledEnergy!.CumulativeInteriorImportJoules, 0.0);
+    }
+
+    [TestMethod]
+    public void Advance_EquilibriumOrRejectedReturn_PreservesCanonicalSource()
+    {
+        var state = CreateCanonical(interiorKelvin: 1_600.0);
+        var next = state.Advance(PlanetOriginDuration.FromSeconds(1.0), ConductionOnly());
+        Assert.AreEqual(state.Field.TotalStoredEnthalpyJoules, next.Field.TotalStoredEnthalpyJoules, state.Field.TotalStoredEnthalpyJoules * 1e-12);
+        var hot = CreateCanonical(interiorKelvin: 1_500.0);
+        Assert.ThrowsExactly<InvalidOperationException>(() => hot.Advance(
+            PlanetOriginDuration.FromSeconds(1.0), ConductionOnly() with { ConductivityWattsPerMeterKelvin = 1e30 }));
+        Assert.AreEqual(0L, hot.Epoch.Revision);
+        Assert.AreEqual(0.0, hot.Epoch.CoupledEnergy!.CumulativeInteriorImportJoules, 0.0);
+    }
+
+    private static PlanetOriginRegionalAirlessParameters ConductionOnly() =>
+        new(new PlanetVector(1.0, 0.0, 0.0), 0.0, 0.0, 0.0, 3.0, 25.0);
+
+    private static PlanetOriginCanonicalRockCells CreateCanonical(bool withVapor = false, double interiorKelvin = 1_750.0)
     {
         var mass = 1.0e19;
         var rock = new PlanetRockEnthalpyModel(new PlanetRockThermalProperties(
             4.0e24, 1_200.0, 400_000.0, 1_300.0, 1_900.0));
         var interior = new PlanetOriginThermalTimeline(PlanetOriginClock.EarthAccretionReference,
-            new PlanetThermalEnergyBudget(rock.CalculateStoredEnergyJoules(1_750.0)), rock);
+            new PlanetThermalEnergyBudget(rock.CalculateStoredEnergyJoules(interiorKelvin)), rock);
         var inventory = withVapor ? PlanetWaterInventory.Empty.Deliver(PlanetWaterReservoir.AtmosphericVapor, 1.0e15)
             : PlanetWaterInventory.Empty;
         var environment = new PlanetWaterEnvironmentalState(inventory, new PlanetEnvironmentalEnergyBudget(

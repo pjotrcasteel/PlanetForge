@@ -7,6 +7,7 @@
 ## Baseline: deployed and validated
 
 - GitHub: https://github.com/pjotrcasteel/PlanetForge
+- Latest independently checked main: `853a3790c53af82fae186e097afe79cfc88e0c54` (#203 docs); Pages run `38393339383` build/deploy/production smoke all passed. No open PRs at session restore; GitHub milestone collection is empty (roadmap is issue #196).
 - Science-code release `main` SHA: `74ba0612a6cd3169b6ec01972ebecce371cd5f5e` (#202); any later docs-only main SHA should be checked against this release
 - Displayed browser version: **PF 0.0.41.0**
 - GitHub Pages validation: **success**, run [38392739208](https://github.com/pjotrcasteel/PlanetForge/actions/runs/38392739208), including exact-SHA publish, deployment, and live-browser smoke. Source PR CI [38390183995](https://github.com/pjotrcasteel/PlanetForge/actions/runs/38390183995) also succeeded.
@@ -46,3 +47,20 @@ See [roadmap issue #196](https://github.com/pjotrcasteel/PlanetForge/issues/196)
 - Always build/test, run browser checks, merge green PR, verify Pages SHA/visible version/production smoke. If any check fails, fix in code and re-run.
 - Never assert future autonomous/background work unless a scheduling mechanism is explicitly used. Work synchronously when a session is active.
 - Each milestone's PR updates **this file**. Create a separate snapshot when handing off chats.
+
+## Active implementation — M2b, bidirectional mantle/surface heat (2026-10-13)
+
+- Branch: `feature/bidirectional-surface-interior-heat`; PR to be created.
+- Implemented typed environmental heat return, distinct interior return counter,
+  signed local Fourier gradient and both-direction canonical publication. Existing
+  zero-conductivity visual scenarios and rendered version remain unchanged.
+- Added conservation/mixed-region/replay/equilibrium/overdraw tests; not yet CI-verified.
+- Local .NET 10.0.401 domain/application compilation passed. Full WASM build
+  encountered local MSBuild task-host startup failure; MSTest reported discovery
+  failure (zero tests is **not** validation). Full GitHub CI remains the release gate.
+- Risks: explicit steps still require a gradient/equilibration stability bound;
+  no full-depth convection, persistent crust, atmospheric physics or Safari approval.
+- Exact next steps: full PR CI and review; fix failures; merge only after full
+  browser suite succeeds; verify Pages exact SHA. Then implement phase-aware
+  regional conduction stability/convergence and a documented opt-in coupled
+  reference; retain the existing magma-ocean user visual gate.

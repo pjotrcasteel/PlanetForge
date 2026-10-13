@@ -49,7 +49,10 @@ public sealed record PlanetOriginSurfaceRockPhaseTrial(
     double InteriorConductionJoules,
     double AbsorbedStellarJoules,
     double OutgoingInfraredJoules,
-    double ConservationResidualJoules);
+    double ConservationResidualJoules)
+{
+    public double InteriorReturnJoules { get; init; }
+}
 
 /// <summary>
 /// Experimental phase-aware state for the EXISTING spherical surface cells.
@@ -212,6 +215,7 @@ public sealed partial class PlanetOriginSurfaceRockPhaseField
 
         var next = new PlanetOriginSurfaceRockPhaseCell[cells.Count];
         var conduction = 0.0;
+        var returned = 0.0;
         var absorbedStellar = 0.0;
         var emittedInfrared = 0.0;
         for (var index = 0; index < cells.Count; index++)
@@ -221,9 +225,12 @@ public sealed partial class PlanetOriginSurfaceRockPhaseField
             var rate = rates(current, current.Resolve(Material));
             rate.Validate();
             var conductiveEnergy = rate.InteriorConductionWattsPerSquareMeter * current.AreaSquareMeters * seconds;
+            var returnEnergy = rate.InteriorReturnWattsPerSquareMeter * current.AreaSquareMeters * seconds;
+            if (!double.IsFinite(returnEnergy) || returnEnergy > current.StoredEnthalpyJoules)
+                throw new InvalidOperationException("Reverse conduction exceeds the unchanged surface donor enthalpy.");
             var stellarEnergy = rate.AbsorbedStellarWattsPerSquareMeter * current.AreaSquareMeters * seconds;
             var infraredEnergy = rate.OutgoingInfraredWattsPerSquareMeter * current.AreaSquareMeters * seconds;
-            var enthalpy = current.StoredEnthalpyJoules + (conductiveEnergy + stellarEnergy - infraredEnergy);
+            var enthalpy = current.StoredEnthalpyJoules + (conductiveEnergy + stellarEnergy - infraredEnergy - returnEnergy);
             if (!double.IsFinite(conductiveEnergy) || !double.IsFinite(stellarEnergy) ||
                 !double.IsFinite(infraredEnergy) || !double.IsFinite(enthalpy) || enthalpy < 0.0)
             {
@@ -232,18 +239,22 @@ public sealed partial class PlanetOriginSurfaceRockPhaseField
 
             next[index] = current with { StoredEnthalpyJoules = enthalpy };
             conduction += conductiveEnergy;
+            returned += returnEnergy;
             absorbedStellar += stellarEnergy;
             emittedInfrared += infraredEnergy;
         }
 
-        if (!double.IsFinite(conduction) || !double.IsFinite(absorbedStellar) || !double.IsFinite(emittedInfrared))
+        if (!double.IsFinite(conduction) || !double.IsFinite(returned) || !double.IsFinite(absorbedStellar) || !double.IsFinite(emittedInfrared))
         {
             throw new InvalidOperationException("The proposed global rock energy exchanges must be finite.");
         }
 
         var candidate = new PlanetOriginSurfaceRockPhaseField(Material, Layout, PlanetRadiusMeters, next);
-        var residual = TotalStoredEnthalpyJoules + conduction + absorbedStellar - emittedInfrared -
+        var residual = TotalStoredEnthalpyJoules + conduction - returned + absorbedStellar - emittedInfrared -
             candidate.TotalStoredEnthalpyJoules;
-        return new PlanetOriginSurfaceRockPhaseTrial(candidate, conduction, absorbedStellar, emittedInfrared, residual);
+        return new PlanetOriginSurfaceRockPhaseTrial(candidate, conduction, absorbedStellar, emittedInfrared, residual)
+        {
+            InteriorReturnJoules = returned
+        };
     }
 }

@@ -10,11 +10,15 @@ public readonly record struct PlanetThermalEnergyFlux(
     double RadiogenicHeatingWatts,
     double SurfaceHeatLossWatts)
 {
+    /// <summary>Heat returned from an explicitly debited environmental store; not external heating.</summary>
+    public double SurfaceHeatGainWatts { get; init; }
+
     public void Validate()
     {
         ValidatePower(ImpactHeatingWatts, nameof(ImpactHeatingWatts));
         ValidatePower(RadiogenicHeatingWatts, nameof(RadiogenicHeatingWatts));
         ValidatePower(SurfaceHeatLossWatts, nameof(SurfaceHeatLossWatts));
+        ValidatePower(SurfaceHeatGainWatts, nameof(SurfaceHeatGainWatts));
     }
 
     private static void ValidatePower(double watts, string parameterName)
@@ -71,6 +75,9 @@ public sealed class PlanetThermalEnergyBudget
 
     public double CumulativeSurfaceHeatLossJoules { get; }
 
+    /// <summary>Internal heat returned by the environment; distinct from material delivery and impacts.</summary>
+    public double CumulativeSurfaceHeatGainJoules { get; private init; }
+
     /// <summary>External enthalpy carried into interior-bound volatile material, distinct from impact heating.</summary>
     public double CumulativeMaterialInputJoules { get; }
 
@@ -78,7 +85,7 @@ public sealed class PlanetThermalEnergyBudget
     public double CumulativeMaterialExportJoules { get; }
 
     public double ConservationResidualJoules => InitialStoredEnergyJoules + CumulativeImpactHeatJoules +
-        CumulativeRadiogenicHeatJoules + CumulativeMaterialInputJoules -
+        CumulativeRadiogenicHeatJoules + CumulativeMaterialInputJoules + CumulativeSurfaceHeatGainJoules -
         CumulativeSurfaceHeatLossJoules - CumulativeMaterialExportJoules - StoredEnergyJoules;
 
     public PlanetThermalEnergyBudget Advance(double elapsedYears, PlanetThermalEnergyFlux flux)
@@ -104,11 +111,13 @@ public sealed class PlanetThermalEnergyBudget
         var impactJoules = flux.ImpactHeatingWatts * durationSeconds;
         var radiogenicJoules = flux.RadiogenicHeatingWatts * durationSeconds;
         var coolingJoules = flux.SurfaceHeatLossWatts * durationSeconds;
+        var returnedJoules = flux.SurfaceHeatGainWatts * durationSeconds;
+        ValidateEnergy(returnedJoules, nameof(flux.SurfaceHeatGainWatts));
         ValidateEnergy(impactJoules, nameof(flux.ImpactHeatingWatts));
         ValidateEnergy(radiogenicJoules, nameof(flux.RadiogenicHeatingWatts));
         ValidateEnergy(coolingJoules, nameof(flux.SurfaceHeatLossWatts));
 
-        var energyAvailable = StoredEnergyJoules + impactJoules + radiogenicJoules;
+        var energyAvailable = StoredEnergyJoules + impactJoules + radiogenicJoules + returnedJoules;
         if (!double.IsFinite(energyAvailable) || coolingJoules > energyAvailable)
         {
             throw new InvalidOperationException("The thermal step is inconsistent: heat loss exceeds available stored and deposited energy.");
@@ -118,6 +127,8 @@ public sealed class PlanetThermalEnergyBudget
         var cumulativeImpacts = CumulativeImpactHeatJoules + impactJoules;
         var cumulativeRadiogenic = CumulativeRadiogenicHeatJoules + radiogenicJoules;
         var cumulativeCooling = CumulativeSurfaceHeatLossJoules + coolingJoules;
+        var cumulativeReturned = CumulativeSurfaceHeatGainJoules + returnedJoules;
+        ValidateEnergy(cumulativeReturned, nameof(cumulativeReturned));
         ValidateEnergy(storedEnergy, nameof(storedEnergy));
         ValidateEnergy(cumulativeImpacts, nameof(cumulativeImpacts));
         ValidateEnergy(cumulativeRadiogenic, nameof(cumulativeRadiogenic));
@@ -125,7 +136,10 @@ public sealed class PlanetThermalEnergyBudget
 
         return new PlanetThermalEnergyBudget(InitialStoredEnergyJoules,
             storedEnergy, cumulativeImpacts, cumulativeRadiogenic, cumulativeCooling,
-            CumulativeMaterialInputJoules, CumulativeMaterialExportJoules);
+            CumulativeMaterialInputJoules, CumulativeMaterialExportJoules)
+        {
+            CumulativeSurfaceHeatGainJoules = cumulativeReturned
+        };
     }
 
     /// <summary>
@@ -150,7 +164,10 @@ public sealed class PlanetThermalEnergyBudget
         ValidateEnergy(delivered, nameof(delivered));
         ValidateEnergy(exported, nameof(exported));
         return new PlanetThermalEnergyBudget(InitialStoredEnergyJoules, stored, CumulativeImpactHeatJoules,
-            CumulativeRadiogenicHeatJoules, CumulativeSurfaceHeatLossJoules, delivered, exported);
+            CumulativeRadiogenicHeatJoules, CumulativeSurfaceHeatLossJoules, delivered, exported)
+        {
+            CumulativeSurfaceHeatGainJoules = CumulativeSurfaceHeatGainJoules
+        };
     }
 
     private static void ValidateEnergy(double joules, string parameterName)
