@@ -54,15 +54,22 @@ public readonly record struct PlanetOriginRegionalAirlessParameters(
 /// </summary>
 public sealed class PlanetOriginCanonicalRockCells
 {
-    public PlanetOriginCanonicalRockCells(PlanetOriginEpochState epoch, PlanetOriginSurfaceRockPhaseField field)
+    public PlanetOriginCanonicalRockCells(PlanetOriginEpochState epoch, PlanetOriginSurfaceRockPhaseField field, PlanetOriginRockColumnField? columns = null)
     {
         Epoch = epoch ?? throw new ArgumentNullException(nameof(epoch));
         Field = field ?? throw new ArgumentNullException(nameof(field));
+        Columns = columns;
+        if (columns is not null && !ReferenceEquals(columns.Aggregate, field))
+            throw new InvalidOperationException("Column aggregate must be the exact phase field owned by this canonical world.");
         CheckInvariant(Epoch, Field);
     }
 
     public PlanetOriginEpochState Epoch { get; }
     public PlanetOriginSurfaceRockPhaseField Field { get; }
+    public PlanetOriginRockColumnField? Columns { get; }
+
+    public PlanetRockThermalState ResolveSurfacePhase(PlanetSurfaceGridCellId id) =>
+        Columns?.ResolveSurface(id) ?? Field.Cells[Field.Layout.GetIndex(id)].Resolve(Field.Material);
 
     public PlanetOriginCanonicalRockCells Advance(
         PlanetOriginDuration interval, PlanetOriginRegionalAirlessParameters parameters,
@@ -78,6 +85,7 @@ public sealed class PlanetOriginCanonicalRockCells
             throw new InvalidOperationException("Regional airless radiation cannot represent atmospheric or wet epochs.");
         }
 
+        if (Columns is not null) return AdvanceColumns(interval, parameters, cancellationToken);
         VerifyInteriorConductionStability(interval, parameters, ledger.Interior, cancellationToken);
         var seconds = interval.TotalSeconds;
         var area = 4.0 * Math.PI * Field.PlanetRadiusMeters * Field.PlanetRadiusMeters;
@@ -121,6 +129,25 @@ public sealed class PlanetOriginCanonicalRockCells
         var nextEpoch = Epoch.AdvanceCoupled(step, cancellationToken);
         cancellationToken.ThrowIfCancellationRequested();
         return new PlanetOriginCanonicalRockCells(nextEpoch, lateralField);
+    }
+
+    private PlanetOriginCanonicalRockCells AdvanceColumns(
+        PlanetOriginDuration interval, PlanetOriginRegionalAirlessParameters parameters, CancellationToken cancellationToken)
+    {
+        var trial = Columns!.Propose(interval, parameters, Epoch.Thermal, cancellationToken);
+        var seconds = interval.TotalSeconds;
+        var area = 4.0 * Math.PI * Field.PlanetRadiusMeters * Field.PlanetRadiusMeters;
+        var radiation = new PlanetRadiativeBalance(area, trial.AbsorbedStellarJoules / seconds / area, trial.OutgoingInfraredJoules / seconds / area,
+            trial.AbsorbedStellarJoules / seconds, trial.OutgoingInfraredJoules / seconds);
+        var step = new PlanetOriginEnergyStep(interval, 0.0, 0.0,
+            new PlanetInteriorHeatExport(trial.InteriorExportJoules / seconds, PlanetEnvironmentHeatReservoir.SurfaceRock),
+            new PlanetRadiativeExchange(radiation, PlanetEnvironmentHeatReservoir.SurfaceRock, PlanetEnvironmentHeatReservoir.SurfaceRock), [])
+        {
+            InteriorImport = new PlanetInteriorHeatImport(trial.InteriorImportJoules / seconds, PlanetEnvironmentHeatReservoir.SurfaceRock)
+        };
+        var nextEpoch = Epoch.AdvanceCoupled(step, cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
+        return new PlanetOriginCanonicalRockCells(nextEpoch, trial.Candidate.Aggregate, trial.Candidate);
     }
 
     private void VerifyInteriorConductionStability(

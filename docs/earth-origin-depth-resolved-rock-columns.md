@@ -1,0 +1,38 @@
+# Conserved depth-resolved rock columns
+
+Workstream PF-EARTH-20261013-A. Initial foundation, 2026-10-13.
+
+## Purpose and ownership
+
+The prior thin active shell resolved one enthalpy per geographic cell. It could not distinguish a solidifying radiating top from molten material below. This model partitions that already funded shell into depth control volumes. `PlanetOriginCanonicalRockCells` owns the epoch, exact aggregate phase field and optional `PlanetOriginRockColumnField` together. Their aggregate mass and enthalpy remain the canonical `SurfaceRock` account. No second planetary state, clock, energy reservoir or invented funding is introduced.
+
+Columns have stable Eulerian geographic addresses. Layer index zero is the radiating surface; the final layer touches the interior boundary. An address is not a moving material parcel or plate identity. Initial equal-layer partition preserves each cell's mass and energy with a residual final layer.
+
+## Physical contracts
+
+- Each layer resolves temperature and melt from the established sensible/fusion enthalpy material. Latent heat is retained through freezing and remelting.
+- Internal Fourier transfer is `Q = k A dt (T_i - T_j) / distance`, with centre-to-centre distance from the current physical layer thicknesses. The exact same Q is debited from one layer and credited to the other.
+- The bottom boundary uses the declared boundary thickness plus half the bottom layer thickness. Positive and negative transfers use the existing matched mantle/surface accounts and separate gross counters.
+- Absorbed stellar heat and `epsilon sigma T_surface^4` radiation act only on the top layer. The ledger receives exactly the integrated trial totals, never a separately recomputed mean-temperature radiation estimate.
+- For melt mass fraction f, volume is `m ((1-f)/rho_s + f/rho_l)`. Column thickness is total volume divided by geographic area. Initial thickness is retained as a datum for later contraction-derived elevation.
+- Thermal solid surface thickness sums contiguous fully solid top layers and stops at the first partly molten layer. It says nothing about mechanical strength, chemical segregation, buoyant crust or plate motion.
+
+## Numerical admission and publication
+
+For every layer, integrated conductive incidence plus the top-layer radiative Jacobian (`4 epsilon sigma A T^3 dt`) must be no greater than half the minimum sensible heat capacity `m cp`. The common finite mantle is checked against the sum of its boundary conductances. This conservative explicit admission bound is not an accuracy proof. Exact-time refinement and energy/replay tests are required.
+
+Nonfinite exchange, negative layer enthalpy, invalid parameters and cancellation reject the immutable trial. No clamping, hidden source or partial publication is allowed. Planar column geometry is restricted to thickness/radius <= 0.001, initially and after evolution. Aggregate lateral exchange is deliberately rejected for columns: it would erase layer ownership. Future lateral transport must resolve consistent per-layer fluxes/advection.
+
+The domain foundation is optional and does not yet change a displayed scenario. Application integration must project the actual top-layer phase and use the shared terrain source for orbit and local LOD 0–3. Density contraction cannot justify invented mountains. Physics and terrain revisions must be committed or rolled back together.
+
+## Scientific scope and provenance
+
+This is a **hypothetical dry/airless thin conductive shell**, not a resolved full-depth convecting magma ocean or a calibrated reconstruction of Earth. Constant reference densities/conductivity and the existing constant-pressure solidus/liquidus are explicit approximations. Test densities 3000 kg/m³ (solid), 2800 kg/m³ (liquid), and k=3 W/(m K) exercise mechanisms; they are not claimed as calibrated Hadean parameters.
+
+Lebrun et al. (2013), [Thermal evolution of an early magma ocean in interaction with the atmosphere](https://doi.org/10.1002/jgre.20068), distinguishes surface boundary cooling from convecting mantle evolution and atmospheric feedback. Its phase-density mixture relation motivates preserving solid/liquid specific volumes; this implementation does not reproduce that paper's convection, pressure-dependent phase front or atmosphere. Elkins-Tanton (2012), [Magma Oceans in the Inner Solar System](https://doi.org/10.1146/annurev-earth-042711-105503), frames crystallization/differentiation as distinct processes. A thermally solid lid here is not evidence that either full differentiation or plate tectonics has been simulated.
+
+Still required: composition and pressure dependence, crystallization/segregation and material transport, mechanical coherence/rheology, physically driven deformation/tectonics, volatile exchange and atmospheric radiation, water, climate, chemistry and life. The user's long-term lush-planet objective requires those interacting causes, not stage timers or shader-generated terrain.
+
+## Validation
+
+Seven domain regressions cover funded partition, surface-only radiation, internal diffusion, a solid top above molten layers, volume contraction, funded remelting, numerical/cancellation rejection, and exact-time convergence/replay. Existing application and infrastructure suites also pass locally (701 total tests). Full PR CI and deployment are separate pending gates; consult CURRENT.md and GitHub for their current result.
