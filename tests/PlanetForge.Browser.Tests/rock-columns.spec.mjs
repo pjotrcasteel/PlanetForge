@@ -31,9 +31,9 @@ test('RockColumns_PhysicalSolidTopOverMoltenDepth_UsesSharedTerrainAndResets', a
   await expect(page.getByTestId('regional-melt-range')).toHaveText('MELT 100%–100%', { timeout: 60_000 });
   await expect(page.getByTestId('column-solid-thickness')).toHaveText('SOLID TOP 0.00–0.00 m');
   await page.getByTestId('regional-switch').click();
-  await expect(page.getByTestId('airless-surface-temperature')).toHaveText('SURFACE 1600 K');
+  await expect(page.getByTestId('airless-surface-temperature')).toHaveText('SURFACE 1600 K', { timeout: 60_000 });
   await page.getByTestId('regional-switch').click();
-  await expect(page.getByTestId('planet-scenario-label')).toHaveText('ROCK COLUMNS · SURFACE AND DEPTH');
+  await expect(page.getByTestId('planet-scenario-label')).toHaveText('ROCK COLUMNS · SURFACE AND DEPTH', { timeout: 60_000 });
   await expect(page.getByTestId('column-solid-thickness')).toHaveText('SOLID TOP 0.00–0.00 m');
   expect(errors).toEqual([]);
 });

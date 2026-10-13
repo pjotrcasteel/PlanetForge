@@ -3,6 +3,13 @@ name: Deploy PlanetForge demo
 on:
   push:
     branches: [main]
+    # Documentation, test-only and validation-pipeline changes are not app releases.
+    # Main receives one tested feature/milestone merge rather than every tiny commit.
+    paths:
+      - 'src/**'
+      - 'PlanetForge.slnx'
+      - 'Directory.Build.props'
+      - '.github/workflows/pages.yml'
   workflow_dispatch:
 
 permissions:

@@ -61,3 +61,10 @@ This prevents mistaking the prior 0.81689 m eight-cell display for a depth-conve
 ## Executable depth-refinement experiment (follow-on validation PR)
 
 A separate follow-on branch runs the *real canonical rock integrator* from matched initially molten 8/16/32/64-layer grids for four hours at a 5 s step cap, with a six-cell geographic layout solely to keep CI bounded. It asserts identical canonical elapsed time, energy conservation, no source-state publication and the spatial-resolution screen's current failure. Every sample is collected from actual depth layers. This complements the dated 384-cell independent experiment without claiming the six-cell globe matches the original geographic radiation pattern. **Pending CI and comparison:** this is a scientific defect reproduction, not a repaired boundary/front solver.
+
+
+## PF-DEVEX-01 — CI/CD throughput optimization (2026-10-13)
+
+A non-physics implementation increment introduces one fast build/.NET/WASM job and **three parallel Playwright shards**, each consuming that exact build artifact. The previous single-runner 43-browser-test stage took 19m16s; full original PR validation 38418506407 passed 715 .NET tests. All browser tests and the separate five production smoke tests remain required. A narrower Pages `push.paths` filter avoids deploying documentation/test-only changes; manual dispatch remains possible. Release milestones should batch meaningful changes on a branch and merge only after full CI, instead of serially waiting for independent micro-PR deployments.
+
+See [development validation pipeline](../development-validation-pipeline.md) for architecture, measured baseline, acceptance and tradeoffs. Do **not** claim the new shard duration/coverage or deployment filter as validated until PF-DEVEX-01's own PR checks complete. Resume depth-boundary/front accuracy after this pipeline work; do not alter the canonical physical model to speed up CI.

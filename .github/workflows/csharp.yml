@@ -19,7 +19,9 @@ permissions:
   contents: read
 
 jobs:
-  validate:
+  fast-checks:
+    name: Build, .NET tests and WASM publish
+    timeout-minutes: 15
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -64,13 +66,37 @@ jobs:
           path: ./artifacts/web/wwwroot
           if-no-files-found: error
 
+  browser-regression:
+    name: Browser regressions (shard ${{ matrix.shard }}/3)
+    needs: fast-checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+
+      - name: Download compiled WASM app from fast checks
+        uses: actions/download-artifact@v4
+        with:
+          name: planetforge-debug-web
+          path: ./artifacts/web/wwwroot
+
       - name: Install browser test dependencies
         working-directory: tests/PlanetForge.Browser.Tests
         run: |
           npm install --no-audit --no-fund
           npx playwright install --with-deps chromium
 
-      - name: Run generator visual regression
+      - name: Run browser regression shard
         run: |
           python3 -m http.server 4173 --directory ./artifacts/web/wwwroot > /tmp/planetforge-http.log 2>&1 &
           for attempt in {1..20}; do
@@ -80,12 +106,14 @@ jobs:
             sleep 1
           done
           cd tests/PlanetForge.Browser.Tests
-          npm test
+          # A checked-in test manifest balances measured runtime and fails closed if a spec is unassigned.
+          # One Playwright worker per runner prevents WebGL resource contention.
+          node runBrowserShard.mjs ${{ matrix.shard }}
 
       - name: Upload visual regression artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: generator-visual-regression
+          name: generator-visual-regression-shard-${{ matrix.shard }}
           path: tests/PlanetForge.Browser.Tests/artifacts
           if-no-files-found: ignore
