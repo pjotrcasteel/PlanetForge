@@ -1,5 +1,12 @@
 # Opt-in main-globe thermal reference — M5h
 
+## Discoverable main-planet entry (0.0.39.0)
+
+On the normal `https://pjotrcasteel.github.io/PlanetForge/` homepage, tap **HOT ROCK TEST** next to the existing progression button. This works even if the geological research view is active; its current research overlay is detached before the physical thermal reference is published. The main globe stays in place. **ADVANCE 1 HOUR** executes the accepted adaptive cooling, **RESET** rewinds the thermal reference and **BACK** returns to the legacy scene without changing the existing planet seed.
+
+The old URL `?visualTest=1&airlessReference=1` remains supported, but iOS users no longer need to preserve a query string or manually navigate to a special address. The visible version badge is **0.0.39.0**; Git SHA still identifies the exact deployed commit. Both local browser tests and the live GitHub Pages smoke must explicitly enter the new reference, advance it, and exit—not merely load the default Snowball experiment.
+
+
 This is the first **user-testable, scientific-boundary-controlled** thermal evolution on the existing 3D PlanetForge planet. Open the same site with:
 
 `?visualTest=1&airlessReference=1`
