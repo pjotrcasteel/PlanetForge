@@ -129,6 +129,74 @@ public sealed class PlanetOriginSurfaceRockPhaseField
         return new PlanetOriginSurfaceRockPhaseField(material, layout, planetRadiusMeters, values);
     }
 
+    /// <summary>
+    /// Creates spatial cells from an EXISTING phase-aware canonical budget.
+    /// The joules are already funded fusion enthalpy; this method merely
+    /// partitions them, without creating or consuming an additional joule.
+    /// </summary>
+    public static PlanetOriginSurfaceRockPhaseField FromCanonicalPhaseSurface(
+        PlanetOriginEnergyLedger canonicalEnergy,
+        PlanetSurfaceGridLayout layout,
+        double planetRadiusMeters)
+    {
+        ArgumentNullException.ThrowIfNull(canonicalEnergy);
+        var material = canonicalEnergy.HeatCapacities.SurfaceRockPhaseMaterial ??
+            throw new InvalidOperationException("Canonical surface energy has not been declared phase-aware.");
+        material.Validate();
+        var sensiblePartition = PlanetOriginSurfaceThermalField.Partition(canonicalEnergy, layout, planetRadiusMeters);
+        var values = sensiblePartition.Cells.Select(cell => new PlanetOriginSurfaceRockPhaseCell(
+            cell.Id, cell.AreaSquareMeters, cell.ActiveRockMassKilograms, cell.SensibleEnergyJoules)).ToArray();
+        var field = new PlanetOriginSurfaceRockPhaseField(material, layout, planetRadiusMeters, values);
+        foreach (var cell in values)
+        {
+            _ = cell.Resolve(material);
+        }
+
+        return field;
+    }
+
+    /// <summary>
+    /// Conservatively redistributes EXISTING enthalpy between cells to encode
+    /// an explicitly supplied heterogeneous initial condition. Weights have
+    /// no historical interpretation; there is no unrecorded impact heating.
+    /// </summary>
+    public PlanetOriginSurfaceRockPhaseField RedistributeInitialEnergy(
+        Func<PlanetOriginSurfaceRockPhaseCell, double> relativeWeight,
+        double redistributedJoules)
+    {
+        ArgumentNullException.ThrowIfNull(relativeWeight);
+        if (!double.IsFinite(redistributedJoules) || redistributedJoules < 0.0)
+            throw new ArgumentOutOfRangeException(nameof(redistributedJoules));
+
+        var weights = cells.Select(relativeWeight).ToArray();
+        if (weights.Any(v => !double.IsFinite(v) || v < 0.0) || weights.All(v => v == 0.0))
+            throw new ArgumentOutOfRangeException(nameof(relativeWeight), "Weights must be finite, nonnegative and contain at least one positive cell.");
+        var weightedTotal = weights.Sum();
+        var sourceEnergy = TotalStoredEnthalpyJoules;
+        if (!double.IsFinite(weightedTotal) || weightedTotal <= 0.0)
+            throw new ArgumentOutOfRangeException(nameof(relativeWeight));
+
+        // Distribution is an explicit initial condition, not an unbalanced
+        // forcing law: the reference uniform heat is reassigned by mass area.
+        var remaining = sourceEnergy;
+        var values = new PlanetOriginSurfaceRockPhaseCell[cells.Count];
+        for (var i = 0; i < values.Length; i++)
+        {
+            var current = cells[i];
+            var uniformShare = sourceEnergy * (current.ActiveRockMassKilograms / TotalActiveRockMassKilograms);
+            var selectedShare = sourceEnergy * weights[i] / weightedTotal;
+            var redistributed = redistributedJoules / sourceEnergy;
+            var candidate = uniformShare * (1.0 - redistributed) + selectedShare * redistributed;
+            if (i == values.Length - 1) candidate = remaining;
+            if (!double.IsFinite(candidate) || candidate < 0.0)
+                throw new InvalidOperationException("Initial spatial redistribution cannot overdraw rock enthalpy.");
+            values[i] = current with { StoredEnthalpyJoules = candidate };
+            remaining -= candidate;
+        }
+
+        return new PlanetOriginSurfaceRockPhaseField(Material, Layout, PlanetRadiusMeters, values);
+    }
+
     public PlanetOriginSurfaceRockPhaseTrial Propose(
         PlanetOriginDuration duration,
         Func<PlanetOriginSurfaceRockPhaseCell, PlanetRockThermalState, PlanetOriginSurfaceThermalRates> rates,
