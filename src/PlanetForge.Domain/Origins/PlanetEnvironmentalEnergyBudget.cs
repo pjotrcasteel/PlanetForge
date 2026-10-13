@@ -107,14 +107,14 @@ public sealed class PlanetEnvironmentalEnergyBudget
         return new PlanetEnvironmentalEnergyBudget(copy);
     }
 
-    /// <summary>Withdraws heat carried away by matter leaving the modelled planet.</summary>
+    /// <summary>Debits an explicitly matched internal heat return or material escape.</summary>
     internal PlanetEnvironmentalEnergyBudget Withdraw(PlanetEnvironmentHeatReservoir reservoir, double joules)
     {
         var index = ValidateReservoir(reservoir);
         ValidateEnergy(joules);
         if (joules > energies[index])
         {
-            throw new InvalidOperationException("Material escape exceeds the heat available in its donor reservoir.");
+            throw new InvalidOperationException("Withdrawal exceeds the heat available in its donor reservoir.");
         }
 
         if (joules == 0.0) return this;

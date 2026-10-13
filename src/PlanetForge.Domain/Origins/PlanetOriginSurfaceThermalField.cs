@@ -30,9 +30,13 @@ public readonly record struct PlanetOriginSurfaceThermalRates(
     double AbsorbedStellarWattsPerSquareMeter,
     double OutgoingInfraredWattsPerSquareMeter)
 {
+    /// <summary>Nonnegative reverse conduction, explicitly debited here and credited to the interior.</summary>
+    public double InteriorReturnWattsPerSquareMeter { get; init; }
+
     public void Validate()
     {
         ValidateRate(InteriorConductionWattsPerSquareMeter, nameof(InteriorConductionWattsPerSquareMeter));
+        ValidateRate(InteriorReturnWattsPerSquareMeter, nameof(InteriorReturnWattsPerSquareMeter));
         ValidateRate(AbsorbedStellarWattsPerSquareMeter, nameof(AbsorbedStellarWattsPerSquareMeter));
         ValidateRate(OutgoingInfraredWattsPerSquareMeter, nameof(OutgoingInfraredWattsPerSquareMeter));
     }
@@ -172,6 +176,8 @@ public sealed class PlanetOriginSurfaceThermalField
             var conducted = rate.InteriorConductionWattsPerSquareMeter * cell.AreaSquareMeters * seconds;
             var absorbed = rate.AbsorbedStellarWattsPerSquareMeter * cell.AreaSquareMeters * seconds;
             var emitted = rate.OutgoingInfraredWattsPerSquareMeter * cell.AreaSquareMeters * seconds;
+            if (rate.InteriorReturnWattsPerSquareMeter != 0.0)
+                throw new InvalidOperationException("Sensible-only surface trials do not account for reverse conduction; use phase-aware canonical cells.");
             var newEnergy = cell.SensibleEnergyJoules + (conducted + absorbed - emitted);
             if (!double.IsFinite(conducted) || !double.IsFinite(absorbed) || !double.IsFinite(emitted) ||
                 !double.IsFinite(newEnergy) || newEnergy < 0.0)

@@ -301,3 +301,27 @@ not the hot start of the Earth-origin reconstruction. The eventual Earth-origin
 journey stops at scientifically plausible prebiotic-to-first-life conditions,
 not scripted animals or land vegetation. A Wednesday demonstration does not
 change the above acceptance gates.
+
+## M2b — Bidirectional mantle/surface conduction (2026-10-13)
+
+Regional Fourier conduction now resolves each cell's signed temperature gradient.
+Cold cells receive interior export; hot cells return existing surface enthalpy
+through `PlanetOriginEnergyStep.InteriorImport`. Both directions have independent
+nonnegative gross joule counters, with matched debits and credits in the same
+immutable epoch. Return heat is neither impact heating, material delivery nor
+negative infrared radiation. The interior's own residual includes its explicit
+returned-heat counter, retained through later volatile exchanges.
+
+The unchanged environmental donor is debited before any simultaneous credit;
+cell overdraw, nonfinite rates and cancellation reject the candidate. Export
+joules are integrated directly over the current interval instead of subtracting
+large cumulative counters. Global and environmental ledgers see only the net
+internal boundary exchange; external energy conservation is unchanged.
+
+This is a bounded explicit Fourier reference, not convection or crust genesis.
+Caller-selected substeps still require convergence/stability validation. No
+conductivity is enabled in the existing magma-ocean visual reference by this
+slice, and iPhone PF 0.0.41.0 acceptance remains pending. Next: limit regional
+conduction steps against phase-aware equilibration, validate timestep convergence,
+then introduce a separately labelled coupled conduction reference before primary
+crust material/thickness publication.

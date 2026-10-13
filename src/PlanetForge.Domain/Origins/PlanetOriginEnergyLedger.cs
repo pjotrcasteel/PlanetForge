@@ -11,6 +11,9 @@ public readonly record struct PlanetInteriorHeatExport(
     double Watts,
     PlanetEnvironmentHeatReservoir Destination);
 
+/// <summary>Internal environmental heat returned to the interior with an identical donor debit.</summary>
+public readonly record struct PlanetInteriorHeatImport(double Watts, PlanetEnvironmentHeatReservoir Source);
+
 /// <summary>
 /// External radiation for one interval: absorbed starlight enters one store and
 /// infrared emission leaves one store. Powers must come from a radiation model
@@ -49,6 +52,9 @@ public sealed record PlanetOriginEnergyStep(
     {
         ExplicitDuration = duration;
     }
+
+    /// <summary>Optional reverse internal heat exchange; zero preserves existing one-way callers.</summary>
+    public PlanetInteriorHeatImport InteriorImport { get; init; }
 
     /// <summary>Explicit material transactions; no route is inferred from phase eligibility.</summary>
     public IReadOnlyList<PlanetOriginVolatileExchange> VolatileChanges { get; init; } = [];
@@ -146,6 +152,9 @@ public sealed class PlanetOriginEnergyLedger
     /// <summary>Internal interior→environment transfer; not an external term.</summary>
     public double CumulativeInteriorExportJoules { get; }
 
+    /// <summary>Internal environmental return; not an external energy source.</summary>
+    public double CumulativeInteriorImportJoules => Interior.EnergyBudget.CumulativeSurfaceHeatGainJoules;
+
     /// <summary>Documented external enthalpy brought in by H2O-bearing material.</summary>
     public double CumulativeDeliveredMaterialEnergyJoules { get; }
 
@@ -173,14 +182,20 @@ public sealed class PlanetOriginEnergyLedger
         // 1. Interior: sources in, exported heat out (the interior ledger
         //    records the export as its surface loss).
         var duration = step.Duration;
+        var importedJoules = RequireEnergy(step.InteriorImport.Watts * duration.TotalSeconds, "interior heat import");
+        // Debit the unchanged donor first: simultaneous exports cannot conceal an overdraw.
+        var environmentBudget = Environment.Environment.Withdraw(step.InteriorImport.Source, importedJoules);
         var nextInterior = Interior.Advance(duration, new PlanetThermalEnergyFlux(
-            step.ImpactHeatingWatts, step.RadiogenicHeatingWatts, step.InteriorExport.Watts));
-        var exportedJoules = nextInterior.EnergyBudget.CumulativeSurfaceHeatLossJoules -
-            Interior.EnergyBudget.CumulativeSurfaceHeatLossJoules;
+            step.ImpactHeatingWatts, step.RadiogenicHeatingWatts, step.InteriorExport.Watts)
+        {
+            SurfaceHeatGainWatts = step.InteriorImport.Watts
+        });
+        // Integrate the actual interval, avoiding subtraction of large cumulative counters.
+        var exportedJoules = RequireEnergy(step.InteriorExport.Watts * duration.TotalSeconds, "interior heat export");
 
         // 2. The same joules arrive in the environment.
-        var environmentBudget = Environment.Environment.Deposit(step.InteriorExport.Destination, exportedJoules);
-        var nextEnvironment = Environment.WithBoundaryExchange(environmentBudget, exportedJoules);
+        environmentBudget = environmentBudget.Deposit(step.InteriorExport.Destination, exportedJoules);
+        var nextEnvironment = Environment.WithBoundaryExchange(environmentBudget, exportedJoules - importedJoules);
 
         // 3. Volatile material brings in explicitly sourced H2O and enthalpy,
         // internally debits mantle heat when magma degasses, or leaves with

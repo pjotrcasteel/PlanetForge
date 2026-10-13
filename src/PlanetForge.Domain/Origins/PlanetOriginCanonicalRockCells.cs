@@ -83,17 +83,18 @@ public sealed class PlanetOriginCanonicalRockCells
         var interiorTemp = ledger.Interior.Rock.TemperatureKelvin;
         var trial = Field.Propose(interval, (cell, phase) =>
         {
-            if (phase.TemperatureKelvin > interiorTemp && parameters.ConductivityWattsPerMeterKelvin > 0.0)
-                throw new InvalidOperationException("Reverse interior heat flow requires an explicit bidirectional ledger.");
             var direction = PlanetSurfaceGridGeometry.GetCenterDirection(cell.Id);
             var cosine = Math.Max(0.0, PlanetVector.Dot(direction, parameters.StellarDirection));
             var absorbed = parameters.SolarIrradianceWattsPerSquareMeter * (1.0 - parameters.BondAlbedo) * cosine;
             var conductive = parameters.ConductivityWattsPerMeterKelvin *
-                Math.Max(0.0, interiorTemp - phase.TemperatureKelvin) / parameters.ConductiveBoundaryThicknessMeters;
+                (interiorTemp - phase.TemperatureKelvin) / parameters.ConductiveBoundaryThicknessMeters;
             var kelvinSquared = phase.TemperatureKelvin * phase.TemperatureKelvin;
             var emitted = parameters.InfraredEmissivity *
                 PlanetRadiationBalanceModel.StefanBoltzmannWattsPerSquareMeterKelvinFourth * kelvinSquared * kelvinSquared;
-            return new PlanetOriginSurfaceThermalRates(conductive, absorbed, emitted);
+            return new PlanetOriginSurfaceThermalRates(Math.Max(0.0, conductive), absorbed, emitted)
+            {
+                InteriorReturnWattsPerSquareMeter = Math.Max(0.0, -conductive)
+            };
         }, cancellationToken);
 
         // Operator splitting: compute boundary heat exchanges from the current
@@ -112,7 +113,10 @@ public sealed class PlanetOriginCanonicalRockCells
             new PlanetInteriorHeatExport(trial.InteriorConductionJoules / seconds, PlanetEnvironmentHeatReservoir.SurfaceRock),
             new PlanetRadiativeExchange(radiation, PlanetEnvironmentHeatReservoir.SurfaceRock,
                 PlanetEnvironmentHeatReservoir.SurfaceRock),
-            []);
+            [])
+        {
+            InteriorImport = new PlanetInteriorHeatImport(trial.InteriorReturnJoules / seconds, PlanetEnvironmentHeatReservoir.SurfaceRock)
+        };
         var nextEpoch = Epoch.AdvanceCoupled(step, cancellationToken);
         cancellationToken.ThrowIfCancellationRequested();
         return new PlanetOriginCanonicalRockCells(nextEpoch, lateralField);

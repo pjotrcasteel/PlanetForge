@@ -146,6 +146,57 @@ public sealed class PlanetOriginEnergyLedgerTests
             Parameters));
     }
 
+    [TestMethod]
+    public void Advance_EnvironmentalReturn_ClosesBothLedgersWithoutExternalHeating()
+    {
+        var start = CreateLedger();
+        var next = start.Advance(ReturnStep(500.0));
+
+        Assert.AreEqual(2_500.0, next.Interior.EnergyBudget.StoredEnergyJoules, 1e-6);
+        Assert.AreEqual(8.0e6 - 500.0, next.Environment.Environment.GetEnergyJoules(PlanetEnvironmentHeatReservoir.SurfaceRock), 1e-6);
+        Assert.AreEqual(500.0, next.CumulativeInteriorImportJoules, 1e-6);
+        Assert.AreEqual(start.StoredEnergyJoules, next.StoredEnergyJoules, 1e-6);
+        Assert.AreEqual(0.0, next.Interior.EnergyBudget.ConservationResidualJoules, 1e-6);
+        Assert.AreEqual(0.0, next.Environment.EnergyConservationResidualJoules, 1e-6);
+        Assert.AreEqual(0.0, next.ConservationResidualJoules, 1e-6);
+        Assert.AreEqual(0.0, next.CumulativeDeliveredMaterialEnergyJoules, 0.0);
+        Assert.AreEqual(0.0, next.Interior.EnergyBudget.CumulativeImpactHeatJoules, 0.0);
+        Assert.AreEqual(0.0, next.Interior.EnergyBudget.CumulativeMaterialInputJoules, 0.0);
+    }
+
+    [TestMethod]
+    public void Advance_ReturnThenMaterialExchange_PreservesInternalHeatHistory()
+    {
+        var start = CreateLedger();
+        var next = start.Advance(ReturnStep(500.0) with
+        {
+            VolatileChanges = [PlanetOriginVolatileExchange.DeliverToMagma(1.0, 100.0)]
+        });
+        Assert.AreEqual(500.0, next.CumulativeInteriorImportJoules, 1e-6);
+        Assert.AreEqual(0.0, next.Interior.EnergyBudget.ConservationResidualJoules, 1e-6);
+        Assert.AreEqual(start.StoredEnergyJoules + 100.0, next.StoredEnergyJoules, 1e-6);
+    }
+
+    [TestMethod]
+    public void Advance_ReturnOverdrawAndInvalidPower_RejectWithoutChangingDonor()
+    {
+        var start = CreateLedger();
+        Assert.ThrowsExactly<InvalidOperationException>(() => start.Advance(ReturnStep(9.0e6)));
+        foreach (var power in new[] { -1.0, double.NaN, double.PositiveInfinity })
+            Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => start.Advance(ReturnStep(power)));
+        Assert.AreEqual(8.0e6, start.Environment.Environment.GetEnergyJoules(PlanetEnvironmentHeatReservoir.SurfaceRock), 0.0);
+        Assert.AreEqual(2_000.0, start.Interior.EnergyBudget.StoredEnergyJoules, 0.0);
+        Assert.AreEqual(0L, start.Clock.MicrosecondsIntoYear);
+    }
+
+    private static PlanetOriginEnergyStep ReturnStep(double joules) => new(
+        PlanetOriginDuration.FromSeconds(1.0), 0.0, 0.0,
+        new PlanetInteriorHeatExport(0.0, PlanetEnvironmentHeatReservoir.SurfaceRock),
+        Radiation(0.0, 0.0, PlanetEnvironmentHeatReservoir.SurfaceRock, PlanetEnvironmentHeatReservoir.SurfaceRock), [])
+    {
+        InteriorImport = new PlanetInteriorHeatImport(joules, PlanetEnvironmentHeatReservoir.SurfaceRock)
+    };
+
     private static PlanetRadiativeExchange Radiation(
         double absorbedJoulesPerYear, double emittedJoulesPerYear,
         PlanetEnvironmentHeatReservoir absorbing, PlanetEnvironmentHeatReservoir emitting) =>
