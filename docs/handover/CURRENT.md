@@ -7,11 +7,11 @@
 ## Baseline: deployed and validated
 
 - GitHub: https://github.com/pjotrcasteel/PlanetForge
-- Latest verified `main` SHA: `6f5f38ce61a31873029b3e41bcd2be8a66cc8310`
-- Displayed browser version: **PF 0.0.40.2**
-- GitHub Pages validation: **success**, workflow run [38387990214](https://github.com/pjotrcasteel/PlanetForge/actions/runs/38387990214), includes publish, deployment, and production smoke.
-- Main 3D planet uses opt-in `?visualTest=1&regionalRock=1` to inspect conserved regional-rock phase. Regular `?visualTest=1` is the separate Snowball experiment; **not** the primordial-Earth timeline.
-- Human iPhone visual acceptance: on PF 0.0.40.2, thermal HUD compact and readable, bottom Advance/Reset/Back/Uniform Reference buttons visible, switches/reset operate, T+1/T+2 updates accepted. The planet **still does NOT look like a true molten/magma-ocean world**. See detailed snapshot.
+- Science-code release `main` SHA: `74ba0612a6cd3169b6ec01972ebecce371cd5f5e` (#202); any later docs-only main SHA should be checked against this release
+- Displayed browser version: **PF 0.0.41.0**
+- GitHub Pages validation: **success**, run [38392739208](https://github.com/pjotrcasteel/PlanetForge/actions/runs/38392739208), including exact-SHA publish, deployment, and live-browser smoke. Source PR CI [38390183995](https://github.com/pjotrcasteel/PlanetForge/actions/runs/38390183995) also succeeded.
+- Main 3D planet: **new opt-in fully molten starting-state** at `?visualTest=1&magmaOcean=1`; original `?visualTest=1&regionalRock=1` regional contrast reference still exists. Regular `?visualTest=1` is the separate Snowball experiment, **not** the primordial-Earth timeline.
+- Human iPhone visual acceptance: **PF 0.0.40.2** thermal HUD/controls and T+1/T+2 accepted, but that earlier regional reference looked like tinted bedrock with one bright hotspot. **PF 0.0.41.0 magma-ocean visual quality is NOT YET HUMAN-ACCEPTED**: user was invited to inspect the new fully molten globe at T+0/T+1; wait for screenshots before closing the visible stage.
 
 ## Completed work
 
@@ -22,14 +22,16 @@
 | [#198](https://github.com/pjotrcasteel/PlanetForge/pull/198) | Blazor isolated CSS loaded; compact iPhone HUD; merged |
 | [#199](https://github.com/pjotrcasteel/PlanetForge/pull/199) | Production smoke now checks version dynamically and verifies actual scoped CSS; merged |
 | [#200](https://github.com/pjotrcasteel/PlanetForge/pull/200) | iPhone viewport/control recovery and bounds/hit tests; merged and deployed as PF 0.0.40.2 |
+| [#201](https://github.com/pjotrcasteel/PlanetForge/pull/201) | Persistent cross-chat handover and PR checklist; merged and deployed |
+| [#202](https://github.com/pjotrcasteel/PlanetForge/pull/202) | PF 0.0.41.0: separately funded fully molten surface-shell initial scenario, main-globe liquid material, deterministic and browser tests; merged, production smoke green; **iPhone appearance pending acceptance** |
 
-**After handover PR #201:** the active workstream documentation is merged into main (`b9eec395`); re-query Pages status before claiming its release is verified. The new `feature/magma-ocean-initial-reference-0.0.41` branch was fast-forwarded onto that main commit and now contains an **unreleased** PF 0.0.41.0 implementation: a separately funded fully molten canonical surface-shell initial scenario, opt-in same-globe query `?magmaOcean=1`, phase-based molten material rendering, C#/browser tests and [scientific limitations](../earth-origin-magma-ocean-initial-reference.md). This is **NOT merged/deployed/visually accepted** until GitHub confirms the separate gates. The original `?regionalRock=1` experiment and Snowball must remain unchanged.
+**After #201 and #202:** persistent documentation is merged and verified; the PF 0.0.41.0 magma-ocean feature is also merged as `74ba0612`, with full PR CI and exact-head GitHub Pages smoke green. The explicit molten starting scenario at `?visualTest=1&magmaOcean=1` is **deployed but not yet iPhone visually approved**. The old `?regionalRock=1` and Snowball remain available. Read [scientific limitations](../earth-origin-magma-ocean-initial-reference.md).
 
 ## Current task: credible molten starting surface
 
 User's visual feedback: the regional planet is mostly orange-tinted existing barren bedrock, plus one small brighter spot. This is not the target. Investigated source in `src/PlanetForge.Application/Planets/PlanetRegionalCoolingReference.cs`: initial surface starts at 1600 K, with material solidus 1300 K and liquidus 1900 K, then shifts only 1.2% of initial enthalpy into a small hotspot. This intentionally creates a scientific **contrast/reference** and a 48–100% melt range rather than a globally molten scenario. Renderer `src/PlanetForge.Presentation.Web/wwwroot/js/planetRenderer.js` uses melt-dependent orange blend over `barrenRockMaterial`, so molten regions currently look like reddish terrain, not a magma-dominated surface.
 
-**Implementation underway, not yet released:** the named molten scenario is coded on the feature branch with surface-shell enthalpy initially funded at 2200 K, bulk-mantle reference 2400 K and a smooth conservative 8% lateral enthalpy redistribution. Renderer switches from dry-bedrock albedo to liquid optical material where the **canonical melt fraction** is effectively 100%. Added C#/Playwright tests and scientific limits. **NEXT:** finish CI and correct any failures; inspect published globe + LOD; merge through green PR; verify exact-sha Pages; ask user for T+0/T+1h screenshots. Next scientific milestone thereafter: mantle/surface coupling and persistent primary crust; no fake black crust masks.
+**Implemented and deployed (PF 0.0.41.0; iPhone acceptance pending):** separately funded molten surface-shell enthalpy starts at 2200 K, bulk mantle at 2400 K, with 8% conserved broad regional redistribution. Canonical 100% initial melt drives a liquid optical material, replacing earlier dry-bedrock tint. C#/Playwright physics/browser tests and Pages smoke are green. **NEXT:** evaluate user's new T+0/T+1h iPhone screenshots for whole-globe molten credibility, camera/LOD and UI correctness; fix any issues, then continue mantle-surface coupling and permanent **primary crust** in small physical steps. Avoid fake black crust masks, artist-created heat or hardcoded evolutionary times.
 
 The exact Earth Hadean thermal state is uncertain, so label this an explicit scenario/hypothesis with parameters, not the true history. Earth-scale magma circulation, deep convection, crust differentiation, steam EOS, outgassing, precipitation and first life remain future physical milestones.
 
