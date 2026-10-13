@@ -71,7 +71,8 @@ test('GeologyPreview_AuditedTimelineDrawsMeasuredGlobalMapsWithoutTouchingMainPl
     await expect(page.getByTestId('geology-preview-scale')).toContainText('Measured map range');
 
     await openStableBlazorPage(page, '/', '#planet-canvas');
-    await expect(page.getByTestId('geology-terrain-toggle')).toBeVisible();
+    await expect(page.getByTestId('formation-phase')).toHaveText('Molten surface', { timeout: 60_000 });
+    await expect(page.getByTestId('formation-time')).toHaveText('T+00:00:00');
 });
 
 test('GeologyPreview_MobileLayout_FitsIPhoneWithoutHorizontalOverflow', async ({ page }) => {
