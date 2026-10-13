@@ -64,3 +64,10 @@ Explicit reference restart uses `ResetRegionalRock` to replace physics and colum
 ## Depth-spatial accuracy gate measured at handoff
 
 Independent 4 h / 5 s cap runs at 8/16/32/64 layers retain energy conservation but produce fully solid-top depths 0.81689/0.40845/0.20422/0.10211 m and substantially changing surface temperatures. This diagnostic equals a single fully solid cell at each tested mesh; it is **not converged**. See the dated rock-column handover for protocol/results. Formalize and resolve boundary/front/depth discretization before quantitative crust genesis or mechanical calibration. No passing temporal/conservation test or displayed metre value overrides this limitation.
+
+
+## Spatial-grid acceptance screening
+
+`PlanetOriginRockColumnResolutionSample.FromColumn` reports the count and metric thickness of **fully solid control volumes**, the end of the first not-fully-solid cell, and the top control-volume temperature. This extent is a discretization indicator, **not** a guaranteed mathematical interval containing a sharp geophysical front; the constant-pressure mush interval and possible subcell gradients are unresolved. The sample contains no added mass or energy state.
+
+`PlanetOriginRockColumnDepthRefinement.Screen` requires at least four successively doubled layer counts at identical geographic position, initial/boundary hypotheses, final physical time, and sufficiently refined time caps. Its necessary (not sufficient) conditions include at least three fully solid cells at finest resolution, at most 0.02 m change in fully solid depth between the two finest grids, at most 10 K temperature difference, and an unresolved first cell no wider than 0.02 m. Thresholds are preliminary research criteria, not measured confidence intervals or a claim of calibrated Hadean evolution. A fixture reproduces the independently recorded nonconverged 4-hour values, deliberately rejecting them. Passing the screening would still require independent continuum-error studies, material/pressure refinement and model validation.
