@@ -268,3 +268,72 @@
     padding: 0 10px;
     font-size: 0.59rem;
 }
+
+
+/* Thermal reference stays an unobtrusive instrument strip, not a tall modal
+   covering the globe. Safari text autosizing previously inflated the labels
+   and made even a successful physical calculation look broken. */
+.foundation-clock.foundation-clock-thermal {
+    width: min(90vw, 345px);
+    min-width: 0;
+    max-width: 345px;
+    gap: 2px;
+    padding: 7px 12px;
+    font-size: 12px;
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+}
+
+.foundation-clock.foundation-clock-thermal > strong {
+    font-size: 0.82rem;
+    letter-spacing: 0.06em;
+    white-space: nowrap;
+}
+
+.foundation-clock.foundation-clock-thermal > span {
+    display: none;
+}
+
+.foundation-clock.foundation-clock-thermal > .foundation-geology-preview {
+    font-size: 0.51rem;
+    letter-spacing: 0.04em;
+    line-height: 1.2;
+}
+
+.foundation-clock.foundation-clock-thermal .foundation-seed {
+    display: none;
+}
+
+.foundation-clock.foundation-clock-thermal .foundation-thermal-readout {
+    gap: 2px;
+    padding-top: 4px;
+}
+
+.foundation-clock.foundation-clock-thermal .foundation-thermal-readout > strong {
+    font-size: 0.91rem;
+    line-height: 1.2;
+}
+
+.foundation-clock.foundation-clock-thermal .foundation-thermal-readout > span {
+    font-size: 0.68rem;
+    line-height: 1.2;
+    white-space: nowrap;
+}
+
+.foundation-clock.foundation-clock-thermal .foundation-thermal-readout > small {
+    font-size: 0.59rem;
+    line-height: 1.25;
+    letter-spacing: 0.02em;
+}
+
+.foundation-clock.foundation-clock-thermal .foundation-thermal-limit {
+    max-width: 100%;
+    white-space: nowrap;
+    font-size: 0.51rem;
+    color: #cbb89b;
+}
+
+.foundation-clock.foundation-clock-thermal .foundation-thermal-readout > small[role="status"] {
+    color: #b9e5c5;
+    white-space: nowrap;
+}

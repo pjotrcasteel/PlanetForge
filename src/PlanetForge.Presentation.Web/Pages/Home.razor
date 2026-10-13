@@ -73,9 +73,9 @@
             {
                 <div class="foundation-thermal-readout" data-testid="airless-reference-readout">
                     <strong data-testid="airless-surface-temperature">SURFACE @($"{thermal.NearSurfaceRockTemperatureKelvin:0}") K</strong>
-                    <span data-testid="airless-mantle-temperature">INTERIOR @($"{thermal.BulkRockTemperatureKelvin:0}") K · MELT @($"{thermal.BulkRockMeltFraction:P1}")</span>
-                    <small data-testid="airless-elapsed">@TimeSpan.FromSeconds(airlessElapsedSeconds).ToString(@"hh\:mm") ELAPSED · REV @thermal.Revision</small>
-                    <small>REFERENCE TERRAIN · NO PRIMORDIAL CRUST</small>
+                    <span data-testid="airless-mantle-temperature">MANTLE @($"{thermal.BulkRockTemperatureKelvin:0}") K · @($"{thermal.BulkRockMeltFraction:P0}") MELT</span>
+                    <small data-testid="airless-elapsed">T+@(airlessElapsedSeconds / 3600)h · REV @thermal.Revision</small>
+                    <small class="foundation-thermal-limit">UNIFORM ROCK TEMP · CRUST NOT MODELED</small>
                     @if (!string.IsNullOrEmpty(airlessStatus))
                     {
                         <small role="status" data-testid="airless-status">@airlessStatus</small>
@@ -391,7 +391,7 @@
                 await rendererModule.InvokeVoidAsync("waitForVisibleTerrain", disposeCancellationTokenSource.Token);
             }
             airlessElapsedSeconds += PlanetAirlessCoolingReference.AdvanceSeconds;
-            airlessStatus = "ACCEPTED · CONSERVATIVE HEAT STEP";
+            airlessStatus = "ACCEPTED";
         }
         catch (Exception error) when (error is not OperationCanceledException)
         {
@@ -417,7 +417,7 @@
             snapshot = Experience.PublishOriginEpoch(PlanetAirlessCoolingReference.CreateInitial());
             await SyncPlanetAsync();
             airlessElapsedSeconds = 0;
-            airlessStatus = "RESET · ORIGINAL ENERGY RESTORED";
+            airlessStatus = "RESET";
         }
         catch (Exception error) when (error is not OperationCanceledException)
         {

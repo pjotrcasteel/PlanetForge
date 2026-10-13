@@ -42,7 +42,7 @@ test('DeployedPlanetForge_ExposesHotRockReferenceAndPhysicalCooling', async ({ p
   await expect(page.getByTestId('airless-surface-temperature')).toHaveText('SURFACE 1600 K');
   await expect(page.getByTestId('planet-scenario-label')).toHaveText('AIRLESS · ONE-ZONE PHYSICAL REFERENCE');
   await page.getByTestId('airless-advance').click();
-  await expect(page.getByTestId('airless-elapsed')).toContainText('01:00 ELAPSED', { timeout: 45_000 });
+  await expect(page.getByTestId('airless-elapsed')).toContainText('T+1h', { timeout: 45_000 });
   await expect(page.getByTestId('airless-surface-temperature')).not.toHaveText('SURFACE 1600 K');
   await expect(page.getByTestId('airless-status')).toContainText('ACCEPTED');
   await page.getByTestId('airless-exit').click();
@@ -51,7 +51,7 @@ test('DeployedPlanetForge_ExposesHotRockReferenceAndPhysicalCooling', async ({ p
   expect(errors).toEqual([]);
 
   const badge = page.locator('#planetforge-build-badge');
-  await expect(badge).toContainText('PF 0.0.39.0 · ');
+  await expect(badge).toContainText('PF 0.0.39.1 · ');
   if (process.env.PLANETFORGE_EXPECTED_SHA) {
     await expect(badge).toContainText(process.env.PLANETFORGE_EXPECTED_SHA.slice(0, 7));
   }
