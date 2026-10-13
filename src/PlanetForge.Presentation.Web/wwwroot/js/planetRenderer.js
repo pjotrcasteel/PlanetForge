@@ -90,6 +90,7 @@ export function setPlanet(snapshot) {
     // frozen-climate temperature only when a coupled epoch is published.
     const origin = state.generatorPreview ? null : snapshot.origin;
     state.originActive = Boolean(origin);
+    updateSpatialRockTexture(state, state.generatorPreview ? null : snapshot.spatialRock);
     state.airlessReference = Boolean(origin && origin.dryGasMassKilograms === 0 &&
         origin.atmosphericSteamMassKilograms === 0 && origin.surfaceLiquidMassKilograms === 0 &&
         origin.surfaceIceMassKilograms === 0);
@@ -212,6 +213,7 @@ export function dispose() {
     clearLocalSurfaceBuffer(state);
     state.scaleHud?.remove();
     state.detailHud?.remove();
+    if (state.spatialRockTexture) state.gl.deleteTexture(state.spatialRockTexture);
     state.gl.deleteProgram(state.globeProgram);
     state.gl.deleteProgram(state.localProgram);
     clearRetainedSurfaceGeometry();
@@ -241,6 +243,7 @@ function createState(canvas, gl, dotNetReference) {
         lodTimer: null, lodSequence: 0, lastSurfaceRequestSignature: null, lastTerrainUpdateMs: null, lastGeometryPayloadCount: 0,
         surfaceRequestInFlight: false, surfaceRequestPending: false, dirty: true,
         surfaceRequestsStarted: 0, surfaceRequestsCompleted: 0, surfaceResponsesSuperseded: 0, originActive: false, airlessReference: false,
+        spatialRockTexture: gl.createTexture(), spatialRockRevision: null, spatialRockActive: false,
         lastGeometryCommitMs: null, lastTerrainDrawSubmittedMs: null, lastGestureToTerrainDrawMs: null,
         pendingDrawStartedAt: null, lastGestureEndedAt: null, localElevationRangeMeters: null, localCellSpacingMeters: null,
         seaLevelMeters: 0, planetRadiusMeters: 6371000, atmosphereDensity: 0.6,
@@ -261,6 +264,8 @@ function createState(canvas, gl, dotNetReference) {
             equilibriumTemperature: gl.getUniformLocation(globeProgram, 'uEquilibriumTemperature'),
             surfaceTemperature: gl.getUniformLocation(globeProgram, 'uSurfaceTemperature'),
             airlessReference: gl.getUniformLocation(globeProgram, 'uAirlessReference'),
+            spatialRockActive: gl.getUniformLocation(globeProgram, 'uSpatialRockActive'),
+            spatialRockTexture: gl.getUniformLocation(globeProgram, 'uSpatialRockTexture'),
             solarFlux: gl.getUniformLocation(globeProgram, 'uSolarFlux'),
             liquidFraction: gl.getUniformLocation(globeProgram, 'uLiquidFraction'),
             vaporFraction: gl.getUniformLocation(globeProgram, 'uVaporFraction'),
@@ -286,6 +291,46 @@ function createState(canvas, gl, dotNetReference) {
             objectMode: gl.getUniformLocation(localProgram, 'uObjectMode')
         }
     };
+}
+
+function updateSpatialRockTexture(s, atlas) {
+    if (!atlas) {
+        s.spatialRockActive = false;
+        s.spatialRockRevision = null;
+        return;
+    }
+
+    const { width, height, temperatureKelvin, meltFraction, revision } = atlas;
+    if (!Number.isInteger(width) || !Number.isInteger(height) || width < 1 || height < 1 ||
+        !Array.isArray(temperatureKelvin) || !Array.isArray(meltFraction) ||
+        temperatureKelvin.length !== width * height || meltFraction.length !== width * height) {
+        throw new Error('Canonical regional rock has an invalid material texture.');
+    }
+
+    if (s.spatialRockActive && s.spatialRockRevision === revision) return;
+    const data = new Float32Array(width * height * 2);
+    for (let index = 0; index < width * height; index++) {
+        const kelvin = temperatureKelvin[index];
+        const phase = meltFraction[index];
+        if (!Number.isFinite(kelvin) || kelvin < 0 || !Number.isFinite(phase) || phase < 0 || phase > 1) {
+            throw new Error('Regional phase texture contains unphysical temperature or melt values.');
+        }
+        data[index * 2] = kelvin;
+        data[index * 2 + 1] = phase;
+    }
+
+    const { gl } = s;
+    gl.activeTexture(gl.TEXTURE1);
+    gl.bindTexture(gl.TEXTURE_2D, s.spatialRockTexture);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RG32F, width, height, 0, gl.RG, gl.FLOAT, data);
+    const error = gl.getError();
+    if (error !== gl.NO_ERROR) throw new Error('Could not upload canonical rock phase field to WebGL: ' + error);
+    s.spatialRockRevision = revision;
+    s.spatialRockActive = true;
 }
 
 function createTerrainDetailHud(canvas) {
@@ -956,6 +1001,10 @@ function renderGlobe(s) {
     gl.uniform1f(s.globeUniforms.equilibriumTemperature, s.equilibriumTemperature);
     gl.uniform1f(s.globeUniforms.surfaceTemperature, s.surfaceTemperature);
     gl.uniform1i(s.globeUniforms.airlessReference, s.airlessReference ? 1 : 0);
+    gl.uniform1i(s.globeUniforms.spatialRockActive, s.spatialRockActive ? 1 : 0);
+    gl.activeTexture(gl.TEXTURE1);
+    gl.bindTexture(gl.TEXTURE_2D, s.spatialRockTexture);
+    gl.uniform1i(s.globeUniforms.spatialRockTexture, 1);
     gl.uniform1f(s.globeUniforms.solarFlux, s.solarFlux);
     gl.uniform1f(s.globeUniforms.liquidFraction, s.liquidFraction);
     gl.uniform1f(s.globeUniforms.vaporFraction, s.vaporFraction);
@@ -1252,6 +1301,8 @@ uniform float uAtmosphere;
 uniform float uEquilibriumTemperature;
 uniform float uSurfaceTemperature;
 uniform int uAirlessReference;
+uniform int uSpatialRockActive;
+uniform sampler2D uSpatialRockTexture;
 uniform float uSolarFlux;
 uniform float uLiquidFraction;
 uniform float uVaporFraction;
@@ -1490,7 +1541,20 @@ void main() {
         // This mask uses the same physical elevation as oceanMaterial below.
         if (uLiquidFraction > 0.001 && elevationAboveSeaLevel < 0.0) discard;
         vec3 material = barrenRockMaterial(radial, normal, vElevationMeters);
-        if (uAirlessReference == 1) {
+        if (uSpatialRockActive == 1) {
+            // The RG floating-point atlas contains ONLY model-projected
+            // Kelvin and phase fraction, with no authored lava/noise mask.
+            vec2 uv = vec2(atan(radial.z, radial.x) / 6.28318530718 + 0.5,
+                asin(clamp(radial.y, -1.0, 1.0)) / 3.14159265359 + 0.5);
+            vec2 physicalPhase = texture(uSpatialRockTexture, uv).rg;
+            float localKelvin = physicalPhase.x;
+            float localMelt = clamp(physicalPhase.y, 0.0, 1.0);
+            float incandescent = smoothstep(850.0, 1700.0, localKelvin);
+            vec3 hot = mix(vec3(0.58, 0.09, 0.02), vec3(1.0, 0.34, 0.06),
+                smoothstep(1200.0, 2000.0, localKelvin));
+            float moltenLight = incandescent * localMelt;
+            material = clamp(mix(material, hot, moltenLight * 0.86) + hot * moltenLight * 0.15, 0.0, 1.0);
+        } else if (uAirlessReference == 1) {
             // Physically derived uniform near-surface temperature. This is
             // DISPLAY tone mapping of thermal incandescence, NOT a simulated
             // molten-area map, crust thickness, or extra heat source.
