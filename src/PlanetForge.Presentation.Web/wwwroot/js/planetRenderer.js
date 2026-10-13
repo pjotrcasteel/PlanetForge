@@ -1078,7 +1078,10 @@ function renderLocal(s) {
     gl.uniform3f(s.localUniforms.light, 0.45, 0.82, 0.35);
     gl.uniform1f(s.localUniforms.seaLevelMeters, s.seaLevelMeters);
     gl.uniform1f(s.localUniforms.surfaceTemperature, s.surfaceTemperature);
-    gl.uniform1i(s.localUniforms.airlessReference, s.airlessReference ? 1 : 0);
+    // Local LOD currently lacks geographic phase sampling; do not falsely
+    // paint an averaged orange surface when only the orbital phase atlas
+    // is supported. Keep existing real elevation and bedrock visible.
+    gl.uniform1i(s.localUniforms.airlessReference, (s.airlessReference && !s.spatialRockActive) ? 1 : 0);
     gl.uniform1f(s.localUniforms.liquidFraction, s.liquidFraction);
     gl.uniform1f(s.localUniforms.vaporFraction, s.vaporFraction);
 
