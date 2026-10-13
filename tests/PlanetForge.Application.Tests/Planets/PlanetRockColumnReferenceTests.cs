@@ -68,6 +68,24 @@ public sealed class PlanetRockColumnReferenceTests
         Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => PlanetRockColumnReference.CreateInitial(6_371_000.0, 65));
     }
 
+    [TestMethod]
+    public void Advance_ZeroElapsedTimeAcrossResolutions_PreservesFundedCanonicalState()
+    {
+        foreach (var layers in new[] { 8, 16, 32, 64 })
+        {
+            var initial = PlanetRockColumnReference.CreateInitial(6_371_000.0, layers);
+            var sample = PlanetOriginRockColumnResolutionSample.FromColumn(
+                initial.Columns!.Columns[0], initial.Columns.Material, initial.Columns.Properties);
+            sample.Validate();
+            Assert.AreEqual(layers, sample.LayerCount);
+            Assert.AreEqual(0, sample.FullySolidTopLayers);
+            Assert.AreEqual(0.0, sample.FullySolidTopMeters, 0.0);
+            Assert.IsGreaterThan(0.0, sample.UnresolvedCellWidthMeters);
+            Assert.IsTrue(initial.Columns.Columns.All(c => c.Layers.All(layer =>
+                layer.Resolve(initial.Columns.Material).MeltFraction > 0.99)));
+        }
+    }
+
     private sealed class FlatElevation : IPlanetElevationSource
     {
         public double SampleElevationMeters(PlanetVector direction, int seed) => 0.0;
