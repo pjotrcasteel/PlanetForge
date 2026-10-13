@@ -21,7 +21,7 @@
         <div class="foundation-clock @(geologyActive ? "foundation-clock-geology" : airlessReferenceActive ? "foundation-clock-thermal" : "")" aria-live="polite">
             <strong>@FormatElapsedTime()</strong>
             <span>@FormatStageLabel()</span>
-            <small class="foundation-geology-preview" data-testid="planet-scenario-label" title="@CurrentScenarioName">@(airlessReferenceActive ? "AIRLESS · ONE-ZONE PHYSICAL REFERENCE" : snapshot?.Origin is not null ? PlanetOriginUxText.ScenarioLabel : geologyActive ? "EXPERIMENT / PHYSICAL TERRAIN" : "EXPERIMENT / CANONICAL TERRAIN")</small>
+            <small class="foundation-geology-preview" data-testid="planet-scenario-label" title="@CurrentScenarioName">@(regionalRockActive ? "REGIONAL ROCK · CONSERVED PHASE REFERENCE" : airlessReferenceActive ? "AIRLESS · ONE-ZONE PHYSICAL REFERENCE" : snapshot?.Origin is not null ? PlanetOriginUxText.ScenarioLabel : geologyActive ? "EXPERIMENT / PHYSICAL TERRAIN" : "EXPERIMENT / CANONICAL TERRAIN")</small>
             <div class="foundation-seed">
                 <small data-testid="planet-seed">SEED @CurrentSeed</small>
                 @if (!airlessReferenceActive)
@@ -72,10 +72,20 @@
             @if (airlessReferenceActive && snapshot?.Origin is { } thermal)
             {
                 <div class="foundation-thermal-readout" data-testid="airless-reference-readout">
-                    <strong data-testid="airless-surface-temperature">SURFACE @($"{thermal.NearSurfaceRockTemperatureKelvin:0}") K</strong>
-                    <span data-testid="airless-mantle-temperature">MANTLE @($"{thermal.BulkRockTemperatureKelvin:0}") K · @($"{thermal.BulkRockMeltFraction:P0}") MELT</span>
+                    @if (regionalRockActive && Experience.PublishedRegionalRock is { } region)
+                    {
+                        <strong data-testid="regional-temperature-range">SURFACE @($"{region.Field.Cells.Min(x => x.Resolve(region.Field.Material).TemperatureKelvin):0}")–@($"{region.Field.Cells.Max(x => x.Resolve(region.Field.Material).TemperatureKelvin):0}") K</strong>
+                        <span data-testid="regional-melt-range">MELT @($"{region.Field.Cells.Min(x => x.Resolve(region.Field.Material).MeltFraction):P0}")–@($"{region.Field.Cells.Max(x => x.Resolve(region.Field.Material).MeltFraction):P0}")</span>
+                    }
+                    else
+                    {
+                        <strong data-testid="airless-surface-temperature">SURFACE @($"{thermal.NearSurfaceRockTemperatureKelvin:0}") K</strong>
+                        <span data-testid="airless-mantle-temperature">MANTLE @($"{thermal.BulkRockTemperatureKelvin:0}") K · @($"{thermal.BulkRockMeltFraction:P0}") MELT</span>
+                    }
                     <small data-testid="airless-elapsed">T+@(airlessElapsedSeconds / 3600)h · REV @thermal.Revision</small>
-                    <small class="foundation-thermal-limit">UNIFORM ROCK TEMP · CRUST NOT MODELED</small>
+                    <small class="foundation-thermal-limit">@(regionalRockActive ? "DECLARED THERMAL CONTRAST · NOT CRUST" : "UNIFORM ROCK TEMP · CRUST NOT MODELED")</small>
+                    <button class="foundation-reference-reset foundation-phase-switch" data-testid="regional-switch" type="button"
+                            disabled="@airlessBusy" @onclick="SwitchRockReferenceAsync">@(regionalRockActive ? "UNIFORM REFERENCE" : "REGIONAL PHASE TEST")</button>
                     @if (!string.IsNullOrEmpty(airlessStatus))
                     {
                         <small role="status" data-testid="airless-status">@airlessStatus</small>
@@ -144,13 +154,16 @@
     private int geologyFrameIndex;
     private string geologyStatus = string.Empty;
     private bool airlessReferenceActive;
+    private bool regionalRockActive;
     private bool airlessBusy;
     private int airlessElapsedSeconds;
     private string airlessStatus = string.Empty;
     private double elapsedYears;
 
     private int CurrentSeed => run?.Mission.Planet.Seed ?? PlanetSeedCatalog.ShowcaseSeed;
-    private string CurrentScenarioName => airlessReferenceActive
+    private string CurrentScenarioName => regionalRockActive
+        ? "Airless conserved regional phase-enthalpy · hypothetical initial heat contrast, not reconstructed Earth history"
+        : airlessReferenceActive
         ? "Airless radiative-conduction reference · not a calibrated early-Earth history"
         : snapshot?.Origin is not null ? PlanetScenarioCatalog.EarthOrigin.Name : PlanetScenarioCatalog.CurrentPlayable.Name;
 
@@ -167,7 +180,17 @@
         airlessReferenceActive = new Uri(Navigation.Uri).Query.TrimStart('?')
             .Split('&', StringSplitOptions.RemoveEmptyEntries)
             .Contains("airlessReference=1", StringComparer.OrdinalIgnoreCase);
-        if (airlessReferenceActive)
+        regionalRockActive = new Uri(Navigation.Uri).Query.TrimStart('?')
+            .Split('&', StringSplitOptions.RemoveEmptyEntries)
+            .Contains("regionalRock=1", StringComparer.OrdinalIgnoreCase);
+        airlessReferenceActive |= regionalRockActive;
+        if (airlessReferenceActive && regionalRockActive)
+        {
+            _ = Experience.PublishRegionalRock(PlanetRegionalCoolingReference.CreateInitial(
+                Experience.CreateInitialRenderSnapshot().PhysicalParameters.RadiusMeters));
+            snapshot = Experience.CreateInitialRenderSnapshot();
+        }
+        else if (airlessReferenceActive)
         {
             // The first WebGL upload requires complete geometry. A regular
             // epoch publication is allowed to contain cached mesh deltas,
@@ -341,6 +364,45 @@
         }
     }
 
+    private async Task SwitchRockReferenceAsync()
+    {
+        if (!airlessReferenceActive || airlessBusy) return;
+        airlessBusy = true;
+        StateHasChanged();
+        await Task.Yield();
+
+        try
+        {
+            Experience.ClearOriginEpoch();
+            regionalRockActive = !regionalRockActive;
+            if (regionalRockActive)
+            {
+                var radius = Experience.CreateInitialRenderSnapshot().PhysicalParameters.RadiusMeters;
+                _ = Experience.PublishRegionalRock(PlanetRegionalCoolingReference.CreateInitial(radius));
+            }
+            else
+            {
+                _ = Experience.PublishOriginEpoch(PlanetAirlessCoolingReference.CreateInitial());
+            }
+
+            snapshot = Experience.CreateInitialRenderSnapshot();
+            await SyncPlanetAsync();
+            if (waterRendererModule is not null)
+                await waterRendererModule.InvokeVoidAsync("clearWaterCycle", disposeCancellationTokenSource.Token);
+            airlessElapsedSeconds = 0;
+            airlessStatus = "RESET";
+        }
+        catch (Exception error) when (error is not OperationCanceledException)
+        {
+            airlessStatus = $"PHASE SWITCH FAILED: {error.Message}";
+        }
+        finally
+        {
+            airlessBusy = false;
+            StateHasChanged();
+        }
+    }
+
     private async Task ExitAirlessReferenceAsync()
     {
         if (!airlessReferenceActive || airlessBusy) return;
@@ -359,6 +421,7 @@
             }
 
             airlessReferenceActive = false;
+            regionalRockActive = false;
             airlessElapsedSeconds = 0;
             airlessStatus = string.Empty;
         }
@@ -383,8 +446,18 @@
 
         try
         {
-            var next = PlanetAirlessCoolingReference.Advance(Experience, disposeCancellationTokenSource.Token);
-            snapshot = next;
+            if (regionalRockActive)
+            {
+                var current = Experience.PublishedRegionalRock ??
+                    throw new InvalidOperationException("Publish a canonical regional epoch first.");
+                var advanced = PlanetRegionalCoolingReference.Advance(current,
+                    Experience.CreateSnapshot(), disposeCancellationTokenSource.Token);
+                snapshot = Experience.PublishRegionalRock(advanced);
+            }
+            else
+            {
+                snapshot = PlanetAirlessCoolingReference.Advance(Experience, disposeCancellationTokenSource.Token);
+            }
             await SyncPlanetAsync();
             if (rendererModule is not null)
             {
@@ -414,7 +487,17 @@
         try
         {
             Experience.ClearOriginEpoch();
-            snapshot = Experience.PublishOriginEpoch(PlanetAirlessCoolingReference.CreateInitial());
+            if (regionalRockActive)
+            {
+                var radius = Experience.CreateInitialRenderSnapshot().PhysicalParameters.RadiusMeters;
+                _ = Experience.PublishRegionalRock(PlanetRegionalCoolingReference.CreateInitial(radius));
+            }
+            else
+            {
+                _ = Experience.PublishOriginEpoch(PlanetAirlessCoolingReference.CreateInitial());
+            }
+
+            snapshot = Experience.CreateInitialRenderSnapshot();
             await SyncPlanetAsync();
             airlessElapsedSeconds = 0;
             airlessStatus = "RESET";
@@ -838,6 +921,7 @@
 
     private string FormatStageLabel()
     {
+        if (regionalRockActive) return "MELT AND CRYSTALLIZATION";
         if (airlessReferenceActive && snapshot?.Origin is { } reference)
             return reference.BulkRockMeltFraction > 0.0 ? "PARTLY MOLTEN INTERIOR" : "SOLID INTERIOR · BULK MODEL";
         if (snapshot?.Origin is { } origin) return PlanetOriginUxText.StateLabel(origin);
@@ -851,6 +935,7 @@
 
     private string FormatElapsedTime()
     {
+        if (regionalRockActive) return "REGIONAL ROCK";
         if (airlessReferenceActive) return "THERMAL REFERENCE";
         if (snapshot?.Origin is { } origin) return PlanetOriginUxText.GeologicalTime(origin);
         if (elapsedYears < 1_000.0)
