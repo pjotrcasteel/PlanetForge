@@ -46,6 +46,17 @@ export function initialize(canvasId, snapshot, dotNetReference, generatorPreview
     }
 }
 
+// Diagnostic selection affects only fragment shading, never the canonical rock model.
+export function setRockDiagnosticMode(mode) {
+    const modes = { physical: 0, temperature: 1, melt: 2 };
+    if (!Object.hasOwn(modes, mode)) throw new RangeError('Unknown rock diagnostic mode.');
+    if (!state) return;
+    state.rockDiagnosticMode = modes[mode];
+    state.dirty = true;
+    renderCurrentView(state);
+    state.dirty = false;
+}
+
 // Read-only snapshot consumed by other render layers. Input and orbit motion
 // belong exclusively to the main renderer, not to each visual overlay.
 export function getPlanetCameraSnapshot() {
