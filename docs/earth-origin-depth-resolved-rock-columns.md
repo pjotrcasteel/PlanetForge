@@ -36,3 +36,13 @@ Still required: composition and pressure dependence, crystallization/segregation
 ## Validation
 
 Seven domain regressions cover funded partition, surface-only radiation, internal diffusion, a solid top above molten layers, volume contraction, funded remelting, numerical/cancellation rejection, and exact-time convergence/replay. Existing application and infrastructure suites also pass locally (701 total tests). Full PR CI and deployment are separate pending gates; consult CURRENT.md and GitHub for their current result.
+
+## Shared physical terrain publication (follow-up increment)
+
+`PlanetOriginRockColumnElevationSource` projects current thickness minus each column's initial thickness, in metres with no height amplification. Spherical inverse-distance reconstruction uses all cell centres, is seed-independent, and does not add modern continents or procedural relief. This read-only reconstruction does not transport mass or energy. The display atlas now resolves the top layer rather than the aggregate mean.
+
+The shared `PlanetTerrainRegionProvider` implements `IPlanetOriginSurfacePublication`. It serializes terrain replacement and a synchronous world/snapshot callback under the same re-entrant publication gate; snapshot reads use that gate too. On callback failure, the exact old terrain source/revision and the experience's accepted epoch, columns, material atlas, climate and local caches are restored. Allocated revision numbers are never reused, including failed attempts, so geometry cached during a failed trial cannot masquerade as a later successful revision.
+
+Entering column mode retains the previously published legacy/geology elevation; leaving restores that exact source with a fresh revision. Independent geology replacement is rejected while columns own the surface. Seed/reset/archive restoration clears both origin physics and terrain ownership. Existing non-column references retain their established terrain path. Column geometry must match the selected world's radius.
+
+This gateway does not claim a new visual scenario is available yet. Its regression tests cover top-vs-mean phase projection, centre/datum/contraction and cube-seam sampling, orbital/local agreement, failure rollback, non-reused failed revisions, restored legacy elevation, monotonic epoch rejection and a blocked concurrent reader.

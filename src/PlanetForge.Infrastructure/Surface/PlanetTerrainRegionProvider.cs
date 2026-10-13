@@ -1,4 +1,4 @@
-using System.Threading;
+using PlanetForge.Domain.Origins;
 using PlanetForge.Domain.Surface;
 
 namespace PlanetForge.Infrastructure.Surface;
@@ -10,22 +10,76 @@ namespace PlanetForge.Infrastructure.Surface;
 /// Regional erosion remains opt-in until inter-region water/sediment exchange
 /// and geographic indexing have been validated.
 /// </summary>
-public sealed class PlanetTerrainRegionProvider(IPlanetElevationSource canonicalElevation) : IPlanetElevationRevisionSource
+public sealed class PlanetTerrainRegionProvider(IPlanetElevationSource canonicalElevation) : IPlanetElevationRevisionSource, IPlanetOriginSurfacePublication
 {
     private readonly object publicationGate = new();
     private PublishedTerrain published = new(canonicalElevation ?? throw new ArgumentNullException(nameof(canonicalElevation)), 0);
 
-    public long Revision => Volatile.Read(ref published).Revision;
+    private PublishedTerrain? originBase;
+    private long allocatedRevision;
+
+    public long Revision { get { lock (publicationGate) return published.Revision; } }
     public IPlanetElevationSource CanonicalElevation => canonicalElevation;
 
-    public double SampleElevationMeters(PlanetVector direction, int seed) =>
-        Volatile.Read(ref published).Elevation.SampleElevationMeters(direction, seed);
+    public double SampleElevationMeters(PlanetVector direction, int seed)
+    {
+        lock (publicationGate) return published.Elevation.SampleElevationMeters(direction, seed);
+    }
 
     /// <summary>
     /// Captures one immutable elevation source for a complete sampling operation.
     /// An in-progress publication cannot mix two different geology revisions.
     /// </summary>
-    public IPlanetElevationSource CaptureSnapshot() => Volatile.Read(ref published).Elevation;
+    public IPlanetElevationSource CaptureSnapshot()
+    {
+        lock (publicationGate) return published.Elevation;
+    }
+
+    public T ReadConsistent<T>(Func<T> readWorld)
+    {
+        ArgumentNullException.ThrowIfNull(readWorld);
+        lock (publicationGate) return readWorld();
+    }
+
+    public T PublishOriginSurface<T>(PlanetOriginRockColumnField? columns, Func<T> publishWorld)
+    {
+        ArgumentNullException.ThrowIfNull(publishWorld);
+        var elevation = columns is null ? null : new PlanetOriginRockColumnElevationSource(columns);
+        lock (publicationGate)
+        {
+            var previous = published;
+            var previousBase = originBase;
+            try
+            {
+                if (elevation is not null)
+                {
+                    originBase ??= published;
+                    published = new PublishedTerrain(elevation, NextRevision());
+                }
+                else if (originBase is not null)
+                {
+                    published = new PublishedTerrain(originBase.Elevation, NextRevision());
+                    originBase = null;
+                }
+                return publishWorld();
+            }
+            catch
+            {
+                published = previous;
+                originBase = previousBase;
+                // Never reuse a failed geometry revision: caches may have sampled it.
+                throw;
+            }
+        }
+    }
+
+    private long NextRevision() => allocatedRevision = checked(allocatedRevision + 1);
+
+    private void RequireGeologyOwnership()
+    {
+        if (originBase is not null)
+            throw new InvalidOperationException("Clear the canonical origin columns before replacing terrain with independent geology.");
+    }
 
     /// <summary>
     /// Replaces all published, geographically anchored geology in one transaction.
@@ -38,8 +92,9 @@ public sealed class PlanetTerrainRegionProvider(IPlanetElevationSource canonical
         var elevation = layers.Length == 0 ? canonicalElevation : new PlanetRegionalGeologyAtlas(canonicalElevation, layers);
         lock (publicationGate)
         {
-            var next = new PublishedTerrain(elevation, checked(published.Revision + 1));
-            Volatile.Write(ref published, next);
+            RequireGeologyOwnership();
+            var next = new PublishedTerrain(elevation, NextRevision());
+            published = next;
             return next.Revision;
         }
     }
@@ -85,8 +140,9 @@ public sealed class PlanetTerrainRegionProvider(IPlanetElevationSource canonical
         var elevation = new PlanetCrustGlobalReliefElevationSource(canonicalElevation, atlas);
         lock (publicationGate)
         {
-            var next = new PublishedTerrain(elevation, checked(published.Revision + 1));
-            Volatile.Write(ref published, next);
+            RequireGeologyOwnership();
+            var next = new PublishedTerrain(elevation, NextRevision());
+            published = next;
             return next.Revision;
         }
     }

@@ -70,81 +70,89 @@ public sealed class PlanetExperience(
     private PlanetOriginSurfaceRockPhaseField? cachedSpatialRockField;
 
     /// <summary>Immutable Earth-origin epoch projected onto the canonical main planet, when selected.</summary>
-    public PlanetOriginEpochState? PublishedOriginEpoch => originEpoch;
+    public PlanetOriginEpochState? PublishedOriginEpoch => ReadOriginConsistent(() => originEpoch);
 
     /// <summary>Accepted physical regional rock field with the same canonical epoch revision.</summary>
-    public PlanetOriginCanonicalRockCells? PublishedRegionalRock => spatialRockEpoch;
+    public PlanetOriginCanonicalRockCells? PublishedRegionalRock => ReadOriginConsistent(() => spatialRockEpoch);
 
     /// <summary>
     /// Commits the regional and planetary views together. Any projection
     /// error restores both; the regional phase atlas can never be newer
     /// than the actual physical epoch or be accepted independently.
     /// </summary>
-    public PlanetRenderSnapshot PublishRegionalRock(PlanetOriginCanonicalRockCells candidate)
+    public PlanetRenderSnapshot PublishRegionalRock(PlanetOriginCanonicalRockCells candidate) => PublishRegionalRock(candidate, resetClock: false);
+
+    /// <summary>Explicitly restart a reference in one terrain/world transaction, without building an intermediate legacy globe.</summary>
+    public PlanetRenderSnapshot ResetRegionalRock(PlanetOriginCanonicalRockCells candidate) => PublishRegionalRock(candidate, resetClock: true);
+
+    private PlanetRenderSnapshot PublishRegionalRock(PlanetOriginCanonicalRockCells candidate, bool resetClock)
     {
         ArgumentNullException.ThrowIfNull(candidate);
         if (hypsometryCache is null)
             throw new InvalidOperationException("Regional rock publication requires real terrain hypsometry.");
 
-        var previous = originEpoch;
-        var previousRock = spatialRockEpoch;
-        var previousAtlas = cachedSpatialRockProjection;
-        var previousField = cachedSpatialRockField;
-        try
-        {
-            // Preserve the established monotonic publication contract.
-            _ = PublishOriginEpoch(candidate.Epoch);
-            spatialRockEpoch = candidate;
-            cachedSpatialRockField = null;
-            cachedSpatialRockProjection = null;
-            return CreateSnapshot();
-        }
-        catch
-        {
-            originEpoch = previous;
-            spatialRockEpoch = previousRock;
-            cachedSpatialRockProjection = previousAtlas;
-            cachedSpatialRockField = previousField;
-            throw;
-        }
+        if (candidate.Field.PlanetRadiusMeters != state.PhysicalParameters.RadiusMeters)
+            throw new InvalidOperationException("Canonical rock geometry must match the published planet radius.");
+        if (candidate.Columns is not null && OriginSurfaceGateway is null)
+            throw new InvalidOperationException("Depth-resolved rock requires the shared atomic origin/terrain gateway.");
+        return PublishOriginState(candidate.Epoch, candidate, resetClock);
     }
 
-    /// <summary>
-    /// Publishes an already conserved, energy-coupled candidate using the real terrain and water-volume model.
-    /// A failing snapshot leaves the previously published epoch untouched.
-    /// </summary>
+    /// <summary>Publish a conserved epoch and restore legacy terrain when leaving column mode.</summary>
     public PlanetRenderSnapshot PublishOriginEpoch(PlanetOriginEpochState epoch)
     {
         ArgumentNullException.ThrowIfNull(epoch);
         if (hypsometryCache is null)
-        {
             throw new InvalidOperationException("Earth-origin publication requires canonical physical terrain hypsometry.");
-        }
+        return PublishOriginState(epoch, null);
+    }
 
-        if (originEpoch is { } published && (epoch.Revision <= published.Revision ||
-            epoch.Clock.YearsSinceSolarSystemFormation < published.Clock.YearsSinceSolarSystemFormation ||
-            (epoch.Clock.YearsSinceSolarSystemFormation == published.Clock.YearsSinceSolarSystemFormation &&
-                epoch.Clock.MicrosecondsIntoYear <= published.Clock.MicrosecondsIntoYear)))
-        {
-            throw new InvalidOperationException("A canonical planet may only publish a newer geological revision and clock.");
-        }
+    private IPlanetOriginSurfacePublication? OriginSurfaceGateway =>
+        localSurfacePatchSampler.ElevationSource as IPlanetOriginSurfacePublication;
 
-        var physics = PlanetPhysicsCalculator.Calculate(state.PhysicalParameters);
-        _ = PlanetOriginSurfaceProjection.Create(epoch, state.PhysicalParameters.RadiusMeters, physics.SurfaceGravityMetersPerSecondSquared);
-        var previous = originEpoch;
-        var previousRegional = spatialRockEpoch;
-        try
+    private T ReadOriginConsistent<T>(Func<T> read) =>
+        OriginSurfaceGateway is { } gateway ? gateway.ReadConsistent(read) : read();
+
+    private PlanetRenderSnapshot PublishOriginState(PlanetOriginEpochState? epoch, PlanetOriginCanonicalRockCells? rock, bool resetClock = false)
+    {
+        PlanetRenderSnapshot CommitWorld()
         {
-            originEpoch = epoch;
-            spatialRockEpoch = null;
-            return CreateSnapshot();
+            if (!resetClock && epoch is not null && originEpoch is { } accepted && (epoch.Revision <= accepted.Revision ||
+                epoch.Clock.YearsSinceSolarSystemFormation < accepted.Clock.YearsSinceSolarSystemFormation ||
+                (epoch.Clock.YearsSinceSolarSystemFormation == accepted.Clock.YearsSinceSolarSystemFormation &&
+                    epoch.Clock.MicrosecondsIntoYear <= accepted.Clock.MicrosecondsIntoYear)))
+                throw new InvalidOperationException("A canonical planet may only publish a newer geological revision and clock.");
+
+            var previous = originEpoch;
+            var previousRock = spatialRockEpoch;
+            var previousAtlas = cachedSpatialRockProjection;
+            var previousField = cachedSpatialRockField;
+            var previousClimate = climateState;
+            var previousLocalKey = cachedLocalSurfaceKey;
+            var previousLocal = cachedLocalSurface;
+            try
+            {
+                originEpoch = epoch;
+                spatialRockEpoch = rock;
+                cachedSpatialRockProjection = null;
+                cachedSpatialRockField = null;
+                return CreateSnapshot();
+            }
+            catch
+            {
+                originEpoch = previous;
+                spatialRockEpoch = previousRock;
+                cachedSpatialRockProjection = previousAtlas;
+                cachedSpatialRockField = previousField;
+                climateState = previousClimate;
+                cachedLocalSurfaceKey = previousLocalKey;
+                cachedLocalSurface = previousLocal;
+                throw;
+            }
         }
-        catch
-        {
-            originEpoch = previous;
-            spatialRockEpoch = previousRegional;
-            throw;
-        }
+        return OriginSurfaceGateway is { } gateway
+            ? gateway.PublishOriginSurface(rock?.Columns, CommitWorld)
+            : CommitWorld();
     }
 
     /// <summary>
@@ -164,14 +172,21 @@ public sealed class PlanetExperience(
         return PublishOriginEpoch(next);
     }
 
-    public PlanetRenderSnapshot ClearOriginEpoch()
+    private void ResetOriginState()
     {
-        originEpoch = null;
-        spatialRockEpoch = null;
-        cachedSpatialRockProjection = null;
-        cachedSpatialRockField = null;
-        return CreateSnapshot();
+        bool ClearState()
+        {
+            originEpoch = null;
+            spatialRockEpoch = null;
+            cachedSpatialRockProjection = null;
+            cachedSpatialRockField = null;
+            return true;
+        }
+        if (OriginSurfaceGateway is { } gateway) gateway.PublishOriginSurface(null, ClearState);
+        else ClearState();
     }
+
+    public PlanetRenderSnapshot ClearOriginEpoch() => PublishOriginState(null, null);
 
     public PlanetRenderSnapshot CreateSnapshot() => CreateSnapshot(includeFullGlobalGeometry: false);
 
@@ -337,7 +352,7 @@ public sealed class PlanetExperience(
 
     public void SetSeed(int seed)
     {
-        originEpoch = null;
+        ResetOriginState();
         state.Reseed(seed);
         surfaceView = null;
         localAnchorDirection = null;
@@ -348,7 +363,7 @@ public sealed class PlanetExperience(
 
     public PlanetRenderSnapshot ResetEarthReference()
     {
-        originEpoch = null;
+        ResetOriginState();
         state.ResetEarthReference();
         climateState = null;
         return CreateSnapshot();
@@ -369,7 +384,7 @@ public sealed class PlanetExperience(
     public PlanetRenderSnapshot RestoreState(PlanetExperienceState restoredState)
     {
         ArgumentNullException.ThrowIfNull(restoredState);
-        originEpoch = null;
+        ResetOriginState();
         state.Reseed(restoredState.Seed);
         state.SetPhysicalParameters(restoredState.PhysicalParameters);
         state.SetAtmosphereParameters(restoredState.AtmosphereParameters);
@@ -383,7 +398,10 @@ public sealed class PlanetExperience(
         return CreateInitialRenderSnapshot();
     }
 
-    private PlanetRenderSnapshot CreateSnapshot(bool includeFullGlobalGeometry)
+    private PlanetRenderSnapshot CreateSnapshot(bool includeFullGlobalGeometry) =>
+        ReadOriginConsistent(() => CreateConsistentSnapshot(includeFullGlobalGeometry));
+
+    private PlanetRenderSnapshot CreateConsistentSnapshot(bool includeFullGlobalGeometry)
     {
         var basePhysics = PlanetPhysicsCalculator.Calculate(state.PhysicalParameters);
         var atmosphere = AtmosphereCalculator.Calculate(state.AtmosphereParameters, state.PhysicalParameters, basePhysics);
