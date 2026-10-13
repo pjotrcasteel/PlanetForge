@@ -40,6 +40,34 @@ public sealed class PlanetRockColumnReferenceTests
         Assert.IsTrue(atlas.MeltFraction.All(f => f == 0.0f));
     }
 
+    [TestMethod]
+    public void CreateInitial_DepthRefinement_PreservesFundedMassEnthalpyAndInitialSurfaceState()
+    {
+        var baseline = PlanetRockColumnReference.CreateInitial(6_371_000.0);
+        var baselineMass = baseline.Field.TotalActiveRockMassKilograms;
+        var baselineEnergy = baseline.Field.TotalStoredEnthalpyJoules;
+        var baselineSurface = baseline.Columns!.Columns[0].Layers[0].Resolve(baseline.Columns.Material);
+
+        foreach (var layers in new[] { 8, 16, 32, 64 })
+        {
+            var candidate = PlanetRockColumnReference.CreateInitial(6_371_000.0, layers);
+            Assert.AreEqual(layers, candidate.Columns!.Properties.LayerCount);
+            Assert.AreEqual(baselineMass, candidate.Field.TotalActiveRockMassKilograms, baselineMass * 1e-12);
+            Assert.AreEqual(baselineEnergy, candidate.Field.TotalStoredEnthalpyJoules, baselineEnergy * 1e-12);
+            Assert.AreEqual(baseline.Epoch.Revision, candidate.Epoch.Revision);
+            Assert.AreEqual(baseline.Epoch.Clock, candidate.Epoch.Clock);
+            Assert.AreEqual(baselineSurface.MeltFraction,
+                candidate.Columns.Columns[0].Layers[0].Resolve(candidate.Columns.Material).MeltFraction, 1e-10);
+        }
+    }
+
+    [TestMethod]
+    public void CreateInitial_UnsupportedDepthResolution_Rejects()
+    {
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => PlanetRockColumnReference.CreateInitial(6_371_000.0, 1));
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => PlanetRockColumnReference.CreateInitial(6_371_000.0, 65));
+    }
+
     private sealed class FlatElevation : IPlanetElevationSource
     {
         public double SampleElevationMeters(PlanetVector direction, int seed) => 0.0;
