@@ -51,7 +51,7 @@ test('DeployedPlanetForge_ExposesHotRockReferenceAndPhysicalCooling', async ({ p
   expect(errors).toEqual([]);
 
   const badge = page.locator('#planetforge-build-badge');
-  await expect(badge).toContainText('PF 0.0.39.1 · ');
+  await expect(badge).toContainText('PF 0.0.40.0 · ');
   if (process.env.PLANETFORGE_EXPECTED_SHA) {
     await expect(badge).toContainText(process.env.PLANETFORGE_EXPECTED_SHA.slice(0, 7));
   }
