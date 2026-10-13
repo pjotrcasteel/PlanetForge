@@ -54,7 +54,7 @@ public sealed class PlanetFormationSimulationTests
         var settings = new PlanetOriginRockColumnIntegrationOptions(0.25, 1000);
         var convecting = PlanetOriginRockColumnIntegrator.Advance(initial, interval, boundary, settings);
         var reference = PlanetOriginRockColumnIntegrator.Advance(initial, interval, boundary with { MagmaConvection = null }, settings);
-        var last = initial.Columns.Columns[0].Layers.Count - 1;
+        var last = initial.Columns!.Columns[0].Layers.Count - 1;
         Assert.AreNotEqual(reference.Columns!.Columns[0].Layers[last].StoredEnthalpyJoules,
             convecting.Columns!.Columns[0].Layers[last].StoredEnthalpyJoules);
         Assert.AreEqual(initial.Field.TotalActiveRockMassKilograms, convecting.Field.TotalActiveRockMassKilograms, 0.0);
