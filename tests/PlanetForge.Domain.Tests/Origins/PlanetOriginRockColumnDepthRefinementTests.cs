@@ -56,14 +56,14 @@ public sealed class PlanetOriginRockColumnDepthRefinementTests
             var (minimum, maximum) = sample.FrontBoundsMeters;
             Assert.AreEqual(sample.FullySolidTopMeters, minimum);
             Assert.AreEqual(sample.FirstUnresolvedCellBottomMeters, maximum);
-            Assert.IsGreaterThan(minimum, maximum);
+            Assert.IsGreaterThan(maximum, minimum);
             Assert.IsTrue(sample.UnresolvedFrontMidpointMeters >= minimum);
             Assert.IsTrue(sample.UnresolvedFrontMidpointMeters <= maximum);
         }
         // A cross-resolution overlap is NOT guaranteed: this is precisely
         // why a single fully solid cell cannot be claimed as a converged crust.
-        Assert.IsGreaterThan(samples[^1].FrontBoundsMeters.MaximumMeters,
-            samples[0].FrontBoundsMeters.MinimumMeters);
+        Assert.IsGreaterThan(samples[0].FrontBoundsMeters.MinimumMeters,
+            samples[^1].FrontBoundsMeters.MaximumMeters);
     }
 
     [TestMethod]
