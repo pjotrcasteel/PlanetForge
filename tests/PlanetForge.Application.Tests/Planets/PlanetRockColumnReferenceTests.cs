@@ -65,7 +65,31 @@ public sealed class PlanetRockColumnReferenceTests
     public void CreateInitial_UnsupportedDepthResolution_Rejects()
     {
         Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => PlanetRockColumnReference.CreateInitial(6_371_000.0, 1));
-        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => PlanetRockColumnReference.CreateInitial(6_371_000.0, 65));
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => PlanetRockColumnReference.CreateInitial(6_371_000.0, 129));
+    }
+
+    [TestMethod]
+    public void Advance_ResolvedReference_ProjectsRadiatingFaceAndPreservesOwnedMaterialAndInitialRelease()
+    {
+        var initial = PlanetRockColumnReference.CreateResolvedInitial(6_371_000.0);
+        var source = new FlatElevation();
+        var experience = new PlanetExperience(new PlanetSurfaceMeshCache(new PlanetSurfaceMeshBuilder(new PlanetSurfaceTileSampler(source))),
+            new PlanetLocalSurfacePatchSampler(source), new PlanetLocalSurfaceMeshBuilder());
+        var candidate = initial;
+        for (var i = 0; i < 4; i++) candidate = PlanetRockColumnReference.Advance(candidate, experience.CreateSnapshot());
+        var columns = candidate.Columns!;
+        Assert.AreEqual(64, columns.Properties.LayerCount);
+        Assert.IsTrue(columns.Columns.All(c => c.SolidSurfaceThicknessMeters(columns.Material, columns.Properties) > 0.0));
+        Assert.IsTrue(columns.Columns.All(c => c.Layers[^1].Resolve(columns.Material).MeltFraction > 0.9));
+        Assert.AreEqual(14_400_000_000L, candidate.Epoch.Clock.MicrosecondsIntoYear);
+        Assert.AreEqual(0.0, candidate.Epoch.EnergyConservationResidualJoules, candidate.Epoch.CoupledEnergy!.InitialStoredEnergyJoules * 1e-12);
+        var atlas = PlanetOriginSpatialSurfaceProjection.Create(candidate);
+        var faces = candidate.Field.Cells.Select(c => candidate.ResolveRadiatingSurfaceTemperature(c.Id)).ToArray();
+        Assert.IsTrue(atlas.TemperatureKelvin.All(t => t >= faces.Min() - 0.001 && t <= faces.Max() + 0.001));
+        Assert.IsTrue(atlas.MeltFraction.All(f => f == 0.0));
+        Assert.IsTrue(candidate.SurfaceBoundary.HasValue);
+        Assert.AreEqual(0L, initial.Epoch.Revision);
+        Assert.AreEqual(8, PlanetRockColumnReference.CreateInitial(6_371_000.0).Columns!.Properties.LayerCount);
     }
 
     private sealed class FlatElevation : IPlanetElevationSource

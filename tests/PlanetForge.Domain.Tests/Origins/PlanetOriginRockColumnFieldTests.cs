@@ -203,7 +203,85 @@ public sealed class PlanetOriginRockColumnFieldTests
             "Current coarse thermal columns must not be represented as a converged quantitative primary-crust front.");
     }
 
-    private static PlanetOriginCanonicalRockCells CreateState(double conductivity = 3.0, int layerCount = 8, int gridLevel = 2)
+    [TestMethod]
+    [DataRow(false)]
+    [DataRow(true)]
+    public void DepthRefinement_GradedRadiatingBoundary_MeasuresFourHourCooling(bool implicitTransport)
+    {
+        double previousFront = 0.0;
+        double previousFace = 0.0;
+        foreach (var count in implicitTransport ? new[] { 8, 16, 32, 64, 128 } : new[] { 8, 16, 32, 64 })
+        {
+            var initial = CreateState(layerCount: count, gridLevel: 0, grading: 2.0, interfaceBoundary: true, implicitTransport: implicitTransport);
+            var cooled = PlanetOriginRockColumnIntegrator.Advance(initial, PlanetOriginDuration.FromSeconds(14_400.0),
+                Boundary with { SolarIrradianceWattsPerSquareMeter = 1_361.0 }, new(5.0, 1_000_000));
+            AssertConservation(cooled);
+            var columns = cooled.Columns!;
+            var column = columns.Columns[0];
+            var sample = PlanetOriginRockColumnResolutionSample.FromColumn(column, columns.Material, columns.Properties);
+            var phase = column.Layers[0].Resolve(Material);
+            var face = PlanetOriginRockRadiatingBoundary.ResolveTemperature(phase.TemperatureKelvin, 3.0,
+                column.Layers[0].VolumeCubicMeters(Material, columns.Properties) / column.AreaSquareMeters * 0.5, 1_361.0, 0.9);
+            var front = column.ReconstructSolidusDepthMeters(Material, columns.Properties, face);
+            Assert.AreEqual(14_400_000_000L, cooled.Epoch.Clock.MicrosecondsIntoYear);
+            Assert.AreEqual(0L, initial.Epoch.Revision);
+            Assert.AreEqual(initial.Field.TotalActiveRockMassKilograms, cooled.Field.TotalActiveRockMassKilograms, initial.Field.TotalActiveRockMassKilograms * 1e-12);
+            if (count >= 64)
+            {
+                Assert.IsTrue(Math.Abs(front - previousFront) < 0.001, "Fine-grid reconstructed solidus must agree within 1 mm.");
+                Assert.IsTrue(Math.Abs(face - previousFace) < 1.0, "Fine-grid radiating face must agree within 1 K.");
+            }
+            if (count == 128)
+            {
+                Assert.IsTrue(sample.UnresolvedCellWidthMeters < 0.012);
+                Assert.IsTrue(sample.FullySolidTopLayers >= 3);
+            }
+            previousFront = front;
+            previousFace = face;
+            Console.WriteLine($"GRADED implicit={implicitTransport} {count}: solid={sample.FullySolidTopMeters:F8}; front={front:F8}; width={sample.UnresolvedCellWidthMeters:F8}; centre={phase.TemperatureKelvin:F5}; face={face:F5}");
+        }
+    }
+
+    [TestMethod]
+    public void ImplicitTransport_TimeRefinement_ApproachesIndependentExplicitSolutionAndRejectsUnpublishedTrials()
+    {
+        var implicitInitial = CreateState(layerCount: 32, gridLevel: 0, grading: 2.0, interfaceBoundary: true, implicitTransport: true);
+        var explicitInitial = CreateState(layerCount: 32, gridLevel: 0, grading: 2.0, interfaceBoundary: true);
+        var interval = PlanetOriginDuration.FromSeconds(3600.0);
+        var reference = PlanetOriginRockColumnIntegrator.Advance(explicitInitial, interval, Boundary, new(0.25, 100_000));
+        double Error(double cap)
+        {
+            var result = PlanetOriginRockColumnIntegrator.Advance(implicitInitial, interval, Boundary, new(cap, 100_000));
+            AssertConservation(result);
+            return Math.Abs(result.ResolveSurfacePhase(result.Field.Cells[0].Id).TemperatureKelvin -
+                reference.ResolveSurfacePhase(reference.Field.Cells[0].Id).TemperatureKelvin);
+        }
+        var coarse = Error(120.0);
+        var medium = Error(30.0);
+        var fine = Error(5.0);
+        Console.WriteLine($"Implicit time errors vs 0.25 s explicit: {coarse:R}, {medium:R}, {fine:R} K");
+        Assert.IsTrue(fine < medium && medium < coarse);
+        Assert.IsTrue(fine < 0.5);
+        Assert.ThrowsExactly<InvalidOperationException>(() => PlanetOriginRockColumnIntegrator.Advance(implicitInitial, interval, Boundary, new(30.0, 1)));
+        Assert.AreEqual(0L, implicitInitial.Epoch.Revision);
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+        Assert.ThrowsExactly<OperationCanceledException>(() => PlanetOriginRockColumnIntegrator.Advance(implicitInitial, interval, Boundary, new(30.0, 1000), cancellation.Token));
+    }
+
+    [TestMethod]
+    public void Partition_GradedDepth_PreservesInitialThermodynamicsAndUsesDeclaredMesh()
+    {
+        var initial = CreateState(layerCount: 64, gridLevel: 0, grading: 2.0, interfaceBoundary: true);
+        var column = initial.Columns!.Columns[0];
+        Assert.AreEqual(column.MassKilograms / 4096.0, column.Layers[0].MassKilograms, column.MassKilograms * 1e-12);
+        Assert.IsTrue(column.Layers.All(layer => Math.Abs(layer.Resolve(Material).TemperatureKelvin - 2200.0) < 1e-8));
+        AssertConservation(initial);
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => CreateState(grading: double.NaN));
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => CreateState(grading: 3.0));
+    }
+
+    private static PlanetOriginCanonicalRockCells CreateState(double conductivity = 3.0, int layerCount = 8, int gridLevel = 2, double grading = 1.0, bool interfaceBoundary = false, bool implicitTransport = false)
     {
         var mantle = new PlanetRockEnthalpyModel(new PlanetRockThermalProperties(4e24, 1_200.0, 400_000.0, 1_300.0, 1_900.0));
         var interior = new PlanetOriginThermalTimeline(PlanetOriginClock.EarthAccretionReference,
@@ -214,7 +292,8 @@ public sealed class PlanetOriginRockColumnFieldTests
         var capacity = new PlanetEnvironmentHeatCapacityParameters(0.0, 1_000.0, 2_000.0, 4_200.0, mass, 850.0) { SurfaceRockPhaseMaterial = Material };
         var ledger = new PlanetOriginEnergyLedger(interior, environment, capacity);
         var field = PlanetOriginSurfaceRockPhaseField.FromCanonicalPhaseSurface(ledger, new PlanetSurfaceGridLayout(gridLevel), Radius);
-        var columns = PlanetOriginRockColumnField.Partition(field, new PlanetOriginRockColumnProperties(layerCount, 3_000.0, 2_800.0, conductivity));
+        var columns = PlanetOriginRockColumnField.Partition(field, new PlanetOriginRockColumnProperties(layerCount, 3_000.0, 2_800.0, conductivity)
+        { DepthGradingExponent = grading, UseRadiatingInterface = interfaceBoundary, UseImplicitDepthTransport = implicitTransport });
         return new PlanetOriginCanonicalRockCells(new PlanetOriginEpochState(ledger), field, columns);
     }
 }

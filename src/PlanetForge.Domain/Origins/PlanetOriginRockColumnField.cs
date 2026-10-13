@@ -9,18 +9,35 @@ public readonly record struct PlanetOriginRockColumnProperties(
     double LiquidDensityKilogramsPerCubicMeter,
     double ConductivityWattsPerMeterKelvin)
 {
+    /// <summary>Equal mass at one; larger exponents concentrate depth resolution at the cooling boundary.</summary>
+    public double DepthGradingExponent { get; init; } = 1.0;
+
+    /// <summary>Opt-in massless conductive/radiative face; legacy references retain cell-centre radiation.</summary>
+    public bool UseRadiatingInterface { get; init; }
+    public bool UseImplicitDepthTransport { get; init; }
+
     public void Validate()
     {
-        if (LayerCount is < 2 or > 64 || !double.IsFinite(SolidDensityKilogramsPerCubicMeter) || SolidDensityKilogramsPerCubicMeter <= 0.0 ||
+        if (!double.IsFinite(DepthGradingExponent) || DepthGradingExponent < 1.0 || DepthGradingExponent > 2.0 ||
+            LayerCount is < 2 or > 128 || !double.IsFinite(SolidDensityKilogramsPerCubicMeter) || SolidDensityKilogramsPerCubicMeter <= 0.0 ||
             !double.IsFinite(LiquidDensityKilogramsPerCubicMeter) || LiquidDensityKilogramsPerCubicMeter <= 0.0 ||
             !double.IsFinite(ConductivityWattsPerMeterKelvin) || ConductivityWattsPerMeterKelvin < 0.0)
-            throw new ArgumentOutOfRangeException(nameof(LayerCount), "Rock columns need 2–64 layers, positive finite densities and finite nonnegative conductivity.");
+            throw new ArgumentOutOfRangeException(nameof(LayerCount), "Rock columns need 2–128 layers, positive finite densities and finite nonnegative conductivity.");
     }
 }
 
 /// <summary>An Eulerian control-volume layer, not a moving plate or a differentiated crust parcel.</summary>
 public readonly record struct PlanetOriginRockColumnLayer(double MassKilograms, double StoredEnthalpyJoules)
 {
+    internal double EnthalpyRoundingCorrection { get; init; }
+
+    internal PlanetOriginRockColumnLayer AddEnthalpy(double delta)
+    {
+        var corrected = delta - EnthalpyRoundingCorrection;
+        var next = StoredEnthalpyJoules + corrected;
+        return this with { StoredEnthalpyJoules = next, EnthalpyRoundingCorrection = (next - StoredEnthalpyJoules) - corrected };
+    }
+
     public PlanetRockThermalState Resolve(PlanetOriginSurfaceRockPhaseMaterial material) =>
         new PlanetRockEnthalpyModel(material.ToRockProperties(MassKilograms)).Resolve(StoredEnthalpyJoules);
 
@@ -52,6 +69,34 @@ public sealed class PlanetOriginRockColumn
     public double ThicknessMeters(PlanetOriginSurfaceRockPhaseMaterial material, PlanetOriginRockColumnProperties properties) =>
         Layers.Sum(layer => layer.VolumeCubicMeters(material, properties)) / AreaSquareMeters;
 
+    /// <summary>
+    /// Linear reconstruction of the first solidus isotherm between depth-cell centres.
+    /// A thermal diagnostic with mesh uncertainty, not a sharp material interface or mechanical crust.
+    /// </summary>
+    public double ReconstructSolidusDepthMeters(PlanetOriginSurfaceRockPhaseMaterial material,
+        PlanetOriginRockColumnProperties properties, double radiatingFaceKelvin)
+    {
+        if (!double.IsFinite(radiatingFaceKelvin) || radiatingFaceKelvin < 0.0)
+            throw new ArgumentOutOfRangeException(nameof(radiatingFaceKelvin));
+        if (radiatingFaceKelvin >= material.SolidusTemperatureKelvin) return 0.0;
+        var previousTemperature = radiatingFaceKelvin;
+        var previousCentre = 0.0;
+        var top = 0.0;
+        foreach (var layer in Layers)
+        {
+            var width = layer.VolumeCubicMeters(material, properties) / AreaSquareMeters;
+            var centre = top + width * 0.5;
+            var temperature = layer.Resolve(material).TemperatureKelvin;
+            if (temperature >= material.SolidusTemperatureKelvin)
+                return previousCentre + (centre - previousCentre) *
+                    (material.SolidusTemperatureKelvin - previousTemperature) / (temperature - previousTemperature);
+            previousTemperature = temperature;
+            previousCentre = centre;
+            top += width;
+        }
+        return top;
+    }
+
     /// <summary>Contiguous fully solid surface material; no mechanical strength or chemical differentiation is inferred.</summary>
     public double SolidSurfaceThicknessMeters(PlanetOriginSurfaceRockPhaseMaterial material, PlanetOriginRockColumnProperties properties)
     {
@@ -78,7 +123,7 @@ public sealed record PlanetOriginRockColumnTrial(
 /// Radiation acts only on the top layer; each internal Fourier flux has equal opposite debits/credits.
 /// Constant-pressure phase material and planar thin-column geometry are declared reference approximations.
 /// </summary>
-public sealed class PlanetOriginRockColumnField
+public sealed partial class PlanetOriginRockColumnField
 {
     private PlanetOriginRockColumnField(PlanetOriginSurfaceRockPhaseField aggregate, PlanetOriginRockColumnProperties properties, PlanetOriginRockColumn[] columns)
     {
@@ -106,8 +151,10 @@ public sealed class PlanetOriginRockColumnField
             for (var depth = 0; depth < layers.Length; depth++)
             {
                 var last = depth == layers.Length - 1;
-                var mass = last ? remainingMass : cell.ActiveRockMassKilograms / layers.Length;
-                var energy = last ? remainingEnergy : cell.StoredEnthalpyJoules / layers.Length;
+                var fraction = properties.DepthGradingExponent == 1.0 ? 1.0 / layers.Length : Math.Pow((depth + 1.0) / layers.Length, properties.DepthGradingExponent) -
+                    Math.Pow((double)depth / layers.Length, properties.DepthGradingExponent);
+                var mass = last ? remainingMass : cell.ActiveRockMassKilograms * fraction;
+                var energy = last ? remainingEnergy : cell.StoredEnthalpyJoules * fraction;
                 layers[depth] = new PlanetOriginRockColumnLayer(mass, energy);
                 remainingMass -= mass;
                 remainingEnergy -= energy;
@@ -137,6 +184,12 @@ public sealed class PlanetOriginRockColumnField
         {
             cancellationToken.ThrowIfCancellationRequested();
             var thickness = column.Layers.Select(layer => layer.VolumeCubicMeters(Material, Properties) / column.AreaSquareMeters).ToArray();
+            if (Properties.UseImplicitDepthTransport)
+            {
+                mantleConductance += boundary.ConductivityWattsPerMeterKelvin * column.AreaSquareMeters /
+                    (boundary.ConductiveBoundaryThicknessMeters + thickness[^1] * 0.5);
+                continue;
+            }
             var incidence = new double[thickness.Length];
             for (var depth = 0; depth < thickness.Length - 1; depth++)
             {
@@ -150,8 +203,10 @@ public sealed class PlanetOriginRockColumnField
             incidence[^1] += bottom;
             mantleConductance += bottom;
             var surface = column.Layers[0].Resolve(Material).TemperatureKelvin;
-            incidence[0] += 4.0 * boundary.InfraredEmissivity * PlanetRadiationBalanceModel.StefanBoltzmannWattsPerSquareMeterKelvinFourth *
-                Math.Pow(surface, 3) * column.AreaSquareMeters;
+            incidence[0] += (Properties.UseRadiatingInterface
+                ? Properties.ConductivityWattsPerMeterKelvin / (thickness[0] * 0.5)
+                : 4.0 * boundary.InfraredEmissivity * PlanetRadiationBalanceModel.StefanBoltzmannWattsPerSquareMeterKelvinFourth *
+                    Math.Pow(surface, 3)) * column.AreaSquareMeters;
             for (var depth = 0; depth < incidence.Length; depth++)
                 maximum = Math.Min(maximum, StableSeconds(incidence[depth],
                     column.Layers[depth].MassKilograms * Material.SpecificHeatCapacityJoulesPerKilogramKelvin));
@@ -176,6 +231,7 @@ public sealed class PlanetOriginRockColumnField
         if (boundary.LateralConductivityWattsPerMeterKelvin != 0.0)
             throw new InvalidOperationException("Depth-resolved lateral exchange needs layer-consistent fluxes; aggregate lateral conduction cannot silently mix column material.");
 
+        if (Properties.UseImplicitDepthTransport) return ProposeImplicit(interval, boundary, interior, cancellationToken);
         var seconds = interval.TotalSeconds;
         var result = new PlanetOriginRockColumn[Columns.Count];
         var exported = 0.0;
@@ -218,23 +274,30 @@ public sealed class PlanetOriginRockColumnField
             var direction = PlanetSurfaceGridGeometry.GetCenterDirection(column.Id);
             var solar = boundary.SolarIrradianceWattsPerSquareMeter * (1.0 - boundary.BondAlbedo) *
                 Math.Max(0.0, PlanetVector.Dot(direction, boundary.StellarDirection)) * column.AreaSquareMeters * seconds;
-            var surfaceKelvin = phase[0].TemperatureKelvin;
+            var surfaceKelvin = Properties.UseRadiatingInterface
+                ? PlanetOriginRockRadiatingBoundary.ResolveTemperature(phase[0].TemperatureKelvin,
+                    Properties.ConductivityWattsPerMeterKelvin, thickness[0] * 0.5, solar / column.AreaSquareMeters / seconds, boundary.InfraredEmissivity)
+                : phase[0].TemperatureKelvin;
             var infrared = boundary.InfraredEmissivity * PlanetRadiationBalanceModel.StefanBoltzmannWattsPerSquareMeterKelvinFourth *
                 Math.Pow(surfaceKelvin, 4) * column.AreaSquareMeters * seconds;
             delta[0] += solar - infrared;
             absorbed += solar;
             emitted += infrared;
             // Bound the explicit radiative Jacobian as well as conductive incidence.
-            coupling[0] += 4.0 * boundary.InfraredEmissivity * PlanetRadiationBalanceModel.StefanBoltzmannWattsPerSquareMeterKelvinFourth *
-                Math.Pow(surfaceKelvin, 3) * column.AreaSquareMeters * seconds;
+            var radiativeDerivative = 4.0 * boundary.InfraredEmissivity * PlanetRadiationBalanceModel.StefanBoltzmannWattsPerSquareMeterKelvinFourth *
+                Math.Pow(surfaceKelvin, 3);
+            coupling[0] += (Properties.UseRadiatingInterface
+                ? Math.Min(radiativeDerivative, Properties.ConductivityWattsPerMeterKelvin / (thickness[0] * 0.5))
+                : radiativeDerivative) * column.AreaSquareMeters * seconds;
             var nextLayers = new PlanetOriginRockColumnLayer[phase.Length];
             for (var depth = 0; depth < nextLayers.Length; depth++)
             {
                 VerifyCoupling(coupling[depth], column.Layers[depth].MassKilograms * Material.SpecificHeatCapacityJoulesPerKilogramKelvin);
-                var energy = column.Layers[depth].StoredEnthalpyJoules + delta[depth];
+                var nextLayer = column.Layers[depth].AddEnthalpy(delta[depth]);
+                var energy = nextLayer.StoredEnthalpyJoules;
                 if (!double.IsFinite(energy) || energy < 0.0)
                     throw new InvalidOperationException("Column step overdraws or overflows a physical rock layer; subdivide the duration.");
-                nextLayers[depth] = column.Layers[depth] with { StoredEnthalpyJoules = energy };
+                nextLayers[depth] = nextLayer;
             }
             result[i] = new PlanetOriginRockColumn(column.Id, column.AreaSquareMeters, column.ReferenceThicknessMeters, nextLayers);
             if (result[i].ThicknessMeters(Material, Properties) / Aggregate.PlanetRadiusMeters > 0.001)

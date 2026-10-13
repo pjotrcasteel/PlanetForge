@@ -65,6 +65,8 @@ public sealed class PlanetThermalEnergyBudget
         CumulativeMaterialExportJoules = cumulativeMaterialExportJoules;
     }
 
+    private double StoredRoundingCorrection { get; init; }
+
     public double InitialStoredEnergyJoules { get; }
 
     public double StoredEnergyJoules { get; }
@@ -123,7 +125,9 @@ public sealed class PlanetThermalEnergyBudget
             throw new InvalidOperationException("The thermal step is inconsistent: heat loss exceeds available stored and deposited energy.");
         }
 
-        var storedEnergy = energyAvailable - coolingJoules;
+        var correctedChange = (impactJoules + radiogenicJoules + returnedJoules - coolingJoules) - StoredRoundingCorrection;
+        var storedEnergy = StoredEnergyJoules + correctedChange;
+        var correction = (storedEnergy - StoredEnergyJoules) - correctedChange;
         var cumulativeImpacts = CumulativeImpactHeatJoules + impactJoules;
         var cumulativeRadiogenic = CumulativeRadiogenicHeatJoules + radiogenicJoules;
         var cumulativeCooling = CumulativeSurfaceHeatLossJoules + coolingJoules;
@@ -138,7 +142,8 @@ public sealed class PlanetThermalEnergyBudget
             storedEnergy, cumulativeImpacts, cumulativeRadiogenic, cumulativeCooling,
             CumulativeMaterialInputJoules, CumulativeMaterialExportJoules)
         {
-            CumulativeSurfaceHeatGainJoules = cumulativeReturned
+            CumulativeSurfaceHeatGainJoules = cumulativeReturned,
+            StoredRoundingCorrection = correction
         };
     }
 
@@ -157,7 +162,9 @@ public sealed class PlanetThermalEnergyBudget
             throw new InvalidOperationException("Volatile material enthalpy exceeds available interior heat.");
         }
 
-        var stored = available - exportedJoules;
+        var correctedChange = (incomingJoules - exportedJoules) - StoredRoundingCorrection;
+        var stored = StoredEnergyJoules + correctedChange;
+        var correction = (stored - StoredEnergyJoules) - correctedChange;
         var delivered = CumulativeMaterialInputJoules + incomingJoules;
         var exported = CumulativeMaterialExportJoules + exportedJoules;
         ValidateEnergy(stored, nameof(stored));
@@ -166,7 +173,8 @@ public sealed class PlanetThermalEnergyBudget
         return new PlanetThermalEnergyBudget(InitialStoredEnergyJoules, stored, CumulativeImpactHeatJoules,
             CumulativeRadiogenicHeatJoules, CumulativeSurfaceHeatLossJoules, delivered, exported)
         {
-            CumulativeSurfaceHeatGainJoules = CumulativeSurfaceHeatGainJoules
+            CumulativeSurfaceHeatGainJoules = CumulativeSurfaceHeatGainJoules,
+            StoredRoundingCorrection = correction
         };
     }
 

@@ -23,6 +23,7 @@ public sealed class PlanetEnvironmentalEnergyBudget
 {
     private const int ReservoirCount = 4;
     private readonly double[] energies;
+    private readonly double[] roundingCorrections;
 
     /// <summary>Creates a budget whose ice store holds no sensible energy.</summary>
     public PlanetEnvironmentalEnergyBudget(double atmosphereJoules, double oceanJoules, double surfaceRockJoules)
@@ -36,7 +37,7 @@ public sealed class PlanetEnvironmentalEnergyBudget
     {
     }
 
-    private PlanetEnvironmentalEnergyBudget(double[] energies)
+    private PlanetEnvironmentalEnergyBudget(double[] energies, double[]? roundingCorrections = null)
     {
         foreach (var energy in energies) ValidateEnergy(energy);
         if (!double.IsFinite(energies.Sum()))
@@ -45,6 +46,7 @@ public sealed class PlanetEnvironmentalEnergyBudget
         }
 
         this.energies = energies;
+        this.roundingCorrections = roundingCorrections ?? new double[ReservoirCount];
     }
 
     public double TotalEnergyJoules => energies.Sum();
@@ -70,9 +72,10 @@ public sealed class PlanetEnvironmentalEnergyBudget
         }
 
         var copy = (double[])energies.Clone();
-        copy[sourceIndex] -= joules;
-        copy[destinationIndex] = AddFinite(copy[destinationIndex], joules);
-        return new PlanetEnvironmentalEnergyBudget(copy);
+        var corrections = (double[])roundingCorrections.Clone();
+        AddCompensated(copy, corrections, sourceIndex, -joules);
+        AddCompensated(copy, corrections, destinationIndex, joules);
+        return new PlanetEnvironmentalEnergyBudget(copy, corrections);
     }
 
     internal PlanetEnvironmentalEnergyBudget ExchangeLatentHeat(
@@ -88,8 +91,10 @@ public sealed class PlanetEnvironmentalEnergyBudget
 
         if (absorbedFromEnvironmentJoules == 0.0 && releasedToEnvironmentJoules == 0.0) return this;
         var copy = (double[])energies.Clone();
-        copy[index] = AddFinite(copy[index] - absorbedFromEnvironmentJoules, releasedToEnvironmentJoules);
-        return new PlanetEnvironmentalEnergyBudget(copy);
+        var corrections = (double[])roundingCorrections.Clone();
+        AddCompensated(copy, corrections, index, -absorbedFromEnvironmentJoules);
+        AddCompensated(copy, corrections, index, releasedToEnvironmentJoules);
+        return new PlanetEnvironmentalEnergyBudget(copy, corrections);
     }
 
     /// <summary>
@@ -103,8 +108,9 @@ public sealed class PlanetEnvironmentalEnergyBudget
         ValidateEnergy(joules);
         if (joules == 0.0) return this;
         var copy = (double[])energies.Clone();
-        copy[index] = AddFinite(copy[index], joules);
-        return new PlanetEnvironmentalEnergyBudget(copy);
+        var corrections = (double[])roundingCorrections.Clone();
+        AddCompensated(copy, corrections, index, joules);
+        return new PlanetEnvironmentalEnergyBudget(copy, corrections);
     }
 
     /// <summary>Debits an explicitly matched internal heat return or material escape.</summary>
@@ -119,8 +125,9 @@ public sealed class PlanetEnvironmentalEnergyBudget
 
         if (joules == 0.0) return this;
         var copy = (double[])energies.Clone();
-        copy[index] -= joules;
-        return new PlanetEnvironmentalEnergyBudget(copy);
+        var corrections = (double[])roundingCorrections.Clone();
+        AddCompensated(copy, corrections, index, -joules);
+        return new PlanetEnvironmentalEnergyBudget(copy, corrections);
     }
 
     /// <summary>
@@ -139,14 +146,15 @@ public sealed class PlanetEnvironmentalEnergyBudget
         ValidateEnergy(emittedJoules);
 
         var copy = (double[])energies.Clone();
-        copy[absorbingIndex] = AddFinite(copy[absorbingIndex], absorbedJoules);
-        copy[emittingIndex] -= emittedJoules;
+        var corrections = (double[])roundingCorrections.Clone();
+        AddCompensated(copy, corrections, absorbingIndex, absorbedJoules);
+        AddCompensated(copy, corrections, emittingIndex, -emittedJoules);
         if (!double.IsFinite(copy[emittingIndex]) || copy[emittingIndex] < 0.0)
         {
             throw new InvalidOperationException("Radiative heat loss exceeds the energy of the explicitly selected emitting reservoir.");
         }
 
-        return new PlanetEnvironmentalEnergyBudget(copy);
+        return new PlanetEnvironmentalEnergyBudget(copy, corrections);
     }
 
     private static int ValidateReservoir(PlanetEnvironmentHeatReservoir reservoir)
@@ -167,15 +175,14 @@ public sealed class PlanetEnvironmentalEnergyBudget
         }
     }
 
-    private static double AddFinite(double first, double second)
+    // Retain sub-ULP transfers across immutable steps instead of losing the same small flux repeatedly.
+    private static void AddCompensated(double[] values, double[] corrections, int index, double delta)
     {
-        var sum = first + second;
-        if (!double.IsFinite(sum))
-        {
-            throw new ArgumentOutOfRangeException(nameof(second), "Accumulated environmental energy must remain finite.");
-        }
-
-        return sum;
+        var corrected = delta - corrections[index];
+        var next = values[index] + corrected;
+        if (!double.IsFinite(next)) throw new ArgumentOutOfRangeException(nameof(delta), "Accumulated environmental energy must remain finite.");
+        corrections[index] = (next - values[index]) - corrected;
+        values[index] = next;
     }
 }
 

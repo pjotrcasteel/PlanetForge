@@ -6,6 +6,18 @@ namespace PlanetForge.Domain.Tests.Origins;
 public sealed class PlanetThermalEnergyBudgetTests
 {
     [TestMethod]
+    public void AdvanceSeconds_RepeatedSubUlpHeatLoss_RetainsDebitsInFiniteMantle()
+    {
+        const double stored = 1e20;
+        var initial = new PlanetThermalEnergyBudget(stored);
+        var candidate = initial;
+        for (var i = 0; i < 10_000; i++) candidate = candidate.AdvanceSeconds(1.0, new(0.0, 0.0, 1.0));
+        Assert.AreEqual(stored - 10_000.0, candidate.StoredEnergyJoules, 0.0);
+        Assert.AreEqual(10_000.0, candidate.CumulativeSurfaceHeatLossJoules, 0.0);
+        Assert.AreEqual(stored, initial.StoredEnergyJoules, 0.0);
+    }
+
+    [TestMethod]
     public void Advance_ImpactRadiogenicHeatingAndSurfaceLoss_ConservesJoules()
     {
         var initial = new PlanetThermalEnergyBudget(1_000.0);

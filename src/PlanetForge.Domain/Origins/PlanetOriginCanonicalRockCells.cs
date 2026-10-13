@@ -68,6 +68,22 @@ public sealed class PlanetOriginCanonicalRockCells
     public PlanetOriginSurfaceRockPhaseField Field { get; }
     public PlanetOriginRockColumnField? Columns { get; }
 
+    /// <summary>Accepted forcing for optical face reconstruction; never an additional energy reservoir.</summary>
+    public PlanetOriginRegionalAirlessParameters? SurfaceBoundary { get; init; }
+
+    public double ResolveRadiatingSurfaceTemperature(PlanetSurfaceGridCellId id)
+    {
+        if (Columns is not { Properties.UseRadiatingInterface: true } || SurfaceBoundary is not { } boundary)
+            return ResolveSurfacePhase(id).TemperatureKelvin;
+        var column = Columns.Columns[Field.Layout.GetIndex(id)];
+        var layer = column.Layers[0];
+        var absorbed = boundary.SolarIrradianceWattsPerSquareMeter * (1.0 - boundary.BondAlbedo) *
+            Math.Max(0.0, PlanetVector.Dot(PlanetSurfaceGridGeometry.GetCenterDirection(id), boundary.StellarDirection));
+        return PlanetOriginRockRadiatingBoundary.ResolveTemperature(layer.Resolve(Field.Material).TemperatureKelvin,
+            Columns.Properties.ConductivityWattsPerMeterKelvin, layer.VolumeCubicMeters(Field.Material, Columns.Properties) / column.AreaSquareMeters * 0.5,
+            absorbed, boundary.InfraredEmissivity);
+    }
+
     public PlanetRockThermalState ResolveSurfacePhase(PlanetSurfaceGridCellId id) =>
         Columns?.ResolveSurface(id) ?? Field.Cells[Field.Layout.GetIndex(id)].Resolve(Field.Material);
 
@@ -147,7 +163,7 @@ public sealed class PlanetOriginCanonicalRockCells
         };
         var nextEpoch = Epoch.AdvanceCoupled(step, cancellationToken);
         cancellationToken.ThrowIfCancellationRequested();
-        return new PlanetOriginCanonicalRockCells(nextEpoch, trial.Candidate.Aggregate, trial.Candidate);
+        return new PlanetOriginCanonicalRockCells(nextEpoch, trial.Candidate.Aggregate, trial.Candidate) { SurfaceBoundary = parameters };
     }
 
     private void VerifyInteriorConductionStability(
@@ -191,7 +207,7 @@ public sealed class PlanetOriginCanonicalRockCells
         if (Math.Abs(energy - field.TotalStoredEnthalpyJoules) > maxEnergyTolerance ||
             Math.Abs(mass - field.TotalActiveRockMassKilograms) > maxMassTolerance)
         {
-            throw new InvalidOperationException("Surface cells are not the same rock mass and enthalpy as the canonical world.");
+            throw new InvalidOperationException($"Surface cells differ from the canonical world: relative energy {(field.TotalStoredEnthalpyJoules - energy) / energy:R}, relative mass {(field.TotalActiveRockMassKilograms - mass) / mass:R}.");
         }
     }
 }

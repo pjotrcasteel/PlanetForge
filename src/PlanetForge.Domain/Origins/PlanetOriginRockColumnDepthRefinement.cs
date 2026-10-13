@@ -41,7 +41,7 @@ public readonly record struct PlanetOriginRockColumnResolutionSample(
 
     public void Validate()
     {
-        if (LayerCount is < 2 or > 64 || FullySolidTopLayers < 0 || FullySolidTopLayers > LayerCount ||
+        if (LayerCount is < 2 or > 128 || FullySolidTopLayers < 0 || FullySolidTopLayers > LayerCount ||
             !double.IsFinite(FullySolidTopMeters) || FullySolidTopMeters < 0.0 ||
             !double.IsFinite(FirstUnresolvedCellBottomMeters) || FirstUnresolvedCellBottomMeters < FullySolidTopMeters ||
             !double.IsFinite(SurfaceTemperatureKelvin) || SurfaceTemperatureKelvin <= 0.0)

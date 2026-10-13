@@ -6,6 +6,19 @@ namespace PlanetForge.Domain.Tests.Origins;
 public sealed class PlanetEnvironmentalEnergyBudgetTests
 {
     [TestMethod]
+    public void TransferHeat_RepeatedSubUlpDebits_PreservesSmallFluxesAndImmutableSource()
+    {
+        const double initialEnergy = 1e20;
+        var initial = new PlanetEnvironmentalEnergyBudget(initialEnergy, 0.0, 0.0);
+        var candidate = initial;
+        for (var i = 0; i < 10_000; i++)
+            candidate = candidate.TransferHeat(PlanetEnvironmentHeatReservoir.Atmosphere, PlanetEnvironmentHeatReservoir.SurfaceOcean, 1.0);
+        Assert.AreEqual(initialEnergy - 10_000.0, candidate.GetEnergyJoules(PlanetEnvironmentHeatReservoir.Atmosphere), 0.0);
+        Assert.AreEqual(10_000.0, candidate.GetEnergyJoules(PlanetEnvironmentHeatReservoir.SurfaceOcean), 0.0);
+        Assert.AreEqual(initialEnergy, initial.GetEnergyJoules(PlanetEnvironmentHeatReservoir.Atmosphere), 0.0);
+    }
+
+    [TestMethod]
     public void Apply_CondensationFreezingAndMelting_ConservesMassAndCombinedEnvironmentalLatentEnergy()
     {
         var water = PlanetWaterInventory.Empty

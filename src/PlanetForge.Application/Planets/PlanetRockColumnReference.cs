@@ -25,6 +25,19 @@ public static class PlanetRockColumnReference
         return new(funded.Epoch, columns.Aggregate, columns);
     }
 
+    /// <summary>Opt-in surface-focused numerical reference; not the released eight-layer reference or calibrated Earth cooling.</summary>
+    public static PlanetOriginCanonicalRockCells CreateResolvedInitial(double radiusMeters, int layerCount = 64)
+    {
+        var funded = PlanetMagmaOceanReference.CreateInitial(radiusMeters);
+        var columns = PlanetOriginRockColumnField.Partition(funded.Field, new(layerCount, 3000.0, 2800.0, 3.0)
+        {
+            DepthGradingExponent = 2.0,
+            UseRadiatingInterface = true,
+            UseImplicitDepthTransport = true
+        });
+        return new(funded.Epoch, columns.Aggregate, columns);
+    }
+
     public static PlanetOriginCanonicalRockCells Advance(PlanetOriginCanonicalRockCells current,
         PlanetRenderSnapshot world, CancellationToken cancellationToken = default) =>
         PlanetOriginRockColumnIntegrator.Advance(current, PlanetOriginDuration.FromSeconds(AdvanceSeconds),
