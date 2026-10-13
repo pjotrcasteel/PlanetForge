@@ -36,3 +36,9 @@ The Earth-origin roadmap (#143) **extends the existing terrain architecture**. I
 - Improve visual realism on the main planet only after its physical state can support the appearance.
 
 Read together with `docs/planet-wide-terrain-roadmap.md` and `docs/earth-origin-scientific-foundation.md`.
+
+## Origin formation boundary (2026-10-13)
+
+The depth-column origin reference now projects funded phase/density contraction through the same `PlanetTerrainRegionProvider` rather than borrowing modern canonical relief. `IPlanetOriginSurfacePublication` serializes that elevation with accepted epoch/columns and render projections, rolls back on failure and never reuses failed geometry revisions. Legacy Hero/research source ownership is retained and restored when leaving the reference. See [depth-column contract](earth-origin-depth-resolved-rock-columns.md).
+
+This does not activate the existing modern crust catalogue or imposed plate history as primordial material. Genesis must create conservative, provenance-bearing material from the canonical thermal/compositional state before mechanical advection/deformation can feed Hero. A thermally solid layer is not yet a plate, a moving material parcel, chemical differentiation or mechanical strength. Do not fill that gap with prebuilt continents, fake fractures or shader mountains. Existing Hero algorithms remain preserved and receive evolved physical terrain only through the shared gateway.
