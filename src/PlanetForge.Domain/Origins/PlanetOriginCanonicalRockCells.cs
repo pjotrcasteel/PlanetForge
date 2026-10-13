@@ -15,6 +15,10 @@ public readonly record struct PlanetOriginRegionalAirlessParameters(
     double ConductivityWattsPerMeterKelvin,
     double ConductiveBoundaryThicknessMeters)
 {
+    /// <summary>Optional shell conduction across adjacent spherical cells. Zero preserves the airless reference.</summary>
+    public double LateralConductivityWattsPerMeterKelvin { get; init; }
+    public double LateralLayerThicknessMeters { get; init; }
+
     public void Validate()
     {
         if (!double.IsFinite(SolarIrradianceWattsPerSquareMeter) || SolarIrradianceWattsPerSquareMeter < 0.0 ||
@@ -31,6 +35,14 @@ public readonly record struct PlanetOriginRegionalAirlessParameters(
             Math.Abs(PlanetVector.Dot(StellarDirection, StellarDirection) - 1.0) > 1e-8)
         {
             throw new ArgumentOutOfRangeException(nameof(StellarDirection), "Sun direction must be a unit vector.");
+        }
+
+        if (!double.IsFinite(LateralConductivityWattsPerMeterKelvin) || LateralConductivityWattsPerMeterKelvin < 0.0 ||
+            !double.IsFinite(LateralLayerThicknessMeters) || LateralLayerThicknessMeters < 0.0 ||
+            (LateralConductivityWattsPerMeterKelvin > 0.0 && LateralLayerThicknessMeters == 0.0))
+        {
+            throw new ArgumentOutOfRangeException(nameof(LateralConductivityWattsPerMeterKelvin),
+                "Lateral heat transfer requires finite nonnegative conductivity and a positive finite active-layer thickness.");
         }
     }
 }
@@ -84,6 +96,14 @@ public sealed class PlanetOriginCanonicalRockCells
             return new PlanetOriginSurfaceThermalRates(conductive, absorbed, emitted);
         }, cancellationToken);
 
+        // Operator splitting: compute boundary heat exchanges from the current
+        // canonical state, then move heat *within* that same SurfaceRock account.
+        // Lateral flux has no source or sink in the global energy ledger.
+        var lateralField = parameters.LateralConductivityWattsPerMeterKelvin == 0.0
+            ? trial.Candidate
+            : trial.Candidate.ProposeLateralHeat(interval, parameters.LateralConductivityWattsPerMeterKelvin,
+                parameters.LateralLayerThicknessMeters, cancellationToken).Candidate;
+
         var radiation = new PlanetRadiativeBalance(
             area, trial.AbsorbedStellarJoules / seconds / area, trial.OutgoingInfraredJoules / seconds / area,
             trial.AbsorbedStellarJoules / seconds, trial.OutgoingInfraredJoules / seconds);
@@ -95,7 +115,7 @@ public sealed class PlanetOriginCanonicalRockCells
             []);
         var nextEpoch = Epoch.AdvanceCoupled(step, cancellationToken);
         cancellationToken.ThrowIfCancellationRequested();
-        return new PlanetOriginCanonicalRockCells(nextEpoch, trial.Candidate);
+        return new PlanetOriginCanonicalRockCells(nextEpoch, lateralField);
     }
 
     private static void CheckInvariant(PlanetOriginEpochState epoch, PlanetOriginSurfaceRockPhaseField field)

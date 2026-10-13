@@ -61,7 +61,7 @@ public sealed record PlanetOriginSurfaceRockPhaseTrial(
 /// energy ledger. A future atomic ledger migration/commit is required before
 /// these cells may drive the main globe.
 /// </summary>
-public sealed class PlanetOriginSurfaceRockPhaseField
+public sealed partial class PlanetOriginSurfaceRockPhaseField
 {
     private readonly IReadOnlyList<PlanetOriginSurfaceRockPhaseCell> cells;
 
