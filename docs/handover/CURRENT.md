@@ -14,6 +14,12 @@
 - No physically modeled *lateral magma momentum/advection*, coherent/differentiated crust mass with mechanical stress, evolving steam radiative boundary, or condensation exists in the primary formation path. The 1950–3400 K initial surface and fixed optical exposure can produce bright near-white incandescent blobs. Once the very thin surface freezes in physical seconds, the globe darkens without generating geological features. The renderer cannot legitimately invent those features.
 - Existing legacy geological/Hero/hydrological examples **are not primordial terrain** and must not be copied into the magma world. The radiating-face skin phase is massless and is **not** mechanically coherent crust. The main orbit/local projection and release UX are now usable; preserve them.
 
+## PF 0.0.47.0 candidate — finite mantle convection, not yet released
+
+The active development branch `feature/pf-mantle-convective-thermal-boundary` adds a validated, hypothesized Rayleigh/Nusselt boundary `Ra=rho*g*alpha*DeltaT*D³/(eta*kappa)`, `Nu=max(1,0.089*Ra^(1/3))` for unstable convection and `D_eff=D/Nu`. The reference parameters are D=100 km, density 3000 kg/m³, viscosity 0.1 Pa s, thermal diffusivity 1e-6 m²/s, expansion 3e-5/K. It uses only the existing finite mantle enthalpy and bottom layer heat-transfer flux, recalculated at every accepted substep. The main globe still receives its color, phase and terrain from one canonical publication; Details gains mantle T, Nu and basal flux. [Science and limits](../earth-origin-magma-convection-closure.md).
+
+**Gates outstanding:** final PR full scientific + WASM + all browser CI; review and merge; exact-SHA Pages build/deploy/smoke; user Safari inspection ONLY if there is meaningfully changed actual main-planet behavior. The 0.0.46.0 visual rejection remains in effect: this thermal closure is not a fluid-flow field or mechanically resolved crust, and should not be declared visually accepted on a passing test suite.
+
 ## Immediate continuation priorities
 
 1. **Replace the inadequate physical reference, not its shader.** Define a finite-capacity deep magma-ocean/upper-mantle coupled thermal system with stated depth, material densities, viscosity/composition, buoyancy and heat-transport validity. Conservatively couple energy/mass between deep melt and surface columns. Validate thermal time scales and supported integration step sizes; 186 seconds is not a geological epoch.

@@ -33,9 +33,15 @@
                         <span data-testid="formation-skin">SKIN MELT @($"{world.Field.Cells.Min(c => world.ResolveRadiatingSurfacePhase(c.Id).MeltFraction):P0}")–@($"{world.Field.Cells.Max(c => world.ResolveRadiatingSurfacePhase(c.Id).MeltFraction):P0}")</span>
                         <span data-testid="formation-melt">TOP MELT @($"{world.Field.Cells.Min(c => world.ResolveSurfacePhase(c.Id).MeltFraction):P0}")–@($"{world.Field.Cells.Max(c => world.ResolveSurfacePhase(c.Id).MeltFraction):P0}")</span>
                         <span data-testid="formation-revision">WORLD REV @world.Epoch.Revision</span>
+                        @if (world.Columns is { } mantleColumns && world.SurfaceBoundary is { MagmaConvection: not null } mantleBoundary)
+                        {
+                            var convection = PlanetOriginMagmaConvection.Diagnose(mantleBoundary, mantleColumns, world.Epoch.Thermal);
+                            <span data-testid="formation-mantle">MANTLE @($"{convection.MantleTemperatureKelvin:0}") K · Nu @($"{convection.NusseltNumber:0}")</span>
+                            <span data-testid="formation-basal-flux">BASAL HEAT @($"{convection.MeanUpwardHeatFluxWattsPerSquareMeter:0}") W/m²</span>
+                        }
                     }
                     <small>Dry cooling and surface crystallization. Atmosphere, water and life are future coupled processes.</small>
-                    <small>Fixed-exposure thermal emission. Camera bloom is an optical effect; convection is not simulated.</small>
+                    <small>Fixed-exposure thermal emission. Bloom is optics, not steam. Parameterized Rayleigh/Nusselt convection transfers finite mantle heat into the same surface-rock ledger; magma fluid motion, steam and coherent crust mechanics remain unresolved.</small>
                     <small>Seeded regional starting heat conserves the 2200 K mean shell energy. It is an initial-condition hypothesis.</small>
                 </details>
                 @if (!string.IsNullOrEmpty(formationStatus))
@@ -331,10 +337,10 @@
             return;
         }
 
-        rendererModule = await JsRuntime.InvokeAsync<IJSObjectReference>("import", disposeCancellationTokenSource.Token, "./js/planetRenderer.js?v=0.0.46.0");
+        rendererModule = await JsRuntime.InvokeAsync<IJSObjectReference>("import", disposeCancellationTokenSource.Token, "./js/planetRenderer.js?v=0.0.47.0");
         await rendererModule.InvokeVoidAsync("initialize", disposeCancellationTokenSource.Token, "planet-canvas", snapshot, GetOrCreateSurfaceLodReference());
 
-        waterRendererModule = await JsRuntime.InvokeAsync<IJSObjectReference>("import", disposeCancellationTokenSource.Token, "./js/waterOverlay.js?v=0.0.46.0");
+        waterRendererModule = await JsRuntime.InvokeAsync<IJSObjectReference>("import", disposeCancellationTokenSource.Token, "./js/waterOverlay.js?v=0.0.47.0");
         await waterRendererModule.InvokeVoidAsync("initialize", disposeCancellationTokenSource.Token, "water-overlay-canvas", "planet-canvas", snapshot.PhysicalParameters.RadiusMeters);
         await waterRendererModule.InvokeVoidAsync("clearWaterCycle", disposeCancellationTokenSource.Token);
         if (continuousSimulation)

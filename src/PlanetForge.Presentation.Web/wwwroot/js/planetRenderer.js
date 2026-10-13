@@ -1,5 +1,5 @@
 import { createOpticalBloom, renderOpticalBloom, disposeOpticalBloom } from './opticalBloom.js';
-import { createThermalRadianceData, thermalTextureSize, thermalMaterialShader } from './thermalRadiance.js?v=0.0.46.0';
+import { createThermalRadianceData, thermalTextureSize, thermalMaterialShader } from './thermalRadiance.js?v=0.0.47.0';
 import { clearRetainedSurfaceGeometry, retainSurfaceGeometry } from './surfaceGeometryStore.js';
 import { bindPlanetCameraState, clearPlanetCameraState } from './planetCameraState.js';
 export { getPlanetCameraSnapshot } from './planetCameraState.js';

@@ -22,8 +22,12 @@ public readonly record struct PlanetOriginRegionalAirlessParameters(
     public double LateralConductivityWattsPerMeterKelvin { get; init; }
     public double LateralLayerThicknessMeters { get; init; }
 
+    /// <summary>Optional convective lower-boundary closure using existing finite mantle enthalpy.</summary>
+    public PlanetOriginMagmaConvectionParameters? MagmaConvection { get; init; }
+
     public void Validate()
     {
+        if (MagmaConvection is { } convection) convection.Validate();
         if (!double.IsFinite(SolarIrradianceWattsPerSquareMeter) || SolarIrradianceWattsPerSquareMeter < 0.0 ||
             !double.IsFinite(BondAlbedo) || BondAlbedo is < 0.0 or > 1.0 ||
             !double.IsFinite(InfraredEmissivity) || InfraredEmissivity is < 0.0 or > 1.0 ||

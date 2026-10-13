@@ -176,6 +176,7 @@ public sealed partial class PlanetOriginRockColumnField
     {
         boundary.Validate();
         ArgumentNullException.ThrowIfNull(interior);
+        boundary = PlanetOriginMagmaConvection.ResolveBoundary(boundary, this, interior);
         if (boundary.LateralConductivityWattsPerMeterKelvin != 0.0)
             throw new InvalidOperationException("Column integration requires layer-consistent lateral transport.");
         var maximum = double.PositiveInfinity;
@@ -229,6 +230,7 @@ public sealed partial class PlanetOriginRockColumnField
         boundary.Validate();
         ArgumentNullException.ThrowIfNull(interior);
         if (interval.IsZero) throw new ArgumentOutOfRangeException(nameof(interval));
+        boundary = PlanetOriginMagmaConvection.ResolveBoundary(boundary, this, interior);
         if (boundary.LateralConductivityWattsPerMeterKelvin != 0.0)
             throw new InvalidOperationException("Depth-resolved lateral exchange needs layer-consistent fluxes; aggregate lateral conduction cannot silently mix column material.");
 

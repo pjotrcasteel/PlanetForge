@@ -60,6 +60,8 @@ test('Formation_OneClock_CoolsAndReplaysWithoutStateSwitchButtons', async ({ pag
   expect(cooled.mean).toBeLessThan(initial.mean*.8);expect(cooled.glError).toBe(0);
   await page.locator('.formation-details summary').click();
   await expect(page.getByTestId('formation-melt')).not.toHaveText('TOP MELT 100%–100%');
+  await expect(page.getByTestId('formation-mantle')).toContainText('MANTLE');
+  await expect(page.getByTestId('formation-basal-flux')).toContainText('BASAL HEAT');
   await page.screenshot({path:testInfo.outputPath('formation-crystallizing-pc.png')});
   await page.getByTestId('formation-speed').selectOption('1');
   await page.getByTestId('formation-play').click();
@@ -144,7 +146,7 @@ test('Formation_VersionedRendererAndWaterOverlay_KeepOneCameraAndTerrainRevision
   await page.goto(url);
   await expect(page.getByTestId('formation-step')).toBeEnabled({ timeout: 90000 });
   const inspect = () => page.evaluate(async () => {
-    const current = await import('/js/planetRenderer.js?v=0.0.46.0');
+    const current = await import('/js/planetRenderer.js?v=0.0.47.0');
     const unversioned = await import('/js/planetRenderer.js');
     const renderer = current.getPlanetCameraSnapshot();
     const alternate = unversioned.getPlanetCameraSnapshot();
@@ -172,7 +174,7 @@ test('Formation_VersionedRendererAndWaterOverlay_KeepOneCameraAndTerrainRevision
   await page.getByTestId('formation-step').click();
   await expect(page.getByTestId('formation-time')).toHaveText('T+00:00:01', { timeout: 90000 });
   const advanced = await inspect();
-  expect(waterModuleRequests.some(requestUrl => requestUrl.includes('waterOverlay.js?v=0.0.46.0'))).toBe(true);
+  expect(waterModuleRequests.some(requestUrl => requestUrl.includes('waterOverlay.js?v=0.0.47.0'))).toBe(true);
   expect(advanced.renderer).toEqual(advanced.alternate);
   expect(advanced.overlay.terrainRevision).toBe(advanced.terrainRevision);
   expect(advanced.renderer.geometryKey).toBeTruthy();
