@@ -38,6 +38,14 @@ Read [column science/publication contract](../earth-origin-depth-resolved-rock-c
 - First #208 CI failed a legacy catalogue-startup timeout; first #209 upload contained corrupted Razor text and was caught before release; corrected #209 then exposed too-short reset waits. All were investigated/fixed; corrected full CI and production gates passed. Large uploads must be read individually and all blobs compared to local bytes before accepting source validation.
 - Legacy Hero morphology, local LOD blur/performance, cryosphere and river continuity risks remain (#148/#162/#163). No new save/archive schema or physical column persistence is claimed.
 
+## Platform and validation agreement (2026-10-13)
+
+**PC is the primary target platform.** iPhone Safari is a convenient rapid inspection device, not the design target or evidence of PC correctness. Responsive WebGL, input handling, performance and quality must also be validated on desktop PC (mouse/keyboard, larger viewport, high LOD). A successful iPhone inspection is valuable but does not substitute for PC browser regression/performance acceptance. Every visible release should specify the iPhone quick check and, when relevant, a separate PC-specific quality check. Continue using fixed seed and matched camera/time screenshots; preserve Hero and LOD 0–3.
+
+## Active depth-refinement work
+
+The `feature/depth-refinement-reproducibility` branch adds an explicit 8/16/32/64 layer-count research parameter to the rock-column reference and initial-state mass/enthalpy regression checks. It **does not fix** the documented nonconverged solidification front or change the released 8-layer behavior. Run full CI, then use the reproducible resolutions to investigate and repair depth/front accuracy before interpreting primary crust thickness. No version bump or visual-check request for a nonvisual scientific tooling PR.
+
 ## Exact next steps
 
 1. Verify this docs checkpoint/main/Pages; inspect any new user Safari feedback at T+0, T+1h, T+4h, reset and orbit/local navigation. Appearance acceptance remains open; do not switch the default prematurely.

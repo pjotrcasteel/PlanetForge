@@ -12,10 +12,16 @@ namespace PlanetForge.Application.Planets;
 public static class PlanetRockColumnReference
 {
     public const int AdvanceSeconds = 3_600;
-    public static PlanetOriginCanonicalRockCells CreateInitial(double radiusMeters)
+    public static PlanetOriginCanonicalRockCells CreateInitial(double radiusMeters) => CreateInitial(radiusMeters, 8);
+
+    /// <summary>
+    /// Research-only depth resolution control. The shipped reference stays at eight layers;
+    /// comparisons must share radius, initial energy, boundary and elapsed time.
+    /// </summary>
+    public static PlanetOriginCanonicalRockCells CreateInitial(double radiusMeters, int layerCount)
     {
         var funded = PlanetMagmaOceanReference.CreateInitial(radiusMeters);
-        var columns = PlanetOriginRockColumnField.Partition(funded.Field, new(8, 3_000.0, 2_800.0, 3.0));
+        var columns = PlanetOriginRockColumnField.Partition(funded.Field, new(layerCount, 3_000.0, 2_800.0, 3.0));
         return new(funded.Epoch, columns.Aggregate, columns);
     }
 
