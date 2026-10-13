@@ -272,7 +272,13 @@ public sealed class PlanetOriginRockColumnField
         double centerKelvin, double halfCellThicknessMeters, double absorbedFluxWattsPerSquareMeter,
         double emissivity, double conductivityWattsPerMeterKelvin)
     {
-        if (conductivityWattsPerMeterKelvin == 0.0) return centerKelvin;
+        if (conductivityWattsPerMeterKelvin == 0.0)
+        {
+            // With no conductive link the radiating skin equilibrates against
+            // the incident flux; the cell interior must not radiate directly.
+            var coefficient = emissivity * PlanetRadiationBalanceModel.StefanBoltzmannWattsPerSquareMeterKelvinFourth;
+            return coefficient == 0.0 ? centerKelvin : Math.Pow(absorbedFluxWattsPerSquareMeter / coefficient, 0.25);
+        }
         var conductance = conductivityWattsPerMeterKelvin / (0.5 * halfCellThicknessMeters);
         var radiativeCoefficient = emissivity * PlanetRadiationBalanceModel.StefanBoltzmannWattsPerSquareMeterKelvinFourth;
         if (radiativeCoefficient == 0.0) return centerKelvin + absorbedFluxWattsPerSquareMeter / conductance;
