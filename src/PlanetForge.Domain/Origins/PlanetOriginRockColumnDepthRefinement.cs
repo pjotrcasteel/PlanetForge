@@ -10,6 +10,8 @@ public readonly record struct PlanetOriginRockColumnResolutionSample(
 {
     public double UnresolvedCellWidthMeters => FirstUnresolvedCellBottomMeters - FullySolidTopMeters;
 
+    public bool HasUnresolvedFront => UnresolvedCellWidthMeters > 0.0;
+
     public static PlanetOriginRockColumnResolutionSample FromColumn(
         PlanetOriginRockColumn column, PlanetOriginSurfaceRockPhaseMaterial material,
         PlanetOriginRockColumnProperties properties)
@@ -130,12 +132,13 @@ public static class PlanetOriginRockColumnDepthRefinement
         var frontDifference = Math.Abs(last.FullySolidTopMeters - previous.FullySolidTopMeters);
         var temperatureDifference = Math.Abs(last.SurfaceTemperatureKelvin - previous.SurfaceTemperatureKelvin);
         var width = last.UnresolvedCellWidthMeters;
+        var everyGridHasUnresolvedFront = samples.All(sample => sample.HasUnresolvedFront);
         // If the grids do not even agree on an interval containing the front,
         // comparing their fully solid cell counts is insufficient evidence.
         var commonLowerBound = samples.Max(sample => sample.FrontBoundsMeters.MinimumMeters);
         var commonUpperBound = samples.Min(sample => sample.FrontBoundsMeters.MaximumMeters);
         var intervalsOverlap = commonLowerBound <= commonUpperBound;
-        var meets = intervalsOverlap && last.FullySolidTopLayers >= 3 &&
+        var meets = everyGridHasUnresolvedFront && intervalsOverlap && last.FullySolidTopLayers >= 3 &&
             frontDifference <= maximumFrontDifferenceMeters &&
             temperatureDifference <= maximumSurfaceTemperatureDifferenceKelvin && width <= maximumFrontDifferenceMeters;
         return new(meets, frontDifference, temperatureDifference, width);
