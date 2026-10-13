@@ -1817,6 +1817,12 @@ void main() {
             vec2 uv = vec2(atan(dir.z, dir.x) / 6.28318530718 + 0.5,
                 asin(clamp(dir.y, -1.0, 1.0)) / 3.14159265359 + 0.5);
             vec2 encoded = sampleRegionalRock(uv);
+            if (uRockDiagnosticMode != 0) {
+                float fraction = uRockDiagnosticMode == 1 ? clamp((encoded.x - 500.0) / 2000.0, 0.0, 1.0) : clamp(encoded.y, 0.0, 1.0);
+                vec3 diagnostic = uRockDiagnosticMode == 1 ? mix(vec3(0.04, 0.15, 0.55), vec3(0.98, 0.17, 0.03), fraction) : mix(vec3(0.12, 0.28, 0.88), vec3(0.95, 0.16, 0.08), fraction);
+                outColor = vec4(diagnostic, 1.0);
+                return;
+            }
             if (uDepthColumns == 1) {
                 outColor = vec4(phaseMaterial(encoded, normalize(vNormal), normalize(uLocalCameraPosition - vPositionMeters),
                     normalize(uLightDirection), uSolarFlux), 1.0);
