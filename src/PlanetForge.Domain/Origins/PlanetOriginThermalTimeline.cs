@@ -24,6 +24,8 @@ public sealed class PlanetOriginThermalTimeline
 
     public PlanetThermalEnergyBudget EnergyBudget { get; }
 
+    public double MinimumRockHeatCapacityJoulesPerKelvin => rockModel.MinimumHeatCapacityJoulesPerKelvin;
+
     public PlanetRockThermalState Rock => rockModel.Resolve(EnergyBudget);
 
     public PlanetOriginThermalTimeline AdvanceYears(long elapsedYears, PlanetThermalEnergyFlux flux) =>

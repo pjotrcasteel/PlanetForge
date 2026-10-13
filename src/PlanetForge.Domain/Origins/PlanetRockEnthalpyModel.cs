@@ -73,6 +73,9 @@ public sealed class PlanetRockEnthalpyModel
         }
     }
 
+    /// <summary>Conservative lower bound on dH/dT, including when fusion increases effective capacity.</summary>
+    public double MinimumHeatCapacityJoulesPerKelvin => properties.RockMassKilograms * properties.SpecificHeatCapacityJoulesPerKilogramKelvin;
+
     public PlanetRockThermalState Resolve(PlanetThermalEnergyBudget energy) =>
         Resolve(energy?.StoredEnergyJoules ?? throw new ArgumentNullException(nameof(energy)));
 

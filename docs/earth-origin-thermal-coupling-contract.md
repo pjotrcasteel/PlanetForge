@@ -325,3 +325,28 @@ slice, and iPhone PF 0.0.41.0 acceptance remains pending. Next: limit regional
 conduction steps against phase-aware equilibration, validate timestep convergence,
 then introduce a separately labelled coupled conduction reference before primary
 crust material/thickness publication.
+
+## M2c — Finite-capacity vertical conduction stability (2026-10-13)
+
+Before a regional conduction trial, each surface cell must satisfy
+`(k / boundaryThickness) * cellArea * duration / minimumCellHeatCapacity <= 0.5`.
+The common mantle independently satisfies the same bound using the **sum** of
+all cell conductances and its own minimum rock heat capacity. Checking only
+surface cells would permit a small finite mantle to overshoot while heating
+or cooling many individually stable cells. Sensible `mass * cp` is a lower bound
+on effective capacity through the latent-fusion interval, so the admission
+rule also protects partially molten cells. Rejected intervals are never clipped;
+the caller must subdivide and recompute the same physical rates.
+
+This bounds the explicit conduction operator's thermal response, not the
+combined radiation/lateral/volatile model's accuracy or a Hadean cooling time.
+Tests prove instability can be rejected **before** energy overdraw, aggregate
+mantle admission, unchanged source epochs and decreasing error with timestep
+refinement over the same exact microsecond interval. The existing airless visual
+reference still uses zero conductivity. Primary crust and calibrated convective
+rates remain separate work.
+
+Production Pages smoke now also enters the explicit fully molten scenario,
+checks the exact deployed SHA, advances the canonical heat state and resets it.
+This supplements default/regional smoke; it does not replace human Safari
+appearance acceptance or prove that crust/steam/oceans have been implemented.
