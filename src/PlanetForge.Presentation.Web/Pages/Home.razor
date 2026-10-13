@@ -13,11 +13,37 @@
 @inject PlanetGeologicalCameraRegionStream RegionStream
 @inject PlanetTerrainRegionProvider TerrainProvider
 
-<main class="foundation-shell">
+<main class="foundation-shell @(continuousSimulation ? "formation-simulation" : "")">
     <section class="planet-stage foundation-stage @PlanetVisualClass()">
         <canvas id="planet-canvas" aria-label="Interactive simulated planet"></canvas>
         <canvas id="water-overlay-canvas" aria-hidden="true"></canvas>
 
+        @if (continuousSimulation)
+        {
+            <div class="formation-hud" data-testid="formation-hud">
+                <small class="formation-brand">PLANETFORGE</small>
+                <strong data-testid="formation-phase">@FormationPhase</strong>
+                <span data-testid="formation-time">@FormationTime</span>
+                <details class="formation-details">
+                    <summary>Details</summary>
+                    <span data-testid="planet-seed">SEED @CurrentSeed</span>
+                    @if (Experience.PublishedRegionalRock is { } world)
+                    {
+                        <span data-testid="formation-temperature">SURFACE @($"{world.Field.Cells.Min(c => world.ResolveRadiatingSurfaceTemperature(c.Id)):0}")–@($"{world.Field.Cells.Max(c => world.ResolveRadiatingSurfaceTemperature(c.Id)):0}") K</span>
+                        <span data-testid="formation-melt">TOP MELT @($"{world.Field.Cells.Min(c => world.ResolveSurfacePhase(c.Id).MeltFraction):P0}")–@($"{world.Field.Cells.Max(c => world.ResolveSurfacePhase(c.Id).MeltFraction):P0}")</span>
+                        <span data-testid="formation-revision">WORLD REV @world.Epoch.Revision</span>
+                    }
+                    <small>Dry cooling and surface crystallization. Atmosphere, water and life are future coupled processes.</small>
+                    <small>Fixed-exposure thermal emission. Camera bloom is an optical effect; convection is not simulated.</small>
+                </details>
+                @if (!string.IsNullOrEmpty(formationStatus))
+                {
+                    <small role="status" data-testid="formation-status">@formationStatus</small>
+                }
+            </div>
+        }
+        else
+        {
         <div class="foundation-clock @(geologyActive ? "foundation-clock-geology" : airlessReferenceActive ? "foundation-clock-thermal" : "")" aria-live="polite">
             <strong>@FormatElapsedTime()</strong>
             <span>@FormatStageLabel()</span>
@@ -126,7 +152,23 @@
             }
         </div>
 
-        @if (airlessReferenceActive)
+        }
+
+        @if (continuousSimulation)
+        {
+            <div class="formation-controls" aria-label="Simulation controls">
+                <button type="button" data-testid="formation-play" aria-pressed="@(formationPlaying ? "true" : "false")" @onclick="ToggleFormationPlayback">@(formationPlaying ? "Pause" : "Play")</button>
+                <button type="button" data-testid="formation-step" disabled="@(formationBusy || formationPlaying)" @onclick="AdvanceFormationAsync">
+                    @if (formationBusy) { <span class="foundation-epoch-spinner" aria-label="Simulating" /> }
+                    else { <span>+@formationStepSeconds s</span> }
+                </button>
+                <select aria-label="Simulation time per step" data-testid="formation-speed" @bind="formationStepSeconds" disabled="@formationBusy">
+                    <option value="1">1 s / step</option><option value="5">5 s / step</option><option value="30">30 s / step</option>
+                </select>
+                <button type="button" data-testid="formation-restart" disabled="@formationBusy" @onclick="RestartFormationAsync">Restart</button>
+            </div>
+        }
+        else if (airlessReferenceActive)
         {
             <div class="foundation-controls foundation-thermal-controls">
                 <button class="foundation-next" data-testid="airless-advance" type="button"
@@ -197,7 +239,15 @@
     private string airlessStatus = string.Empty;
     private double elapsedYears;
 
-    private int CurrentSeed => run?.Mission.Planet.Seed ?? PlanetSeedCatalog.ShowcaseSeed;
+    private bool continuousSimulation;
+    private bool formationPlaying;
+    private bool formationBusy;
+    private int formationSeed;
+    private int formationStepSeconds = 1;
+    private string formationStatus = string.Empty;
+    private Task? formationLoopTask;
+
+    private int CurrentSeed => continuousSimulation ? formationSeed : run?.Mission.Planet.Seed ?? PlanetSeedCatalog.ShowcaseSeed;
     private string CurrentScenarioName => rockColumnsActive
         ? "Dry/airless thin rock columns · physical surface cooling, freezing and contraction · no tectonics yet"
         : magmaOceanActive
@@ -224,6 +274,16 @@
         var query = new Uri(Navigation.Uri).Query;
         rockDiagnosticMode = query.Contains("rockMap=temperature", StringComparison.OrdinalIgnoreCase) ? "temperature"
             : query.Contains("rockMap=melt", StringComparison.OrdinalIgnoreCase) ? "melt" : "physical";
+        var values = query.TrimStart('?').Split('&', StringSplitOptions.RemoveEmptyEntries);
+        var researchKeys = new[] { "legacy=1", "airlessReference=1", "rockColumns=1", "resolvedColumns=1", "magmaOcean=1", "regionalRock=1", "regionalStreaming=1" };
+        continuousSimulation = !values.Any(v => researchKeys.Contains(v, StringComparer.OrdinalIgnoreCase));
+        if (continuousSimulation)
+        {
+            var seedValue = values.FirstOrDefault(v => v.StartsWith("seed=", StringComparison.OrdinalIgnoreCase));
+            formationSeed = seedValue is not null && int.TryParse(seedValue[5..], out var seed) && seed > 0 ? seed : PlanetSeedCatalog.ShowcaseSeed;
+            snapshot = PlanetFormationSimulation.Start(Experience, formationSeed);
+            return;
+        }
         var visualTestSeed = GetVisualTestSeed();
         ApplyRun(visualTestSeed.HasValue ? Run.StartNew(visualTestSeed.Value) : Run.StartNew());
         currentStage = FoundationStage.FrozenWorld;
@@ -274,6 +334,7 @@
         waterRendererModule = await JsRuntime.InvokeAsync<IJSObjectReference>("import", disposeCancellationTokenSource.Token, "./js/waterOverlay.js");
         await waterRendererModule.InvokeVoidAsync("initialize", disposeCancellationTokenSource.Token, "water-overlay-canvas", "planet-canvas", snapshot.PhysicalParameters.RadiusMeters);
         await waterRendererModule.InvokeVoidAsync("clearWaterCycle", disposeCancellationTokenSource.Token);
+        if (continuousSimulation) formationLoopTask = RunFormationLoopAsync();
         if (regionalStreamingEnabled)
         {
             try
@@ -1045,6 +1106,7 @@
     public async ValueTask DisposeAsync()
     {
         disposeCancellationTokenSource.Cancel();
+        if (formationLoopTask is not null) await formationLoopTask;
         if (geologyActive)
         {
             TerrainProvider.ClearGlobalCrustDeformation();

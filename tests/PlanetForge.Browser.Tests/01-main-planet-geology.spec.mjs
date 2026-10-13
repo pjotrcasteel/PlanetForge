@@ -5,7 +5,7 @@ import { expect, test } from '@playwright/test';
 // not send players away from the globe just to inspect its physical relief.
 test('MainPlanet_GeologyToggle_PublishesActualRevisedMeshesAndRestoresCanonicalTerrain', async ({ page }, testInfo) => {
     test.setTimeout(300_000);
-    await page.goto('/?visualTest=1');
+    await page.goto('/?visualTest=1&legacy=1');
     const planet = page.locator('#planet-canvas');
     await expect(planet).toBeVisible({ timeout: 30_000 });
     await page.waitForFunction(() => window.__planetForgeSurfaceTest?.getTerrainGeometryKey(), null, { timeout: 30_000 });
@@ -54,7 +54,7 @@ test('MainPlanet_GeologyToggle_PublishesActualRevisedMeshesAndRestoresCanonicalT
 test('MainPlanet_GeologyToggle_MobileLayout_StaysOnCanvasAndFitsPhone', async ({ page }) => {
     test.setTimeout(240_000);
     await page.setViewportSize({ width: 390, height: 844 });
-    await page.goto('/?visualTest=1');
+    await page.goto('/?visualTest=1&legacy=1');
     await expect(page.locator('#planet-canvas')).toBeVisible({ timeout: 30_000 });
     const toggle = page.getByTestId('geology-terrain-toggle');
     await expect(toggle).toBeVisible();
@@ -81,7 +81,7 @@ test('MainPlanet_GeologyToggle_MobileLayout_StaysOnCanvasAndFitsPhone', async ({
 
 test('MainPlanet_WaterOverlay_CameraFollowsWebGLOrbitWithoutIndependentGestures', async ({ page }) => {
     test.setTimeout(90_000);
-    await page.goto('/?visualTest=1');
+    await page.goto('/?visualTest=1&legacy=1');
     await expect(page.locator('#planet-canvas')).toBeVisible({ timeout: 30_000 });
     await page.waitForFunction(() => window.__planetForgeSurfaceTest?.getTerrainGeometryKey()
         && window.__planetForgeWaterTest?.camera(), null, { timeout: 30_000 });
@@ -109,7 +109,7 @@ test('MainPlanet_WaterOverlay_CameraFollowsWebGLOrbitWithoutIndependentGestures'
 
 test('MainPlanet_ActiveWaterWorld_BuildsWaterAgainstVisibleTerrainWithoutSecondCamera', async ({ page }, testInfo) => {
     test.setTimeout(300_000);
-    await page.goto('/?visualTest=1');
+    await page.goto('/?visualTest=1&legacy=1');
     await expect(page.locator('#planet-canvas')).toBeVisible({ timeout: 30_000 });
     await expect(page.getByRole('button', { name: 'NEXT' })).toBeEnabled({ timeout: 30_000 });
 
@@ -138,7 +138,7 @@ test('MainPlanet_ActiveWaterWorld_BuildsWaterAgainstVisibleTerrainWithoutSecondC
 
 test('MainPlanet_MeltingWorld_PublishesPhysicallyPlacedOceanInBothGeologyModes', async ({ page }, testInfo) => {
     test.setTimeout(300_000);
-    await page.goto('/?visualTest=1');
+    await page.goto('/?visualTest=1&legacy=1');
     await expect(page.locator('#planet-canvas')).toBeVisible({ timeout: 30_000 });
     await page.waitForFunction(() => window.__planetForgeSurfaceTest?.getTerrainGeometryKey(), null, { timeout: 30_000 });
 
@@ -183,7 +183,7 @@ test('MainPlanet_MeltingWorld_PublishesPhysicallyPlacedOceanInBothGeologyModes',
 test('MainPlanet_CrustResearchEpochs_ChangePhysicalGeometryAndKeepWaterCameraAlignedOnPhone', async ({ page }, testInfo) => {
     test.setTimeout(420_000);
     await page.setViewportSize({ width: 390, height: 844 });
-    await page.goto('/?visualTest=1');
+    await page.goto('/?visualTest=1&legacy=1');
     await expect(page.locator('#planet-canvas')).toBeVisible({ timeout: 30_000 });
     await page.waitForFunction(() => window.__planetForgeSurfaceTest?.getTerrainGeometryKey(), null, { timeout: 30_000 });
     const canonical = await page.evaluate(() => window.__planetForgeSurfaceTest.getTerrainGeometryKey());
@@ -245,7 +245,7 @@ test('MainPlanet_CrustResearchEpochs_ChangePhysicalGeometryAndKeepWaterCameraAli
 test('MainPlanet_VisualTestMeasurement_InLocalModeActuallyRendersVisibleGround', async ({ page }, testInfo) => {
     test.setTimeout(180_000);
     await page.setViewportSize({ width: 390, height: 844 });
-    await page.goto('/?visualTest=1');
+    await page.goto('/?visualTest=1&legacy=1');
     await expect(page.locator('#planet-canvas')).toBeVisible({ timeout: 30_000 });
     await page.waitForFunction(() => window.__planetForgeSurfaceTest?.getLodStats(), null, { timeout: 30_000 });
 
@@ -284,7 +284,7 @@ test('MainPlanet_VisualTestMeasurement_InLocalModeActuallyRendersVisibleGround',
 test('MainPlanet_ZoomedGeologyEpochChanges_KeepVisibleGpuTerrainAndShowDirectionalLoading', async ({ page }, testInfo) => {
     test.setTimeout(360_000);
     await page.setViewportSize({ width: 390, height: 844 });
-    await page.goto('/?visualTest=1');
+    await page.goto('/?visualTest=1&legacy=1');
     await expect(page.locator('#planet-canvas')).toBeVisible({ timeout: 30_000 });
     await page.waitForFunction(() => window.__planetForgeSurfaceTest?.getLodStats(), null, { timeout: 30_000 });
 

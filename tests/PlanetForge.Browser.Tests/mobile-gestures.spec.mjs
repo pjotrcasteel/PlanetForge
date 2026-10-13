@@ -4,7 +4,7 @@ test.use({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 1, hasTouch
 test.setTimeout(120_000);
 
 test('Mobile_PinchZoom_ZoomsInAndOut_AndPreservesSingleFingerRotation', async ({ page }, testInfo) => {
-  await page.goto('/?visualTest=1');
+  await page.goto('/?visualTest=1&legacy=1');
   await page.waitForFunction(() => Boolean(window.__planetForgeSurfaceTest), null, { timeout: 45_000 });
 
   const canvas = page.locator('#planet-canvas');
@@ -51,7 +51,7 @@ test('Mobile_PinchZoom_ZoomsInAndOut_AndPreservesSingleFingerRotation', async ({
 
 
 test('Mobile_PinchPause_DefersMeshRequestsUntilAllFingersReleased', async ({ page }) => {
-  await page.goto('/?visualTest=1');
+  await page.goto('/?visualTest=1&legacy=1');
   await page.waitForFunction(() => Boolean(window.__planetForgeSurfaceTest), null, { timeout: 45_000 });
 
   // Begin in adaptive orbit. A pause partway through a pinch must not run WebAssembly mesh

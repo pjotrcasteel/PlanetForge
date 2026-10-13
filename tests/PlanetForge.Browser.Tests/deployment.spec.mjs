@@ -7,7 +7,7 @@ test('DeployedPlanetForge_BootsAndRendersPlanet', async ({ page }) => {
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
 
-  const deployedUrl = process.env.PLANETFORGE_BASE_URL + '/?visualTest=1';
+  const deployedUrl = process.env.PLANETFORGE_BASE_URL + '/?visualTest=1&legacy=1';
   await page.goto(deployedUrl, { waitUntil: 'domcontentloaded' });
   await expect(page.getByTestId('planet-seed')).toBeVisible({ timeout: 90_000 });
   await expect(page.getByRole('button', { name: 'NEXT' })).toBeVisible();
@@ -35,7 +35,7 @@ test('DeployedPlanetForge_ExposesHotRockReferenceAndPhysicalCooling', async ({ p
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
 
-  await page.goto(process.env.PLANETFORGE_BASE_URL + '/?visualTest=1', { waitUntil: 'domcontentloaded' });
+  await page.goto(process.env.PLANETFORGE_BASE_URL + '/?visualTest=1&legacy=1', { waitUntil: 'domcontentloaded' });
   await expect(page.getByTestId('airless-enter')).toBeVisible({ timeout: 90_000 });
   await page.getByTestId('airless-enter').click();
   await expect(page.getByTestId('airless-reference-readout')).toBeVisible({ timeout: 45_000 });
@@ -154,4 +154,17 @@ test('PublishedRockColumns_SurfaceAndDepth_AdvancesCanonicalTerrainAndResets', a
   await expect(page.getByTestId('column-solid-thickness')).toHaveText('SOLID TOP 0.00–0.00 m');
   await expect(page.getByTestId('regional-melt-range')).toHaveText('MELT 100%–100%');
   expect(errors).toEqual([]);
+});
+
+test('DeployedFormation_StartsMoltenOnPrimaryPageAndAdvancesSameClock', async ({ page }) => {
+  await page.goto(process.env.PLANETFORGE_BASE_URL + '/?visualTest=1&seed=24061984', {waitUntil:'domcontentloaded'});
+  await expect(page.getByTestId('formation-phase')).toHaveText('Molten surface',{timeout:90000});
+  await expect(page.locator('#planetforge-build-badge')).toContainText('PF 0.0.45.0');
+  if(process.env.PLANETFORGE_EXPECTED_SHA) await expect(page.locator('#planetforge-build-badge')).toContainText(process.env.PLANETFORGE_EXPECTED_SHA.slice(0,7));
+  await expect(page.getByTestId('formation-time')).toHaveText('T+00:00:00');
+  await expect(page.getByTestId('airless-enter')).toHaveCount(0);
+  await page.getByTestId('formation-step').click();
+  await expect(page.getByTestId('formation-time')).toHaveText('T+00:00:01',{timeout:60000});
+  await page.waitForFunction(()=>Boolean(window.__planetForgeSurfaceTest),null,{timeout:60000});
+  expect((await page.evaluate(()=>window.__planetForgeSurfaceTest.measure())).glError).toBe(0);
 });

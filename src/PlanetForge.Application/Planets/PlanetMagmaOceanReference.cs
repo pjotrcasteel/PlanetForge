@@ -20,8 +20,10 @@ public static class PlanetMagmaOceanReference
     private static readonly PlanetOriginSurfaceRockPhaseMaterial Material =
         new(850.0, 400_000.0, 1_300.0, 1_900.0);
 
-    public static PlanetOriginCanonicalRockCells CreateInitial(double planetRadiusMeters)
+    public static PlanetOriginCanonicalRockCells CreateInitial(double planetRadiusMeters, double contrastFraction = RegionalContrastFraction)
     {
+        if (!double.IsFinite(contrastFraction) || contrastFraction < 0.0 || contrastFraction > 0.3)
+            throw new ArgumentOutOfRangeException(nameof(contrastFraction));
         var mantle = new PlanetRockEnthalpyModel(new PlanetRockThermalProperties(
             4.0e24, 1_200.0, 400_000.0, 1_300.0, 1_900.0));
         var interior = new PlanetOriginThermalTimeline(PlanetOriginClock.EarthAccretionReference,
@@ -50,7 +52,7 @@ public static class PlanetMagmaOceanReference
                 0.20 * position.Y * position.Z +
                 0.15 * Math.Cos(3.0 * position.Z - position.Y);
             return Math.Max(0.05, variation) * cell.ActiveRockMassKilograms;
-        }, initialRockEnthalpy * RegionalContrastFraction);
+        }, initialRockEnthalpy * contrastFraction);
 
         // The visual state is only a valid "initially molten" reference when
         // every canonical cell is liquid under this explicitly named model.

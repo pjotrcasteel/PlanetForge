@@ -1,4 +1,5 @@
 using Microsoft.JSInterop;
+using PlanetForge.Application.Planets;
 using PlanetForge.Application.Rendering;
 using PlanetForge.Application.Surface;
 using PlanetForge.Domain.Surface;
@@ -7,6 +8,96 @@ namespace PlanetForge.Presentation.Web.Pages;
 
 public partial class Home
 {
+    private string FormationTime
+    {
+        get
+        {
+            var seconds = (Experience.PublishedOriginEpoch?.Clock.MicrosecondsIntoYear ?? 0) / 1_000_000;
+            return $"T+{seconds / 3600:00}:{seconds / 60 % 60:00}:{seconds % 60:00}";
+        }
+    }
+
+    private string FormationPhase
+    {
+        get
+        {
+            var world = Experience.PublishedRegionalRock;
+            if (world?.Columns is not { } columns) return "Initializing planet";
+            var melts = world.Field.Cells.Select(c => world.ResolveSurfacePhase(c.Id).MeltFraction).ToArray();
+            if (melts.All(f => f >= 0.999)) return "Molten surface";
+            if (melts.Any(f => f > 0.0)) return "Surface crystallizing";
+            return columns.Columns.Any(c => c.Layers[^1].Resolve(columns.Material).MeltFraction > 0.0)
+                ? "Solid surface · molten interior" : "Solid rock";
+        }
+    }
+
+    private void ToggleFormationPlayback() => formationPlaying = !formationPlaying;
+
+    private async Task RunFormationLoopAsync()
+    {
+        try
+        {
+            while (!disposeCancellationTokenSource.IsCancellationRequested)
+            {
+                await Task.Delay(250, disposeCancellationTokenSource.Token);
+                if (formationPlaying) await AdvanceFormationAsync();
+            }
+        }
+        catch (OperationCanceledException) when (disposeCancellationTokenSource.IsCancellationRequested) { }
+    }
+
+    private async Task AdvanceFormationAsync()
+    {
+        if (!continuousSimulation || formationBusy || rendererModule is null) return;
+        formationBusy = true;
+        formationStatus = string.Empty;
+        StateHasChanged();
+        try
+        {
+            await Task.Delay(16, disposeCancellationTokenSource.Token); // Present busy state before the bounded physics batch.
+            snapshot = PlanetFormationSimulation.Advance(Experience, formationStepSeconds, disposeCancellationTokenSource.Token);
+            await SyncPlanetAsync();
+        }
+        catch (OperationCanceledException) when (disposeCancellationTokenSource.IsCancellationRequested) { }
+        catch (Exception error)
+        {
+            formationPlaying = false;
+            formationStatus = "Simulation paused: this step could not be accepted.";
+            Console.Error.WriteLine(error);
+        }
+        finally
+        {
+            formationBusy = false;
+            if (!disposeCancellationTokenSource.IsCancellationRequested) StateHasChanged();
+        }
+    }
+
+    private async Task RestartFormationAsync()
+    {
+        if (formationBusy || !continuousSimulation) return;
+        formationPlaying = false;
+        formationBusy = true;
+        StateHasChanged();
+        try
+        {
+            await Task.Delay(16, disposeCancellationTokenSource.Token);
+            snapshot = PlanetFormationSimulation.Start(Experience, formationSeed);
+            await SyncPlanetAsync();
+            formationStatus = string.Empty;
+        }
+        catch (OperationCanceledException) when (disposeCancellationTokenSource.IsCancellationRequested) { }
+        catch (Exception error)
+        {
+            formationStatus = "The planet could not be restarted.";
+            Console.Error.WriteLine(error);
+        }
+        finally
+        {
+            formationBusy = false;
+            if (!disposeCancellationTokenSource.IsCancellationRequested) StateHasChanged();
+        }
+    }
+
     private DotNetObjectReference<Home>? surfaceLodReference;
     private PlanetLocalSurfaceMesh? lastFullLocalSurface;
     private int remainingGuaranteedFullDeliveries;
