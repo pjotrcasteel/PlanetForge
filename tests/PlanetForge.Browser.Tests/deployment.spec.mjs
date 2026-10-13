@@ -56,3 +56,23 @@ test('DeployedPlanetForge_ExposesHotRockReferenceAndPhysicalCooling', async ({ p
     await expect(badge).toContainText(process.env.PLANETFORGE_EXPECTED_SHA.slice(0, 7));
   }
 });
+
+test('PublishedRegionalRock_ShowsCanonicalPhaseAndAdvancesWithoutFakeCrust', async ({ page }) => {
+  const errors = [];
+  page.on('pageerror', error => errors.push(error.message));
+  await page.goto(process.env.PLANETFORGE_BASE_URL + '/?visualTest=1&regionalRock=1', {
+    waitUntil: 'domcontentloaded'
+  });
+
+  await expect(page.getByTestId('regional-temperature-range')).toBeVisible({ timeout: 90_000 });
+  await expect(page.getByTestId('regional-melt-range')).toBeVisible();
+  await expect(page.getByText('DECLARED THERMAL CONTRAST · NOT CRUST')).toBeVisible();
+  await expect(page.getByTestId('planet-scenario-label')).toHaveText('REGIONAL ROCK · CONSERVED PHASE REFERENCE');
+
+  const initial = await page.getByTestId('regional-temperature-range').textContent();
+  await page.getByTestId('airless-advance').click();
+  await expect(page.getByTestId('airless-elapsed')).toContainText('T+1h', { timeout: 90_000 });
+  await expect(page.getByTestId('regional-temperature-range')).not.toHaveText(initial);
+  await expect(page.getByTestId('airless-status')).toContainText('ACCEPTED');
+  expect(errors).toEqual([]);
+});
