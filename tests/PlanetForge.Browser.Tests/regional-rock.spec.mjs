@@ -96,3 +96,57 @@ test('RegionalRock_iPhoneScienceHud_LoadsScopedCSSAndKeepsAllReadoutsUnobstructe
   expect(layout.elapsed.bottom).toBeLessThanOrEqual(layout.caveat.top + 1);
   await page.screenshot({ path: testInfo.outputPath('regional-rock-iphone-hud.png') });
 });
+
+
+test('RegionalRock_iPhoneActions_StayWithinVisibleViewportAndAdvanceSimulation', async ({ page }, testInfo) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/?visualTest=1&regionalRock=1');
+  await expect(page.getByTestId('regional-temperature-range')).toBeVisible({ timeout: 45_000 });
+  await expect(page.getByTestId('airless-advance')).toBeVisible();
+  await expect(page.getByTestId('airless-reset')).toBeVisible();
+  await expect(page.getByTestId('airless-exit')).toBeVisible();
+  await expect(page.getByTestId('regional-switch')).toBeVisible();
+
+  const placement = await page.evaluate(() => {
+    const stage = document.querySelector('.planet-stage.foundation-stage');
+    const controls = document.querySelector('.foundation-controls.foundation-thermal-controls');
+    const buttons = Array.from(controls.querySelectorAll('button'));
+    const viewportHeight = document.documentElement.clientHeight;
+    const viewportWidth = document.documentElement.clientWidth;
+    return {
+      stageMinHeight: getComputedStyle(stage).minHeight,
+      stageBottom: stage.getBoundingClientRect().bottom,
+      controlsBottom: controls.getBoundingClientRect().bottom,
+      viewportHeight,
+      viewportWidth,
+      buttons: buttons.map(button => {
+        const box = button.getBoundingClientRect();
+        const x = (box.left + box.right) / 2;
+        const y = (box.top + box.bottom) / 2;
+        return {
+          name: button.textContent.trim(),
+          left: box.left, right: box.right,
+          top: box.top, bottom: box.bottom,
+          hitTested: button.contains(document.elementFromPoint(x, y))
+        };
+      })
+    };
+  });
+
+  expect(placement.stageMinHeight).toBe('0px');
+  expect(placement.stageBottom).toBeLessThanOrEqual(placement.viewportHeight + 1);
+  expect(placement.controlsBottom).toBeLessThanOrEqual(placement.viewportHeight - 3);
+  expect(placement.buttons).toHaveLength(4);
+  for (const button of placement.buttons) {
+    expect(button.left, button.name).toBeGreaterThanOrEqual(0);
+    expect(button.right, button.name).toBeLessThanOrEqual(placement.viewportWidth);
+    expect(button.top, button.name).toBeGreaterThanOrEqual(0);
+    expect(button.bottom, button.name).toBeLessThanOrEqual(placement.viewportHeight - 3);
+    expect(button.hitTested, button.name).toBe(true);
+  }
+
+  await page.screenshot({ path: testInfo.outputPath('regional-rock-iphone-actions-visible.png') });
+  await page.getByTestId('airless-advance').click();
+  await expect(page.getByTestId('airless-elapsed')).toContainText('T+1h', { timeout: 90_000 });
+  await expect(page.getByTestId('airless-status')).toContainText('ACCEPTED');
+});
