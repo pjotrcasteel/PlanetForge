@@ -41,7 +41,7 @@ if (process.argv[2] === '--verify') {
 
 const shard = Number(process.argv[2]);
 if (!Number.isInteger(shard) || shard < 1 || shard > groups.length) {
-  console.error('Expected a browser shard number between 1 and ${groups.length}.');
+  console.error(`Expected a browser shard number between 1 and ${groups.length}.`);
   process.exit(1);
 }
 
