@@ -1,5 +1,8 @@
 # PlanetForge — successor-developer handover
 
+> **This is a historical long-form handover last verified 12 October 2026.** For up-to-date workstream status, version, PRs, scientific decisions, and the cross-chat continuation prompt, start with [docs/handover/README.md](handover/README.md) and [docs/handover/CURRENT.md](handover/CURRENT.md). Workstream: `PF-EARTH-20261013-A`.
+
+
 **Verified successor update:** 12 October 2026. **Repository:** https://github.com/pjotrcasteel/PlanetForge. **Live:** https://pjotrcasteel.github.io/PlanetForge/. **Latest validated science-code merge:** `6741f0b9be91af4cbcc71b8b55c269af0928e222` (#171). Full CI and live GitHub Pages boot checks passed (runs 38241322921 and 38242699311); subsequent documentation commits may advance the SHA. **Always re-query the current GitHub state before coding.**
 
 > **Mission:** An evidence-informed, deterministic reconstruction of **Earth's history from its formation and molten/magma-ocean conditions, through crust, water-bearing impacts and outgassing, atmospheric condensation, oceans, evolving geology and prebiotic conditions, stopping at the earliest *plausible* life**. A life-creation algorithm has *not* been scientifically established. The **live browser is still a separate artificial Snowball Climate Experiment**, not a playable Hadean Earth timeline. Do not conflate the two.

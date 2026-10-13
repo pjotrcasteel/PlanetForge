@@ -1,5 +1,8 @@
 # PlanetForge
 
+> **Resume development / cross-chat handover:** [PlanetForge active workstream PF-EARTH-20261013-A](docs/handover/README.md), [current verified state](docs/handover/CURRENT.md), and [continuation prompt](docs/handover/CONTINUE.md). Current scientific development and release versions are tracked there; the historical milestone below is not the latest release.
+
+
 PlanetForge is a science-grounded, low-poly planetary terraforming game built in C# and playable directly in the browser.
 
 ## Current milestone
