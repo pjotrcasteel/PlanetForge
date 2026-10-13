@@ -84,8 +84,6 @@
                     }
                     <small data-testid="airless-elapsed">T+@(airlessElapsedSeconds / 3600)h · REV @thermal.Revision</small>
                     <small class="foundation-thermal-limit">@(regionalRockActive ? "DECLARED THERMAL CONTRAST · NOT CRUST" : "UNIFORM ROCK TEMP · CRUST NOT MODELED")</small>
-                    <button class="foundation-reference-reset foundation-phase-switch" data-testid="regional-switch" type="button"
-                            disabled="@airlessBusy" @onclick="SwitchRockReferenceAsync">@(regionalRockActive ? "UNIFORM REFERENCE" : "REGIONAL PHASE TEST")</button>
                     @if (!string.IsNullOrEmpty(airlessStatus))
                     {
                         <small role="status" data-testid="airless-status">@airlessStatus</small>
@@ -107,6 +105,8 @@
                         disabled="@airlessBusy" @onclick="ResetAirlessReferenceAsync">RESET</button>
                 <button class="foundation-reference-reset" data-testid="airless-exit" type="button"
                         disabled="@airlessBusy" @onclick="ExitAirlessReferenceAsync">BACK</button>
+                <button class="foundation-reference-reset foundation-phase-switch" data-testid="regional-switch" type="button"
+                        disabled="@airlessBusy" @onclick="SwitchRockReferenceAsync">@(regionalRockActive ? "UNIFORM REFERENCE" : "REGIONAL PHASE TEST")</button>
             </div>
         }
         else
