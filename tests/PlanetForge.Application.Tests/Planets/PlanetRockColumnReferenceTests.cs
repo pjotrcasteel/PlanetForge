@@ -25,6 +25,11 @@ public sealed class PlanetRockColumnReferenceTests
         Assert.IsTrue(candidate.Columns.Columns.All(c => c.SolidSurfaceThicknessMeters(candidate.Columns.Material, candidate.Columns.Properties) > 0.0));
         var diagnostic = PlanetOriginRockColumnResolutionSample.FromColumn(
             candidate.Columns.Columns[0], candidate.Columns.Material, candidate.Columns.Properties);
+        var phaseWeighted = PlanetOriginRockColumnResolutionSample.EstimatePhaseWeightedFrontMeters(
+            candidate.Columns.Columns[0], candidate.Columns.Material, candidate.Columns.Properties);
+        Assert.IsTrue(double.IsFinite(phaseWeighted));
+        Assert.IsTrue(phaseWeighted >= diagnostic.FrontBoundsMeters.MinimumMeters);
+        Assert.IsTrue(phaseWeighted <= diagnostic.FrontBoundsMeters.MaximumMeters);
         Assert.AreEqual(8, diagnostic.LayerCount);
         Assert.AreEqual(1, diagnostic.FullySolidTopLayers);
         Assert.IsGreaterThan(0.0, diagnostic.UnresolvedCellWidthMeters);
