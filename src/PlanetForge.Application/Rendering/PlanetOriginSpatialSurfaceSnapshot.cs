@@ -34,19 +34,64 @@ public static class PlanetOriginSpatialSurfaceProjection
             {
                 var longitude = (((x + 0.5) / AtlasWidth) - 0.5) * 2.0 * Math.PI;
                 var unit = new PlanetVector(cosLat * Math.Cos(longitude), sinLat, cosLat * Math.Sin(longitude));
-                var bestIndex = 0;
-                var bestDot = double.NegativeInfinity;
+                // Reconstruct the *display* field from nearby physical cell centers.
+                // Dot products are spherical: no artificial seams at cube faces or longitude wrap.
+                // Physical cell enthalpy and its conservation ledger are never changed.
+                const int neighborCount = 4;
+                Span<int> nearest = stackalloc int[neighborCount];
+                Span<double> proximity = stackalloc double[neighborCount];
+                nearest.Fill(-1);
+                proximity.Fill(double.NegativeInfinity);
                 for (var cellIndex = 0; cellIndex < centers.Length; cellIndex++)
                 {
                     var dot = PlanetVector.Dot(unit, centers[cellIndex]);
-                    if (dot <= bestDot) continue;
-                    bestDot = dot;
-                    bestIndex = cellIndex;
+                    for (var slot = 0; slot < neighborCount; slot++)
+                    {
+                        if (dot <= proximity[slot]) continue;
+                        for (var shift = neighborCount - 1; shift > slot; shift--)
+                        {
+                            proximity[shift] = proximity[shift - 1];
+                            nearest[shift] = nearest[shift - 1];
+                        }
+                        proximity[slot] = dot;
+                        nearest[slot] = cellIndex;
+                        break;
+                    }
                 }
 
                 var i = y * AtlasWidth + x;
-                temperatures[i] = checked((float)rock[bestIndex].TemperatureKelvin);
-                melts[i] = checked((float)rock[bestIndex].MeltFraction);
+                if (proximity[0] >= 1.0 - 1e-12)
+                {
+                    temperatures[i] = checked((float)rock[nearest[0]].TemperatureKelvin);
+                    melts[i] = checked((float)rock[nearest[0]].MeltFraction);
+                    continue;
+                }
+
+                var weightSum = 0.0;
+                var temperatureSum = 0.0;
+                var meltSum = 0.0;
+                var minimumTemperature = double.PositiveInfinity;
+                var maximumTemperature = double.NegativeInfinity;
+                var minimumMelt = 1.0;
+                var maximumMelt = 0.0;
+                for (var slot = 0; slot < neighborCount; slot++)
+                {
+                    var neighbor = nearest[slot];
+                    if (neighbor < 0) continue;
+                    var weight = 1.0 / Math.Pow(Math.Max(1e-12, 1.0 - proximity[slot]), 2.0);
+                    var temperature = rock[neighbor].TemperatureKelvin;
+                    var melt = rock[neighbor].MeltFraction;
+                    weightSum += weight;
+                    temperatureSum += weight * temperature;
+                    meltSum += weight * melt;
+                    minimumTemperature = Math.Min(minimumTemperature, temperature);
+                    maximumTemperature = Math.Max(maximumTemperature, temperature);
+                    minimumMelt = Math.Min(minimumMelt, melt);
+                    maximumMelt = Math.Max(maximumMelt, melt);
+                }
+
+                temperatures[i] = checked((float)Math.Clamp(temperatureSum / weightSum, minimumTemperature, maximumTemperature));
+                melts[i] = checked((float)Math.Clamp(meltSum / weightSum, minimumMelt, maximumMelt));
             }
         }
 
