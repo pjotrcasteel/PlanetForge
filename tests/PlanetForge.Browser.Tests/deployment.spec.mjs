@@ -51,7 +51,11 @@ test('DeployedPlanetForge_ExposesHotRockReferenceAndPhysicalCooling', async ({ p
   expect(errors).toEqual([]);
 
   const badge = page.locator('#planetforge-build-badge');
-  await expect(badge).toContainText('PF 0.0.40.0 · ');
+  // The smoke suite must validate each deployed release without carrying
+  // a stale prior-version assertion into the next release.
+  const visibleVersion = (await page.title()).match(/^PlanetForge ([0-9.]+) — Planetary Simulation$/)?.[1];
+  expect(visibleVersion).toBeTruthy();
+  await expect(badge).toContainText(`PF ${visibleVersion} · `);
   if (process.env.PLANETFORGE_EXPECTED_SHA) {
     await expect(badge).toContainText(process.env.PLANETFORGE_EXPECTED_SHA.slice(0, 7));
   }
@@ -66,6 +70,30 @@ test('PublishedRegionalRock_ShowsCanonicalPhaseAndAdvancesWithoutFakeCrust', asy
 
   await expect(page.getByTestId('regional-temperature-range')).toBeVisible({ timeout: 90_000 });
   await expect(page.getByTestId('regional-melt-range')).toBeVisible();
+  // Verify that Blazor's isolated component styles are really served by
+  // GitHub Pages, not merely referenced by the HTML document.
+  const isolatedStylesLoaded = await page.evaluate(() =>
+    Array.from(document.styleSheets).some(sheet =>
+      sheet.href?.includes('PlanetForge.Presentation.Web.styles.css')));
+  expect(isolatedStylesLoaded).toBe(true);
+  const hudLayout = await page.evaluate(() => {
+    const panel = document.querySelector('.foundation-clock-thermal');
+    const temperature = document.querySelector('[data-testid="regional-temperature-range"]');
+    const melt = document.querySelector('[data-testid="regional-melt-range"]');
+    const elapsed = document.querySelector('[data-testid="airless-elapsed"]');
+    const bounds = element => element.getBoundingClientRect();
+    return {
+      panelHeight: bounds(panel).height,
+      temperatureBottom: bounds(temperature).bottom,
+      meltTop: bounds(melt).top,
+      meltRight: bounds(melt).right,
+      elapsedLeft: bounds(elapsed).left
+    };
+  });
+  expect(hudLayout.panelHeight).toBeLessThan(160);
+  expect(hudLayout.temperatureBottom).toBeLessThanOrEqual(hudLayout.meltTop + 1);
+  expect(hudLayout.meltRight).toBeLessThanOrEqual(hudLayout.elapsedLeft + 1);
+
   await expect(page.getByText('DECLARED THERMAL CONTRAST · NOT CRUST')).toBeVisible();
   await expect(page.getByTestId('planet-scenario-label')).toHaveText('REGIONAL ROCK · CONSERVED PHASE REFERENCE');
 
