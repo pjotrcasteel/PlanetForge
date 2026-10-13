@@ -117,6 +117,25 @@ public sealed class PlanetOriginSurfacePublicationTests
         Assert.AreEqual(1_000.0, provider.SampleElevationMeters(PlanetVector.UnitZ, 1), 0.0);
     }
 
+    [TestMethod]
+    public void Experience_UnsupportedDisplayTemperature_RestoresAcceptedEpochTerrainAndGeometryGeneration()
+    {
+        var provider = new PlanetTerrainRegionProvider(new LegacyElevation());
+        var experience = CreateExperience(provider);
+        var initial = CreateWorld();
+        experience.PublishRegionalRock(initial);
+        var elevation = provider.CaptureSnapshot();
+        var revision = provider.Revision;
+        var heated = initial.Advance(PlanetOriginDuration.FromSeconds(1.0), new(PlanetVector.UnitX, 1e12, 0.0, 0.0, 0.0, 25.0));
+        Assert.ThrowsExactly<InvalidOperationException>(() => experience.PublishRegionalRock(heated));
+        Assert.AreSame(initial, experience.PublishedRegionalRock);
+        Assert.AreSame(initial.Epoch, experience.PublishedOriginEpoch);
+        Assert.AreSame(elevation, provider.CaptureSnapshot());
+        Assert.AreEqual(revision, provider.Revision);
+        var snapshot = experience.CreateSnapshot();
+        Assert.AreEqual(initial.Epoch.Revision, snapshot.SpatialRock!.Revision);
+    }
+
     private static PlanetOriginCanonicalRockCells CreateWorld()
     {
         var initial = PlanetMagmaOceanReference.CreateInitial(Radius);

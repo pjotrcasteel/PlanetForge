@@ -134,6 +134,44 @@ public sealed class PlanetOriginRockColumnFieldTests
         Assert.AreEqual(0.0, state.Epoch.WaterConservationResidualKilograms, 0.0);
     }
 
+    [TestMethod]
+    public void BoundedIntegration_ReevaluatesAdmission_ReachesExactClockAndReplaysWithoutPublishingInitial()
+    {
+        var initial = CreateState();
+        var duration = PlanetOriginDuration.FromSeconds(3_600.123456);
+        Assert.ThrowsExactly<InvalidOperationException>(() => initial.Advance(duration, Boundary));
+        var next = PlanetOriginRockColumnIntegrator.Advance(initial, duration, Boundary, new(3_600.0, 10_000));
+        var replay = PlanetOriginRockColumnIntegrator.Advance(initial, duration, Boundary, new(3_600.0, 10_000));
+        Assert.AreEqual(initial.Epoch.Clock.MicrosecondsIntoYear + 3_600_123_456L, next.Epoch.Clock.MicrosecondsIntoYear);
+        Assert.IsGreaterThan(1L, next.Epoch.Revision);
+        Assert.AreEqual(0L, initial.Epoch.Revision);
+        CollectionAssert.AreEqual(next.Columns!.Columns[0].Layers.ToArray(), replay.Columns!.Columns[0].Layers.ToArray());
+        AssertConservation(next);
+        Assert.ThrowsExactly<InvalidOperationException>(() => PlanetOriginRockColumnIntegrator.Advance(initial, duration, Boundary, new(3_600.0, 1)));
+        Assert.AreEqual(0L, initial.Epoch.Revision);
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+        Assert.ThrowsExactly<OperationCanceledException>(() => PlanetOriginRockColumnIntegrator.Advance(initial, duration, Boundary, new(30.0, 10_000), cancellation.Token));
+    }
+
+    [TestMethod]
+    public void BoundedIntegration_AccuracyCapRefinement_ConvergesSurfaceEnthalpyAtIdenticalTime()
+    {
+        var initial = CreateState();
+        var interval = PlanetOriginDuration.FromSeconds(300.0);
+        PlanetOriginCanonicalRockCells Integrate(double cap) => PlanetOriginRockColumnIntegrator.Advance(initial, interval, Boundary, new(cap, 10_000));
+        var coarse = Integrate(30.0);
+        var refined = Integrate(15.0);
+        var reference = Integrate(1.0);
+        double Error(PlanetOriginCanonicalRockCells state) => Math.Abs(state.Columns!.Columns[0].Layers[0].StoredEnthalpyJoules -
+            reference.Columns!.Columns[0].Layers[0].StoredEnthalpyJoules);
+        Assert.IsLessThan(Error(coarse), Error(refined));
+        Assert.AreEqual(coarse.Epoch.Clock, refined.Epoch.Clock);
+        Assert.AreEqual(refined.Epoch.Clock, reference.Epoch.Clock);
+        AssertConservation(coarse);
+        AssertConservation(refined);
+    }
+
     private static PlanetOriginCanonicalRockCells CreateState(double conductivity = 3.0)
     {
         var mantle = new PlanetRockEnthalpyModel(new PlanetRockThermalProperties(4e24, 1_200.0, 400_000.0, 1_300.0, 1_900.0));

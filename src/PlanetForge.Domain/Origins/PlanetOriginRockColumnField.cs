@@ -123,6 +123,49 @@ public sealed class PlanetOriginRockColumnField
     public PlanetRockThermalState ResolveSurface(PlanetSurfaceGridCellId id) =>
         Columns[Aggregate.Layout.GetIndex(id)].Layers[0].Resolve(Material);
 
+    /// <summary>Current explicit admission bound; re-evaluate after every accepted immutable substep.</summary>
+    public double MaximumStableStepSeconds(PlanetOriginRegionalAirlessParameters boundary,
+        PlanetOriginThermalTimeline interior, CancellationToken cancellationToken = default)
+    {
+        boundary.Validate();
+        ArgumentNullException.ThrowIfNull(interior);
+        if (boundary.LateralConductivityWattsPerMeterKelvin != 0.0)
+            throw new InvalidOperationException("Column integration requires layer-consistent lateral transport.");
+        var maximum = double.PositiveInfinity;
+        var mantleConductance = 0.0;
+        foreach (var column in Columns)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var thickness = column.Layers.Select(layer => layer.VolumeCubicMeters(Material, Properties) / column.AreaSquareMeters).ToArray();
+            var incidence = new double[thickness.Length];
+            for (var depth = 0; depth < thickness.Length - 1; depth++)
+            {
+                var conductance = Properties.ConductivityWattsPerMeterKelvin * column.AreaSquareMeters /
+                    ((thickness[depth] + thickness[depth + 1]) * 0.5);
+                incidence[depth] += conductance;
+                incidence[depth + 1] += conductance;
+            }
+            var bottom = boundary.ConductivityWattsPerMeterKelvin * column.AreaSquareMeters /
+                (boundary.ConductiveBoundaryThicknessMeters + thickness[^1] * 0.5);
+            incidence[^1] += bottom;
+            mantleConductance += bottom;
+            var surface = column.Layers[0].Resolve(Material).TemperatureKelvin;
+            incidence[0] += 4.0 * boundary.InfraredEmissivity * PlanetRadiationBalanceModel.StefanBoltzmannWattsPerSquareMeterKelvinFourth *
+                Math.Pow(surface, 3) * column.AreaSquareMeters;
+            for (var depth = 0; depth < incidence.Length; depth++)
+                maximum = Math.Min(maximum, StableSeconds(incidence[depth],
+                    column.Layers[depth].MassKilograms * Material.SpecificHeatCapacityJoulesPerKilogramKelvin));
+        }
+        return Math.Min(maximum, StableSeconds(mantleConductance, interior.MinimumRockHeatCapacityJoulesPerKelvin));
+    }
+
+    private static double StableSeconds(double conductance, double capacity)
+    {
+        if (!double.IsFinite(conductance) || conductance < 0.0 || !double.IsFinite(capacity) || capacity <= 0.0)
+            throw new InvalidOperationException("Column capacity and thermal incidence must remain finite and physical.");
+        return conductance == 0.0 ? double.PositiveInfinity : 0.5 * capacity / conductance;
+    }
+
     public PlanetOriginRockColumnTrial Propose(
         PlanetOriginDuration interval, PlanetOriginRegionalAirlessParameters boundary,
         PlanetOriginThermalTimeline interior, CancellationToken cancellationToken = default)
