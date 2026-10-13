@@ -49,3 +49,50 @@ test('RegionalRock_ExistingOneZoneSimulation_CanSwitchWithoutChangingMainPlanet'
   await page.getByTestId('airless-exit').click();
   await expect(page.getByText('SNOWBALL EXPERIMENT', { exact: true })).toBeVisible();
 });
+
+
+test('RegionalRock_iPhoneScienceHud_LoadsScopedCSSAndKeepsAllReadoutsUnobstructed', async ({ page }, testInfo) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/?visualTest=1&regionalRock=1');
+  await expect(page.getByTestId('regional-temperature-range')).toBeVisible({ timeout: 45_000 });
+  await expect(page.getByTestId('airless-elapsed')).toContainText('T+0h');
+
+  const layout = await page.evaluate(() => {
+    const panel = document.querySelector('.foundation-clock-thermal');
+    const temperature = document.querySelector('[data-testid="regional-temperature-range"]');
+    const melt = document.querySelector('[data-testid="regional-melt-range"]');
+    const elapsed = document.querySelector('[data-testid="airless-elapsed"]');
+    const caveat = document.querySelector('.foundation-thermal-limit');
+    const stylesheet = Array.from(document.styleSheets).some(sheet =>
+      sheet.href?.includes('PlanetForge.Presentation.Web.styles.css'));
+    const bounds = element => {
+      const r = element.getBoundingClientRect();
+      return { top: r.top, bottom: r.bottom, left: r.left, right: r.right, width: r.width, height: r.height };
+    };
+    return {
+      stylesheet,
+      panel: bounds(panel),
+      temperature: bounds(temperature),
+      melt: bounds(melt),
+      elapsed: bounds(elapsed),
+      caveat: bounds(caveat),
+      viewportWidth: window.innerWidth,
+      documentWidth: document.documentElement.scrollWidth,
+      titleVisible: getComputedStyle(document.querySelector('.foundation-clock-thermal > strong')).display !== 'none'
+    };
+  });
+
+  expect(layout.stylesheet).toBe(true);
+  expect(layout.titleVisible).toBe(true);
+  expect(layout.panel.width).toBeGreaterThan(260);
+  expect(layout.panel.height).toBeLessThan(160);
+  expect(layout.documentWidth).toBeLessThanOrEqual(layout.viewportWidth);
+  expect(layout.panel.left).toBeGreaterThanOrEqual(0);
+  expect(layout.panel.right).toBeLessThanOrEqual(layout.viewportWidth);
+  expect(layout.temperature.left).toBeGreaterThanOrEqual(layout.panel.left);
+  expect(layout.temperature.right).toBeLessThanOrEqual(layout.panel.right);
+  expect(layout.temperature.bottom).toBeLessThanOrEqual(layout.melt.top + 1);
+  expect(layout.melt.right).toBeLessThanOrEqual(layout.elapsed.left + 1);
+  expect(layout.elapsed.bottom).toBeLessThanOrEqual(layout.caveat.top + 1);
+  await page.screenshot({ path: testInfo.outputPath('regional-rock-iphone-hud.png') });
+});
