@@ -337,3 +337,34 @@
     color: #b9e5c5;
     white-space: nowrap;
 }
+
+
+/* The regional option belongs with controls below the planet, not in the
+   scientific instrument HUD that already overlaps the orbital scene. */
+.foundation-controls.foundation-thermal-controls:has(.foundation-phase-switch) {
+    flex-wrap: wrap;
+    justify-content: center;
+    width: min(94vw, 350px);
+    max-width: 350px;
+    gap: 6px;
+}
+
+.foundation-controls.foundation-thermal-controls .foundation-phase-switch {
+    flex-basis: 100%;
+    width: 100%;
+    min-height: 38px;
+    padding: 0 12px;
+    border-color: rgba(232, 148, 104, 0.54);
+    color: #ffe0c2;
+    background: rgba(51, 26, 18, 0.91);
+}
+
+.foundation-clock.foundation-clock-thermal .foundation-thermal-readout [data-testid="regional-temperature-range"] {
+    font-size: 0.81rem;
+    letter-spacing: 0.05em;
+    white-space: nowrap;
+}
+
+.foundation-clock.foundation-clock-thermal .foundation-thermal-readout [data-testid="regional-melt-range"] {
+    font-size: 0.64rem;
+}
