@@ -85,6 +85,20 @@ public sealed class PlanetOriginRockColumnDepthRefinementTests
     }
 
     [TestMethod]
+    public void Screen_FullySolidFinestGrid_DoesNotClaimResolvedFront()
+    {
+        PlanetOriginRockColumnResolutionSample[] samples =
+        [
+            new(8, 0.50, 0.60, 900, 3),
+            new(16, 0.52, 0.57, 901, 6),
+            new(32, 0.53, 0.55, 902, 12),
+            new(64, 0.54, 0.54, 903, 64)
+        ];
+        Assert.IsFalse(samples[^1].HasUnresolvedFront);
+        Assert.IsFalse(PlanetOriginRockColumnDepthRefinement.Screen(samples).MeetsScreeningCriteria);
+    }
+
+    [TestMethod]
     public void Screen_OutOfOrderOrNonPhysicalSamples_Rejects()
     {
         PlanetOriginRockColumnResolutionSample[] samples =
