@@ -1,6 +1,6 @@
 // The single source of truth for the visible PlanetForge release version.
 // Every deployed build also displays its own Git commit SHA in the page badge.
-const buildVersion = '0.0.45.0';
+const buildVersion = '0.0.46.0';
 document.title = `PlanetForge ${buildVersion} — Planetary Simulation`;
 
 document.addEventListener('DOMContentLoaded', () => {

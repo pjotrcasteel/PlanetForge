@@ -20,7 +20,7 @@ public static class PlanetMagmaOceanReference
     private static readonly PlanetOriginSurfaceRockPhaseMaterial Material =
         new(850.0, 400_000.0, 1_300.0, 1_900.0);
 
-    public static PlanetOriginCanonicalRockCells CreateInitial(double planetRadiusMeters, double contrastFraction = RegionalContrastFraction)
+    public static PlanetOriginCanonicalRockCells CreateInitial(double planetRadiusMeters, double contrastFraction = RegionalContrastFraction, int gridLevel = 3)
     {
         if (!double.IsFinite(contrastFraction) || contrastFraction < 0.0 || contrastFraction > 0.3)
             throw new ArgumentOutOfRangeException(nameof(contrastFraction));
@@ -40,7 +40,7 @@ public static class PlanetMagmaOceanReference
         };
         var ledger = new PlanetOriginEnergyLedger(interior, environment, capacities);
         var uniform = PlanetOriginSurfaceRockPhaseField.FromCanonicalPhaseSurface(
-            ledger, new PlanetSurfaceGridLayout(3), planetRadiusMeters);
+            ledger, new PlanetSurfaceGridLayout(gridLevel), planetRadiusMeters);
 
         // Broad spherical harmonics encode one declared, non-unique regional
         // initial-temperature hypothesis. We redistribute *existing* energy

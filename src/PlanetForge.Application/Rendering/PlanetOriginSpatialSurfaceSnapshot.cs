@@ -27,8 +27,7 @@ public static class PlanetOriginSpatialSurfaceProjection
     {
         ArgumentNullException.ThrowIfNull(region);
         var field = region.Field;
-        var rock = field.Cells.Select(c => region.ResolveSurfacePhase(c.Id) with
-        { TemperatureKelvin = region.ResolveRadiatingSurfaceTemperature(c.Id) }).ToArray();
+        var rock = field.Cells.Select(c => region.ResolveRadiatingSurfacePhase(c.Id)).ToArray();
         if (rock.Any(value => !double.IsFinite(value.TemperatureKelvin) || value.TemperatureKelvin < 0.0 || value.TemperatureKelvin > 6553.5))
             throw new InvalidOperationException("Physical surface temperature exceeds the declared RGBA8 display envelope; publication was rejected.");
         var stencil = GetStencil(field.Layout);
@@ -107,10 +106,12 @@ public static class PlanetOriginSpatialSurfaceProjection
                         if (nearest[slot] < 0) { weights[address] = 0.0; continue; }
                         var distance = Math.Max(1e-12, 1.0 - proximity[slot]);
                         var support = Math.Max(1e-12, 1.0 - proximity[DisplayNeighbors]);
-                        // Compact Shepard support goes to zero as a cell enters/leaves the neighbourhood.
-                        // Avoid visible four-neighbour boundaries without adding a new physical heat/phase field.
-                        weights[address] = proximity[0] >= 1.0 - 1e-12 ? (slot == 0 ? 1.0 : 0.0)
-                            : Math.Pow(Math.Max(0.0, 1.0 / distance - 1.0 / support), 2.0);
+                        // Normalized compact Wendland reconstruction is smooth at cell centres
+                        // and vanishes at support boundaries. Singular inverse-distance weights
+                        // created visible square hot plateaus on the cubed-sphere sampling grid.
+                        // This bounded optical footprint does not modify the physical cells.
+                        var ratio = Math.Min(1.0, Math.Sqrt(distance / support));
+                        weights[address] = Math.Pow(1.0 - ratio, 4.0) * (1.0 + 4.0 * ratio);
                     }
                 }
             }

@@ -10,17 +10,19 @@ async function materialStatistics(page) {
     const gl = canvas.getContext('webgl2');
     const pixels = new Uint8Array(canvas.width * canvas.height * 4);
     gl.readPixels(0, 0, canvas.width, canvas.height, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
-    let sum=0, count=0, min=1, max=0, ocean=0;
+    let sum=0, count=0, min=1, max=0, ocean=0, hot=0, dark=0;
     for(let y=Math.floor(canvas.height*.3);y<canvas.height*.7;y+=3) {
-      for(let x=Math.floor(canvas.width*.4);x<canvas.width*.6;x+=3) {
+      for(let x=Math.floor(canvas.width*.3);x<canvas.width*.7;x+=3) {
         const i=(y*canvas.width+x)*4;
         const r=pixels[i]/255,g=pixels[i+1]/255,b=pixels[i+2]/255;
         const value=.2126*r+.7152*g+.0722*b;
         sum+=value;count++;min=Math.min(min,value);max=Math.max(max,value);
         if(b>r*1.35 && g>r*1.3)ocean++;
+        if(r>.2 && r>g*1.5)hot++;
+        if(Math.max(r,g,b)<.18)dark++;
       }
     }
-    return { mean:sum/count, range:max-min, oceanFraction:ocean/count, glError:gl.getError() };
+    return { mean:sum/count, range:max-min, oceanFraction:ocean/count, hotFraction:hot/count, darkFraction:dark/count, glError:gl.getError() };
   });
 }
 
@@ -95,4 +97,41 @@ test('Formation_Portrait_ControlsFitAndAdvanceWithoutChangingScenario', async ({
   await page.getByTestId('formation-step').click();
   await expect(page.getByTestId('formation-time')).toHaveText('T+00:00:01',{timeout:60000});
   expect((await page.evaluate(()=>window.__planetForgeSurfaceTest.measure())).glError).toBe(0);
+});
+
+
+test('Formation_ColdStart_DisablesControlsUntilRendererIsReady', async ({ page }) => {
+  let release;
+  const gate = new Promise(resolve => { release = resolve; });
+  await page.route('**/js/planetRenderer.js*', async route => { await gate; await route.continue(); });
+  await page.goto(url, { waitUntil: 'domcontentloaded' });
+  await expect(page.getByTestId('formation-phase')).toHaveText('Molten surface', { timeout: 60000 });
+  for (const id of ['formation-play', 'formation-step', 'formation-speed', 'formation-restart'])
+    await expect(page.getByTestId(id)).toBeDisabled();
+  release();
+  await expect(page.getByTestId('formation-step')).toBeEnabled({ timeout: 60000 });
+  await page.getByTestId('formation-step').click();
+  await expect(page.getByTestId('formation-time')).toHaveText('T+00:00:01', { timeout: 60000 });
+});
+
+
+test('Formation_SolidSkinAndResidualEmission_CoexistOnTheSameGlobe', async ({ page }, testInfo) => {
+  test.setTimeout(420000);
+  await page.setViewportSize({ width:1440, height:900 });
+  await page.goto(url);
+  await expect(page.getByTestId('formation-step')).toBeEnabled({ timeout:90000 });
+  await page.getByTestId('formation-speed').selectOption('30');
+  for(let step=1;step<=6;step++) {
+    await page.getByTestId('formation-step').click();
+    await expect(page.getByTestId('formation-step')).toBeEnabled({ timeout:90000 });
+  }
+  await expect(page.getByTestId('formation-time')).toHaveText('T+00:03:00');
+  await page.locator('.formation-details summary').click();
+  const melt = (await page.getByTestId('formation-skin').innerText()).match(/\d+/g).map(Number);
+  expect(melt[0]).toBe(0);expect(melt[1]).toBeGreaterThan(20);
+  const stats=await materialStatistics(page);
+  expect(stats.glError).toBe(0);
+  expect(stats.hotFraction).toBeGreaterThan(.02);
+  expect(stats.darkFraction).toBeGreaterThan(.05);
+  await page.screenshot({ path:testInfo.outputPath('formation-solid-skin-residual-glow.png') });
 });

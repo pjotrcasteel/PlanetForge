@@ -159,7 +159,7 @@ test('PublishedRockColumns_SurfaceAndDepth_AdvancesCanonicalTerrainAndResets', a
 test('DeployedFormation_StartsMoltenOnPrimaryPageAndAdvancesSameClock', async ({ page }) => {
   await page.goto(process.env.PLANETFORGE_BASE_URL + '/?visualTest=1&seed=24061984', {waitUntil:'domcontentloaded'});
   await expect(page.getByTestId('formation-phase')).toHaveText('Molten surface',{timeout:90000});
-  await expect(page.locator('#planetforge-build-badge')).toContainText('PF 0.0.45.0');
+  await expect(page.locator('#planetforge-build-badge')).toContainText('PF 0.0.46.0');
   if(process.env.PLANETFORGE_EXPECTED_SHA) await expect(page.locator('#planetforge-build-badge')).toContainText(process.env.PLANETFORGE_EXPECTED_SHA.slice(0,7));
   await expect(page.getByTestId('formation-time')).toHaveText('T+00:00:00');
   await expect(page.getByTestId('airless-enter')).toHaveCount(0);
