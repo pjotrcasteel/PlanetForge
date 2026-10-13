@@ -24,3 +24,20 @@ test('RockDiagnostic_DefaultPhysicalAppearance_RemainsAvailable', async ({ page 
   await page.waitForFunction(() => Boolean(window.__planetForgeSurfaceTest), null, { timeout: 60_000 });
   expect((await page.evaluate(() => window.__planetForgeSurfaceTest.measure())).glError).toBe(0);
 });
+
+test('RockDiagnostic_Selector_SwitchesWithoutResettingPhysicalClock', async ({ page }) => {
+  await page.goto('/?visualTest=1&rockColumns=1');
+  await expect(page.getByTestId('rock-map-select')).toHaveValue('physical', { timeout: 60_000 });
+  await page.getByTestId('airless-advance').click();
+  await expect(page.getByTestId('airless-elapsed')).toContainText('T+1h', { timeout: 60_000 });
+  await page.getByTestId('rock-map-select').selectOption('temperature');
+  await expect(page.getByTestId('rock-map-legend')).toContainText('500 K');
+  await expect(page.getByTestId('airless-elapsed')).toContainText('T+1h');
+  await page.getByTestId('rock-map-select').selectOption('melt');
+  await expect(page.getByTestId('rock-map-legend')).toContainText('100% MOLTEN');
+  await page.getByTestId('rock-map-select').selectOption('physical');
+  await expect(page.getByTestId('rock-map-legend')).toHaveCount(0);
+  await expect(page.getByTestId('airless-elapsed')).toContainText('T+1h');
+  expect((await page.evaluate(() => window.__planetForgeSurfaceTest.measure())).glError).toBe(0);
+});
+
