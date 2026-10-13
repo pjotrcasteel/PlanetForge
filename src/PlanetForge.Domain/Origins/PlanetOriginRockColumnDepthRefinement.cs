@@ -39,6 +39,21 @@ public readonly record struct PlanetOriginRockColumnResolutionSample(
             column.Layers[0].Resolve(material).TemperatureKelvin, solidLayers);
     }
 
+    /// <summary>
+    /// Conservative front bounds from the contiguous fully solid layer region.
+    /// The actual solidification front is unresolved inside the next cell; this
+    /// interval must not be presented as a measured crust thickness.
+    /// </summary>
+    public (double MinimumMeters, double MaximumMeters) FrontBoundsMeters =>
+        (FullySolidTopMeters, FirstUnresolvedCellBottomMeters);
+
+    /// <summary>
+    /// Display-only center of the unresolved interval. It is not a physical
+    /// Stefan-front reconstruction and must not be used by the integrator.
+    /// </summary>
+    public double UnresolvedFrontMidpointMeters =>
+        (FullySolidTopMeters + FirstUnresolvedCellBottomMeters) * 0.5;
+
     public void Validate()
     {
         if (LayerCount is < 2 or > 64 || FullySolidTopLayers < 0 || FullySolidTopLayers > LayerCount ||
