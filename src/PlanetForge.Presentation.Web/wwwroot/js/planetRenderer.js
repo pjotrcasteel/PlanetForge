@@ -1337,6 +1337,33 @@ uniform float uSurfaceTemperature;
 uniform int uAirlessReference;
 uniform int uSpatialRockActive;
 uniform sampler2D uSpatialRockTexture;
+
+// RGBA8 stores Kelvin in two separate bytes. Interpolate *decoded* physical
+// samples, never the packed channels (linear filtering corrupts byte carries).
+vec2 sampleRegionalRock(vec2 uv) {
+    ivec2 size = textureSize(uSpatialRockTexture, 0);
+    vec2 pixel = uv * vec2(size) - vec2(0.5);
+    ivec2 base = ivec2(floor(pixel));
+    vec2 fraction = fract(pixel);
+    vec2 weighted = vec2(0.0);
+    for (int dy = 0; dy < 2; dy++) {
+        for (int dx = 0; dx < 2; dx++) {
+            ivec2 cell = base + ivec2(dx, dy);
+            cell.x = (cell.x % size.x + size.x) % size.x;
+            cell.y = clamp(cell.y, 0, size.y - 1);
+            vec4 encoded = texelFetch(uSpatialRockTexture, cell, 0);
+            vec2 sampleValue = vec2(
+                (floor(encoded.r * 255.0 + 0.5) * 256.0 +
+                    floor(encoded.g * 255.0 + 0.5)) * 0.1,
+                encoded.b);
+            float weight = (dx == 0 ? 1.0 - fraction.x : fraction.x) *
+                (dy == 0 ? 1.0 - fraction.y : fraction.y);
+            weighted += sampleValue * weight;
+        }
+    }
+    return weighted;
+}
+
 uniform float uSolarFlux;
 uniform float uLiquidFraction;
 uniform float uVaporFraction;
@@ -1580,10 +1607,9 @@ void main() {
             // Kelvin and phase fraction, with no authored lava/noise mask.
             vec2 uv = vec2(atan(radial.z, radial.x) / 6.28318530718 + 0.5,
                 asin(clamp(radial.y, -1.0, 1.0)) / 3.14159265359 + 0.5);
-            vec4 physicalPhase = texture(uSpatialRockTexture, uv);
-            float localKelvin = (floor(physicalPhase.r * 255.0 + 0.5) * 256.0 +
-                floor(physicalPhase.g * 255.0 + 0.5)) * 0.1;
-            float localMelt = clamp(physicalPhase.b, 0.0, 1.0);
+            vec2 physicalPhase = sampleRegionalRock(uv);
+            float localKelvin = physicalPhase.x;
+            float localMelt = clamp(physicalPhase.y, 0.0, 1.0);
             float incandescent = smoothstep(850.0, 1700.0, localKelvin);
             vec3 hot = mix(vec3(0.58, 0.09, 0.02), vec3(1.0, 0.34, 0.06),
                 smoothstep(1200.0, 2000.0, localKelvin));
@@ -1649,6 +1675,33 @@ uniform float uSurfaceTemperature;
 uniform int uAirlessReference;
 uniform int uSpatialRockActive;
 uniform sampler2D uSpatialRockTexture;
+
+// RGBA8 stores Kelvin in two separate bytes. Interpolate *decoded* physical
+// samples, never the packed channels (linear filtering corrupts byte carries).
+vec2 sampleRegionalRock(vec2 uv) {
+    ivec2 size = textureSize(uSpatialRockTexture, 0);
+    vec2 pixel = uv * vec2(size) - vec2(0.5);
+    ivec2 base = ivec2(floor(pixel));
+    vec2 fraction = fract(pixel);
+    vec2 weighted = vec2(0.0);
+    for (int dy = 0; dy < 2; dy++) {
+        for (int dx = 0; dx < 2; dx++) {
+            ivec2 cell = base + ivec2(dx, dy);
+            cell.x = (cell.x % size.x + size.x) % size.x;
+            cell.y = clamp(cell.y, 0, size.y - 1);
+            vec4 encoded = texelFetch(uSpatialRockTexture, cell, 0);
+            vec2 sampleValue = vec2(
+                (floor(encoded.r * 255.0 + 0.5) * 256.0 +
+                    floor(encoded.g * 255.0 + 0.5)) * 0.1,
+                encoded.b);
+            float weight = (dx == 0 ? 1.0 - fraction.x : fraction.x) *
+                (dy == 0 ? 1.0 - fraction.y : fraction.y);
+            weighted += sampleValue * weight;
+        }
+    }
+    return weighted;
+}
+
 uniform vec3 uLocalRockAnchor;
 uniform float uLiquidFraction;
 uniform float uVaporFraction;
@@ -1680,10 +1733,9 @@ void main() {
             vec3 dir = normalize(uLocalRockAnchor);
             vec2 uv = vec2(atan(dir.z, dir.x) / 6.28318530718 + 0.5,
                 asin(clamp(dir.y, -1.0, 1.0)) / 3.14159265359 + 0.5);
-            vec4 encoded = texture(uSpatialRockTexture, uv);
-            float localKelvin = (floor(encoded.r * 255.0 + 0.5) * 256.0 +
-                floor(encoded.g * 255.0 + 0.5)) * 0.1;
-            float melt = encoded.b;
+            vec2 encoded = sampleRegionalRock(uv);
+            float localKelvin = encoded.x;
+            float melt = encoded.y;
             float glow = smoothstep(850.0, 1700.0, localKelvin) * melt;
             vec3 colour = mix(vec3(0.58, 0.09, 0.02), vec3(1.0, 0.34, 0.06),
                 smoothstep(1200.0, 2000.0, localKelvin));
