@@ -18,7 +18,11 @@ public static class PlanetFormationSimulation
         experience.SetSeed(seed);
         var solarFlux = PlanetPhysicsCalculator.Calculate(EarthReference.CreateParameters()).SolarFluxWattsPerSquareMeter;
         var funded = PlanetFormationInitialHeat.Create(EarthReference.MeanRadiusMeters, seed);
-        var candidate = PlanetRockColumnReference.CreateResolvedInitial(funded, 64, solarFlux);
+        var fundedColumns = PlanetRockColumnReference.CreateResolvedInitial(funded, 64, solarFlux);
+        var candidate = new PlanetOriginCanonicalRockCells(fundedColumns.Epoch, fundedColumns.Field, fundedColumns.Columns)
+        {
+            SurfaceBoundary = Boundary(solarFlux)
+        };
         _ = experience.PublishRegionalRock(candidate);
         return experience.CreateInitialRenderSnapshot();
     }
@@ -63,5 +67,8 @@ public static class PlanetFormationSimulation
         (clock.YearsSinceSolarSystemFormation - PlanetOriginClock.EarthAccretionReference.YearsSinceSolarSystemFormation) *
         PlanetThermalEnergyBudget.JulianYearSeconds + clock.MicrosecondsIntoYear / 1_000_000.0;
 
-    private static PlanetOriginRegionalAirlessParameters Boundary(double solarFlux) => new(PlanetVector.UnitX, solarFlux, 0.15, 0.9, 3.0, 25.0);
+    private static PlanetOriginRegionalAirlessParameters Boundary(double solarFlux) => new(PlanetVector.UnitX, solarFlux, 0.15, 0.9, 3.0, 25.0)
+    {
+        MagmaConvection = PlanetOriginMagmaConvectionParameters.Reference
+    };
 }
