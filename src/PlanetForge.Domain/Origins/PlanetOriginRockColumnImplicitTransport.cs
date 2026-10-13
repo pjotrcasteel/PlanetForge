@@ -33,7 +33,7 @@ public sealed partial class PlanetOriginRockColumnField
             var bottomWidth = column.Layers[^1].VolumeCubicMeters(Material, Properties) / column.AreaSquareMeters;
             mantleIncidence += boundary.ConductivityWattsPerMeterKelvin * column.AreaSquareMeters * seconds /
                 (boundary.ConductiveBoundaryThicknessMeters + bottomWidth * 0.5);
-            if (result[i].ThicknessMeters(Material, Properties) / Aggregate.PlanetRadiusMeters > 0.001)
+            if (solution.ThicknessMeters / Aggregate.PlanetRadiusMeters > 0.001)
                 throw new InvalidOperationException("Implicit columns exceeded the thin-shell geometry envelope.");
         }
         VerifyCoupling(mantleIncidence, interior.MinimumRockHeatCapacityJoulesPerKelvin);
@@ -45,7 +45,7 @@ public sealed partial class PlanetOriginRockColumnField
     }
 }
 
-internal sealed record PlanetOriginImplicitColumnSolution(PlanetOriginRockColumnLayer[] Layers, double InteriorJoules, double EmittedJoules);
+internal sealed record PlanetOriginImplicitColumnSolution(PlanetOriginRockColumnLayer[] Layers, double InteriorJoules, double EmittedJoules, double ThicknessMeters);
 
 /// <summary>
 /// Backward-Euler enthalpy solve on a frozen beginning-of-step physical mesh.
@@ -59,11 +59,23 @@ internal static class PlanetOriginRockColumnImplicitSolver
         double mantleKelvin, double solar, double seconds, CancellationToken cancellationToken)
     {
         var n = column.Layers.Count;
-        var width = column.Layers.Select(layer => layer.VolumeCubicMeters(material, properties) / column.AreaSquareMeters).ToArray();
-        var mass = column.Layers.Select(layer => layer.MassKilograms / column.AreaSquareMeters).ToArray();
-        var oldEnergy = column.Layers.Select(layer => layer.StoredEnthalpyJoules / column.AreaSquareMeters).ToArray();
-        var temperature = column.Layers.Select(layer => layer.Resolve(material).TemperatureKelvin).ToArray();
-        var models = mass.Select(value => new PlanetRockEnthalpyModel(material.ToRockProperties(value))).ToArray();
+        // One immutable specific-enthalpy model, scaled by actual layer mass.
+        // Avoid constructing several identical phase models per layer/substep in WASM.
+        var model = new PlanetRockEnthalpyModel(material.ToRockProperties(1.0));
+        var width = new double[n];
+        var mass = new double[n];
+        var oldEnergy = new double[n];
+        var temperature = new double[n];
+        for (var j = 0; j < n; j++)
+        {
+            var layer = column.Layers[j];
+            var phase = model.Resolve(layer.StoredEnthalpyJoules / layer.MassKilograms);
+            width[j] = layer.MassKilograms * ((1.0 - phase.MeltFraction) / properties.SolidDensityKilogramsPerCubicMeter +
+                phase.MeltFraction / properties.LiquidDensityKilogramsPerCubicMeter) / column.AreaSquareMeters;
+            mass[j] = layer.MassKilograms / column.AreaSquareMeters;
+            oldEnergy[j] = layer.StoredEnthalpyJoules / column.AreaSquareMeters;
+            temperature[j] = phase.TemperatureKelvin;
+        }
         var conductance = new double[n - 1];
         for (var j = 0; j < conductance.Length; j++) conductance[j] = properties.ConductivityWattsPerMeterKelvin / ((width[j] + width[j + 1]) * 0.5);
         var bottom = boundary.ConductivityWattsPerMeterKelvin / (boundary.ConductiveBoundaryThicknessMeters + width[^1] * 0.5);
@@ -87,7 +99,7 @@ internal static class PlanetOriginRockColumnImplicitSolver
             {
                 var inflow = j == 0 ? solar - radiation * Math.Pow(face, 4) : conductance[j - 1] * (values[j - 1] - values[j]);
                 inflow += j == n - 1 ? bottom * (mantleKelvin - values[j]) : conductance[j] * (values[j + 1] - values[j]);
-                residual[j] = models[j].CalculateStoredEnergyJoules(values[j]) - oldEnergy[j] - seconds * inflow;
+                residual[j] = model.CalculateStoredEnergyJoules(values[j]) * mass[j] - oldEnergy[j] - seconds * inflow;
                 norm = Math.Max(norm, Math.Abs(residual[j]) / (mass[j] * material.SpecificHeatCapacityJoulesPerKilogramKelvin));
                 if (!jacobian) continue;
                 var cp = material.SpecificHeatCapacityJoulesPerKilogramKelvin;
@@ -142,13 +154,16 @@ internal static class PlanetOriginRockColumnImplicitSolver
         delta[^1] += interior;
         delta[0] += seconds * solar - emitted;
         var layers = new PlanetOriginRockColumnLayer[n];
+        var volume = 0.0;
         for (var j = 0; j < n; j++)
         {
             layers[j] = column.Layers[j].AddEnthalpy(delta[j] * column.AreaSquareMeters);
-            var resolved = layers[j].Resolve(material);
+            var resolved = model.Resolve(layers[j].StoredEnthalpyJoules / layers[j].MassKilograms);
+            volume += layers[j].MassKilograms * ((1.0 - resolved.MeltFraction) / properties.SolidDensityKilogramsPerCubicMeter +
+                resolved.MeltFraction / properties.LiquidDensityKilogramsPerCubicMeter);
             if (Math.Abs(resolved.TemperatureKelvin - temperature[j]) > 1e-6)
                 throw new InvalidOperationException("Implicit flux update differs from the converged enthalpy solution.");
         }
-        return new(layers, interior * column.AreaSquareMeters, emitted * column.AreaSquareMeters);
+        return new(layers, interior * column.AreaSquareMeters, emitted * column.AreaSquareMeters, volume / column.AreaSquareMeters);
     }
 }
