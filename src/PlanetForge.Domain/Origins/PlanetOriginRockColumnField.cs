@@ -150,8 +150,15 @@ public sealed class PlanetOriginRockColumnField
             incidence[^1] += bottom;
             mantleConductance += bottom;
             var surface = column.Layers[0].Resolve(Material).TemperatureKelvin;
-            incidence[0] += 4.0 * boundary.InfraredEmissivity * PlanetRadiationBalanceModel.StefanBoltzmannWattsPerSquareMeterKelvinFourth *
+            // The emitting surface is a half-cell above the first cell center.
+            // Its effective conductance limits how strongly radiation can
+            // perturb the cell as the depth mesh is refined.
+            var radiativeConductance = 4.0 * boundary.InfraredEmissivity *
+                PlanetRadiationBalanceModel.StefanBoltzmannWattsPerSquareMeterKelvinFourth *
                 Math.Pow(surface, 3) * column.AreaSquareMeters;
+            var surfaceConductance = Properties.ConductivityWattsPerMeterKelvin * column.AreaSquareMeters / (0.5 * thickness[0]);
+            incidence[0] += surfaceConductance == 0.0 ? 0.0 :
+                radiativeConductance * surfaceConductance / (radiativeConductance + surfaceConductance);
             for (var depth = 0; depth < incidence.Length; depth++)
                 maximum = Math.Min(maximum, StableSeconds(incidence[depth],
                     column.Layers[depth].MassKilograms * Material.SpecificHeatCapacityJoulesPerKilogramKelvin));
@@ -219,14 +226,20 @@ public sealed class PlanetOriginRockColumnField
             var solar = boundary.SolarIrradianceWattsPerSquareMeter * (1.0 - boundary.BondAlbedo) *
                 Math.Max(0.0, PlanetVector.Dot(direction, boundary.StellarDirection)) * column.AreaSquareMeters * seconds;
             var surfaceKelvin = phase[0].TemperatureKelvin;
+            var absorbedFlux = solar / (column.AreaSquareMeters * seconds);
+            var emittingSurfaceKelvin = ResolveRadiatingSurfaceKelvin(surfaceKelvin, thickness[0],
+                absorbedFlux, boundary.InfraredEmissivity, Properties.ConductivityWattsPerMeterKelvin);
             var infrared = boundary.InfraredEmissivity * PlanetRadiationBalanceModel.StefanBoltzmannWattsPerSquareMeterKelvinFourth *
-                Math.Pow(surfaceKelvin, 4) * column.AreaSquareMeters * seconds;
+                Math.Pow(emittingSurfaceKelvin, 4) * column.AreaSquareMeters * seconds;
             delta[0] += solar - infrared;
             absorbed += solar;
             emitted += infrared;
-            // Bound the explicit radiative Jacobian as well as conductive incidence.
-            coupling[0] += 4.0 * boundary.InfraredEmissivity * PlanetRadiationBalanceModel.StefanBoltzmannWattsPerSquareMeterKelvinFourth *
-                Math.Pow(surfaceKelvin, 3) * column.AreaSquareMeters * seconds;
+            var radiativeConductance = 4.0 * boundary.InfraredEmissivity *
+                PlanetRadiationBalanceModel.StefanBoltzmannWattsPerSquareMeterKelvinFourth *
+                Math.Pow(emittingSurfaceKelvin, 3) * column.AreaSquareMeters;
+            var surfaceConductance = Properties.ConductivityWattsPerMeterKelvin * column.AreaSquareMeters / (0.5 * thickness[0]);
+            coupling[0] += surfaceConductance == 0.0 ? 0.0 :
+                radiativeConductance * surfaceConductance / (radiativeConductance + surfaceConductance) * seconds;
             var nextLayers = new PlanetOriginRockColumnLayer[phase.Length];
             for (var depth = 0; depth < nextLayers.Length; depth++)
             {
@@ -248,6 +261,32 @@ public sealed class PlanetOriginRockColumnField
             Math.Abs(residual) > Math.Max(1e-6, Aggregate.TotalStoredEnthalpyJoules * 2e-12))
             throw new InvalidOperationException("Depth-resolved rock energy exchanges did not close the canonical surface account.");
         return new PlanetOriginRockColumnTrial(candidate, exported, imported, absorbed, emitted, residual);
+    }
+
+    /// <summary>
+    /// Solve the steady sub-cell conductive/radiative boundary. Radiation is
+    /// emitted at the physical surface, not at the center of the first cell.
+    /// The root is unique for nonnegative temperatures and conductivities.
+    /// </summary>
+    private static double ResolveRadiatingSurfaceKelvin(
+        double centerKelvin, double halfCellThicknessMeters, double absorbedFluxWattsPerSquareMeter,
+        double emissivity, double conductivityWattsPerMeterKelvin)
+    {
+        if (conductivityWattsPerMeterKelvin == 0.0) return centerKelvin;
+        var conductance = conductivityWattsPerMeterKelvin / (0.5 * halfCellThicknessMeters);
+        var radiativeCoefficient = emissivity * PlanetRadiationBalanceModel.StefanBoltzmannWattsPerSquareMeterKelvinFourth;
+        if (radiativeCoefficient == 0.0) return centerKelvin + absorbedFluxWattsPerSquareMeter / conductance;
+        var lower = 0.0;
+        var upper = Math.Max(centerKelvin + absorbedFluxWattsPerSquareMeter / conductance, 1.0);
+        for (var iteration = 0; iteration < 64; iteration++)
+        {
+            var middle = (lower + upper) * 0.5;
+            var balance = radiativeCoefficient * Math.Pow(middle, 4) +
+                conductance * (middle - centerKelvin) - absorbedFluxWattsPerSquareMeter;
+            if (balance > 0.0) upper = middle;
+            else lower = middle;
+        }
+        return (lower + upper) * 0.5;
     }
 
     private static void VerifyCoupling(double integratedConductance, double capacity)
