@@ -54,6 +54,35 @@ public readonly record struct PlanetOriginRockColumnResolutionSample(
     public double UnresolvedFrontMidpointMeters =>
         (FullySolidTopMeters + FirstUnresolvedCellBottomMeters) * 0.5;
 
+    /// <summary>
+    /// A phase-volume-equivalent depth within the first unresolved cell.
+    /// Uses the local equilibrium melt fraction as a sub-cell solid-volume
+    /// proxy, not a resolved moving Stefan interface. The result is bounded
+    /// by the contiguous-solid surface depth and the next cell bottom.
+    /// </summary>
+    public static double EstimatePhaseWeightedFrontMeters(
+        PlanetOriginRockColumn column, PlanetOriginSurfaceRockPhaseMaterial material,
+        PlanetOriginRockColumnProperties properties)
+    {
+        ArgumentNullException.ThrowIfNull(column);
+        properties.Validate();
+        var fullySolidMeters = 0.0;
+        foreach (var layer in column.Layers)
+        {
+            var melt = layer.Resolve(material).MeltFraction;
+            var thickness = layer.VolumeCubicMeters(material, properties) / column.AreaSquareMeters;
+            if (melt == 0.0)
+            {
+                fullySolidMeters += thickness;
+                continue;
+            }
+
+            return fullySolidMeters + thickness * (1.0 - melt);
+        }
+
+        return fullySolidMeters;
+    }
+
     public void Validate()
     {
         if (LayerCount is < 2 or > 64 || FullySolidTopLayers < 0 || FullySolidTopLayers > LayerCount ||
