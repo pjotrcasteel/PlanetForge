@@ -77,6 +77,8 @@ public readonly record struct PlanetOriginRockColumnResolutionSample(
                 continue;
             }
 
+            // The first unresolved layer bounds the connected solid region.
+            // A completely liquid top cell implies no attached solid crust.
             return fullySolidMeters + thickness * (1.0 - melt);
         }
 
