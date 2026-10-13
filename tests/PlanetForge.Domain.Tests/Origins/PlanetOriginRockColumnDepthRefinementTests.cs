@@ -42,6 +42,31 @@ public sealed class PlanetOriginRockColumnDepthRefinementTests
     }
 
     [TestMethod]
+    public void FrontBounds_RecordedGridSequence_EnclosesUnresolvedPhysicalFront()
+    {
+        PlanetOriginRockColumnResolutionSample[] samples =
+        [
+            new(8, 0.81689, 1.63378, 1043.61, 1),
+            new(16, 0.40845, 0.81690, 846.49, 1),
+            new(32, 0.20422, 0.40844, 786.51, 1),
+            new(64, 0.10211, 0.20422, 820.28, 1)
+        ];
+        foreach (var sample in samples)
+        {
+            var (minimum, maximum) = sample.FrontBoundsMeters;
+            Assert.AreEqual(sample.FullySolidTopMeters, minimum);
+            Assert.AreEqual(sample.FirstUnresolvedCellBottomMeters, maximum);
+            Assert.IsGreaterThan(minimum, maximum);
+            Assert.IsTrue(sample.UnresolvedFrontMidpointMeters >= minimum);
+            Assert.IsTrue(sample.UnresolvedFrontMidpointMeters <= maximum);
+        }
+        // A cross-resolution overlap is NOT guaranteed: this is precisely
+        // why a single fully solid cell cannot be claimed as a converged crust.
+        Assert.IsGreaterThan(samples[^1].FrontBoundsMeters.MaximumMeters,
+            samples[0].FrontBoundsMeters.MinimumMeters);
+    }
+
+    [TestMethod]
     public void Screen_OutOfOrderOrNonPhysicalSamples_Rejects()
     {
         PlanetOriginRockColumnResolutionSample[] samples =
