@@ -32,13 +32,13 @@ public sealed class PlanetOriginSpatialSurfaceProjectionTests
     public void Create_RegionalContrast_ReconstructsIntermediateValuesWithoutChangingPhysicalEnergy()
     {
         var region = PlanetRegionalCoolingReference.CreateInitial(6_371_000.0);
-        var originalEnergy = region.Field.Cells.Sum(cell => cell.ActiveRockEnergyJoules);
+        var originalEnergy = region.Field.Cells.Sum(cell => cell.StoredEnthalpyJoules);
 
         var projection = PlanetOriginSpatialSurfaceProjection.Create(region);
 
         var physical = region.Field.Cells.Select(cell => cell.Resolve(region.Field.Material).TemperatureKelvin).ToArray();
         Assert.IsTrue(projection.TemperatureKelvin.Any(value =>
             physical.All(temperature => Math.Abs(value - temperature) > 0.01)));
-        Assert.AreEqual(originalEnergy, region.Field.Cells.Sum(cell => cell.ActiveRockEnergyJoules), 0.0);
+        Assert.AreEqual(originalEnergy, region.Field.Cells.Sum(cell => cell.StoredEnthalpyJoules), 0.0);
     }
 }
