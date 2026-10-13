@@ -109,3 +109,118 @@
         bottom: max(26px, calc(env(safe-area-inset-bottom) + 14px));
     }
 }
+
+
+/* One-globe airless cooling reference: compact on iPhone, not a diagnostic tab. */
+.foundation-thermal-readout {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    align-items: center;
+    max-width: min(86vw, 340px);
+    padding-top: 7px;
+    border-top: 1px solid rgba(141, 190, 163, 0.24);
+    text-align: center;
+}
+
+.foundation-thermal-readout > strong {
+    color: #ffe8ce;
+    font-size: 0.78rem;
+    letter-spacing: 0.08em;
+}
+
+.foundation-thermal-readout > span,
+.foundation-thermal-readout > small {
+    color: #abc8b6;
+    font-size: 0.55rem;
+    letter-spacing: 0.035em;
+    line-height: 1.45;
+}
+
+.foundation-thermal-readout > small[role="status"] {
+    color: #f6cc97;
+}
+
+.foundation-thermal-controls {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    white-space: nowrap;
+}
+
+.foundation-thermal-controls .foundation-next {
+    min-width: 178px;
+    min-height: 46px;
+    padding: 0 18px;
+    letter-spacing: 0.06em;
+    font-size: 0.70rem;
+}
+
+.foundation-reference-reset {
+    min-height: 46px;
+    padding: 0 15px;
+    border: 1px solid rgba(141, 190, 163, 0.45);
+    border-radius: 999px;
+    background: rgba(3, 12, 10, 0.87);
+    color: #dcebe2;
+    font: 800 0.65rem ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    letter-spacing: 0.08em;
+}
+
+.foundation-reference-reset:disabled { opacity: 0.60; }
+
+
+/* Keep the opt-in science HUD from swallowing the planet on narrow phones. */
+.foundation-clock.foundation-clock-thermal {
+    width: min(88vw, 370px);
+    box-sizing: border-box;
+    padding: 10px 12px;
+    gap: 3px;
+}
+
+.foundation-clock.foundation-clock-thermal > strong {
+    font-size: 0.83rem;
+    letter-spacing: 0.08em;
+    white-space: nowrap;
+}
+
+.foundation-clock.foundation-clock-thermal > span,
+.foundation-clock.foundation-clock-thermal > small {
+    white-space: normal;
+    text-align: center;
+    letter-spacing: 0.045em;
+}
+
+.foundation-clock.foundation-clock-thermal .foundation-thermal-readout {
+    width: 100%;
+    max-width: 100%;
+    gap: 3px;
+    padding-top: 5px;
+}
+
+.foundation-clock.foundation-clock-thermal .foundation-thermal-readout > small {
+    max-width: 100%;
+    line-height: 1.35;
+}
+
+.foundation-controls.foundation-thermal-controls {
+    display: flex;
+    flex-wrap: nowrap;
+    flex-direction: row;
+    justify-content: center;
+    align-items: center;
+    width: max-content;
+    max-width: 94vw;
+    gap: 8px;
+}
+
+.foundation-controls.foundation-thermal-controls .foundation-next {
+    min-width: 0;
+    min-height: 46px;
+    padding: 0 14px;
+}
+
+.foundation-controls.foundation-thermal-controls .foundation-reference-reset {
+    min-width: 65px;
+    flex-shrink: 0;
+}
