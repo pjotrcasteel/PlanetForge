@@ -189,6 +189,8 @@ public sealed class PlanetOriginRockColumnFieldTests
             Assert.AreEqual(14_400_000_000L, cooled.Epoch.Clock.MicrosecondsIntoYear);
             Assert.AreEqual(0L, initial.Epoch.Revision);
             AssertConservation(cooled);
+            Assert.AreEqual(initial.Field.TotalActiveRockMassKilograms, cooled.Field.TotalActiveRockMassKilograms,
+                initial.Field.TotalActiveRockMassKilograms * 1e-12);
             samples[i] = PlanetOriginRockColumnResolutionSample.FromColumn(
                 cooled.Columns!.Columns[0], cooled.Columns.Material, cooled.Columns.Properties);
             Assert.AreEqual(depths[i], samples[i].LayerCount);
