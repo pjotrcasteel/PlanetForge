@@ -206,20 +206,26 @@ function initialize(canvasId, seed) {
         float mature=smoothstep(2.,75.,material.a);
         basalt*=mix(1.08,.75,mature);
         basalt*=1.-.30*clamp(material.b,0.,1.);
-        float temperature=clamp((state.r-.15)/1.3,0.,1.);
-        vec3 lava=mix(vec3(.23,.009,.002),vec3(.95,.27,.019),temperature);
+        // Use actual transported heat as the radiant optical gradient.
+        // This is a dimensionless illustrative color response, not a kelvin calibration.
+        float temperature=smoothstep(.75,1.45,state.r);
+        vec3 lava=mix(vec3(.25,.009,.002),vec3(1.,.34,.024),temperature);
+        lava*=mix(.65,1.25,temperature);
         lava+=vec3(.13,.046,.004)*clamp(state.a*6.,0.,1.);
         // Display only owned, exposed melt. An empty or frozen cell cannot glow as lava.
         // A thin surface crust is optically opaque even while liquid magma remains beneath it.
         // Coverage is bounded by owned solid mass; only owned melt at a hypothesized active rift can shine through.
         float surfaceCrust=smoothstep(.015,.18,rock);
-        float riftWindow=.8*smoothstep(.25,.8,material.g);
+        // A seeded rift only opens an incandescent window while real melt is moving.
+        // This suppresses permanent glowing polygon outlines in stagnant solid rock.
+        float activeMeltFlow=smoothstep(.004,.08,state.a);
+        float riftWindow=.8*smoothstep(.25,.8,material.g)*activeMeltFlow;
         float openMelt=(1.-surfaceCrust*(1.-riftWindow))*smoothstep(.01,.16,melt);
         lava*=mix(.76,1.,clamp(melt,0.,1.));
         vec3 surface=mix(basalt,lava,openMelt);
         // Newly frozen margins and funded active rifts reveal adjacent owned liquid.
         float margin=smoothstep(.07,.4,crust)*(1.-smoothstep(.72,.98,solidShare));
-        float fissure=margin*clamp(material.g*2.,0.,1.)*smoothstep(.02,.3,melt);
+        float fissure=margin*clamp(material.g*2.,0.,1.)*activeMeltFlow*smoothstep(.02,.3,melt);
         surface+=vec3(.35,.066,.004)*fissure;
         // The glowing seam requires actual neighboring exposed melt; no invented lava.
         float lavaSeam=fracture*smoothstep(.03,.22,melt)*(1.-smoothstep(.75,.98,solidShare));
