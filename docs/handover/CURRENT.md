@@ -20,6 +20,16 @@ The active development branch `feature/pf-mantle-convective-thermal-boundary` ad
 
 **Gates outstanding:** final PR full scientific + WASM + all browser CI; review and merge; exact-SHA Pages build/deploy/smoke; user Safari inspection ONLY if there is meaningfully changed actual main-planet behavior. The 0.0.46.0 visual rejection remains in effect: this thermal closure is not a fluid-flow field or mechanically resolved crust, and should not be declared visually accepted on a passing test suite.
 
+## 2026-10-14 continuation — PF 0.0.47.0 still visually rejected
+
+The user supplied five iPhone Safari screenshots showing **PF 0.0.47.0 · cc4c19c** at T+0, 2, 7, 37 and 187 physical seconds. The same golden/white blurred patches cool into brown and nearly black material. No lava flow, coherent growing crust, magma veins or mountain growth is visible. The mantle boundary is on main; the older “not yet released” candidate paragraph above is historical. These screenshots establish the visible deployed identity, not a fresh independent Pages smoke verification. Human visual acceptance remains **FAILED**.
+
+An isolated correction branch `fix/pf-phase-consistent-crust-projection` fixes a display inconsistency: the CPU atlas and both globe/local fragment shaders previously interpolated temperature and melt independently. Interpolation could imply liquid below solidus or crystals above liquidus. The atlas now exports its actual material bounds and resolves equilibrium melt after temperature reconstruction; both GPU footprints repeat that material law after filtering. Older archived atlases without bounds retain their original supplied phase. This does not change canonical enthalpy, mass, clock or terrain, nor implement magma flow or crust mechanics.
+
+Local validation: application test project Release build, zero warnings/errors; all five spatial projection test methods passed through an in-process runner (normal VSTest/MSBuild worker sockets are denied in this environment); JavaScript syntax and diff whitespace passed. Full browser/WASM CI and visual acceptance remain unverified. No new demo release or deployment is claimed. Do not ask the user to retest this small correction as if it delivers their requested geological demo.
+
+Next substantial slice must replace the independently cooling thin shell with explicitly funded lateral melt/material dynamics and a defensible physical time window; couple persistent solid material and its relief into the existing canonical publication, then validate main-globe morphology before requesting another device check. A fixed shader or a thermal closure alone cannot produce the requested flows and mountains.
+
 ## Immediate continuation priorities
 
 1. **Replace the inadequate physical reference, not its shader.** Define a finite-capacity deep magma-ocean/upper-mantle coupled thermal system with stated depth, material densities, viscosity/composition, buoyancy and heat-transport validity. Conservatively couple energy/mass between deep melt and surface columns. Validate thermal time scales and supported integration step sizes; 186 seconds is not a geological epoch.
