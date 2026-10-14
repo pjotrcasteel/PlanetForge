@@ -177,9 +177,7 @@ public sealed partial class PlanetOriginRockColumnField
         boundary.Validate();
         ArgumentNullException.ThrowIfNull(interior);
         boundary = PlanetOriginMagmaConvection.ResolveBoundary(boundary, this, interior);
-        if (boundary.LateralConductivityWattsPerMeterKelvin != 0.0)
-            throw new InvalidOperationException("Column integration requires layer-consistent lateral transport.");
-        var maximum = double.PositiveInfinity;
+        var maximum = MaximumLateralStepSeconds(boundary.LateralConductivityWattsPerMeterKelvin, boundary.LateralLayerThicknessMeters, cancellationToken);
         var mantleConductance = 0.0;
         foreach (var column in Columns)
         {
@@ -231,9 +229,17 @@ public sealed partial class PlanetOriginRockColumnField
         ArgumentNullException.ThrowIfNull(interior);
         if (interval.IsZero) throw new ArgumentOutOfRangeException(nameof(interval));
         boundary = PlanetOriginMagmaConvection.ResolveBoundary(boundary, this, interior);
-        if (boundary.LateralConductivityWattsPerMeterKelvin != 0.0)
-            throw new InvalidOperationException("Depth-resolved lateral exchange needs layer-consistent fluxes; aggregate lateral conduction cannot silently mix column material.");
+        var verticalBoundary = boundary with { LateralConductivityWattsPerMeterKelvin = 0.0, LateralLayerThicknessMeters = 0.0 };
+        var vertical = ProposeVertical(interval, verticalBoundary, interior, cancellationToken);
+        if (boundary.LateralConductivityWattsPerMeterKelvin == 0.0) return vertical;
+        var lateral = vertical.Candidate.ProposeLateralHeat(interval, boundary.LateralConductivityWattsPerMeterKelvin,
+            boundary.LateralLayerThicknessMeters, cancellationToken);
+        return vertical with { Candidate = lateral.Candidate, ConservationResidualJoules = vertical.ConservationResidualJoules + lateral.ConservationResidualJoules };
+    }
 
+    private PlanetOriginRockColumnTrial ProposeVertical(PlanetOriginDuration interval, PlanetOriginRegionalAirlessParameters boundary,
+        PlanetOriginThermalTimeline interior, CancellationToken cancellationToken)
+    {
         if (Properties.UseImplicitDepthTransport) return ProposeImplicit(interval, boundary, interior, cancellationToken);
         var seconds = interval.TotalSeconds;
         var result = new PlanetOriginRockColumn[Columns.Count];

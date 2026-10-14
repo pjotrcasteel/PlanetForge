@@ -12,6 +12,8 @@ public sealed record PlanetOriginSpatialSurfaceSnapshot(
     long Revision, int Width, int Height, float[] TemperatureKelvin, float[] MeltFraction)
 {
     public bool HasDepthColumns { get; init; }
+    public double SolidusTemperatureKelvin { get; init; }
+    public double LiquidusTemperatureKelvin { get; init; }
 }
 
 public static class PlanetOriginSpatialSurfaceProjection
@@ -37,11 +39,8 @@ public static class PlanetOriginSpatialSurfaceProjection
         {
             var weightSum = 0.0;
             var temperatureSum = 0.0;
-            var meltSum = 0.0;
             var minimumTemperature = double.PositiveInfinity;
             var maximumTemperature = double.NegativeInfinity;
-            var minimumMelt = 1.0;
-            var maximumMelt = 0.0;
             for (var slot = 0; slot < DisplayNeighbors; slot++)
             {
                 var address = pixel * DisplayNeighbors + slot;
@@ -50,16 +49,21 @@ public static class PlanetOriginSpatialSurfaceProjection
                 var state = rock[stencil.Indices[address]];
                 weightSum += weight;
                 temperatureSum += weight * state.TemperatureKelvin;
-                meltSum += weight * state.MeltFraction;
                 minimumTemperature = Math.Min(minimumTemperature, state.TemperatureKelvin);
                 maximumTemperature = Math.Max(maximumTemperature, state.TemperatureKelvin);
-                minimumMelt = Math.Min(minimumMelt, state.MeltFraction);
-                maximumMelt = Math.Max(maximumMelt, state.MeltFraction);
             }
             temperatures[pixel] = (float)Math.Clamp(temperatureSum / weightSum, minimumTemperature, maximumTemperature);
-            melts[pixel] = (float)Math.Clamp(meltSum / weightSum, minimumMelt, maximumMelt);
+            // Reconstruct one equilibrium emitting interface. Independently filtering phase
+            // would leave liquid material below solidus and crystals above liquidus.
+            melts[pixel] = (float)Math.Clamp((temperatures[pixel] - field.Material.SolidusTemperatureKelvin) /
+                (field.Material.LiquidusTemperatureKelvin - field.Material.SolidusTemperatureKelvin), 0.0, 1.0);
         }
-        return new(region.Epoch.Revision, AtlasWidth, AtlasHeight, temperatures, melts) { HasDepthColumns = region.Columns is not null };
+        return new(region.Epoch.Revision, AtlasWidth, AtlasHeight, temperatures, melts)
+        {
+            HasDepthColumns = region.Columns is not null,
+            SolidusTemperatureKelvin = field.Material.SolidusTemperatureKelvin,
+            LiquidusTemperatureKelvin = field.Material.LiquidusTemperatureKelvin
+        };
     }
 
     // Geometry-only, one-entry bounded cache. No temperature/phase/epoch is cached here.

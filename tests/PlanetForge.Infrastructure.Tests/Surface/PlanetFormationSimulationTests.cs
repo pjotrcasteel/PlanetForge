@@ -125,6 +125,40 @@ public sealed class PlanetFormationSimulationTests
         Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => PlanetFormationSimulation.Advance(experience, 0));
     }
 
+    [TestMethod]
+    public void Publish_MaterialFaceTransaction_UpdatesTheSameCanonicalGlobeAndPhysicalRelief()
+    {
+        var source = new PlanetTerrainRegionProvider(new FlatElevation());
+        var experience = new PlanetExperience(new PlanetSurfaceMeshCache(new PlanetSurfaceMeshBuilder(new PlanetSurfaceTileSampler(source), source)),
+            new PlanetLocalSurfacePatchSampler(source), new PlanetLocalSurfaceMeshBuilder(),
+            hypsometryCache: new PlanetHypsometryCache(new PlanetHypsometrySampler(source), source));
+        var initialRender = PlanetFormationSimulation.Start(experience, 24061984);
+        var initial = experience.PublishedRegionalRock!;
+        var donor = initial.Columns!.Columns[0];
+        var recipientId = PlanetSurfaceGridTopology.GetNeighbor(donor.Id, PlanetGridDirection.East).Cell;
+        var recipientIndex = initial.Field.Layout.GetIndex(recipientId);
+        var depth = donor.Layers.Count - 1;
+        var mass = donor.Layers[depth].MassKilograms * 0.01;
+        // A supplied material transaction verifies publication; it is not a fabricated default flow field.
+        var candidate = initial.AdvanceWithMeltTransfers(PlanetOriginDuration.FromSeconds(0.01), initial.SurfaceBoundary!.Value,
+            [new(donor.Id, depth, recipientId, depth, mass)]);
+        Assert.AreSame(initial, experience.PublishedRegionalRock);
+        var rendered = experience.PublishRegionalRock(candidate);
+        Assert.AreSame(candidate, experience.PublishedRegionalRock);
+        Assert.AreEqual(candidate.Epoch.Revision, rendered.SpatialRock!.Revision);
+        Assert.AreNotEqual(initialRender.TerrainRevision, rendered.TerrainRevision);
+        var expected = new PlanetOriginRockColumnElevationSource(candidate.Columns!);
+        var donorDirection = PlanetSurfaceGridGeometry.GetCenterDirection(donor.Id);
+        var recipientDirection = PlanetSurfaceGridGeometry.GetCenterDirection(recipientId);
+        Assert.AreEqual(expected.SampleElevationMeters(donorDirection, 24061984), source.SampleElevationMeters(donorDirection, 24061984), 1e-9);
+        Assert.AreEqual(expected.SampleElevationMeters(recipientDirection, 24061984), source.SampleElevationMeters(recipientDirection, 24061984), 1e-9);
+        Assert.IsTrue(expected.SampleElevationMeters(donorDirection, 24061984) < 0.0);
+        Assert.IsTrue(expected.SampleElevationMeters(recipientDirection, 24061984) > 0.0);
+        Assert.AreEqual(initial.Field.TotalActiveRockMassKilograms, candidate.Field.TotalActiveRockMassKilograms, initial.Field.TotalActiveRockMassKilograms * 1e-12);
+        Assert.AreEqual(0.0, candidate.Epoch.EnergyConservationResidualJoules, candidate.Epoch.CoupledEnergy!.InitialStoredEnergyJoules * 1e-12);
+        Assert.AreEqual(10_000L, candidate.Epoch.Clock.MicrosecondsIntoYear);
+    }
+
     private static PlanetExperience CreateExperience()
     {
         var source = new PlanetTerrainRegionProvider(new FlatElevation());
