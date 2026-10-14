@@ -159,7 +159,9 @@ test('PublishedRockColumns_SurfaceAndDepth_AdvancesCanonicalTerrainAndResets', a
 test('DeployedFormation_StartsMoltenOnPrimaryPageAndAdvancesSameClock', async ({ page }) => {
   await page.goto(process.env.PLANETFORGE_BASE_URL + '/?visualTest=1&seed=24061984', {waitUntil:'domcontentloaded'});
   await expect(page.getByTestId('formation-phase')).toHaveText('Molten surface',{timeout:90000});
-  await expect(page.locator('#planetforge-build-badge')).toContainText('PF 0.0.47.0');
+  const releaseVersion = (await page.title()).match(/^PlanetForge ([0-9.]+) — Planetary Simulation$/)?.[1];
+  expect(releaseVersion).toBeTruthy();
+  await expect(page.locator('#planetforge-build-badge')).toContainText(`PF ${releaseVersion} · `);
   if(process.env.PLANETFORGE_EXPECTED_SHA) await expect(page.locator('#planetforge-build-badge')).toContainText(process.env.PLANETFORGE_EXPECTED_SHA.slice(0,7));
   await expect(page.getByTestId('formation-time')).toHaveText('T+00:00:00');
   await expect(page.getByTestId('airless-enter')).toHaveCount(0);
@@ -167,4 +169,26 @@ test('DeployedFormation_StartsMoltenOnPrimaryPageAndAdvancesSameClock', async ({
   await expect(page.getByTestId('formation-time')).toHaveText('T+00:00:01',{timeout:60000});
   await page.waitForFunction(()=>Boolean(window.__planetForgeSurfaceTest),null,{timeout:60000});
   expect((await page.evaluate(()=>window.__planetForgeSurfaceTest.measure())).glError).toBe(0);
+});
+
+test('DeployedPlayableFormation_AdvancesActualMainGlobeWithCorrectRelease', async ({ page }) => {
+  const errors = [];
+  page.on('pageerror', error => errors.push(error.message));
+  await page.goto(process.env.PLANETFORGE_BASE_URL + '/?demo=1&seed=24061984', { waitUntil: 'domcontentloaded' });
+  await expect(page.getByTestId('formation-phase')).toHaveText('Magma ocean', { timeout: 90_000 });
+  const badge = page.locator('#planetforge-build-badge');
+  const version = (await page.title()).match(/^PlanetForge ([0-9.]+) — Planetary Simulation$/)?.[1];
+  expect(version).toBeTruthy();
+  await expect(badge).toContainText(`PF ${version} · `);
+  if (process.env.PLANETFORGE_EXPECTED_SHA)
+    await expect(badge).toContainText(process.env.PLANETFORGE_EXPECTED_SHA.slice(0, 7));
+  const canvas = page.locator('#planet-canvas');
+  const initial = await canvas.screenshot();
+  await page.getByTestId('formation-speed').selectOption('30');
+  await page.getByTestId('formation-step').click();
+  await expect(page.getByTestId('formation-phase')).toHaveText('Crust islands · active lava');
+  await expect(page.getByTestId('formation-time')).toHaveText('Demo T+00:00:30');
+  const evolved = await canvas.screenshot();
+  expect(evolved.equals(initial)).toBe(false);
+  expect(errors).toEqual([]);
 });
