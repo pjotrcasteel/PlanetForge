@@ -25,7 +25,7 @@ public sealed partial class PlanetOriginRockColumnField
                 Math.Max(0.0, PlanetVector.Dot(direction, boundary.StellarDirection));
             var solution = PlanetOriginRockColumnImplicitSolver.Solve(column, Material, Properties, boundary,
                 interior.Rock.TemperatureKelvin, solar, seconds, cancellationToken);
-            result[i] = new(column.Id, column.AreaSquareMeters, column.ReferenceThicknessMeters, solution.Layers);
+            result[i] = new(column.Id, column.AreaSquareMeters, column.ReferenceThicknessMeters, solution.Layers, column.ReferenceMassKilograms);
             exported += Math.Max(0.0, solution.InteriorJoules);
             imported += Math.Max(0.0, -solution.InteriorJoules);
             absorbed += solar * column.AreaSquareMeters * seconds;

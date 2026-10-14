@@ -36,12 +36,16 @@ public static class PlanetOriginRockColumnIntegrator
             if (count >= options.MaximumSubsteps)
                 throw new InvalidOperationException("Column integration exhausted its explicit substep budget; nothing was published.");
             var bound = candidate.Columns!.MaximumStableStepSeconds(boundary, candidate.Epoch.Thermal, cancellationToken);
+            if (candidate.MechanicalReference is { } mechanics)
+                bound = Math.Min(bound, candidate.Columns.MaximumViscousMeltStepSeconds(mechanics, cancellationToken));
             // A margin protects against floating-point admission rounding; flooring
             // cannot exceed the bound and the final remainder reaches exact time.
             var seconds = Math.Min(options.MaximumStepSeconds, bound * 0.8);
             var ticks = Math.Min(remaining, checked((long)Math.Floor(seconds * 1_000_000.0)));
             if (ticks < 1) throw new InvalidOperationException("Required column timestep is below the supported microsecond resolution.");
-            candidate = candidate.Advance(new PlanetOriginDuration(0, ticks), boundary, cancellationToken);
+            var step = new PlanetOriginDuration(0, ticks);
+            candidate = candidate.MechanicalReference is null ? candidate.Advance(step, boundary, cancellationToken) :
+                candidate.AdvanceWithViscousMeltFlow(step, boundary, cancellationToken);
             remaining -= ticks;
         }
         cancellationToken.ThrowIfCancellationRequested();

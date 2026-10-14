@@ -61,19 +61,23 @@ public readonly record struct PlanetOriginRegionalAirlessParameters(
 /// </summary>
 public sealed class PlanetOriginCanonicalRockCells
 {
-    public PlanetOriginCanonicalRockCells(PlanetOriginEpochState epoch, PlanetOriginSurfaceRockPhaseField field, PlanetOriginRockColumnField? columns = null)
+    public PlanetOriginCanonicalRockCells(PlanetOriginEpochState epoch, PlanetOriginSurfaceRockPhaseField field, PlanetOriginRockColumnField? columns = null,
+        PlanetOriginViscousMeltReference? mechanicalReference = null)
     {
         Epoch = epoch ?? throw new ArgumentNullException(nameof(epoch));
         Field = field ?? throw new ArgumentNullException(nameof(field));
         Columns = columns;
+        MechanicalReference = mechanicalReference;
         if (columns is not null && !ReferenceEquals(columns.Aggregate, field))
             throw new InvalidOperationException("Column aggregate must be the exact phase field owned by this canonical world.");
         CheckInvariant(Epoch, Field);
+        CheckMechanicalInvariant();
     }
 
     public PlanetOriginEpochState Epoch { get; }
     public PlanetOriginSurfaceRockPhaseField Field { get; }
     public PlanetOriginRockColumnField? Columns { get; }
+    public PlanetOriginViscousMeltReference? MechanicalReference { get; }
 
     /// <summary>Accepted forcing for optical face reconstruction; never an additional energy reservoir.</summary>
     public PlanetOriginRegionalAirlessParameters? SurfaceBoundary { get; init; }
@@ -167,6 +171,68 @@ public sealed class PlanetOriginCanonicalRockCells
         return new PlanetOriginCanonicalRockCells(nextEpoch, lateralField);
     }
 
+    /// <summary>
+    /// Composes a thermal interval and explicitly supplied material-face transactions into
+    /// one unpublished candidate. This is not a momentum or pressure-head flow solver.
+    /// </summary>
+    public PlanetOriginCanonicalRockCells AdvanceWithMeltTransfers(PlanetOriginDuration interval,
+        PlanetOriginRegionalAirlessParameters parameters, IReadOnlyList<PlanetOriginMeltFaceTransfer> transfers,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(transfers);
+        if (Columns is null) throw new InvalidOperationException("Melt material transfers require owned depth columns.");
+        if (MechanicalReference is not null)
+            throw new InvalidOperationException("Funded gravity needs the matched physical-flow/work path, not unaccounted face transactions.");
+        var thermal = Advance(interval, parameters, cancellationToken);
+        var material = thermal.Columns!.ProposeMeltTransfers(transfers, cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
+        return new(thermal.Epoch, material.Candidate.Aggregate, material.Candidate) { SurfaceBoundary = parameters };
+    }
+
+    public PlanetOriginCanonicalRockCells FundViscousMeltMechanics(PlanetOriginViscousMeltParameters parameters,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var columns = Columns ?? throw new InvalidOperationException("Mechanical funding requires owned material columns.");
+        if (Epoch.Revision != 0 || MechanicalReference is not null || Epoch.CoupledEnergy!.SurfaceMechanics is not null)
+            throw new InvalidOperationException("Mechanical potential must be funded once, before initial-world publication and evolution.");
+        var reference = new PlanetOriginViscousMeltReference(parameters, columns.Properties.LiquidDensityKilogramsPerCubicMeter);
+        var potential = reference.PotentialEnergyJoules(columns);
+        var heat = columns.Columns.Select(column => column.Layers.Select(layer =>
+            -potential * layer.MassKilograms / Field.TotalActiveRockMassKilograms).ToArray()).ToArray();
+        var funded = columns.AddOwnedLayerHeat(heat, cancellationToken);
+        if (funded.Columns.Any(column => column.Layers.Any(layer => layer.Resolve(Field.Material).MeltFraction != 1.0)))
+            throw new InvalidOperationException("This initial funding reference must retain fully molten initial material.");
+        var ledger = Epoch.CoupledEnergy.FundSurfaceMechanics(potential);
+        cancellationToken.ThrowIfCancellationRequested();
+        return new(new PlanetOriginEpochState(ledger), funded.Aggregate, funded, reference) { SurfaceBoundary = SurfaceBoundary };
+    }
+
+    public PlanetOriginCanonicalRockCells AdvanceWithViscousMeltFlow(PlanetOriginDuration interval,
+        PlanetOriginRegionalAirlessParameters parameters, CancellationToken cancellationToken = default)
+    {
+        var reference = MechanicalReference ?? throw new InvalidOperationException("Viscous flow requires a funded mechanical reference.");
+        var thermal = Advance(interval, parameters, cancellationToken);
+        var flow = thermal.Columns!.ProposeViscousMeltFlow(interval, reference, cancellationToken);
+        var epoch = thermal.Epoch.ThermalizeSurfaceMechanics(flow.DissipatedWorkJoules);
+        cancellationToken.ThrowIfCancellationRequested();
+        return new(epoch, flow.Candidate.Aggregate, flow.Candidate, reference) { SurfaceBoundary = parameters };
+    }
+
+    private void CheckMechanicalInvariant()
+    {
+        var budget = Epoch.CoupledEnergy!.SurfaceMechanics;
+        if (MechanicalReference is null)
+        {
+            if (budget is not null) throw new InvalidOperationException("Canonical mechanical energy needs its owning geometry/reference.");
+            return;
+        }
+        if (Columns is null || budget is null) throw new InvalidOperationException("Mechanical reference requires owned columns and funded energy.");
+        var expected = MechanicalReference.PotentialEnergyJoules(Columns);
+        if (Math.Abs(expected - budget.StoredEnergyJoules) > Math.Max(1e-6, expected * 2e-12))
+            throw new InvalidOperationException("Canonical mechanical work does not match the material's gravitational potential.");
+    }
+
     private PlanetOriginCanonicalRockCells AdvanceColumns(
         PlanetOriginDuration interval, PlanetOriginRegionalAirlessParameters parameters, CancellationToken cancellationToken)
     {
@@ -183,7 +249,7 @@ public sealed class PlanetOriginCanonicalRockCells
         };
         var nextEpoch = Epoch.AdvanceCoupled(step, cancellationToken);
         cancellationToken.ThrowIfCancellationRequested();
-        return new PlanetOriginCanonicalRockCells(nextEpoch, trial.Candidate.Aggregate, trial.Candidate) { SurfaceBoundary = parameters };
+        return new PlanetOriginCanonicalRockCells(nextEpoch, trial.Candidate.Aggregate, trial.Candidate, MechanicalReference) { SurfaceBoundary = parameters };
     }
 
     private void VerifyInteriorConductionStability(
