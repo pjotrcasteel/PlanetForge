@@ -9,6 +9,24 @@ namespace PlanetForge.Application.Tests.Planets;
 public sealed class PlanetOriginSpatialSurfaceProjectionTests
 {
     [TestMethod]
+    public void Create_FreezingBoundary_KeepsEveryDisplayedPhaseConsistentWithItsTemperature()
+    {
+        var region = PlanetRockColumnReference.CreateResolvedInitial(PlanetFormationInitialHeat.Create(6371000.0, 24061984));
+        var projection = PlanetOriginSpatialSurfaceProjection.Create(region);
+        Assert.AreEqual(region.Field.Material.SolidusTemperatureKelvin, projection.SolidusTemperatureKelvin);
+        Assert.AreEqual(region.Field.Material.LiquidusTemperatureKelvin, projection.LiquidusTemperatureKelvin);
+        var transitionSamples = 0;
+        for (var index = 0; index < projection.TemperatureKelvin.Length; index++)
+        {
+            var expected = Math.Clamp((projection.TemperatureKelvin[index] - projection.SolidusTemperatureKelvin) /
+                (projection.LiquidusTemperatureKelvin - projection.SolidusTemperatureKelvin), 0.0, 1.0);
+            Assert.AreEqual(expected, projection.MeltFraction[index], 1e-7);
+            if (expected > 0.0 && expected < 1.0) transitionSamples++;
+        }
+        Assert.IsGreaterThan(0, transitionSamples);
+    }
+
+    [TestMethod]
     public void Create_RadiatingInterface_ProjectsSkinPhaseInsteadOfWarmerVolumeMelt()
     {
         var region = PlanetRockColumnReference.CreateResolvedInitial(PlanetFormationInitialHeat.Create(6371000.0, 24061984));
