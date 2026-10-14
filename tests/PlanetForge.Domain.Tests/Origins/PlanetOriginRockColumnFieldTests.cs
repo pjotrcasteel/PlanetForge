@@ -83,13 +83,13 @@ public sealed class PlanetOriginRockColumnFieldTests
     }
 
     [TestMethod]
-    public void Advance_InstabilityCancellationOrUnsupportedLateralFlux_LeavesAllDepthLayersUnpublished()
+    public void Advance_InstabilityCancellationOrExcessiveLateralFlux_LeavesAllDepthLayersUnpublished()
     {
         var state = CreateState();
         var original = state.Columns!.Columns[0].Layers.ToArray();
         Assert.ThrowsExactly<InvalidOperationException>(() => state.Advance(PlanetOriginDuration.FromSeconds(3_600.0), Boundary));
         Assert.ThrowsExactly<InvalidOperationException>(() => state.Advance(PlanetOriginDuration.FromSeconds(1.0),
-            Boundary with { LateralConductivityWattsPerMeterKelvin = 3.0, LateralLayerThicknessMeters = 1.0 }));
+            Boundary with { LateralConductivityWattsPerMeterKelvin = 1e30, LateralLayerThicknessMeters = 1.0 }));
         using var cancellation = new CancellationTokenSource();
         cancellation.Cancel();
         Assert.ThrowsExactly<OperationCanceledException>(() => state.Advance(PlanetOriginDuration.FromSeconds(1.0), Boundary, cancellation.Token));
@@ -278,7 +278,207 @@ public sealed class PlanetOriginRockColumnFieldTests
         Assert.IsTrue(column.Layers.All(layer => Math.Abs(layer.Resolve(Material).TemperatureKelvin - 2200.0) < 1e-8));
         AssertConservation(initial);
         Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => CreateState(grading: double.NaN));
-        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => CreateState(grading: 3.0));
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => CreateState(grading: 5.0));
+    }
+
+    [TestMethod]
+    public void LateralHeat_UniformColumns_HasNoThermalSourceAndRetainsEveryLayerMass()
+    {
+        var state = CreateState(conductivity: 0.0, gridLevel: 0);
+        var trial = state.Columns!.ProposeLateralHeat(PlanetOriginDuration.FromSeconds(1.0), 3.0, 25.0);
+        Assert.IsTrue(trial.TransportedJoules < state.Field.TotalStoredEnthalpyJoules * 1e-15);
+        Assert.AreEqual(state.Field.TotalStoredEnthalpyJoules, trial.Candidate.Aggregate.TotalStoredEnthalpyJoules, state.Field.TotalStoredEnthalpyJoules * 1e-12);
+        for (var index = 0; index < state.Columns.Columns.Count; index++)
+            CollectionAssert.AreEqual(state.Columns.Columns[index].Layers.Select(layer => layer.MassKilograms).ToArray(),
+                trial.Candidate.Columns[index].Layers.Select(layer => layer.MassKilograms).ToArray());
+    }
+
+    [TestMethod]
+    public void LateralHeat_PhysicalSurfaceExtent_ExchangesHeatAcrossCubeSeamsWithoutMixingDeepLayers()
+    {
+        var state = CreateLateralContrast();
+        var boundary = Boundary with { ConductivityWattsPerMeterKelvin = 0.0, InfraredEmissivity = 0.0,
+            LateralConductivityWattsPerMeterKelvin = 1e16, LateralLayerThicknessMeters = 0.1 };
+        var next = state.Advance(PlanetOriginDuration.FromSeconds(1.0), boundary);
+        var before = state.Columns!.Columns;
+        var after = next.Columns!.Columns;
+        Assert.IsTrue(after.Any(column => column.Layers[0].StoredEnthalpyJoules != before[state.Field.Layout.GetIndex(column.Id)].Layers[0].StoredEnthalpyJoules));
+        for (var index = 0; index < before.Count; index++)
+        {
+            for (var depth = 1; depth < before[index].Layers.Count; depth++)
+                Assert.AreEqual(before[index].Layers[depth], after[index].Layers[depth]);
+            Assert.AreEqual(before[index].MassKilograms, after[index].MassKilograms, 0.0);
+        }
+        var minimum = before.Min(column => column.Layers[0].Resolve(Material).TemperatureKelvin);
+        var maximum = before.Max(column => column.Layers[0].Resolve(Material).TemperatureKelvin);
+        Assert.IsTrue(after.All(column => column.Layers[0].Resolve(Material).TemperatureKelvin >= minimum - 1e-8 &&
+            column.Layers[0].Resolve(Material).TemperatureKelvin <= maximum + 1e-8));
+        Assert.IsTrue(after.Max(column => column.Layers[0].Resolve(Material).TemperatureKelvin) < maximum);
+        AssertConservation(next);
+    }
+
+    [TestMethod]
+    public void LateralHeat_StableSubsteps_ReplaysAndConvergesAtTheSameCanonicalTime()
+    {
+        var state = CreateLateralContrast();
+        var boundary = Boundary with { ConductivityWattsPerMeterKelvin = 0.0, InfraredEmissivity = 0.0,
+            LateralConductivityWattsPerMeterKelvin = 1e16, LateralLayerThicknessMeters = 25.0 };
+        PlanetOriginCanonicalRockCells Integrate(double cap) => PlanetOriginRockColumnIntegrator.Advance(state,
+            PlanetOriginDuration.FromSeconds(300.0), boundary, new(cap, 10000), CancellationToken.None);
+        var coarse = Integrate(20.0);
+        var fine = Integrate(10.0);
+        var reference = Integrate(1.0);
+        var replay = Integrate(10.0);
+        double Error(PlanetOriginCanonicalRockCells candidate) => candidate.Columns!.Columns.Select((column, index) =>
+            Math.Abs(column.Layers[0].Resolve(Material).TemperatureKelvin - reference.Columns!.Columns[index].Layers[0].Resolve(Material).TemperatureKelvin)).Max();
+        Assert.IsTrue(Error(fine) < Error(coarse));
+        Assert.AreEqual(coarse.Epoch.Clock, fine.Epoch.Clock);
+        CollectionAssert.AreEqual(fine.Field.Cells.ToArray(), replay.Field.Cells.ToArray());
+        AssertConservation(fine);
+        AssertConservation(reference);
+    }
+
+    [TestMethod]
+    public void LateralHeat_InstabilityOrCancellation_RejectsWithoutMutatingAnyOwnedLayer()
+    {
+        var state = CreateLateralContrast();
+        var before = state.Columns!.Columns.SelectMany(column => column.Layers).ToArray();
+        Assert.ThrowsExactly<InvalidOperationException>(() => state.Columns.ProposeLateralHeat(PlanetOriginDuration.FromSeconds(1.0), 1e30, 25.0));
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => state.Columns.ProposeLateralHeat(PlanetOriginDuration.FromSeconds(1.0), -1.0, 25.0));
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+        Assert.ThrowsExactly<OperationCanceledException>(() => state.Columns.ProposeLateralHeat(PlanetOriginDuration.FromSeconds(1.0), 3.0, 25.0, cancellation.Token));
+        CollectionAssert.AreEqual(before, state.Columns.Columns.SelectMany(column => column.Layers).ToArray());
+        Assert.AreEqual(0L, state.Epoch.Revision);
+    }
+
+    [TestMethod]
+    public void MeltTransfers_OwnedLiquid_MovesActualMassEnthalpyAndReliefWithoutChangingDonorTemperature()
+    {
+        var state = CreateState(conductivity: 0.0, gridLevel: 1);
+        var donor = state.Columns!.Columns[0];
+        var recipientId = PlanetSurfaceGridTopology.GetNeighbor(donor.Id, PlanetGridDirection.West).Cell;
+        var recipientIndex = state.Field.Layout.GetIndex(recipientId);
+        var recipient = state.Columns.Columns[recipientIndex];
+        var mass = donor.Layers[0].MassKilograms * 0.01;
+        var boundary = Boundary with { ConductivityWattsPerMeterKelvin = 0.0, InfraredEmissivity = 0.0 };
+        var next = state.AdvanceWithMeltTransfers(PlanetOriginDuration.FromSeconds(1.0), boundary, [new(donor.Id, 0, recipientId, 0, mass)]);
+        var afterDonor = next.Columns!.Columns[0];
+        var afterRecipient = next.Columns.Columns[recipientIndex];
+        Assert.AreEqual(donor.Layers[0].MassKilograms - mass, afterDonor.Layers[0].MassKilograms, donor.Layers[0].MassKilograms * 1e-12);
+        Assert.AreEqual(recipient.Layers[0].MassKilograms + mass, afterRecipient.Layers[0].MassKilograms, recipient.Layers[0].MassKilograms * 1e-12);
+        Assert.AreEqual(donor.Layers[0].Resolve(Material).TemperatureKelvin, afterDonor.Layers[0].Resolve(Material).TemperatureKelvin, 1e-8);
+        Assert.IsTrue(afterDonor.ThicknessMeters(Material, state.Columns.Properties) < donor.ThicknessMeters(Material, state.Columns.Properties));
+        Assert.IsTrue(afterRecipient.ThicknessMeters(Material, state.Columns.Properties) > recipient.ThicknessMeters(Material, state.Columns.Properties));
+        Assert.AreEqual(1_000_000L, next.Epoch.Clock.MicrosecondsIntoYear);
+        Assert.AreEqual(state.Field.TotalActiveRockMassKilograms, next.Field.TotalActiveRockMassKilograms, state.Field.TotalActiveRockMassKilograms * 1e-12);
+        AssertConservation(next);
+        for (var depth = 1; depth < donor.Layers.Count; depth++) Assert.AreEqual(donor.Layers[depth], afterDonor.Layers[depth]);
+    }
+
+    [TestMethod]
+    public void MeltTransfers_IncomingMaterial_DoesNotHideOriginalDonorOverdraw()
+    {
+        var state = CreateState(conductivity: 0.0, gridLevel: 1);
+        var donor = state.Columns!.Columns[0];
+        var eastId = PlanetSurfaceGridTopology.GetNeighbor(donor.Id, PlanetGridDirection.East).Cell;
+        var westId = PlanetSurfaceGridTopology.GetNeighbor(donor.Id, PlanetGridDirection.West).Cell;
+        var mass = donor.Layers[0].MassKilograms;
+        Assert.ThrowsExactly<InvalidOperationException>(() => state.Columns.ProposeMeltTransfers(
+            [new(donor.Id, 0, eastId, 0, mass * 0.20), new(eastId, 0, donor.Id, 0, mass * 0.20), new(donor.Id, 0, westId, 0, mass * 0.10)]));
+        Assert.AreEqual(mass, state.Columns.Columns[0].Layers[0].MassKilograms, 0.0);
+        Assert.AreEqual(0L, state.Epoch.Revision);
+    }
+
+    [TestMethod]
+    public void MeltTransfers_SolidNonAdjacentOrNonOverlappingMaterial_IsRejectedWithoutPublishing()
+    {
+        var cold = AdvanceHours(CreateState(gridLevel: 0), 4);
+        var donor = cold.Columns!.Columns[0];
+        var recipientId = PlanetSurfaceGridTopology.GetNeighbor(donor.Id, PlanetGridDirection.East).Cell;
+        var mass = donor.Layers[0].MassKilograms * 0.01;
+        Assert.AreEqual(0.0, donor.Layers[0].Resolve(Material).MeltFraction, 0.0);
+        Assert.ThrowsExactly<InvalidOperationException>(() => cold.Columns.ProposeMeltTransfers([new(donor.Id, 0, recipientId, 0, mass)]));
+        var hot = CreateState(conductivity: 0.0, gridLevel: 0);
+        Assert.ThrowsExactly<ArgumentException>(() => hot.Columns!.ProposeMeltTransfers([new(donor.Id, 0, donor.Id, 0, mass)]));
+        Assert.ThrowsExactly<InvalidOperationException>(() => hot.Columns!.ProposeMeltTransfers([new(donor.Id, 0, recipientId, 7, mass)]));
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => hot.Columns!.ProposeMeltTransfers([new(donor.Id, 0, recipientId, 0, double.NaN)]));
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => hot.Columns!.ProposeMeltTransfers([new(donor.Id, -1, recipientId, 0, mass)]));
+        Assert.AreEqual(0L, hot.Epoch.Revision);
+    }
+
+    [TestMethod]
+    public void MeltTransfers_DifferentTemperatures_UsesDonorSpecificEnthalpyAndReplays()
+    {
+        var state = CreateLateralContrast();
+        var donor = state.Columns!.Columns.OrderByDescending(column => column.Layers[0].Resolve(Material).TemperatureKelvin).First();
+        var recipientId = PlanetSurfaceGridTopology.GetNeighbor(donor.Id, PlanetGridDirection.East).Cell;
+        var recipient = state.Columns.Columns[state.Field.Layout.GetIndex(recipientId)];
+        var mass = donor.Layers[0].MassKilograms * 0.01;
+        PlanetOriginMeltFaceTransfer[] transfers = [new(donor.Id, 0, recipientId, 0, mass)];
+        var trial = state.Columns.ProposeMeltTransfers(transfers);
+        var replay = state.Columns.ProposeMeltTransfers(transfers);
+        var expectedHeat = mass * donor.Layers[0].StoredEnthalpyJoules / donor.Layers[0].MassKilograms;
+        Assert.AreEqual(expectedHeat, trial.TransportedEnthalpyJoules, expectedHeat * 1e-12);
+        var after = trial.Candidate.Columns[state.Field.Layout.GetIndex(recipientId)];
+        Assert.AreEqual(recipient.Layers[0].StoredEnthalpyJoules + expectedHeat, after.Layers[0].StoredEnthalpyJoules, expectedHeat * 1e-12);
+        CollectionAssert.AreEqual(trial.Candidate.Aggregate.Cells.ToArray(), replay.Candidate.Aggregate.Cells.ToArray());
+        Assert.AreEqual(0.0, trial.MassResidualKilograms, state.Field.TotalActiveRockMassKilograms * 2e-12);
+        Assert.AreEqual(0.0, trial.EnthalpyResidualJoules, state.Field.TotalStoredEnthalpyJoules * 2e-12);
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+        Assert.ThrowsExactly<OperationCanceledException>(() => state.Columns.ProposeMeltTransfers(transfers, cancellation.Token));
+    }
+
+    [TestMethod]
+    public void LateralHeat_UnequalPhysicalLayerWidths_ExchangesAcrossDifferentDepthIndices()
+    {
+        var state = CreateMixedPhaseContrast();
+        var cold = state.Columns!.Columns.OrderBy(column => column.Layers[0].Resolve(Material).TemperatureKelvin).First();
+        var hotId = PlanetSurfaceGridTopology.GetNeighbor(cold.Id, PlanetGridDirection.East).Cell;
+        var hot = state.Columns.Columns[state.Field.Layout.GetIndex(hotId)];
+        var coldWidth = cold.Layers[0].VolumeCubicMeters(Material, state.Columns.Properties) / cold.AreaSquareMeters;
+        var hotWidth = hot.Layers[0].VolumeCubicMeters(Material, state.Columns.Properties) / hot.AreaSquareMeters;
+        Assert.IsTrue(coldWidth < hotWidth);
+        var extent = (coldWidth + hotWidth) * 0.5;
+        var trial = state.Columns.ProposeLateralHeat(PlanetOriginDuration.FromSeconds(1.0), 1e16, extent);
+        var afterCold = trial.Candidate.Columns[state.Field.Layout.GetIndex(cold.Id)];
+        var afterHot = trial.Candidate.Columns[state.Field.Layout.GetIndex(hot.Id)];
+        Assert.IsTrue(afterCold.Layers[1].StoredEnthalpyJoules > cold.Layers[1].StoredEnthalpyJoules);
+        Assert.AreEqual(hot.Layers[1], afterHot.Layers[1]);
+        Assert.AreEqual(cold.Layers[2], afterCold.Layers[2]);
+        Assert.AreEqual(0.0, trial.ConservationResidualJoules, state.Field.TotalStoredEnthalpyJoules * 2e-12);
+    }
+
+    [TestMethod]
+    public void MeltTransfers_SolidRecipient_RequiresAnInterfaceModelRatherThanInjectingLiquidIntoRock()
+    {
+        var state = CreateMixedPhaseContrast();
+        var cold = state.Columns!.Columns.OrderBy(column => column.Layers[0].Resolve(Material).TemperatureKelvin).First();
+        var donorId = PlanetSurfaceGridTopology.GetNeighbor(cold.Id, PlanetGridDirection.East).Cell;
+        var donor = state.Columns.Columns[state.Field.Layout.GetIndex(donorId)];
+        Assert.AreEqual(0.0, cold.Layers[0].Resolve(Material).MeltFraction);
+        Assert.AreEqual(1.0, donor.Layers[0].Resolve(Material).MeltFraction);
+        Assert.ThrowsExactly<InvalidOperationException>(() => state.Columns.ProposeMeltTransfers(
+            [new(donor.Id, 0, cold.Id, 0, donor.Layers[0].MassKilograms * 0.01)]));
+    }
+
+    private static PlanetOriginCanonicalRockCells CreateMixedPhaseContrast()
+    {
+        var state = CreateState(conductivity: 0.0, gridLevel: 0);
+        var field = state.Field.RedistributeInitialEnergy(cell => cell.ActiveRockMassKilograms *
+            (1.0 + PlanetSurfaceGridGeometry.GetCenterDirection(cell.Id).X), state.Field.TotalStoredEnthalpyJoules * 0.60);
+        var columns = PlanetOriginRockColumnField.Partition(field, state.Columns!.Properties);
+        return new(state.Epoch, field, columns);
+    }
+
+    private static PlanetOriginCanonicalRockCells CreateLateralContrast()
+    {
+        var state = CreateState(conductivity: 0.0, gridLevel: 1);
+        var field = state.Field.RedistributeInitialEnergy(cell => cell.ActiveRockMassKilograms *
+            (1.0 + PlanetSurfaceGridGeometry.GetCenterDirection(cell.Id).X), state.Field.TotalStoredEnthalpyJoules * 0.01);
+        var columns = PlanetOriginRockColumnField.Partition(field, state.Columns!.Properties);
+        return new(state.Epoch, field, columns);
     }
 
     private static PlanetOriginCanonicalRockCells CreateState(double conductivity = 3.0, int layerCount = 8, int gridLevel = 2, double grading = 1.0, bool interfaceBoundary = false, bool implicitTransport = false)

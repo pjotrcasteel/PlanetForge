@@ -12,13 +12,19 @@ public readonly record struct PlanetOriginRockColumnProperties(
     /// <summary>Equal mass at one; larger exponents concentrate depth resolution at the cooling boundary.</summary>
     public double DepthGradingExponent { get; init; } = 1.0;
 
+    /// <summary>Optional fixed graded parent mesh, uniformly subdivided for genuinely nested depth refinement. Zero grades all layers directly.</summary>
+    public int DepthGradingBaseLayerCount { get; init; }
+
     /// <summary>Opt-in massless conductive/radiative face; legacy references retain cell-centre radiation.</summary>
     public bool UseRadiatingInterface { get; init; }
     public bool UseImplicitDepthTransport { get; init; }
 
     public void Validate()
     {
-        if (!double.IsFinite(DepthGradingExponent) || DepthGradingExponent < 1.0 || DepthGradingExponent > 2.0 ||
+        if (DepthGradingBaseLayerCount < 0 || (DepthGradingBaseLayerCount > 0 &&
+            (DepthGradingBaseLayerCount < 2 || DepthGradingBaseLayerCount > LayerCount || LayerCount % DepthGradingBaseLayerCount != 0)))
+            throw new ArgumentOutOfRangeException(nameof(DepthGradingBaseLayerCount), "A parent mesh must divide the declared layer count.");
+        if (!double.IsFinite(DepthGradingExponent) || DepthGradingExponent < 1.0 || DepthGradingExponent > 4.0 ||
             LayerCount is < 2 or > 128 || !double.IsFinite(SolidDensityKilogramsPerCubicMeter) || SolidDensityKilogramsPerCubicMeter <= 0.0 ||
             !double.IsFinite(LiquidDensityKilogramsPerCubicMeter) || LiquidDensityKilogramsPerCubicMeter <= 0.0 ||
             !double.IsFinite(ConductivityWattsPerMeterKelvin) || ConductivityWattsPerMeterKelvin < 0.0)
@@ -51,17 +57,19 @@ public readonly record struct PlanetOriginRockColumnLayer(double MassKilograms, 
 /// <summary>Immutable owned material from the radiating surface (index 0) down to the interior boundary.</summary>
 public sealed class PlanetOriginRockColumn
 {
-    internal PlanetOriginRockColumn(PlanetSurfaceGridCellId id, double area, double referenceThickness, PlanetOriginRockColumnLayer[] layers)
+    internal PlanetOriginRockColumn(PlanetSurfaceGridCellId id, double area, double referenceThickness, PlanetOriginRockColumnLayer[] layers, double? referenceMassKilograms = null)
     {
         Id = id;
         AreaSquareMeters = area;
         ReferenceThicknessMeters = referenceThickness;
+        ReferenceMassKilograms = referenceMassKilograms ?? layers.Sum(layer => layer.MassKilograms);
         Layers = Array.AsReadOnly(layers);
     }
 
     public PlanetSurfaceGridCellId Id { get; }
     public double AreaSquareMeters { get; }
     public double ReferenceThicknessMeters { get; }
+    public double ReferenceMassKilograms { get; }
     public IReadOnlyList<PlanetOriginRockColumnLayer> Layers { get; }
     public double MassKilograms => Layers.Sum(layer => layer.MassKilograms);
     public double StoredEnthalpyJoules => Layers.Sum(layer => layer.StoredEnthalpyJoules);
@@ -151,8 +159,12 @@ public sealed partial class PlanetOriginRockColumnField
             for (var depth = 0; depth < layers.Length; depth++)
             {
                 var last = depth == layers.Length - 1;
-                var fraction = properties.DepthGradingExponent == 1.0 ? 1.0 / layers.Length : Math.Pow((depth + 1.0) / layers.Length, properties.DepthGradingExponent) -
-                    Math.Pow((double)depth / layers.Length, properties.DepthGradingExponent);
+                var baseCount = properties.DepthGradingBaseLayerCount == 0 ? layers.Length : properties.DepthGradingBaseLayerCount;
+                var subdivisions = layers.Length / baseCount;
+                var parent = depth / subdivisions;
+                var fraction = properties.DepthGradingExponent == 1.0 ? 1.0 / layers.Length :
+                    (Math.Pow((parent + 1.0) / baseCount, properties.DepthGradingExponent) -
+                        Math.Pow((double)parent / baseCount, properties.DepthGradingExponent)) / subdivisions;
                 var mass = last ? remainingMass : cell.ActiveRockMassKilograms * fraction;
                 var energy = last ? remainingEnergy : cell.StoredEnthalpyJoules * fraction;
                 layers[depth] = new PlanetOriginRockColumnLayer(mass, energy);
@@ -176,10 +188,10 @@ public sealed partial class PlanetOriginRockColumnField
     {
         boundary.Validate();
         ArgumentNullException.ThrowIfNull(interior);
+        if (boundary.LiquidHeatTransport is not null && !Properties.UseImplicitDepthTransport)
+            throw new InvalidOperationException("Liquid heat transport requires implicit depth columns.");
         boundary = PlanetOriginMagmaConvection.ResolveBoundary(boundary, this, interior);
-        if (boundary.LateralConductivityWattsPerMeterKelvin != 0.0)
-            throw new InvalidOperationException("Column integration requires layer-consistent lateral transport.");
-        var maximum = double.PositiveInfinity;
+        var maximum = MaximumLateralStepSeconds(boundary.LateralConductivityWattsPerMeterKelvin, boundary.LateralLayerThicknessMeters, cancellationToken);
         var mantleConductance = 0.0;
         foreach (var column in Columns)
         {
@@ -230,10 +242,20 @@ public sealed partial class PlanetOriginRockColumnField
         boundary.Validate();
         ArgumentNullException.ThrowIfNull(interior);
         if (interval.IsZero) throw new ArgumentOutOfRangeException(nameof(interval));
+        if (boundary.LiquidHeatTransport is not null && !Properties.UseImplicitDepthTransport)
+            throw new InvalidOperationException("Liquid heat transport requires implicit depth columns.");
         boundary = PlanetOriginMagmaConvection.ResolveBoundary(boundary, this, interior);
-        if (boundary.LateralConductivityWattsPerMeterKelvin != 0.0)
-            throw new InvalidOperationException("Depth-resolved lateral exchange needs layer-consistent fluxes; aggregate lateral conduction cannot silently mix column material.");
+        var verticalBoundary = boundary with { LateralConductivityWattsPerMeterKelvin = 0.0, LateralLayerThicknessMeters = 0.0 };
+        var vertical = ProposeVertical(interval, verticalBoundary, interior, cancellationToken);
+        if (boundary.LateralConductivityWattsPerMeterKelvin == 0.0) return vertical;
+        var lateral = vertical.Candidate.ProposeLateralHeat(interval, boundary.LateralConductivityWattsPerMeterKelvin,
+            boundary.LateralLayerThicknessMeters, cancellationToken);
+        return vertical with { Candidate = lateral.Candidate, ConservationResidualJoules = vertical.ConservationResidualJoules + lateral.ConservationResidualJoules };
+    }
 
+    private PlanetOriginRockColumnTrial ProposeVertical(PlanetOriginDuration interval, PlanetOriginRegionalAirlessParameters boundary,
+        PlanetOriginThermalTimeline interior, CancellationToken cancellationToken)
+    {
         if (Properties.UseImplicitDepthTransport) return ProposeImplicit(interval, boundary, interior, cancellationToken);
         var seconds = interval.TotalSeconds;
         var result = new PlanetOriginRockColumn[Columns.Count];
@@ -302,7 +324,7 @@ public sealed partial class PlanetOriginRockColumnField
                     throw new InvalidOperationException("Column step overdraws or overflows a physical rock layer; subdivide the duration.");
                 nextLayers[depth] = nextLayer;
             }
-            result[i] = new PlanetOriginRockColumn(column.Id, column.AreaSquareMeters, column.ReferenceThicknessMeters, nextLayers);
+            result[i] = new PlanetOriginRockColumn(column.Id, column.AreaSquareMeters, column.ReferenceThicknessMeters, nextLayers, column.ReferenceMassKilograms);
             if (result[i].ThicknessMeters(Material, Properties) / Aggregate.PlanetRadiusMeters > 0.001)
                 throw new InvalidOperationException("Column evolution exceeded the validated thin-shell geometry envelope.");
         }

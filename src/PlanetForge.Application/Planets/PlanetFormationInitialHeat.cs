@@ -14,8 +14,15 @@ public static class PlanetFormationInitialHeat
     public const double MaximumInitialKelvin = 3400.0;
 
     public static PlanetOriginCanonicalRockCells Create(double radiusMeters, int seed)
+        => Redistribute(PlanetMagmaOceanReference.CreateInitial(radiusMeters, 0.0, 4), seed);
+
+    /// <summary>Same seeded heat hypothesis, funded by a declared upper-shell inventory rather than extra heat.</summary>
+    public static PlanetOriginCanonicalRockCells CreateUpperMagma(double radiusMeters, int seed,
+        double liquidDepthMeters = 1_000.0, int gridLevel = 4) =>
+        Redistribute(PlanetMagmaOceanReference.CreateUpperMagmaInitial(radiusMeters, liquidDepthMeters, 0.0, gridLevel), seed);
+
+    private static PlanetOriginCanonicalRockCells Redistribute(PlanetOriginCanonicalRockCells uniform, int seed)
     {
-        var uniform = PlanetMagmaOceanReference.CreateInitial(radiusMeters, 0.0, 4);
         var field = uniform.Field;
         var lobes = CreateLobes(seed);
         var weights = field.Cells.Select(cell =>

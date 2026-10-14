@@ -102,12 +102,13 @@ public sealed class PlanetOriginEnergyLedger
     public PlanetOriginEnergyLedger(
         PlanetOriginThermalTimeline interior,
         PlanetWaterEnvironmentalState environment,
-        PlanetEnvironmentHeatCapacityParameters heatCapacities)
+        PlanetEnvironmentHeatCapacityParameters heatCapacities, PlanetOriginMechanicalEnergyBudget? surfaceMechanics = null)
     {
         Interior = interior ?? throw new ArgumentNullException(nameof(interior));
         Environment = environment ?? throw new ArgumentNullException(nameof(environment));
         heatCapacities.Validate();
         HeatCapacities = heatCapacities;
+        SurfaceMechanics = surfaceMechanics;
         // Reject an initial state with heat in an empty material store.
         PlanetEnvironmentTemperatureModel.Resolve(environment, heatCapacities);
         InitialStoredEnergyJoules = StoredEnergyJoules;
@@ -122,7 +123,7 @@ public sealed class PlanetOriginEnergyLedger
         double emittedInfraredJoules,
         double exportedInteriorJoules,
         double materialDeliveredJoules,
-        double materialEscapedJoules)
+        double materialEscapedJoules, PlanetOriginMechanicalEnergyBudget? surfaceMechanics = null)
     {
         Interior = interior;
         Environment = environment;
@@ -133,6 +134,7 @@ public sealed class PlanetOriginEnergyLedger
         CumulativeInteriorExportJoules = exportedInteriorJoules;
         CumulativeDeliveredMaterialEnergyJoules = materialDeliveredJoules;
         CumulativeEscapedMaterialEnergyJoules = materialEscapedJoules;
+        SurfaceMechanics = surfaceMechanics;
     }
 
     public PlanetOriginThermalTimeline Interior { get; }
@@ -140,6 +142,8 @@ public sealed class PlanetOriginEnergyLedger
     public PlanetWaterEnvironmentalState Environment { get; }
 
     public PlanetEnvironmentHeatCapacityParameters HeatCapacities { get; }
+
+    public PlanetOriginMechanicalEnergyBudget? SurfaceMechanics { get; }
 
     public PlanetOriginClock Clock => Interior.Clock;
 
@@ -162,7 +166,7 @@ public sealed class PlanetOriginEnergyLedger
     public double CumulativeEscapedMaterialEnergyJoules { get; }
 
     public double StoredEnergyJoules => Interior.EnergyBudget.StoredEnergyJoules +
-        Environment.Environment.TotalEnergyJoules + Environment.RelativeLatentEnergyJoules;
+        Environment.Environment.TotalEnergyJoules + Environment.RelativeLatentEnergyJoules + (SurfaceMechanics?.StoredEnergyJoules ?? 0.0);
 
     public double ConservationResidualJoules => InitialStoredEnergyJoules +
         Interior.EnergyBudget.CumulativeImpactHeatJoules + Interior.EnergyBudget.CumulativeRadiogenicHeatJoules +
@@ -236,8 +240,31 @@ public sealed class PlanetOriginEnergyLedger
             RequireEnergy(CumulativeDeliveredMaterialEnergyJoules + volatiles.ExternalMaterialInputJoules,
                 "cumulative delivered material enthalpy"),
             RequireEnergy(CumulativeEscapedMaterialEnergyJoules + volatiles.ExternalMaterialEscapeJoules,
-                "cumulative escaped material enthalpy"));
+                "cumulative escaped material enthalpy"), SurfaceMechanics);
     }
+
+    /// <summary>Funds initial mechanical potential by debiting the existing surface-rock account, without a clock advance or external energy.</summary>
+    internal PlanetOriginEnergyLedger FundSurfaceMechanics(double joules)
+    {
+        if (SurfaceMechanics is not null) throw new InvalidOperationException("Surface mechanical energy is already funded.");
+        var budget = Environment.Environment.Withdraw(PlanetEnvironmentHeatReservoir.SurfaceRock, joules);
+        var environment = Environment.WithBoundaryExchange(budget, -joules);
+        return WithMechanicalEnvironment(environment, new(joules));
+    }
+
+    /// <summary>Exactly matched work-to-heat exchange; the source cannot be an untracked gravity multiplier.</summary>
+    internal PlanetOriginEnergyLedger ThermalizeSurfaceMechanics(double joules)
+    {
+        var mechanical = SurfaceMechanics ?? throw new InvalidOperationException("Mechanical work needs an initially funded source.");
+        var nextMechanical = mechanical.Thermalize(joules);
+        var budget = Environment.Environment.Deposit(PlanetEnvironmentHeatReservoir.SurfaceRock, joules);
+        return WithMechanicalEnvironment(Environment.WithBoundaryExchange(budget, joules), nextMechanical);
+    }
+
+    private PlanetOriginEnergyLedger WithMechanicalEnvironment(PlanetWaterEnvironmentalState environment, PlanetOriginMechanicalEnergyBudget mechanics) =>
+        new(Interior, environment, HeatCapacities, InitialStoredEnergyJoules, CumulativeAbsorbedStellarEnergyJoules,
+            CumulativeEmittedInfraredEnergyJoules, CumulativeInteriorExportJoules, CumulativeDeliveredMaterialEnergyJoules,
+            CumulativeEscapedMaterialEnergyJoules, mechanics);
 
     private static double RequireEnergy(double joules, string name)
     {

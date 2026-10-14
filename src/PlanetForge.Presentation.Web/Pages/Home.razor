@@ -21,13 +21,20 @@
         @if (continuousSimulation)
         {
             <div class="formation-hud" data-testid="formation-hud">
-                <small class="formation-brand">PLANETFORGE</small>
+                <small class="formation-brand">PLANETFORGE @(playableDemo ? "· PLAYABLE PROTOTYPE" : "")</small>
                 <strong data-testid="formation-phase">@FormationPhase</strong>
                 <span data-testid="formation-time">@FormationTime</span>
                 <details class="formation-details">
                     <summary>Details</summary>
-                    <span data-testid="planet-seed">SEED @CurrentSeed</span>
-                    @if (Experience.PublishedRegionalRock is { } world)
+                    <span data-testid="planet-seed">SEED @(playableDemo ? formationSeed : CurrentSeed)</span>
+                    @if (playableDemo)
+                    {
+                        <span>CRUST COVERAGE @demoReadout.Coverage.ToString("P0")</span>
+                        <small>Accelerated, simplified cooling, lava transport and uplift. Time and relief are illustrative; this is not validated Earth geophysics.</small>
+                        <small>Drag to orbit · scroll to inspect. One evolving field drives liquid, crust and relief.</small>
+                        <a href="?">Open validated thermal reference</a>
+                    }
+                    @if (!playableDemo && Experience.PublishedRegionalRock is { } world)
                     {
                         <span data-testid="formation-temperature">SURFACE @($"{world.Field.Cells.Min(c => world.ResolveRadiatingSurfaceTemperature(c.Id)):0}")–@($"{world.Field.Cells.Max(c => world.ResolveRadiatingSurfaceTemperature(c.Id)):0}") K</span>
                         <span data-testid="formation-skin">SKIN MELT @($"{world.Field.Cells.Min(c => world.ResolveRadiatingSurfacePhase(c.Id).MeltFraction):P0}")–@($"{world.Field.Cells.Max(c => world.ResolveRadiatingSurfacePhase(c.Id).MeltFraction):P0}")</span>
@@ -40,9 +47,13 @@
                             <span data-testid="formation-basal-flux">BASAL HEAT @($"{convection.MeanUpwardHeatFluxWattsPerSquareMeter:0}") W/m²</span>
                         }
                     }
+                    @if (!playableDemo)
+                    {
+                    <a href="?demo=1">Open playable formation demo</a>
                     <small>Dry cooling and surface crystallization. Atmosphere, water and life are future coupled processes.</small>
                     <small>Fixed-exposure thermal emission. Bloom is optics, not steam. Parameterized Rayleigh/Nusselt convection transfers finite mantle heat into the same surface-rock ledger; magma fluid motion, steam and coherent crust mechanics remain unresolved.</small>
                     <small>Seeded regional starting heat conserves the 2200 K mean shell energy. It is an initial-condition hypothesis.</small>
+                    }
                 </details>
                 @if (!string.IsNullOrEmpty(formationStatus))
                 {
@@ -172,6 +183,7 @@
                 </button>
                 <select aria-label="Simulation time per step" data-testid="formation-speed" @bind="formationStepSeconds" disabled="@(!formationRendererReady || formationBusy)">
                     <option value="1">1 s / step</option><option value="5">5 s / step</option><option value="30">30 s / step</option>
+                    @if (playableDemo) { <option value="60">60 demo s / step</option> }
                 </select>
                 <button type="button" data-testid="formation-restart" disabled="@(!formationRendererReady || formationBusy)" @onclick="RestartFormationAsync">Restart</button>
             </div>
@@ -251,6 +263,8 @@
     private bool formationPlaying;
     private bool formationBusy;
     private bool formationRendererReady;
+    private bool playableDemo;
+    private DemoReadout demoReadout = new();
     private int formationSeed;
     private int formationStepSeconds = 1;
     private string formationStatus = string.Empty;
@@ -285,12 +299,14 @@
             : query.Contains("rockMap=melt", StringComparison.OrdinalIgnoreCase) ? "melt" : "physical";
         var values = query.TrimStart('?').Split('&', StringSplitOptions.RemoveEmptyEntries);
         var researchKeys = new[] { "legacy=1", "airlessReference=1", "rockColumns=1", "resolvedColumns=1", "magmaOcean=1", "regionalRock=1", "regionalStreaming=1" };
+        playableDemo = values.Contains("demo=1", StringComparer.OrdinalIgnoreCase);
         continuousSimulation = !values.Any(v => researchKeys.Contains(v, StringComparer.OrdinalIgnoreCase));
+        playableDemo &= continuousSimulation;
         if (continuousSimulation)
         {
             var seedValue = values.FirstOrDefault(v => v.StartsWith("seed=", StringComparison.OrdinalIgnoreCase));
             formationSeed = seedValue is not null && int.TryParse(seedValue[5..], out var seed) && seed > 0 ? seed : PlanetSeedCatalog.ShowcaseSeed;
-            snapshot = PlanetFormationSimulation.Start(Experience, formationSeed);
+            if (!playableDemo) snapshot = PlanetFormationSimulation.Start(Experience, formationSeed);
             return;
         }
         var visualTestSeed = GetVisualTestSeed();
@@ -332,15 +348,25 @@
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
+        if (firstRender && playableDemo)
+        {
+            rendererModule = await JsRuntime.InvokeAsync<IJSObjectReference>("import", "./js/formationDemo.js?v=0.0.48.0");
+            demoReadout = await rendererModule.InvokeAsync<DemoReadout>("initialize", "planet-canvas", formationSeed);
+            formationStepSeconds = 5;
+            formationRendererReady = true;
+            formationLoopTask = RunFormationLoopAsync();
+            StateHasChanged();
+            return;
+        }
         if (!firstRender || snapshot is null)
         {
             return;
         }
 
-        rendererModule = await JsRuntime.InvokeAsync<IJSObjectReference>("import", disposeCancellationTokenSource.Token, "./js/planetRenderer.js?v=0.0.47.0");
+        rendererModule = await JsRuntime.InvokeAsync<IJSObjectReference>("import", disposeCancellationTokenSource.Token, "./js/planetRenderer.js?v=0.0.48.0");
         await rendererModule.InvokeVoidAsync("initialize", disposeCancellationTokenSource.Token, "planet-canvas", snapshot, GetOrCreateSurfaceLodReference());
 
-        waterRendererModule = await JsRuntime.InvokeAsync<IJSObjectReference>("import", disposeCancellationTokenSource.Token, "./js/waterOverlay.js?v=0.0.47.0");
+        waterRendererModule = await JsRuntime.InvokeAsync<IJSObjectReference>("import", disposeCancellationTokenSource.Token, "./js/waterOverlay.js?v=0.0.48.0");
         await waterRendererModule.InvokeVoidAsync("initialize", disposeCancellationTokenSource.Token, "water-overlay-canvas", "planet-canvas", snapshot.PhysicalParameters.RadiusMeters);
         await waterRendererModule.InvokeVoidAsync("clearWaterCycle", disposeCancellationTokenSource.Token);
         if (continuousSimulation)

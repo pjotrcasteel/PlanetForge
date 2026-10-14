@@ -259,7 +259,7 @@ function createState(canvas, gl, dotNetReference) {
         lodTimer: null, lodSequence: 0, lastSurfaceRequestSignature: null, lastTerrainUpdateMs: null, lastGeometryPayloadCount: 0,
         surfaceRequestInFlight: false, surfaceRequestPending: false, dirty: true,
         surfaceRequestsStarted: 0, surfaceRequestsCompleted: 0, surfaceResponsesSuperseded: 0, originActive: false, airlessReference: false,
-        thermalRadianceTexture: createThermalReferenceTexture(gl), depthColumnsActive: false, opticalBloom: null,
+        thermalRadianceTexture: createThermalReferenceTexture(gl), depthColumnsActive: false, rockPhaseBounds: [0, 0], opticalBloom: null,
         rockDiagnosticMode: resolveRockDiagnosticMode(),
         spatialRockTexture: createEmptySpatialRockTexture(gl), spatialRockRevision: null, spatialRockActive: false,
         lastGeometryCommitMs: null, lastTerrainDrawSubmittedMs: null, lastGestureToTerrainDrawMs: null,
@@ -283,6 +283,7 @@ function createState(canvas, gl, dotNetReference) {
             surfaceTemperature: gl.getUniformLocation(globeProgram, 'uSurfaceTemperature'),
             airlessReference: gl.getUniformLocation(globeProgram, 'uAirlessReference'),
             depthColumns: gl.getUniformLocation(globeProgram, 'uDepthColumns'),
+            rockPhaseBounds: gl.getUniformLocation(globeProgram, 'uRockPhaseBounds'),
             thermalRadiance: gl.getUniformLocation(globeProgram, 'uThermalRadianceTexture'),
             spatialRockActive: gl.getUniformLocation(globeProgram, 'uSpatialRockActive'),
             rockDiagnosticMode: gl.getUniformLocation(globeProgram, 'uRockDiagnosticMode'),
@@ -310,6 +311,7 @@ function createState(canvas, gl, dotNetReference) {
             surfaceTemperature: gl.getUniformLocation(localProgram, 'uSurfaceTemperature'),
             airlessReference: gl.getUniformLocation(localProgram, 'uAirlessReference'),
             depthColumns: gl.getUniformLocation(localProgram, 'uDepthColumns'),
+            rockPhaseBounds: gl.getUniformLocation(localProgram, 'uRockPhaseBounds'),
             thermalRadiance: gl.getUniformLocation(localProgram, 'uThermalRadianceTexture'),
             spatialRockActive: gl.getUniformLocation(localProgram, 'uSpatialRockActive'),
             rockDiagnosticMode: gl.getUniformLocation(localProgram, 'uRockDiagnosticMode'),
@@ -368,7 +370,15 @@ function updateSpatialRockTexture(s, atlas) {
         return;
     }
 
-    const { width, height, temperatureKelvin, meltFraction, revision } = atlas;
+    const { width, height, temperatureKelvin, meltFraction, revision, solidusTemperatureKelvin, liquidusTemperatureKelvin } = atlas;
+    // Older archived atlases have no material bounds; retain their supplied phase.
+    s.rockPhaseBounds = [0, 0];
+    if (solidusTemperatureKelvin != null || liquidusTemperatureKelvin != null) {
+        if (!Number.isFinite(solidusTemperatureKelvin) || !Number.isFinite(liquidusTemperatureKelvin) ||
+            solidusTemperatureKelvin < 0 || liquidusTemperatureKelvin <= solidusTemperatureKelvin)
+            throw new Error('Canonical rock has invalid solidus/liquidus bounds.');
+        s.rockPhaseBounds = [solidusTemperatureKelvin, liquidusTemperatureKelvin];
+    }
     if (!Number.isInteger(width) || !Number.isInteger(height) || width < 1 || height < 1 ||
         !Array.isArray(temperatureKelvin) || !Array.isArray(meltFraction) ||
         temperatureKelvin.length !== width * height || meltFraction.length !== width * height) {
@@ -1083,6 +1093,7 @@ function renderGlobe(s) {
     gl.uniform1i(s.globeUniforms.spatialRockActive, s.spatialRockActive ? 1 : 0);
     gl.uniform1i(s.globeUniforms.rockDiagnosticMode, s.rockDiagnosticMode);
     gl.uniform1i(s.globeUniforms.depthColumns, s.depthColumnsActive ? 1 : 0);
+    gl.uniform2f(s.globeUniforms.rockPhaseBounds, ...s.rockPhaseBounds);
     gl.activeTexture(gl.TEXTURE2);
     gl.bindTexture(gl.TEXTURE_2D, s.thermalRadianceTexture);
     gl.uniform1i(s.globeUniforms.thermalRadiance, 2);
@@ -1167,6 +1178,7 @@ function renderLocal(s) {
     gl.uniform1i(s.localUniforms.spatialRockActive, s.spatialRockActive ? 1 : 0);
     gl.uniform1i(s.localUniforms.rockDiagnosticMode, s.rockDiagnosticMode);
     gl.uniform1i(s.localUniforms.depthColumns, s.depthColumnsActive ? 1 : 0);
+    gl.uniform2f(s.localUniforms.rockPhaseBounds, ...s.rockPhaseBounds);
     gl.activeTexture(gl.TEXTURE2);
     gl.bindTexture(gl.TEXTURE_2D, s.thermalRadianceTexture);
     gl.uniform1i(s.localUniforms.thermalRadiance, 2);
@@ -1331,6 +1343,7 @@ uniform mat4 uModel;
 uniform mat4 uViewProjection;
 uniform float uPlanetRadiusMeters;
 uniform int uDepthColumns;
+uniform vec2 uRockPhaseBounds;
 uniform vec3 uCameraPosition;
 uniform float uSeaLevelMeters;
 uniform float uSeaIceFraction;
@@ -1409,6 +1422,7 @@ uniform float uEquilibriumTemperature;
 uniform float uSurfaceTemperature;
 uniform int uAirlessReference;
 uniform int uDepthColumns;
+uniform vec2 uRockPhaseBounds;
 ${thermalMaterialShader}
 uniform int uSpatialRockActive;
 uniform int uRockDiagnosticMode;
@@ -1437,6 +1451,10 @@ vec2 sampleRegionalRock(vec2 uv) {
             weighted += sampleValue * weight;
         }
     }
+    // Apply the material law AFTER temperature filtering, including the GPU
+    // footprint. A filtered melt channel can otherwise cross the freezing front.
+    if (uRockPhaseBounds.y > uRockPhaseBounds.x)
+        weighted.y = clamp((weighted.x - uRockPhaseBounds.x) / (uRockPhaseBounds.y - uRockPhaseBounds.x), 0.0, 1.0);
     return weighted;
 }
 
@@ -1776,6 +1794,7 @@ uniform float uSeaLevelMeters;
 uniform float uSurfaceTemperature;
 uniform int uAirlessReference;
 uniform int uDepthColumns;
+uniform vec2 uRockPhaseBounds;
 ${thermalMaterialShader}
 uniform int uSpatialRockActive;
 uniform int uRockDiagnosticMode;
@@ -1804,6 +1823,10 @@ vec2 sampleRegionalRock(vec2 uv) {
             weighted += sampleValue * weight;
         }
     }
+    // Apply the material law AFTER temperature filtering, including the GPU
+    // footprint. A filtered melt channel can otherwise cross the freezing front.
+    if (uRockPhaseBounds.y > uRockPhaseBounds.x)
+        weighted.y = clamp((weighted.x - uRockPhaseBounds.x) / (uRockPhaseBounds.y - uRockPhaseBounds.x), 0.0, 1.0);
     return weighted;
 }
 

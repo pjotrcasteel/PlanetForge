@@ -25,7 +25,7 @@ public sealed partial class PlanetOriginRockColumnField
                 Math.Max(0.0, PlanetVector.Dot(direction, boundary.StellarDirection));
             var solution = PlanetOriginRockColumnImplicitSolver.Solve(column, Material, Properties, boundary,
                 interior.Rock.TemperatureKelvin, solar, seconds, cancellationToken);
-            result[i] = new(column.Id, column.AreaSquareMeters, column.ReferenceThicknessMeters, solution.Layers);
+            result[i] = new(column.Id, column.AreaSquareMeters, column.ReferenceThicknessMeters, solution.Layers, column.ReferenceMassKilograms);
             exported += Math.Max(0.0, solution.InteriorJoules);
             imported += Math.Max(0.0, -solution.InteriorJoules);
             absorbed += solar * column.AreaSquareMeters * seconds;
@@ -44,6 +44,8 @@ public sealed partial class PlanetOriginRockColumnField
         return new(new(aggregate, Properties, result), exported, imported, absorbed, emitted, residual);
     }
 }
+
+internal sealed class PlanetOriginRockColumnConvergenceException(string message) : InvalidOperationException(message);
 
 internal sealed record PlanetOriginImplicitColumnSolution(PlanetOriginRockColumnLayer[] Layers, double InteriorJoules, double EmittedJoules, double ThicknessMeters);
 
@@ -76,8 +78,17 @@ internal static class PlanetOriginRockColumnImplicitSolver
             oldEnergy[j] = layer.StoredEnthalpyJoules / column.AreaSquareMeters;
             temperature[j] = phase.TemperatureKelvin;
         }
+        // Solve temperature departures from a shared reference. In a stiff liquid
+        // layer, subtracting two absolute ~2200 K values loses the tiny gradient
+        // that carries a finite heat flux through a very large conductance.
+        var referenceKelvin = temperature[^1];
+        for (var j = 0; j < n; j++) temperature[j] -= referenceKelvin;
         var conductance = new double[n - 1];
-        for (var j = 0; j < conductance.Length; j++) conductance[j] = properties.ConductivityWattsPerMeterKelvin / ((width[j] + width[j + 1]) * 0.5);
+        if (boundary.LiquidHeatTransport is not null)
+            conductance = PlanetOriginLiquidHeatTransport.Resolve(column, material, properties, boundary.LiquidHeatTransport).Conductance;
+        else
+            for (var j = 0; j < conductance.Length; j++)
+                conductance[j] = properties.ConductivityWattsPerMeterKelvin / ((width[j] + width[j + 1]) * 0.5);
         var bottom = boundary.ConductivityWattsPerMeterKelvin / (boundary.ConductiveBoundaryThicknessMeters + width[^1] * 0.5);
         var faceConductance = properties.ConductivityWattsPerMeterKelvin / (width[0] * 0.5);
         var radiation = boundary.InfraredEmissivity * PlanetRadiationBalanceModel.StefanBoltzmannWattsPerSquareMeterKelvinFourth;
@@ -88,7 +99,7 @@ internal static class PlanetOriginRockColumnImplicitSolver
         var rhs = new double[n];
         var trial = new double[n];
         var converged = false;
-        double Face(double t) => PlanetOriginRockRadiatingBoundary.ResolveTemperature(t,
+        double Face(double t) => PlanetOriginRockRadiatingBoundary.ResolveTemperature(t + referenceKelvin,
             properties.ConductivityWattsPerMeterKelvin, width[0] * 0.5, solar, boundary.InfraredEmissivity);
 
         double Evaluate(double[] values, bool jacobian)
@@ -98,12 +109,12 @@ internal static class PlanetOriginRockColumnImplicitSolver
             for (var j = 0; j < n; j++)
             {
                 var inflow = j == 0 ? solar - radiation * Math.Pow(face, 4) : conductance[j - 1] * (values[j - 1] - values[j]);
-                inflow += j == n - 1 ? bottom * (mantleKelvin - values[j]) : conductance[j] * (values[j + 1] - values[j]);
-                residual[j] = model.CalculateStoredEnergyJoules(values[j]) * mass[j] - oldEnergy[j] - seconds * inflow;
+                inflow += j == n - 1 ? bottom * (mantleKelvin - referenceKelvin - values[j]) : conductance[j] * (values[j + 1] - values[j]);
+                residual[j] = model.CalculateStoredEnergyJoules(values[j] + referenceKelvin) * mass[j] - oldEnergy[j] - seconds * inflow;
                 norm = Math.Max(norm, Math.Abs(residual[j]) / (mass[j] * material.SpecificHeatCapacityJoulesPerKilogramKelvin));
                 if (!jacobian) continue;
                 var cp = material.SpecificHeatCapacityJoulesPerKilogramKelvin;
-                if (values[j] > material.SolidusTemperatureKelvin && values[j] < material.LiquidusTemperatureKelvin)
+                if (values[j] + referenceKelvin > material.SolidusTemperatureKelvin && values[j] + referenceKelvin < material.LiquidusTemperatureKelvin)
                     cp += material.LatentHeatOfFusionJoulesPerKilogram / (material.LiquidusTemperatureKelvin - material.SolidusTemperatureKelvin);
                 var radSlope = 4.0 * radiation * Math.Pow(face, 3);
                 var faceSlope = faceConductance == 0.0 || radSlope == 0.0 ? 0.0 : faceConductance * radSlope / (faceConductance + radSlope);
@@ -133,15 +144,15 @@ internal static class PlanetOriginRockColumnImplicitSolver
             for (var alpha = 1.0; alpha >= 1.0 / 1_048_576.0; alpha *= 0.5)
             {
                 for (var j = 0; j < n; j++) trial[j] = temperature[j] + alpha * rhs[j];
-                if (trial.Any(value => !double.IsFinite(value) || value < 0.0)) continue;
+                if (trial.Any(value => !double.IsFinite(value) || value + referenceKelvin < 0.0)) continue;
                 if (Evaluate(trial, false) >= norm) continue;
                 Array.Copy(trial, temperature, n);
                 accepted = true;
                 break;
             }
-            if (!accepted) throw new InvalidOperationException("Implicit column Newton line search failed; nothing was published.");
+            if (!accepted) throw new PlanetOriginRockColumnConvergenceException("Implicit column Newton line search failed; nothing was published.");
         }
-        if (!converged) throw new InvalidOperationException("Implicit column enthalpy solve did not converge; nothing was published.");
+        if (!converged) throw new PlanetOriginRockColumnConvergenceException("Implicit column enthalpy solve did not converge; nothing was published.");
         var delta = new double[n];
         for (var j = 0; j < n - 1; j++)
         {
@@ -149,7 +160,7 @@ internal static class PlanetOriginRockColumnImplicitSolver
             delta[j] -= heat;
             delta[j + 1] += heat;
         }
-        var interior = seconds * bottom * (mantleKelvin - temperature[^1]);
+        var interior = seconds * bottom * (mantleKelvin - referenceKelvin - temperature[^1]);
         var emitted = seconds * radiation * Math.Pow(Face(temperature[0]), 4);
         delta[^1] += interior;
         delta[0] += seconds * solar - emitted;
@@ -161,7 +172,7 @@ internal static class PlanetOriginRockColumnImplicitSolver
             var resolved = model.Resolve(layers[j].StoredEnthalpyJoules / layers[j].MassKilograms);
             volume += layers[j].MassKilograms * ((1.0 - resolved.MeltFraction) / properties.SolidDensityKilogramsPerCubicMeter +
                 resolved.MeltFraction / properties.LiquidDensityKilogramsPerCubicMeter);
-            if (Math.Abs(resolved.TemperatureKelvin - temperature[j]) > 1e-6)
+            if (Math.Abs(resolved.TemperatureKelvin - (temperature[j] + referenceKelvin)) > 1e-6)
                 throw new InvalidOperationException("Implicit flux update differs from the converged enthalpy solution.");
         }
         return new(layers, interior * column.AreaSquareMeters, emitted * column.AreaSquareMeters, volume / column.AreaSquareMeters);

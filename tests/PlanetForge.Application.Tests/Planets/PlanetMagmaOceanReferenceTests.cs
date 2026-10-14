@@ -10,6 +10,65 @@ public sealed class PlanetMagmaOceanReferenceTests
     private const double RadiusMeters = 6_371_000.0;
 
     [TestMethod]
+    public void AdvanceUpperMagmaColumns_CoolsResolvedSurfaceAndConservesFundedEnergy()
+    {
+        var initial = PlanetRockColumnReference.CreateUpperMagmaInitial(RadiusMeters, gridLevel: 0);
+        var next = initial.Advance(PlanetOriginDuration.FromSeconds(0.1), initial.SurfaceBoundary!.Value);
+        Assert.IsLessThan(initial.Columns!.Columns[0].Layers[0].StoredEnthalpyJoules,
+            next.Columns!.Columns[0].Layers[0].StoredEnthalpyJoules);
+        Assert.AreEqual(0.0, next.Epoch.EnergyConservationResidualJoules,
+            next.Epoch.CoupledEnergy!.InitialStoredEnergyJoules * 1e-12);
+        Assert.AreEqual(initial.Columns.Columns.Sum(column => column.MassKilograms),
+            next.Columns.Columns.Sum(column => column.MassKilograms), initial.Columns.Columns.Sum(column => column.MassKilograms) * 1e-12);
+        Assert.AreEqual(0L, initial.Epoch.Revision);
+        Assert.AreEqual(1L, next.Epoch.Revision);
+    }
+
+    [TestMethod]
+    public void CreateUpperMagmaColumns_SurfaceMeshResolvesInitialLiquidRadiatingFace()
+    {
+        var initial = PlanetRockColumnReference.CreateUpperMagmaInitial(RadiusMeters, gridLevel: 0);
+        var columns = initial.Columns!;
+        foreach (var column in columns.Columns)
+        {
+            var top = column.Layers[0];
+            var width = top.VolumeCubicMeters(columns.Material, columns.Properties) / column.AreaSquareMeters;
+            Assert.IsLessThan(0.0001, width);
+            var face = PlanetOriginRockRadiatingBoundary.ResolveTemperature(
+                top.Resolve(columns.Material).TemperatureKelvin, 3.0, width / 2.0, 0.0, 0.9);
+            Assert.IsGreaterThan(columns.Material.LiquidusTemperatureKelvin, face);
+            Assert.AreEqual(1_000.0, column.ThicknessMeters(columns.Material, columns.Properties), 1e-8);
+        }
+        Assert.AreEqual(initial.Field.TotalStoredEnthalpyJoules,
+            columns.Columns.Sum(column => column.StoredEnthalpyJoules), initial.Field.TotalStoredEnthalpyJoules * 1e-12);
+    }
+
+    [TestMethod]
+    public void CreateUpperMagmaInitial_ReallocatesInventoryWithoutAddingHeat()
+    {
+        var original = PlanetMagmaOceanReference.CreateInitial(RadiusMeters, 0.0);
+        var deeper = PlanetMagmaOceanReference.CreateUpperMagmaInitial(RadiusMeters, 1_000.0, 0.0);
+        var originalLedger = original.Epoch.CoupledEnergy!;
+        var deeperLedger = deeper.Epoch.CoupledEnergy!;
+        var expectedMass = 4.0 * Math.PI * RadiusMeters * RadiusMeters * 1_000.0 * 2_800.0;
+        Assert.AreEqual(expectedMass, deeper.Field.Cells.Sum(cell => cell.ActiveRockMassKilograms), expectedMass * 1e-12);
+        Assert.AreEqual(originalLedger.InitialStoredEnergyJoules, deeperLedger.InitialStoredEnergyJoules,
+            originalLedger.InitialStoredEnergyJoules * 1e-14);
+        Assert.AreEqual(0L, deeper.Epoch.Revision);
+        Assert.AreEqual(1.0, deeper.Field.Cells.Min(cell => cell.Resolve(deeper.Field.Material).MeltFraction), 1e-12);
+        Assert.IsGreaterThan(original.Field.TotalStoredEnthalpyJoules, deeper.Field.TotalStoredEnthalpyJoules);
+    }
+
+    [TestMethod]
+    public void CreateUpperMagmaInitial_RejectsDepthOutsideThinGeometryEnvelope()
+    {
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() =>
+            PlanetMagmaOceanReference.CreateUpperMagmaInitial(RadiusMeters, RadiusMeters * 0.002));
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() =>
+            PlanetMagmaOceanReference.CreateUpperMagmaInitial(RadiusMeters, double.NaN));
+    }
+
+    [TestMethod]
     public void CreateInitial_EntireSurfaceMolten_IsFundedByCanonicalMaterialEnthalpy()
     {
         var initial = PlanetMagmaOceanReference.CreateInitial(RadiusMeters);

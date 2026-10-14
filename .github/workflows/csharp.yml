@@ -46,6 +46,9 @@ jobs:
       - name: Validate browser JavaScript
         run: find src/PlanetForge.Presentation.Web/wwwroot/js -name '*.js' -print0 | xargs -0 -n1 node --check
 
+      - name: Validate playable prototype state
+        run: node --test tests/PlanetForge.Browser.Tests/demo/formation-demo-model.test.mjs
+
       - name: Reject whole-canvas planet grayscale filters
         run: |
           if grep -R -n -E '#planet-canvas[^\{]*\{[^}]*filter:[^;}]*grayscale|pre-vegetation-world[^\{]*#planet-canvas[^\{]*\{[^}]*filter:' src/PlanetForge.Presentation.Web/wwwroot/css; then
