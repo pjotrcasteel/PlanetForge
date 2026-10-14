@@ -129,3 +129,12 @@ The new optically illustrative coverage rule derives opacity from **owned local 
 ### M0 thermal contrast and flow-gated optical openings — staged on 2026-10-14
 
 Chromium test screenshots of PR #233 at T+0/30/60/120 pass all automated regressions but reveal unacceptable physical presentation: a near-uniform orange initial sphere and persistent giant orange polygon seams. The staged renderer maps its **actual seeded/transported heat** to a broader, bounded incandescent response and only reveals melt through hypothesized seeded rifts while the same cell has measurable simulated material flow. This does not create a flow field, alter heat/inventory or invent relief. Both the standalone and main-page renderer remain byte-consistent for this shader. Prior screenshots are regression inputs; visual acceptance still pending.
+
+
+### M0 soft thermal province initial condition — staged scientific/visual correction (2026-10-14)
+
+Fixed-seed Chromium imagery and a 256×128 diagnostic prove the former initialization gives a hard Voronoi step in `heat` and `cooling` at nearest-region boundaries. This is the direct cause of large geometric regions, not merely a shader artifact. The revised seeded initial hypothesis uses normalized exponentially decaying spatial weights over all 18 seed regions. It conserves determinism and all runtime material transactions while giving a continuous initial heat/cooling field. A multi-seed adjacent-grid regression bounds spurious region jumps without preventing real smooth gradients.
+
+Local prototype measurements at 256×128, seed 24061984: maximum geographic-neighbor heat difference decreases from ~0.343 to ~0.083 (dimensionless). At 64×32 it decreases from ~0.381 to ~0.111. Initial heat remains >1 everywhere to be consistent with the dimensionless initially fully molten inventory; T+30/60/120 crust trajectories stay bounded and preserve material closure. This modifies the *initial hypothesis*, not an already validated physical geodynamic model; existing primary .NET ledger is unchanged.
+
+Changes are staged outside the validating PR to preserve its full CI/screenshot run. No new deployment or human acceptance is claimed.

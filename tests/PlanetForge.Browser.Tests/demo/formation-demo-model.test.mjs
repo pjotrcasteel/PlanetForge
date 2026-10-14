@@ -55,3 +55,18 @@ test('Crust maturation and convergence conserve solid material and replay determ
     assert.ok(a.crust.every(mass => mass >= 0));
     assert.ok(Math.abs(a.inventory() - a.initialInventory) < 1e-7);
 });
+
+
+test('Initial thermal provinces are continuous instead of nearest-region step patches', () => {
+    for (const seed of [1, 2, 42, 24061984, 579460630, 346147916]) {
+        const world = new FormationDemoWorld(seed, 64, 32);
+        for (let y = 0; y < world.height; y++) for (let x = 0; x < world.width; x++) {
+            const i = y * world.width + x;
+            const east = y * world.width + (x + 1) % world.width;
+            assert.ok(Math.abs(world.heat[i] - world.heat[east]) < .16, 'No abrupt thermal step at longitude seams or thermal province edges');
+            if (y + 1 < world.height)
+                assert.ok(Math.abs(world.heat[i] - world.heat[i + world.width]) < .16, 'No abrupt thermal step between adjacent latitude cells');
+        }
+        assert.ok(world.heat.every(value => value >= 1), 'The initial all-molten state must be thermally consistent');
+    }
+});

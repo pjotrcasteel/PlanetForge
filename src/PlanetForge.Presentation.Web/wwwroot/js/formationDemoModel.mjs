@@ -30,11 +30,21 @@ export class FormationDemoWorld {
             const boundary = Math.exp(-Math.pow((ranked[1].d - ranked[0].d) * 30, 2));
             const folded = 2 * (.55 * noise(x * 5, y * 5, z * 5) + .3 * noise(x * 13, y * 13, z * 13)
                 + .15 * noise(x * 29, y * 29, z * 29)) - 1;
+            // A continuous seeded initial heat field avoids artificial step changes
+            // when nearest-region ownership changes. Region seeds are illustrative
+            // initial hypotheses, not physically resolved modern tectonic plates.
+            let thermalWeight = 0, weightedCold = 0;
+            for (const candidate of ranked) {
+                const influence = Math.exp(-5 * candidate.d);
+                thermalWeight += influence;
+                weightedCold += influence * candidate.p.cold;
+            }
+            const regionalCold = weightedCold / thermalWeight;
             this.compression[k] = ranked[0].p.convergent ? boundary : 0;
             this.rift[k] = boundary * (ranked[0].p.convergent ? .35 : 1);
             this.bed[k] = .16 * folded + .25 * ranked[0].d - .12 * boundary;
-            this.cooling[k] = .001 + .020 * ranked[0].p.cold + .002 * (folded + 1);
-            this.lava[k] = 1; this.heat[k] = 1.05 + .35 * ranked[0].p.cold + .12 * folded;
+            this.cooling[k] = .001 + .020 * regionalCold + .002 * (folded + 1);
+            this.lava[k] = 1; this.heat[k] = 1.09 + .33 * regionalCold + .14 * folded;
             this.reservoir[k] = 2;
         }
         this._massDelta = new Float64Array(n); this._heatDelta = new Float64Array(n); this._crustDelta = new Float64Array(n); this._ageMassDelta = new Float64Array(n);
