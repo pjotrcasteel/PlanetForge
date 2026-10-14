@@ -2,6 +2,18 @@
 
 **Workstream:** `PF-EARTH-20261013-A` · One canonical planetary-formation world · vertical science → state → visualization → validation slices.
 
+## Today’s playable prototype — user scope update, 2026-10-14
+
+The user explicitly chose “Playable prototype but after that the focus remains validated physics.” This supersedes the earlier requirement to finish validating every new geological process before showing a demo. It does not make simplified processes scientifically validated.
+
+New opt-in **main-page `?demo=1`** uses the existing main planet canvas and Play/Step/Restart controls. A single seeded dimensionless lattice owns liquid, frozen crust, advected heat, finite volcanic reservoir, and simplified convergence uplift. Neighbor transfers and freeze/remelt conserve total material; thermal losses, rheology, initial plate/stress hypothesis and relief exaggeration are not a calibrated Earth model. These states must not be injected into the .NET thermodynamic ledger. The original default scientific path remains unchanged.
+
+`wwwroot/planetforge-demo.html` packages those exact same modules for direct offline play; regenerate with `python tools/demo/package-demo.py`. This is a packaging output, not a second independently implemented model. Drag, wheel and touch pinch operate the globe. No atmosphere/ocean/life, resolved subsurface veins, or scientific LOD 0–3 equivalence is claimed.
+
+Validation: three Node tests cover finite nonnegative state, material closure, replay, batch equivalence, seed variation and invalid durations. The actual ES3 vertex/fragment shaders compile/link under Mesa EGL; four chronological seeded state renders produce no GL errors and were visually inspected. Local Razor/C# Compile succeeds. Full local WASM build is blocked by prohibited MSBuild task-host sockets; local browser download returned truncated archives. Two new CI browser cases exercise the main route and packaged file, controls, orbit and restart. Full CI remains a separate gate before live deployment. The preceding scientific candidate `6a8b720` passed full CI **38537484975**.
+
+Next priority: playable human visual review, then replace prototype heat/flow/strength/uplift hypotheses with validated conservative physics, preserving the main-globe experience.
+
 ## Current continuation candidate — 2026-10-14
 
 Draft PR #231 now targets main. Its preceding head `c178a3ffa52a31e39847da89d84490f6ce658140` passed full CI **38529393417** (build/.NET/WASM/all browser shards). The new follow-up shares one adaptive sync/async controller, yields on rejected work, adds conservative nested parent-mesh refinement, fixes the skipped two-microsecond trial, and adds an optional crystal-suspension thermal rheology. Local builds have zero warnings/errors; **19 targeted application plus 72 broader domain/infrastructure cases pass in process (91 total)**. Full follow-up CI is a separate gate.

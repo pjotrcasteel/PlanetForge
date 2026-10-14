@@ -12,8 +12,8 @@ public partial class Home
     {
         get
         {
-            var seconds = Experience.PublishedOriginEpoch is { } epoch ? (long)PlanetFormationSimulation.ElapsedSeconds(epoch.Clock) : 0L;
-            return $"T+{seconds / 3600:00}:{seconds / 60 % 60:00}:{seconds % 60:00}";
+            var seconds = playableDemo ? (long)demoReadout.Seconds : Experience.PublishedOriginEpoch is { } epoch ? (long)PlanetFormationSimulation.ElapsedSeconds(epoch.Clock) : 0L;
+            return $"{(playableDemo ? "Demo " : "")}T+{seconds / 3600:00}:{seconds / 60 % 60:00}:{seconds % 60:00}";
         }
     }
 
@@ -21,6 +21,7 @@ public partial class Home
     {
         get
         {
+            if (playableDemo) return demoReadout.Phase;
             var world = Experience.PublishedRegionalRock;
             if (world?.Columns is not { } columns) return "Initializing planet";
             var melts = world.Field.Cells.Select(c => world.ResolveSurfacePhase(c.Id).MeltFraction).ToArray();
@@ -55,8 +56,13 @@ public partial class Home
         try
         {
             await Task.Delay(16, disposeCancellationTokenSource.Token); // Present busy state before the bounded physics batch.
-            snapshot = await PlanetFormationSimulation.AdvanceAsync(Experience, formationStepSeconds, disposeCancellationTokenSource.Token);
-            await SyncPlanetAsync();
+            if (playableDemo)
+                demoReadout = await rendererModule.InvokeAsync<DemoReadout>("advance", disposeCancellationTokenSource.Token, formationStepSeconds);
+            else
+            {
+                snapshot = await PlanetFormationSimulation.AdvanceAsync(Experience, formationStepSeconds, disposeCancellationTokenSource.Token);
+                await SyncPlanetAsync();
+            }
         }
         catch (OperationCanceledException) when (disposeCancellationTokenSource.IsCancellationRequested) { }
         catch (Exception error)
@@ -81,8 +87,13 @@ public partial class Home
         try
         {
             await Task.Delay(16, disposeCancellationTokenSource.Token);
-            snapshot = PlanetFormationSimulation.Start(Experience, formationSeed);
-            await SyncPlanetAsync();
+            if (playableDemo && rendererModule is not null)
+                demoReadout = await rendererModule.InvokeAsync<DemoReadout>("restart", disposeCancellationTokenSource.Token, formationSeed);
+            else
+            {
+                snapshot = PlanetFormationSimulation.Start(Experience, formationSeed);
+                await SyncPlanetAsync();
+            }
             formationStatus = string.Empty;
         }
         catch (OperationCanceledException) when (disposeCancellationTokenSource.IsCancellationRequested) { }
@@ -96,6 +107,14 @@ public partial class Home
             formationBusy = false;
             if (!disposeCancellationTokenSource.IsCancellationRequested) StateHasChanged();
         }
+    }
+
+    private sealed class DemoReadout
+    {
+        public DemoReadout() { }
+        public double Seconds { get; set; }
+        public double Coverage { get; set; }
+        public string Phase { get; set; } = "Magma ocean";
     }
 
     private DotNetObjectReference<Home>? surfaceLodReference;
