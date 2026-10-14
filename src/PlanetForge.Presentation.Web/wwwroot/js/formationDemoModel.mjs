@@ -37,7 +37,7 @@ export class FormationDemoWorld {
             this.lava[k] = 1; this.heat[k] = 1.05 + .35 * ranked[0].p.cold + .12 * folded;
             this.reservoir[k] = 2;
         }
-        this._massDelta = new Float64Array(n); this._heatDelta = new Float64Array(n); this._crustDelta = new Float64Array(n);
+        this._massDelta = new Float64Array(n); this._heatDelta = new Float64Array(n); this._crustDelta = new Float64Array(n); this._ageMassDelta = new Float64Array(n);
         this.initialInventory = this.inventory();
     }
     inventory() { return this.lava.reduce((s, x, i) => s + x + this.crust[i] + this.reservoir[i], 0); }
@@ -54,7 +54,7 @@ export class FormationDemoWorld {
     }
     tick(dt) {
         const n = this.lava.length, dm = this._massDelta, dh = this._heatDelta;
-        dm.fill(0); dh.fill(0); this._crustDelta.fill(0); this.flux.fill(0);
+        dm.fill(0); dh.fill(0); this._crustDelta.fill(0); this._ageMassDelta.fill(0); this.flux.fill(0);
         const exchange = (a, b) => {
             const headA = this.bed[a] + this.uplift[a] + this.crust[a] + this.lava[a];
             const headB = this.bed[b] + this.uplift[b] + this.crust[b] + this.lava[b];
@@ -114,8 +114,14 @@ export class FormationDemoWorld {
             if (this.compression[target] <= this.compression[k]) continue;
             const moved = Math.min(this.crust[k] * .015 * dt, this.crust[k] * .1);
             dc[k] -= moved; dc[target] += moved;
+            const ageMass = moved * this.crustAge[k];
+            this._ageMassDelta[k] -= ageMass; this._ageMassDelta[target] += ageMass;
         }
-        for (let k = 0; k < n; k++) this.crust[k] += dc[k];
+        for (let k = 0; k < n; k++) {
+            const ageMass = this.crustAge[k] * this.crust[k] + this._ageMassDelta[k];
+            this.crust[k] += dc[k];
+            this.crustAge[k] = this.crust[k] > 1e-8 ? Math.max(0, ageMass / this.crust[k]) : 0;
+        }
         this.time += dt;
     }
     stats() {
