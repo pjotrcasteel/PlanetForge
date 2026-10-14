@@ -167,6 +167,22 @@ public sealed class PlanetOriginCanonicalRockCells
         return new PlanetOriginCanonicalRockCells(nextEpoch, lateralField);
     }
 
+    /// <summary>
+    /// Composes a thermal interval and explicitly supplied material-face transactions into
+    /// one unpublished candidate. This is not a momentum or pressure-head flow solver.
+    /// </summary>
+    public PlanetOriginCanonicalRockCells AdvanceWithMeltTransfers(PlanetOriginDuration interval,
+        PlanetOriginRegionalAirlessParameters parameters, IReadOnlyList<PlanetOriginMeltFaceTransfer> transfers,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(transfers);
+        if (Columns is null) throw new InvalidOperationException("Melt material transfers require owned depth columns.");
+        var thermal = Advance(interval, parameters, cancellationToken);
+        var material = thermal.Columns!.ProposeMeltTransfers(transfers, cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
+        return new(thermal.Epoch, material.Candidate.Aggregate, material.Candidate) { SurfaceBoundary = parameters };
+    }
+
     private PlanetOriginCanonicalRockCells AdvanceColumns(
         PlanetOriginDuration interval, PlanetOriginRegionalAirlessParameters parameters, CancellationToken cancellationToken)
     {

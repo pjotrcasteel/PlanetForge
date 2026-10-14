@@ -30,6 +30,14 @@ Local validation: application test project Release build, zero warnings/errors; 
 
 Next substantial slice must replace the independently cooling thin shell with explicitly funded lateral melt/material dynamics and a defensible physical time window; couple persistent solid material and its relief into the existing canonical publication, then validate main-globe morphology before requesting another device check. A fixed shader or a thermal closure alone cannot produce the requested flows and mountains.
 
+## 2026-10-14 transport continuation candidate
+
+- PR #228's full build, .NET, WASM and browser CI **38491579292 passed**. Its material correction is included in `feature/pf-layer-material-transport`; it has not been separately released.
+- Added physically overlapping depth-layer Fourier exchange across spherical neighbors, with equal/opposite joules, per-layer stability admission and a bounded integration path. Added explicit fully molten face transactions carrying owned mass plus donor-specific enthalpy. Canonical composition and the existing main-globe publication now accept their actual mass-derived relief together with the same epoch and material atlas.
+- [Transport contract and limitations](../earth-origin-layer-material-transport.md). These APIs do **not** supply a pressure/velocity field, mechanically coherent crust, magma veins or a complete mechanical-energy account. Default formation remains the seven-metre reference; no synthetic flow field or visual stage has been introduced.
+- Local Release domain/application/infrastructure builds passed with no warnings/errors. A broader in-process run passed all 30 column/formation regression cases, including canonical mass-to-terrain publication, unequal-depth contacts and solid-recipient rejection; full candidate CI is a separate gate. Standard local VSTest sockets are unavailable; do not call the in-process invocation a VSTest run.
+- No new production or human visual acceptance is claimed. Preserve the user's PF 0.0.47.0 rejection above. The next substantial primary slice needs a physically sourced momentum/pressure mechanism and work accounting, an appropriate finite magma-ocean reference and physical clock, followed by actual surface/crust morphology and device inspection.
+
 ## Immediate continuation priorities
 
 1. **Replace the inadequate physical reference, not its shader.** Define a finite-capacity deep magma-ocean/upper-mantle coupled thermal system with stated depth, material densities, viscosity/composition, buoyancy and heat-transport validity. Conservatively couple energy/mass between deep melt and surface columns. Validate thermal time scales and supported integration step sizes; 186 seconds is not a geological epoch.

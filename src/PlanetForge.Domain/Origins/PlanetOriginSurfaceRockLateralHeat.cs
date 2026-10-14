@@ -119,7 +119,7 @@ public sealed partial class PlanetOriginSurfaceRockPhaseField
         return new PlanetOriginLateralHeatTrial(candidate, transported, residual);
     }
 
-    private double SharedSphericalEdgeLengthMeters(PlanetSurfaceGridCellId cell, PlanetGridDirection side)
+    internal double SharedSphericalEdgeLengthMeters(PlanetSurfaceGridCellId cell, PlanetGridDirection side)
     {
         var n = cell.CellsPerAxis;
         var u0 = -1.0 + 2.0 * cell.X / n;
