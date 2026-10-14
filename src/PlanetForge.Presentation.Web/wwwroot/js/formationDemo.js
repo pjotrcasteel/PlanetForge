@@ -78,7 +78,8 @@ export function initialize(canvasId, seed) {
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
         gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA16F, world.width, world.height, 0, gl.RGBA, gl.FLOAT, data);
     }
-    const vertices = [], w = 256, h = 128;
+    // Tessellation follows the canonical material grid: denser triangles do not invent new terrain.
+    const vertices = [], w = world.width * 2, h = world.height * 2;
     for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) {
         for (const [x,y] of [[i,j],[i,j+1],[i+1,j],[i+1,j],[i,j+1],[i+1,j+1]]) vertices.push(x/w,y/h);
     }
