@@ -32,12 +32,14 @@ export function initialize(canvasId, seed) {
         vec3 n=normalize(cross(dFdx(point),dFdy(point)));
         if(dot(n,normal)<0.) n=-n;
         float light=max(0.,dot(n,normalize(vec3(-.6,.7,1.))));
+        float ambient=.28;
         // Sub-cell variation is an optical basalt texture, never simulated land or relief.
         float grain=fract(sin(dot(floor(uv*vec2(1600.,800.)),vec2(12.9898,78.233)))*43758.5453);
         float grainFine=fract(sin(dot(floor(uv*vec2(3700.,1800.)),vec2(48.327,25.199)))*12731.918);
-        vec3 basalt=mix(vec3(.055,.059,.065),vec3(.19,.17,.15),grain*.65+grainFine*.2)*(.20+light*1.25);
+        vec3 basalt=mix(vec3(.055,.059,.065),vec3(.19,.17,.15),grain*.65+grainFine*.2)*(ambient+light*1.25);
         float solidShare=rock/(rock+melt+.0001);
         float crustEdge=length(vec2(dFdx(solidShare),dFdy(solidShare)));
+        // Screen-space gradients are a shading cue, not a physical fracture field.
         float fracture=clamp(crustEdge*3.5,0.,1.)*smoothstep(.18,.7,solidShare);
         basalt*=1.-.48*fracture;
         float temperature=clamp((state.r-.15)/1.3,0.,1.);
