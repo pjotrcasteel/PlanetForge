@@ -57,8 +57,10 @@ class FormationDemoWorld {
     inventory() { return this.lava.reduce((s, x, i) => s + x + this.crust[i] + this.reservoir[i], 0); }
     advance(seconds) {
         if (!Number.isFinite(seconds) || seconds < 0 || seconds > 300) throw new RangeError('Demo step must be 0–300 seconds.');
+        const endTime = this.time + seconds;
         const ticks = Math.ceil(seconds / .1), dt = ticks ? seconds / ticks : 0;
         for (let t = 0; t < ticks; t++) this.tick(dt);
+        this.time = endTime;
         return this.stats();
     }
     tick(dt) {

@@ -16,6 +16,7 @@ test('Playback batches and one equal-duration request evolve the same world', ()
     const a = new FormationDemoWorld(42, 32, 16), b = new FormationDemoWorld(42, 32, 16);
     a.advance(30); for (let i = 0; i < 6; i++) b.advance(5);
     assert.deepEqual(a.crust, b.crust); assert.deepEqual(a.lava, b.lava);
+    assert.equal(a.time, 30); assert.equal(b.time, 30);
 });
 test('Seed changes initial geometry and invalid steps fail before mutation', () => {
     const a = new FormationDemoWorld(1, 32, 16), b = new FormationDemoWorld(2, 32, 16);
