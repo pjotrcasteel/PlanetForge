@@ -350,7 +350,7 @@
     {
         if (firstRender && playableDemo)
         {
-            rendererModule = await JsRuntime.InvokeAsync<IJSObjectReference>("import", "./js/formationDemo.js?v=prototype-1");
+            rendererModule = await JsRuntime.InvokeAsync<IJSObjectReference>("import", "./js/formationDemo.js?v=0.0.48.0");
             demoReadout = await rendererModule.InvokeAsync<DemoReadout>("initialize", "planet-canvas", formationSeed);
             formationStepSeconds = 5;
             formationRendererReady = true;
@@ -363,10 +363,10 @@
             return;
         }
 
-        rendererModule = await JsRuntime.InvokeAsync<IJSObjectReference>("import", disposeCancellationTokenSource.Token, "./js/planetRenderer.js?v=0.0.47.0");
+        rendererModule = await JsRuntime.InvokeAsync<IJSObjectReference>("import", disposeCancellationTokenSource.Token, "./js/planetRenderer.js?v=0.0.48.0");
         await rendererModule.InvokeVoidAsync("initialize", disposeCancellationTokenSource.Token, "planet-canvas", snapshot, GetOrCreateSurfaceLodReference());
 
-        waterRendererModule = await JsRuntime.InvokeAsync<IJSObjectReference>("import", disposeCancellationTokenSource.Token, "./js/waterOverlay.js?v=0.0.47.0");
+        waterRendererModule = await JsRuntime.InvokeAsync<IJSObjectReference>("import", disposeCancellationTokenSource.Token, "./js/waterOverlay.js?v=0.0.48.0");
         await waterRendererModule.InvokeVoidAsync("initialize", disposeCancellationTokenSource.Token, "water-overlay-canvas", "planet-canvas", snapshot.PhysicalParameters.RadiusMeters);
         await waterRendererModule.InvokeVoidAsync("clearWaterCycle", disposeCancellationTokenSource.Token);
         if (continuousSimulation)

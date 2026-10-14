@@ -24,25 +24,30 @@ export function initialize(canvasId, seed) {
     }`;
     const fragment = `#version 300 es
     precision highp float;
-    uniform sampler2D field; in vec3 normal; in vec3 point; in vec2 uv; out vec4 color;
+    uniform sampler2D field; uniform sampler2D materialField; in vec3 normal; in vec3 point; in vec2 uv; out vec4 color;
     void main(){
-        vec4 state=texture(field,uv);float crust=clamp(state.g/.18,0.,1.);
-        vec3 n=normalize(cross(dFdx(point),dFdy(point)));if(dot(n,normal)<0.)n=-n;
+        vec4 state=texture(field,uv), material=texture(materialField,uv);
+        float rock=max(0.,state.g), melt=max(0.,material.r);
+        float crust=clamp(rock/.18,0.,1.);
+        vec3 n=normalize(cross(dFdx(point),dFdy(point)));
+        if(dot(n,normal)<0.) n=-n;
         float light=max(0.,dot(n,normalize(vec3(-.6,.7,1.))));
-        // Optical texture only: roughness follows the simulated frozen inventory.
+        // Sub-cell variation is an optical basalt texture, never simulated land or relief.
         float grain=fract(sin(dot(floor(uv*vec2(1600.,800.)),vec2(12.9898,78.233)))*43758.5453);
-        vec3 basalt=mix(vec3(.13,.135,.145),vec3(.19,.17,.15),grain*.4)*(.38+light*.9);
-        float heat=clamp((state.r-.2)/1.25,0.,1.);
-        vec3 lava=mix(vec3(.35,.018,.002),vec3(1.,.24,.012),heat);
-        lava+=vec3(.18,.045,.002)*clamp(state.a*8.,0.,1.);
-        // The liquid/solid boundary comes from the evolving cell inventory.
-        float solid=smoothstep(.25,.85,crust);
-        vec3 surface=mix(lava,basalt,solid);
-        float edge=(1.-smoothstep(.7,1.,crust))*smoothstep(.05,.4,crust);
-        surface+=vec3(.32,.04,.003)*edge;
-        float rim=pow(1.-max(0.,normalize(normal).z),4.);
-        surface+=vec3(.055,.021,.012)*rim;
-        color=vec4(pow(surface,vec3(.85)),1.);
+        float grainFine=fract(sin(dot(floor(uv*vec2(3700.,1800.)),vec2(48.327,25.199)))*12731.918);
+        vec3 basalt=mix(vec3(.072,.079,.087),vec3(.19,.16,.14),grain*.65+grainFine*.2)*(.27+light*.98);
+        float temperature=clamp((state.r-.15)/1.3,0.,1.);
+        vec3 lava=mix(vec3(.26,.009,.002),vec3(1.,.32,.025),temperature);
+        lava+=vec3(.13,.046,.004)*clamp(state.a*6.,0.,1.);
+        // Display only owned, exposed melt. An empty or frozen cell cannot glow as lava.
+        float openMelt=(1.-smoothstep(.12,.85,crust))*smoothstep(.01,.35,melt);
+        lava*=mix(.65,1.,clamp(melt,0.,1.));
+        vec3 surface=mix(basalt,lava,openMelt);
+        // Newly frozen margins and funded active rifts reveal adjacent owned liquid.
+        float margin=smoothstep(.07,.4,crust)*(1.-smoothstep(.65,.97,crust));
+        float fissure=margin*clamp(material.g*2.,0.,1.)*smoothstep(.02,.3,melt);
+        surface+=vec3(.35,.066,.004)*fissure;
+        color=vec4(pow(max(surface,vec3(0.)),vec3(.86)),1.);
     }`;
     const compile = (type, source) => {
         const shader = gl.createShader(type); gl.shaderSource(shader, source); gl.compileShader(shader);
@@ -53,19 +58,24 @@ export function initialize(canvasId, seed) {
     shaders.forEach(s => gl.attachShader(program, s)); gl.linkProgram(program);
     if (!gl.getProgramParameter(program, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(program));
     shaders.forEach(s => gl.deleteShader(s));
-    const world = new FormationDemoWorld(seed), data = new Float32Array(world.lava.length * 4);
-    const texture = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, texture);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-    // Float linear filtering is not guaranteed on mobile: use a filterable half-float texture instead.
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA16F, world.width, world.height, 0, gl.RGBA, gl.FLOAT, data);
+    const world = new FormationDemoWorld(seed), data = new Float32Array(world.lava.length * 4), materialData = new Float32Array(data.length);
+    const texture = gl.createTexture(), materialTexture = gl.createTexture();
+    // Both textures are drawn from the same evolving world. Filtering RGBA16F is WebGL2-portable.
+    for (const target of [texture, materialTexture]) {
+        gl.bindTexture(gl.TEXTURE_2D, target);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA16F, world.width, world.height, 0, gl.RGBA, gl.FLOAT, data);
+    }
     const vertices = [], w = 256, h = 128;
     for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) {
         for (const [x,y] of [[i,j],[i,j+1],[i+1,j],[i+1,j],[i,j+1],[i+1,j+1]]) vertices.push(x/w,y/h);
     }
     const vao=gl.createVertexArray(), buffer=gl.createBuffer();gl.bindVertexArray(vao);gl.bindBuffer(gl.ARRAY_BUFFER,buffer);
     gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(vertices),gl.STATIC_DRAW);gl.enableVertexAttribArray(0);gl.vertexAttribPointer(0,2,gl.FLOAT,false,0,0);
-    const uniforms=Object.fromEntries(['field','rotation','aspect','zoom'].map(n=>[n,gl.getUniformLocation(program,n)]));
+    const uniforms=Object.fromEntries(['field','materialField','rotation','aspect','zoom'].map(n=>[n,gl.getUniformLocation(program,n)]));
     const abort=new AbortController();let drag,lastX,lastY;const camera={x:-.4,y:.12,zoom:3.4};
     canvas.style.touchAction='none';
     canvas.addEventListener('pointerdown',e=>{drag=true;lastX=e.clientX;lastY=e.clientY;canvas.setPointerCapture(e.pointerId);},{signal:abort.signal});
@@ -89,21 +99,33 @@ export function initialize(canvasId, seed) {
     },{signal:abort.signal});
     for(const event of ['pointerup','pointercancel']) canvas.addEventListener(event,e=>touches.delete(e.pointerId),{signal:abort.signal});
     canvas.addEventListener('wheel' ,e=>{e.preventDefault();camera.zoom=Math.max(1.5,Math.min(5,camera.zoom+e.deltaY*.002));},{passive:false,signal:abort.signal});
-    instance={world,canvas,gl,program,texture,buffer,vao,abort,camera,dirty:true,frame:0};
+    instance={world,canvas,gl,program,texture,materialTexture,buffer,vao,abort,camera,dirty:true,frame:0};
     const draw=()=>{
         const s=instance;if(!s)return;
         const dpr=Math.min(window.devicePixelRatio||1,2),rect=canvas.getBoundingClientRect();
         const width=Math.max(1,Math.round(rect.width*dpr)),height=Math.max(1,Math.round(rect.height*dpr));
         if(canvas.width!==width||canvas.height!==height){canvas.width=width;canvas.height=height;}
         gl.viewport(0,0,width,height);gl.clearColor(.008,.011,.018,1);gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);
-        gl.enable(gl.DEPTH_TEST);gl.useProgram(program);gl.bindVertexArray(vao);gl.activeTexture(gl.TEXTURE0);gl.bindTexture(gl.TEXTURE_2D,texture);
-        if(s.dirty){for(let i=0;i<world.lava.length;i++){data[i*4]=world.heat[i];data[i*4+1]=world.crust[i];data[i*4+2]=world.uplift[i];data[i*4+3]=world.flux[i];}
-            gl.texSubImage2D(gl.TEXTURE_2D,0,0,0,world.width,world.height,gl.RGBA,gl.FLOAT,data);s.dirty=false;}
-        gl.uniform1i(uniforms.field,0);gl.uniform2f(uniforms.rotation,camera.x,camera.y);gl.uniform1f(uniforms.aspect,width/height);gl.uniform1f(uniforms.zoom,camera.zoom);
+        gl.enable(gl.DEPTH_TEST);gl.useProgram(program);gl.bindVertexArray(vao);
+        if(s.dirty) {
+            for(let i=0;i<world.lava.length;i++) {
+                data[i*4]=world.heat[i];data[i*4+1]=world.crust[i];data[i*4+2]=world.uplift[i];data[i*4+3]=world.flux[i];
+                materialData[i*4]=world.lava[i];materialData[i*4+1]=world.rift[i];materialData[i*4+2]=world.bed[i];materialData[i*4+3]=world.reservoir[i];
+            }
+            gl.activeTexture(gl.TEXTURE0);gl.bindTexture(gl.TEXTURE_2D,texture);
+            gl.texSubImage2D(gl.TEXTURE_2D,0,0,0,world.width,world.height,gl.RGBA,gl.FLOAT,data);
+            gl.activeTexture(gl.TEXTURE1);gl.bindTexture(gl.TEXTURE_2D,materialTexture);
+            gl.texSubImage2D(gl.TEXTURE_2D,0,0,0,world.width,world.height,gl.RGBA,gl.FLOAT,materialData);
+            s.dirty=false;
+        }
+        gl.activeTexture(gl.TEXTURE0);gl.bindTexture(gl.TEXTURE_2D,texture);
+        gl.activeTexture(gl.TEXTURE1);gl.bindTexture(gl.TEXTURE_2D,materialTexture);
+        gl.uniform1i(uniforms.field,0);gl.uniform1i(uniforms.materialField,1);
+        gl.uniform2f(uniforms.rotation,camera.x,camera.y);gl.uniform1f(uniforms.aspect,width/height);gl.uniform1f(uniforms.zoom,camera.zoom);
         gl.drawArrays(gl.TRIANGLES,0,vertices.length/2);s.frame=requestAnimationFrame(draw);
     };draw();return world.stats();
 }
 export function advance(seconds){if(!instance)throw new Error('Initialize the demo first.');const result=instance.world.advance(seconds);instance.dirty=true;return result;}
 export function restart(seed){const id=instance.canvas.id;return initialize(id,seed);}
 export function dispose(){if(!instance)return;const s=instance;instance=null;cancelAnimationFrame(s.frame);s.abort.abort();
-    s.gl.deleteBuffer(s.buffer);s.gl.deleteVertexArray(s.vao);s.gl.deleteTexture(s.texture);s.gl.deleteProgram(s.program);}
+    s.gl.deleteBuffer(s.buffer);s.gl.deleteVertexArray(s.vao);s.gl.deleteTexture(s.texture);s.gl.deleteTexture(s.materialTexture);s.gl.deleteProgram(s.program);}
