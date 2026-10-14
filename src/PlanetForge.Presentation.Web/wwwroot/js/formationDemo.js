@@ -63,7 +63,11 @@ export function initialize(canvasId, seed) {
         vec3 lava=mix(vec3(.23,.009,.002),vec3(.95,.27,.019),temperature);
         lava+=vec3(.13,.046,.004)*clamp(state.a*6.,0.,1.);
         // Display only owned, exposed melt. An empty or frozen cell cannot glow as lava.
-        float openMelt=(1.-smoothstep(.25,.78,solidShare))*smoothstep(.01,.16,melt);
+        // A thin surface crust is optically opaque even while liquid magma remains beneath it.
+        // Coverage is bounded by owned solid mass; only owned melt at a hypothesized active rift can shine through.
+        float surfaceCrust=smoothstep(.015,.18,rock);
+        float riftWindow=.8*smoothstep(.25,.8,material.g);
+        float openMelt=(1.-surfaceCrust*(1.-riftWindow))*smoothstep(.01,.16,melt);
         lava*=mix(.76,1.,clamp(melt,0.,1.));
         vec3 surface=mix(basalt,lava,openMelt);
         // Newly frozen margins and funded active rifts reveal adjacent owned liquid.
