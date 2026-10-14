@@ -43,3 +43,15 @@ test('Accelerated integration stays close to a ten-times-refined crust trajector
     assert.ok(Math.abs(fast.stats().coverage - fine.stats().coverage) < .08);
     assert.ok(Math.abs(fast.inventory() - fine.inventory()) < 1e-7);
 });
+
+test('Crust maturation and convergence conserve solid material and replay deterministically', () => {
+    const a = new FormationDemoWorld(24061984, 64, 32), b = new FormationDemoWorld(24061984, 64, 32);
+    for (const duration of [30, 30, 60]) { a.advance(duration); b.advance(duration); }
+    assert.deepEqual(a.crust, b.crust);
+    assert.deepEqual(a.crustAge, b.crustAge);
+    assert.deepEqual(a.strain, b.strain);
+    assert.ok(a.crustAge.some(age => age > 0));
+    assert.ok(a.strain.some(strain => strain > 0));
+    assert.ok(a.crust.every(mass => mass >= 0));
+    assert.ok(Math.abs(a.inventory() - a.initialInventory) < 1e-7);
+});
