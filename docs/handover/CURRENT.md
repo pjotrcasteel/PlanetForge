@@ -2,6 +2,14 @@
 
 **Workstream:** `PF-EARTH-20261013-A` · One canonical planetary-formation world · vertical science → state → visualization → validation slices.
 
+## Current continuation candidate — 2026-10-14
+
+Draft PR #231 now targets main. Its preceding head `c178a3ffa52a31e39847da89d84490f6ce658140` passed full CI **38529393417** (build/.NET/WASM/all browser shards). The new follow-up shares one adaptive sync/async controller, yields on rejected work, adds conservative nested parent-mesh refinement, fixes the skipped two-microsecond trial, and adds an optional crystal-suspension thermal rheology. Local builds have zero warnings/errors; **19 targeted application plus 72 broader domain/infrastructure cases pass in process (91 total)**. Full follow-up CI is a separate gate.
+
+The nested 128-layer seeded one-second case now runs at 0.1-K local tolerance. Long-time onset/front convergence remains unresolved: fine four-hour research requests exhaust their bounded trial budget; the suspension hypothesis delays apparent crust formation relative to the original fully-liquid-only scope. Primary formation's async scheduling changes, but its released physical reference is not switched. No lava velocity, mechanical crust, mountains, new visual acceptance, merge or deployment is claimed.
+
+Read the [dated adaptive/depth/rheology checkpoint](PF-EARTH-20261013-A-20261014-adaptive-async-depth.md) and [science/limits](../earth-origin-liquid-heat-transport.md) before continuing. Next: supported long-time phase-front validation and actual material motion/crust interaction, then main-renderer orbit/local inspection. The PF 0.0.47.0 visual rejection still governs.
+
 ## Verified release and human acceptance (2026-10-13)
 
 - **PF 0.0.46.0** merged via PR #225 as main `9e0b250f751815cd7585dad667380195f82d9622`. Full scientific/WASM/browser CI **38468827454** passed; Pages **38471352704** passed build, deploy and six exact-SHA live smoke checks. The deployed source is real and verified; the **human visual gate is FAILED**, not pending.

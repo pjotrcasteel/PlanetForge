@@ -26,6 +26,34 @@ public static class PlanetOriginRockColumnIntegrator
         PlanetOriginRegionalAirlessParameters boundary, PlanetOriginRockColumnIntegrationOptions options,
         CancellationToken cancellationToken = default)
     {
+        var candidate = initial;
+        foreach (var accepted in EnumerateAccepted(initial, duration, boundary, options, cancellationToken))
+            if (accepted is not null) candidate = accepted;
+        return candidate;
+    }
+
+    /// <summary>Same controller and accepted substeps as Advance, with cooperative scheduling of accepted/rejected work and no intermediate publication.</summary>
+    public static async Task<PlanetOriginCanonicalRockCells> AdvanceAsync(
+        PlanetOriginCanonicalRockCells initial, PlanetOriginDuration duration,
+        PlanetOriginRegionalAirlessParameters boundary, PlanetOriginRockColumnIntegrationOptions options,
+        CancellationToken cancellationToken = default)
+    {
+        var candidate = initial;
+        var workCount = 0;
+        foreach (var accepted in EnumerateAccepted(initial, duration, boundary, options, cancellationToken))
+        {
+            if (accepted is not null) candidate = accepted;
+            if (++workCount % 4 == 0) await Task.Delay(1, cancellationToken);
+        }
+        cancellationToken.ThrowIfCancellationRequested();
+        return candidate;
+    }
+
+    private static IEnumerable<PlanetOriginCanonicalRockCells?> EnumerateAccepted(
+        PlanetOriginCanonicalRockCells initial, PlanetOriginDuration duration,
+        PlanetOriginRegionalAirlessParameters boundary, PlanetOriginRockColumnIntegrationOptions options,
+        CancellationToken cancellationToken)
+    {
         ArgumentNullException.ThrowIfNull(initial);
         options.Validate();
         boundary.Validate();
@@ -57,31 +85,37 @@ public static class PlanetOriginRockColumnIntegrator
                 candidate = candidate.MechanicalReference is null ? candidate.Advance(step, boundary, cancellationToken) :
                     candidate.AdvanceWithViscousMeltFlow(step, boundary, cancellationToken);
                 remaining -= ticks;
+                yield return candidate;
                 continue;
             }
             while (true)
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 if (++trials > options.MaximumSubsteps)
-                    throw new InvalidOperationException("Thermal error control exhausted its trial budget; nothing was published.");
+                    throw new InvalidOperationException(
+                        $"Thermal error control exhausted its trial budget (accepted={count}, remainingMicroseconds={remaining}); nothing was published.");
                 // Reserve a two-tick final interval; a one-tick remainder cannot be step-doubled.
                 if (remaining - ticks == 1 && ticks > 2) ticks--;
                 if (ticks < 2) throw new InvalidOperationException(
                     $"Thermal error control requires two supported microsecond intervals (remaining={remaining}, trial={ticks}).");
                 var trial = TryRefinedThermalStep(candidate, ticks, boundary, cancellationToken);
-                if (trial is null) { ticks /= 2; continue; }
+                if (trial is null) { ticks = ReduceTrialTicks(ticks); yield return null; continue; }
                 var (refined, error) = trial.Value;
-                if (error > options.MaximumThermalErrorKelvin) { ticks /= 2; continue; }
+                if (error > options.MaximumThermalErrorKelvin) { ticks = ReduceTrialTicks(ticks); yield return null; continue; }
                 candidate = refined;
                 remaining -= ticks;
                 adaptiveCap = Math.Min(options.MaximumStepSeconds, ticks / 1_000_000.0 *
                     (error < options.MaximumThermalErrorKelvin * 0.25 ? 2.0 : 1.0));
                 break;
             }
+            yield return candidate;
         }
         cancellationToken.ThrowIfCancellationRequested();
-        return candidate;
     }
+
+    // Flooring an odd three-tick trial directly to one skipped the smallest
+    // admissible two-tick estimate, rejecting otherwise supported trajectories.
+    private static long ReduceTrialTicks(long ticks) => ticks > 2 ? Math.Max(2, ticks / 2) : 1;
 
     private static (PlanetOriginCanonicalRockCells Refined, double Error)? TryRefinedThermalStep(
         PlanetOriginCanonicalRockCells candidate, long ticks, PlanetOriginRegionalAirlessParameters boundary, CancellationToken cancellationToken)

@@ -33,13 +33,14 @@ public static class PlanetRockColumnReference
     }
 
     public static PlanetOriginCanonicalRockCells CreateResolvedInitial(PlanetOriginCanonicalRockCells funded, int layerCount = 64,
-        double solarIrradianceWattsPerSquareMeter = 1361.0, double depthGradingExponent = 2.0)
+        double solarIrradianceWattsPerSquareMeter = 1361.0, double depthGradingExponent = 2.0, int depthGradingBaseLayerCount = 0)
     {
         ArgumentNullException.ThrowIfNull(funded);
         if (funded.Columns is not null) throw new ArgumentException("Initial columns must partition an unpartitioned funded shell.", nameof(funded));
         var columns = PlanetOriginRockColumnField.Partition(funded.Field, new(layerCount, 3000.0, 2800.0, 3.0)
         {
             DepthGradingExponent = depthGradingExponent,
+            DepthGradingBaseLayerCount = depthGradingBaseLayerCount,
             UseRadiatingInterface = true,
             UseImplicitDepthTransport = true
         });
@@ -50,12 +51,16 @@ public static class PlanetRockColumnReference
 
     /// <summary>Coupled liquid heat transport on an explicitly funded upper shell; not a resolved magma velocity field.</summary>
     public static PlanetOriginCanonicalRockCells CreateCoupledUpperMagmaInitial(PlanetOriginCanonicalRockCells funded,
-        int layerCount = 64, double solarIrradianceWattsPerSquareMeter = 1361.0)
+        int layerCount = 64, double solarIrradianceWattsPerSquareMeter = 1361.0, bool useCrystalSuspensionRheology = false)
     {
-        var resolved = CreateResolvedInitial(funded, layerCount, solarIrradianceWattsPerSquareMeter, 4.0);
+        var resolved = CreateResolvedInitial(funded, layerCount, solarIrradianceWattsPerSquareMeter, 4.0, layerCount is 64 or 128 ? 64 : 0);
         return new(resolved.Epoch, resolved.Field, resolved.Columns)
         {
-            SurfaceBoundary = resolved.SurfaceBoundary!.Value with { LiquidHeatTransport = PlanetOriginLiquidHeatTransportParameters.Reference }
+            SurfaceBoundary = resolved.SurfaceBoundary!.Value with
+            {
+                LiquidHeatTransport = useCrystalSuspensionRheology ? PlanetOriginLiquidHeatTransportParameters.CrystalSuspensionReference :
+                    PlanetOriginLiquidHeatTransportParameters.Reference
+            }
         };
     }
 

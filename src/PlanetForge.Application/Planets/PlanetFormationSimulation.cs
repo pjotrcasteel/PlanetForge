@@ -38,17 +38,9 @@ public static class PlanetFormationSimulation
     /// <summary>Same accepted substeps and one atomic publication; UI work may run between bounded candidate batches.</summary>
     public static async Task<PlanetRenderSnapshot> AdvanceAsync(PlanetExperience experience, int seconds, CancellationToken cancellationToken = default)
     {
-        var (candidate, boundary, cap) = Prepare(experience, seconds);
-        var remaining = seconds;
-        var batchSeconds = Math.Max(1, (int)cap);
-        while (remaining > 0)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            var batch = Math.Min(remaining, batchSeconds);
-            candidate = PlanetOriginRockColumnIntegrator.Advance(candidate, PlanetOriginDuration.FromSeconds(batch), boundary, new(cap, 20_000), cancellationToken);
-            remaining -= batch;
-            await Task.Delay(1, cancellationToken);
-        }
+        var (current, boundary, cap) = Prepare(experience, seconds);
+        var candidate = await PlanetOriginRockColumnIntegrator.AdvanceAsync(current, PlanetOriginDuration.FromSeconds(seconds),
+            boundary, new(cap, 20_000), cancellationToken);
         cancellationToken.ThrowIfCancellationRequested();
         return experience.PublishRegionalRock(candidate);
     }

@@ -12,12 +12,18 @@ public readonly record struct PlanetOriginRockColumnProperties(
     /// <summary>Equal mass at one; larger exponents concentrate depth resolution at the cooling boundary.</summary>
     public double DepthGradingExponent { get; init; } = 1.0;
 
+    /// <summary>Optional fixed graded parent mesh, uniformly subdivided for genuinely nested depth refinement. Zero grades all layers directly.</summary>
+    public int DepthGradingBaseLayerCount { get; init; }
+
     /// <summary>Opt-in massless conductive/radiative face; legacy references retain cell-centre radiation.</summary>
     public bool UseRadiatingInterface { get; init; }
     public bool UseImplicitDepthTransport { get; init; }
 
     public void Validate()
     {
+        if (DepthGradingBaseLayerCount < 0 || (DepthGradingBaseLayerCount > 0 &&
+            (DepthGradingBaseLayerCount < 2 || DepthGradingBaseLayerCount > LayerCount || LayerCount % DepthGradingBaseLayerCount != 0)))
+            throw new ArgumentOutOfRangeException(nameof(DepthGradingBaseLayerCount), "A parent mesh must divide the declared layer count.");
         if (!double.IsFinite(DepthGradingExponent) || DepthGradingExponent < 1.0 || DepthGradingExponent > 4.0 ||
             LayerCount is < 2 or > 128 || !double.IsFinite(SolidDensityKilogramsPerCubicMeter) || SolidDensityKilogramsPerCubicMeter <= 0.0 ||
             !double.IsFinite(LiquidDensityKilogramsPerCubicMeter) || LiquidDensityKilogramsPerCubicMeter <= 0.0 ||
@@ -153,8 +159,12 @@ public sealed partial class PlanetOriginRockColumnField
             for (var depth = 0; depth < layers.Length; depth++)
             {
                 var last = depth == layers.Length - 1;
-                var fraction = properties.DepthGradingExponent == 1.0 ? 1.0 / layers.Length : Math.Pow((depth + 1.0) / layers.Length, properties.DepthGradingExponent) -
-                    Math.Pow((double)depth / layers.Length, properties.DepthGradingExponent);
+                var baseCount = properties.DepthGradingBaseLayerCount == 0 ? layers.Length : properties.DepthGradingBaseLayerCount;
+                var subdivisions = layers.Length / baseCount;
+                var parent = depth / subdivisions;
+                var fraction = properties.DepthGradingExponent == 1.0 ? 1.0 / layers.Length :
+                    (Math.Pow((parent + 1.0) / baseCount, properties.DepthGradingExponent) -
+                        Math.Pow((double)parent / baseCount, properties.DepthGradingExponent)) / subdivisions;
                 var mass = last ? remainingMass : cell.ActiveRockMassKilograms * fraction;
                 var energy = last ? remainingEnergy : cell.StoredEnthalpyJoules * fraction;
                 layers[depth] = new PlanetOriginRockColumnLayer(mass, energy);
