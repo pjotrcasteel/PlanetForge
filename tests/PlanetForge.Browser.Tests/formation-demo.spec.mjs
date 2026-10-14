@@ -11,6 +11,11 @@ test('Main globe prototype evolves, orbits, pauses and resets on a mobile viewpo
     await expect(page.getByTestId('formation-time')).toContainText('00:00:30');
     const evolved = await page.locator('#planet-canvas').screenshot();
     expect(evolved.equals(initial)).toBe(false);
+    // Same view, later simulation time: check material evolution beyond first frame.
+    await step.click();
+    await expect(page.getByTestId('formation-time')).toContainText('00:01:00');
+    const cooling = await page.locator('#planet-canvas').screenshot();
+    expect(cooling.equals(evolved)).toBe(false);
     await page.mouse.move(190, 420); await page.mouse.down(); await page.mouse.move(270, 440, { steps: 8 }); await page.mouse.up();
     const rotated = await page.locator('#planet-canvas').screenshot(); expect(rotated.equals(evolved)).toBe(false);
     await page.getByTestId('formation-play').click();

@@ -25,20 +25,34 @@ export function initialize(canvasId, seed) {
     const fragment = `#version 300 es
     precision highp float;
     uniform sampler2D field; uniform sampler2D materialField; in vec3 normal; in vec3 point; in vec2 uv; out vec4 color;
+    // Stable material gradients are measured on the simulation grid, not in view pixels.
+    float frozenFraction(vec2 sampleUv) {
+        float rock=max(0.,texture(field,sampleUv).g);
+        float melt=max(0.,texture(materialField,sampleUv).r);
+        return rock/(rock+melt+.0001);
+    }
     void main(){
         vec4 state=texture(field,uv), material=texture(materialField,uv);
         float rock=max(0.,state.g), melt=max(0.,material.r);
         float crust=clamp(rock/.18,0.,1.);
-        vec3 n=normalize(cross(dFdx(point),dFdy(point)));
+        vec3 geometry=cross(dFdx(point),dFdy(point));
+        vec3 n=length(geometry)>1e-8?normalize(geometry):normalize(normal);
         if(dot(n,normal)<0.) n=-n;
+        // Blend funded relief with the smooth-sphere normal to limit triangle glare.
+        n=normalize(mix(normalize(normal),n,.7));
         float light=max(0.,dot(n,normalize(vec3(-.6,.7,1.))));
         float ambient=.28;
         // Sub-cell variation is an optical basalt texture, never simulated land or relief.
         float grain=fract(sin(dot(floor(uv*vec2(1600.,800.)),vec2(12.9898,78.233)))*43758.5453);
         float grainFine=fract(sin(dot(floor(uv*vec2(3700.,1800.)),vec2(48.327,25.199)))*12731.918);
-        vec3 basalt=mix(vec3(.055,.059,.065),vec3(.19,.17,.15),grain*.65+grainFine*.2)*(ambient+light*1.25);
+        vec3 basalt=mix(vec3(.038,.044,.05),vec3(.17,.14,.12),grain*.65+grainFine*.2)*(ambient+light*1.14);
         float solidShare=rock/(rock+melt+.0001);
-        float crustEdge=length(vec2(dFdx(solidShare),dFdy(solidShare)));
+        vec2 texel=1./vec2(textureSize(field,0));
+        float west=frozenFraction(uv-vec2(texel.x,0.));
+        float east=frozenFraction(uv+vec2(texel.x,0.));
+        float north=frozenFraction(uv-vec2(0.,texel.y));
+        float south=frozenFraction(uv+vec2(0.,texel.y));
+        float crustEdge=length(vec2(east-west,south-north))*.7;
         // Screen-space gradients are a shading cue, not a physical fracture field.
         float fracture=clamp(crustEdge*3.5,0.,1.)*smoothstep(.18,.7,solidShare);
         basalt*=1.-.48*fracture;
@@ -46,11 +60,11 @@ export function initialize(canvasId, seed) {
         basalt*=mix(1.08,.75,mature);
         basalt*=1.-.30*clamp(material.b,0.,1.);
         float temperature=clamp((state.r-.15)/1.3,0.,1.);
-        vec3 lava=mix(vec3(.26,.009,.002),vec3(1.,.32,.025),temperature);
+        vec3 lava=mix(vec3(.23,.009,.002),vec3(.95,.27,.019),temperature);
         lava+=vec3(.13,.046,.004)*clamp(state.a*6.,0.,1.);
         // Display only owned, exposed melt. An empty or frozen cell cannot glow as lava.
         float openMelt=(1.-smoothstep(.25,.78,solidShare))*smoothstep(.01,.16,melt);
-        lava*=mix(.65,1.,clamp(melt,0.,1.));
+        lava*=mix(.76,1.,clamp(melt,0.,1.));
         vec3 surface=mix(basalt,lava,openMelt);
         // Newly frozen margins and funded active rifts reveal adjacent owned liquid.
         float margin=smoothstep(.07,.4,crust)*(1.-smoothstep(.72,.98,solidShare));
@@ -58,8 +72,10 @@ export function initialize(canvasId, seed) {
         surface+=vec3(.35,.066,.004)*fissure;
         // The glowing seam requires actual neighboring exposed melt; no invented lava.
         float lavaSeam=fracture*smoothstep(.03,.22,melt)*(1.-smoothstep(.75,.98,solidShare));
-        surface+=vec3(.55,.12,.008)*lavaSeam;
-        color=vec4(pow(max(surface,vec3(0.)),vec3(.86)),1.);
+        surface+=vec3(.35,.065,.004)*lavaSeam;
+        // Bounded response avoids featureless yellow/white highlights.
+        vec3 mapped=vec3(1.)-exp(-max(surface,vec3(0.))*1.3);
+        color=vec4(pow(clamp(mapped,0.,1.),vec3(.86)),1.);
     }`;
     const compile = (type, source) => {
         const shader = gl.createShader(type); gl.shaderSource(shader, source); gl.compileShader(shader);

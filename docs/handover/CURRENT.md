@@ -105,3 +105,10 @@ Playback-step profiling also found an avoidable main-thread stall at 0.1-unit in
 ### PF 0.0.48 demo release gate — browser regression correction (2026-10-14)
 
 Fixed a pre-existing version-pinned browser expectation in the main planet/overlay coherence spec to expect the 0.0.48.0 imports, and eliminated an archive-import test startup race by waiting for completion of the initial empty IndexedDB catalogue render. The initial stable release snapshot passed .NET, WASM, browser shard 1 and its playable formation-demo tests; browser shard 2 failed only the outdated import-version assertion, and browser shard 3 failed one archive-import status race. Re-run all CI for the updated snapshot before merging; do not label this release deployed or visually accepted until GitHub Pages exact-SHA smoke and device review.
+
+
+## M0 visual-foundation implementation — 2026-10-14 draft
+
+PF 0.0.49 candidate: material-front contrast now samples neighbors in *simulation texels* rather than screen-space derivatives, preserving coherent boundaries across camera zoom levels. Displaced-mesh normals are blended with spherical normals; reduced yellow magma saturation and bounded optical exposure preserve readable solid/melt regions. Glowing rims continue to require finite owned melt and solid/liquid interfaces. The offline prototype's outdated embedded renderer was regenerated to match the main page exactly. Browser regression now checks progression at T+0, T+30, and T+60 with a fixed camera before orbit and restart.
+
+**Not yet accepted:** full branch CI, Pages deployment and human Safari screenshots. This changes optical presentation of the dimensionless playable hypothesis, not its mass/energy model; it must not be described as validated magma-ocean physics.
