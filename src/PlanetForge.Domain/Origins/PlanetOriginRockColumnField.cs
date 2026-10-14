@@ -18,7 +18,7 @@ public readonly record struct PlanetOriginRockColumnProperties(
 
     public void Validate()
     {
-        if (!double.IsFinite(DepthGradingExponent) || DepthGradingExponent < 1.0 || DepthGradingExponent > 2.0 ||
+        if (!double.IsFinite(DepthGradingExponent) || DepthGradingExponent < 1.0 || DepthGradingExponent > 4.0 ||
             LayerCount is < 2 or > 128 || !double.IsFinite(SolidDensityKilogramsPerCubicMeter) || SolidDensityKilogramsPerCubicMeter <= 0.0 ||
             !double.IsFinite(LiquidDensityKilogramsPerCubicMeter) || LiquidDensityKilogramsPerCubicMeter <= 0.0 ||
             !double.IsFinite(ConductivityWattsPerMeterKelvin) || ConductivityWattsPerMeterKelvin < 0.0)

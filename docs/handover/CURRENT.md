@@ -57,3 +57,10 @@ Next substantial slice must replace the independently cooling thin shell with ex
 ## Process
 
 Follow [CONTINUE.md](CONTINUE.md), [handover README](README.md), #196 and the scientific contracts; independently check GitHub main/PRs/CI/Pages before resuming. Batch coherent implementation and keep the handover current. No isolated feature previews, secondary planets, copied geographies, or scripted stage switching. The last verified **feature** release remains PF 0.0.46.0; a documentation-only commit does not constitute a new visual release.
+
+
+## Upper magma inventory checkpoint — 2026-10-14
+
+Pressure-flow candidate 5ee6685 passed build, .NET tests, WASM publish and all three browser regression shards. Added a research-only upper-magma factory that reallocates mantle mass and initial enthalpy into a declared thin upper shell. A one-kilometre reference uses quartic depth grading to resolve its initially molten radiating face. Eight targeted application cases pass via the local in-process runner; build has zero warnings/errors. See `docs/earth-origin-upper-magma-inventory.md`.
+
+The released main globe is unchanged. Internal convective heat transport, depth/time convergence, crust mechanics and visual acceptance remain outstanding. Do not describe this checkpoint as a completed demo or enable the deeper reference merely to change brightness.

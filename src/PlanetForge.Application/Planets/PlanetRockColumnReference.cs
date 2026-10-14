@@ -48,6 +48,25 @@ public static class PlanetRockColumnReference
         return new(funded.Epoch, columns.Aggregate, columns) { SurfaceBoundary = boundary };
     }
 
+    /// <summary>
+    /// Research-only funded upper magma reference. Quartic depth grading resolves
+    /// the sub-millimetre initial radiating boundary without making the entire
+    /// kilometre-depth inventory one surface control volume. No convection is implied.
+    /// </summary>
+    public static PlanetOriginCanonicalRockCells CreateUpperMagmaInitial(double radiusMeters,
+        double liquidDepthMeters = 1_000.0, int layerCount = 64, int gridLevel = 3)
+    {
+        var funded = PlanetMagmaOceanReference.CreateUpperMagmaInitial(radiusMeters, liquidDepthMeters, 0.0, gridLevel);
+        var columns = PlanetOriginRockColumnField.Partition(funded.Field, new(layerCount, 3000.0, 2800.0, 3.0)
+        {
+            DepthGradingExponent = 4.0,
+            UseRadiatingInterface = true,
+            UseImplicitDepthTransport = true
+        });
+        var boundary = new PlanetOriginRegionalAirlessParameters(PlanetVector.UnitX, 1361.0, 0.15, 0.9, 3.0, 25.0);
+        return new(funded.Epoch, columns.Aggregate, columns) { SurfaceBoundary = boundary };
+    }
+
     public static PlanetOriginCanonicalRockCells Advance(PlanetOriginCanonicalRockCells current,
         PlanetRenderSnapshot world, CancellationToken cancellationToken = default) =>
         PlanetOriginRockColumnIntegrator.Advance(current, PlanetOriginDuration.FromSeconds(AdvanceSeconds),
