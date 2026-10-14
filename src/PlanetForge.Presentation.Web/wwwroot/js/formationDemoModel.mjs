@@ -44,7 +44,10 @@ export class FormationDemoWorld {
     advance(seconds) {
         if (!Number.isFinite(seconds) || seconds < 0 || seconds > 300) throw new RangeError('Demo step must be 0–300 seconds.');
         const endTime = this.time + seconds;
-        const ticks = Math.ceil(seconds / .1), dt = ticks ? seconds / ticks : 0;
+        // Bounded demonstrator dynamics: a one-unit step remains inside the explicit
+        // 20%-per-donor face-flux cap, and is regression-checked against 0.1-unit refinement.
+        const maximumTick = 1;
+        const ticks = Math.ceil(seconds / maximumTick), dt = ticks ? seconds / ticks : 0;
         for (let t = 0; t < ticks; t++) this.tick(dt);
         this.time = endTime;
         return this.stats();

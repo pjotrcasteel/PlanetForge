@@ -35,3 +35,11 @@ test('Cooling makes persistent crust while budgeted localized remelting leaves l
     assert.ok(w.lava.some(x => x > .02) && w.crust.some(x => x > .18));
     assert.ok(Math.abs(w.inventory() - w.initialInventory) < 1e-7);
 });
+
+test('Accelerated integration stays close to a ten-times-refined crust trajectory', () => {
+    const fast = new FormationDemoWorld(24061984, 32, 16), fine = new FormationDemoWorld(24061984, 32, 16);
+    fast.advance(30);
+    for (let i = 0; i < 300; i++) fine.tick(.1);
+    assert.ok(Math.abs(fast.stats().coverage - fine.stats().coverage) < .08);
+    assert.ok(Math.abs(fast.inventory() - fine.inventory()) < 1e-7);
+});
