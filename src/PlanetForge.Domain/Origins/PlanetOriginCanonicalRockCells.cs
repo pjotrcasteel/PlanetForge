@@ -25,8 +25,12 @@ public readonly record struct PlanetOriginRegionalAirlessParameters(
     /// <summary>Optional convective lower-boundary closure using existing finite mantle enthalpy.</summary>
     public PlanetOriginMagmaConvectionParameters? MagmaConvection { get; init; }
 
+    /// <summary>Optional internal liquid thermal transport, separate from the mantle boundary.</summary>
+    public PlanetOriginLiquidHeatTransportParameters? LiquidHeatTransport { get; init; }
+
     public void Validate()
     {
+        if (LiquidHeatTransport is { } liquid) liquid.Validate();
         if (MagmaConvection is { } convection) convection.Validate();
         if (!double.IsFinite(SolarIrradianceWattsPerSquareMeter) || SolarIrradianceWattsPerSquareMeter < 0.0 ||
             !double.IsFinite(BondAlbedo) || BondAlbedo is < 0.0 or > 1.0 ||

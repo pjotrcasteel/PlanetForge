@@ -64,3 +64,12 @@ Follow [CONTINUE.md](CONTINUE.md), [handover README](README.md), #196 and the sc
 Pressure-flow candidate 5ee6685 passed build, .NET tests, WASM publish and all three browser regression shards. Added a research-only upper-magma factory that reallocates mantle mass and initial enthalpy into a declared thin upper shell. A one-kilometre reference uses quartic depth grading to resolve its initially molten radiating face. Eight targeted application cases pass via the local in-process runner; build has zero warnings/errors. See `docs/earth-origin-upper-magma-inventory.md`.
 
 The released main globe is unchanged. Internal convective heat transport, depth/time convergence, crust mechanics and visual acceptance remain outstanding. Do not describe this checkpoint as a completed demo or enable the deeper reference merely to change brightness.
+
+
+## Connected-liquid transport and numerical continuation — 2026-10-14
+
+PR #231 now targets main so its next source push receives the normal CI gate. Added opt-in connected-liquid turbulent heat transport, a seed-preserving funded upper-shell factory, shared-reference temperature arithmetic for stiff implicit solves, and bounded thermal step-doubling error control. Accepted liquid heat exchanges conserve the existing layer/ledger accounts. No resolved turbulent velocity or mechanical crust is implied.
+
+Local builds pass with zero warnings/errors. Fourteen targeted application cases and 72 broader domain/infrastructure cases passed through the in-process runner (86 total); local VSTest sockets remain unavailable. Evidence is recorded in `docs/earth-origin-liquid-heat-transport.md`. Uniform 32/64/128-layer one-second checks converge. Seeded coarse steps prematurely crystallized material; error-controlled results supersede that observation. Exploratory four-hour seeded runs develop solid surface layers next to liquid material, but first-solid onset is not converged and the stringent 128-layer seeded transient hits the supported microsecond boundary. Do not promote those runs to visual or geological acceptance.
+
+Next: crust-front/onset convergence and supported initial-transient resolution, asynchronous adaptive integration preserving sync/replay semantics, then actual main-renderer orbit/LOD inspection. Released primary reference and live version remain unchanged. No merge/deploy/device-test request is claimed.

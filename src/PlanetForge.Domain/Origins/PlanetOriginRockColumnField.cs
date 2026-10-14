@@ -178,6 +178,8 @@ public sealed partial class PlanetOriginRockColumnField
     {
         boundary.Validate();
         ArgumentNullException.ThrowIfNull(interior);
+        if (boundary.LiquidHeatTransport is not null && !Properties.UseImplicitDepthTransport)
+            throw new InvalidOperationException("Liquid heat transport requires implicit depth columns.");
         boundary = PlanetOriginMagmaConvection.ResolveBoundary(boundary, this, interior);
         var maximum = MaximumLateralStepSeconds(boundary.LateralConductivityWattsPerMeterKelvin, boundary.LateralLayerThicknessMeters, cancellationToken);
         var mantleConductance = 0.0;
@@ -230,6 +232,8 @@ public sealed partial class PlanetOriginRockColumnField
         boundary.Validate();
         ArgumentNullException.ThrowIfNull(interior);
         if (interval.IsZero) throw new ArgumentOutOfRangeException(nameof(interval));
+        if (boundary.LiquidHeatTransport is not null && !Properties.UseImplicitDepthTransport)
+            throw new InvalidOperationException("Liquid heat transport requires implicit depth columns.");
         boundary = PlanetOriginMagmaConvection.ResolveBoundary(boundary, this, interior);
         var verticalBoundary = boundary with { LateralConductivityWattsPerMeterKelvin = 0.0, LateralLayerThicknessMeters = 0.0 };
         var vertical = ProposeVertical(interval, verticalBoundary, interior, cancellationToken);

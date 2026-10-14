@@ -12,6 +12,36 @@ namespace PlanetForge.Infrastructure.Tests.Surface;
 public sealed class PlanetFormationSimulationTests
 {
     [TestMethod]
+    public void Publish_CoupledUpperMagmaCooling_UsesTheSameEpochAtlasAndMassDerivedTerrain()
+    {
+        var source = new PlanetTerrainRegionProvider(new FlatElevation());
+        var experience = new PlanetExperience(new PlanetSurfaceMeshCache(new PlanetSurfaceMeshBuilder(new PlanetSurfaceTileSampler(source), source)),
+            new PlanetLocalSurfacePatchSampler(source), new PlanetLocalSurfaceMeshBuilder(),
+            hypsometryCache: new PlanetHypsometryCache(new PlanetHypsometrySampler(source), source));
+        var funded = PlanetFormationInitialHeat.CreateUpperMagma(6_371_000.0, 24061984, gridLevel: 1);
+        var initial = PlanetRockColumnReference.CreateCoupledUpperMagmaInitial(funded);
+        var initialRender = experience.PublishRegionalRock(initial);
+        var next = PlanetOriginRockColumnIntegrator.Advance(initial, PlanetOriginDuration.FromSeconds(1.0), initial.SurfaceBoundary!.Value,
+            new(0.25, 10000) { MaximumThermalErrorKelvin = 0.1 });
+        Assert.AreSame(initial, experience.PublishedRegionalRock);
+        var rendered = experience.PublishRegionalRock(next);
+        Assert.AreSame(next, experience.PublishedRegionalRock);
+        Assert.AreEqual(next.Epoch.Revision, rendered.SpatialRock!.Revision);
+        CollectionAssert.AreEqual(PlanetOriginSpatialSurfaceProjection.Create(next).TemperatureKelvin, rendered.SpatialRock.TemperatureKelvin);
+        Assert.AreNotEqual(initialRender.TerrainRevision, rendered.TerrainRevision);
+        var elevation = new PlanetOriginRockColumnElevationSource(next.Columns!);
+        foreach (var column in next.Columns!.Columns)
+        {
+            var direction = PlanetSurfaceGridGeometry.GetCenterDirection(column.Id);
+            Assert.AreEqual(elevation.SampleElevationMeters(direction, 24061984), source.SampleElevationMeters(direction, 24061984), 1e-9);
+        }
+        Assert.AreEqual(1_000_000L, next.Epoch.Clock.MicrosecondsIntoYear);
+        Assert.AreEqual(funded.Field.TotalActiveRockMassKilograms, next.Field.TotalActiveRockMassKilograms, funded.Field.TotalActiveRockMassKilograms * 1e-12);
+        Assert.AreEqual(0.0, rendered.Origin!.SurfaceLiquidMassKilograms);
+        Assert.AreEqual(0.0, next.Epoch.EnergyConservationResidualJoules, next.Epoch.CoupledEnergy!.InitialStoredEnergyJoules * 1e-12);
+    }
+
+    [TestMethod]
     public async Task AdvanceAsync_YieldingBatches_PreservesExactSynchronousEnthalpiesAndCancelsAtomically()
     {
         var synchronous = CreateExperience();

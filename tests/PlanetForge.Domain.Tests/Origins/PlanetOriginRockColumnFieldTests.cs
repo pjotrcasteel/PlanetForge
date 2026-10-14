@@ -278,7 +278,7 @@ public sealed class PlanetOriginRockColumnFieldTests
         Assert.IsTrue(column.Layers.All(layer => Math.Abs(layer.Resolve(Material).TemperatureKelvin - 2200.0) < 1e-8));
         AssertConservation(initial);
         Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => CreateState(grading: double.NaN));
-        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => CreateState(grading: 3.0));
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => CreateState(grading: 5.0));
     }
 
     [TestMethod]

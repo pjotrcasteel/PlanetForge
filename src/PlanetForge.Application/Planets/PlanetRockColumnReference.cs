@@ -33,19 +33,30 @@ public static class PlanetRockColumnReference
     }
 
     public static PlanetOriginCanonicalRockCells CreateResolvedInitial(PlanetOriginCanonicalRockCells funded, int layerCount = 64,
-        double solarIrradianceWattsPerSquareMeter = 1361.0)
+        double solarIrradianceWattsPerSquareMeter = 1361.0, double depthGradingExponent = 2.0)
     {
         ArgumentNullException.ThrowIfNull(funded);
         if (funded.Columns is not null) throw new ArgumentException("Initial columns must partition an unpartitioned funded shell.", nameof(funded));
         var columns = PlanetOriginRockColumnField.Partition(funded.Field, new(layerCount, 3000.0, 2800.0, 3.0)
         {
-            DepthGradingExponent = 2.0,
+            DepthGradingExponent = depthGradingExponent,
             UseRadiatingInterface = true,
             UseImplicitDepthTransport = true
         });
         var boundary = new PlanetOriginRegionalAirlessParameters(PlanetVector.UnitX, solarIrradianceWattsPerSquareMeter, 0.15, 0.9, 3.0, 25.0);
         boundary.Validate();
         return new(funded.Epoch, columns.Aggregate, columns) { SurfaceBoundary = boundary };
+    }
+
+    /// <summary>Coupled liquid heat transport on an explicitly funded upper shell; not a resolved magma velocity field.</summary>
+    public static PlanetOriginCanonicalRockCells CreateCoupledUpperMagmaInitial(PlanetOriginCanonicalRockCells funded,
+        int layerCount = 64, double solarIrradianceWattsPerSquareMeter = 1361.0)
+    {
+        var resolved = CreateResolvedInitial(funded, layerCount, solarIrradianceWattsPerSquareMeter, 4.0);
+        return new(resolved.Epoch, resolved.Field, resolved.Columns)
+        {
+            SurfaceBoundary = resolved.SurfaceBoundary!.Value with { LiquidHeatTransport = PlanetOriginLiquidHeatTransportParameters.Reference }
+        };
     }
 
     /// <summary>
