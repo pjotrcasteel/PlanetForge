@@ -42,6 +42,9 @@ export function initialize(canvasId, seed) {
         // Screen-space gradients are a shading cue, not a physical fracture field.
         float fracture=clamp(crustEdge*3.5,0.,1.)*smoothstep(.18,.7,solidShare);
         basalt*=1.-.48*fracture;
+        float mature=smoothstep(2.,75.,material.a);
+        basalt*=mix(1.08,.75,mature);
+        basalt*=1.-.30*clamp(material.b,0.,1.);
         float temperature=clamp((state.r-.15)/1.3,0.,1.);
         vec3 lava=mix(vec3(.26,.009,.002),vec3(1.,.32,.025),temperature);
         lava+=vec3(.13,.046,.004)*clamp(state.a*6.,0.,1.);
@@ -120,7 +123,7 @@ export function initialize(canvasId, seed) {
         if(s.dirty) {
             for(let i=0;i<world.lava.length;i++) {
                 data[i*4]=world.heat[i];data[i*4+1]=world.crust[i];data[i*4+2]=world.uplift[i];data[i*4+3]=world.flux[i];
-                materialData[i*4]=world.lava[i];materialData[i*4+1]=world.rift[i];materialData[i*4+2]=world.bed[i];materialData[i*4+3]=world.reservoir[i];
+                materialData[i*4]=world.lava[i];materialData[i*4+1]=world.rift[i];materialData[i*4+2]=world.strain[i];materialData[i*4+3]=world.crustAge[i];
             }
             gl.activeTexture(gl.TEXTURE0);gl.bindTexture(gl.TEXTURE_2D,texture);
             gl.texSubImage2D(gl.TEXTURE_2D,0,0,0,world.width,world.height,gl.RGBA,gl.FLOAT,data);
