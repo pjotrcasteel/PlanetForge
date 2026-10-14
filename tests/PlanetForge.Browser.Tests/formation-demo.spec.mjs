@@ -1,21 +1,26 @@
 import { test, expect } from '@playwright/test';
-test('Main globe prototype evolves, orbits, pauses and resets on a mobile viewport', async ({ page }) => {
+test('Main globe prototype evolves, orbits, pauses and resets on a mobile viewport', async ({ page }, testInfo) => {
     const errors = []; page.on('pageerror', e => errors.push(e.message));
     await page.goto('/?demo=1&seed=24061984');
     const step = page.getByTestId('formation-step');
     await expect(step).toBeEnabled();
     await expect(page.getByTestId('formation-phase')).toHaveText('Magma ocean');
-    const initial = await page.locator('#planet-canvas').screenshot();
+    const initial = await page.locator('#planet-canvas').screenshot({path:testInfo.outputPath('m0-molten-t0.png')});
     await page.getByTestId('formation-speed').selectOption('30');
     await step.click();
     await expect(page.getByTestId('formation-time')).toContainText('00:00:30');
-    const evolved = await page.locator('#planet-canvas').screenshot();
+    const evolved = await page.locator('#planet-canvas').screenshot({path:testInfo.outputPath('m0-crust-t30.png')});
     expect(evolved.equals(initial)).toBe(false);
     // Same view, later simulation time: check material evolution beyond first frame.
     await step.click();
     await expect(page.getByTestId('formation-time')).toContainText('00:01:00');
-    const cooling = await page.locator('#planet-canvas').screenshot();
+    const cooling = await page.locator('#planet-canvas').screenshot({path:testInfo.outputPath('m0-crust-t60.png')});
     expect(cooling.equals(evolved)).toBe(false);
+    await step.click();
+    await step.click();
+    await expect(page.getByTestId('formation-time')).toContainText('00:02:00');
+    const late = await page.locator('#planet-canvas').screenshot({path:testInfo.outputPath('m0-crust-t120.png')});
+    expect(late.equals(cooling)).toBe(false);
     await page.mouse.move(190, 420); await page.mouse.down(); await page.mouse.move(270, 440, { steps: 8 }); await page.mouse.up();
     const rotated = await page.locator('#planet-canvas').screenshot(); expect(rotated.equals(evolved)).toBe(false);
     await page.getByTestId('formation-play').click();
