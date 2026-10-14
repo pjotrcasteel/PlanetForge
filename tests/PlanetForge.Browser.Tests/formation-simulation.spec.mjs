@@ -146,8 +146,10 @@ test('Formation_VersionedRendererAndWaterOverlay_KeepOneCameraAndTerrainRevision
   await page.goto(url);
   await expect(page.getByTestId('formation-step')).toBeEnabled({ timeout: 90000 });
   const inspect = () => page.evaluate(async () => {
-    const current = await import('/js/planetRenderer.js?v=0.0.47.0');
-    const unversioned = await import('/js/planetRenderer.js');
+    const version = document.title.match(/^PlanetForge ([0-9.]+) — Planetary Simulation$/)?.[1];
+    if (!version) throw new Error('Missing versioned PlanetForge document title');
+    const current = await import(new URL(`js/planetRenderer.js?v=${version}`, document.baseURI).href);
+    const unversioned = await import(new URL('js/planetRenderer.js', document.baseURI).href);
     const renderer = current.getPlanetCameraSnapshot();
     const alternate = unversioned.getPlanetCameraSnapshot();
     const overlay = window.__planetForgeWaterTest?.camera();
@@ -174,7 +176,9 @@ test('Formation_VersionedRendererAndWaterOverlay_KeepOneCameraAndTerrainRevision
   await page.getByTestId('formation-step').click();
   await expect(page.getByTestId('formation-time')).toHaveText('T+00:00:01', { timeout: 90000 });
   const advanced = await inspect();
-  expect(waterModuleRequests.some(requestUrl => requestUrl.includes('waterOverlay.js?v=0.0.47.0'))).toBe(true);
+  const releaseVersion = (await page.title()).match(/^PlanetForge ([0-9.]+) — Planetary Simulation$/)?.[1];
+  expect(releaseVersion).toBeTruthy();
+  expect(waterModuleRequests.some(requestUrl => requestUrl.includes(`waterOverlay.js?v=${releaseVersion}`))).toBe(true);
   expect(advanced.renderer).toEqual(advanced.alternate);
   expect(advanced.overlay.terrainRevision).toBe(advanced.terrainRevision);
   expect(advanced.renderer.geometryKey).toBeTruthy();
