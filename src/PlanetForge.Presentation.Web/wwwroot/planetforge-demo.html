@@ -16,10 +16,10 @@ button:disabled{opacity:.5}details{max-width:290px;font-size:12px;color:#919da3}
 <script type="module">// Playable hypothesis model. Dimensionless inventories and accelerated time;
 // deliberately separate from the validated .NET thermodynamic ledger.
 class FormationDemoWorld {
-    constructor(seed = 24061984, width = 128, height = 64) {
+    constructor(seed = 24061984, width = 256, height = 128) {
         this.seed = seed; this.width = width; this.height = height; this.time = 0;
         const n = width * height;
-        for (const name of ['lava', 'crust', 'heat', 'bed', 'uplift', 'rift', 'compression', 'cooling', 'reservoir', 'flux']) this[name] = new Float64Array(n);
+        for (const name of ['lava', 'crust', 'heat', 'bed', 'uplift', 'rift', 'compression', 'cooling', 'reservoir', 'flux', 'crustAge', 'strain']) this[name] = new Float64Array(n);
         let state = seed >>> 0;
         const random = () => { state = (Math.imul(state, 1664525) + 1013904223) >>> 0; return state / 4294967296; };
         const noise = (x, y, z) => {
@@ -52,20 +52,24 @@ class FormationDemoWorld {
             this.lava[k] = 1; this.heat[k] = 1.05 + .35 * ranked[0].p.cold + .12 * folded;
             this.reservoir[k] = 2;
         }
+        this._massDelta = new Float64Array(n); this._heatDelta = new Float64Array(n); this._crustDelta = new Float64Array(n); this._ageMassDelta = new Float64Array(n);
         this.initialInventory = this.inventory();
     }
     inventory() { return this.lava.reduce((s, x, i) => s + x + this.crust[i] + this.reservoir[i], 0); }
     advance(seconds) {
         if (!Number.isFinite(seconds) || seconds < 0 || seconds > 300) throw new RangeError('Demo step must be 0–300 seconds.');
         const endTime = this.time + seconds;
-        const ticks = Math.ceil(seconds / .1), dt = ticks ? seconds / ticks : 0;
+        // Bounded demonstrator dynamics: a one-unit step remains inside the explicit
+        // 20%-per-donor face-flux cap, and is regression-checked against 0.1-unit refinement.
+        const maximumTick = 1;
+        const ticks = Math.ceil(seconds / maximumTick), dt = ticks ? seconds / ticks : 0;
         for (let t = 0; t < ticks; t++) this.tick(dt);
         this.time = endTime;
         return this.stats();
     }
     tick(dt) {
-        const n = this.lava.length, dm = new Float64Array(n), dh = new Float64Array(n);
-        this.flux.fill(0);
+        const n = this.lava.length, dm = this._massDelta, dh = this._heatDelta;
+        dm.fill(0); dh.fill(0); this._crustDelta.fill(0); this._ageMassDelta.fill(0); this.flux.fill(0);
         const exchange = (a, b) => {
             const headA = this.bed[a] + this.uplift[a] + this.crust[a] + this.lava[a];
             const headB = this.bed[b] + this.uplift[b] + this.crust[b] + this.lava[b];
@@ -95,13 +99,43 @@ class FormationDemoWorld {
             this.heat[k] = Math.max(.1, this.heat[k] - dt * this.cooling[k] / (1 + this.crust[k] * 8));
             const freeze = Math.min(this.lava[k], dt * Math.max(0, 1 - this.heat[k]) * .12);
             this.lava[k] -= freeze; this.crust[k] += freeze;
+            this.crustAge[k] = this.crust[k] > 1e-8 ? (this.crustAge[k] * (this.crust[k] - freeze) + freeze * dt * .5) / this.crust[k] + dt : 0;
             // A simplified rupture/remelt rule; a fracture exposes owned liquid.
-            if (this.heat[k] > 1.05 && this.crust[k] > 0) {
-                const remelt = Math.min(this.crust[k], dt * (this.heat[k] - 1.05) * .1);
-                this.crust[k] -= remelt; this.lava[k] += remelt;
+            if (this.heat[k] > 1.05 && this.crust[k] > 0 && this.lava[k] > 0) {
+                // Hot owned melt must pay for remelting nearby solid; it cannot do so for free.
+                // The latent-cost proxy is illustrative, not a calibrated thermodynamic equation of state.
+                const moltenMass = this.lava[k], excess = (this.heat[k] - 1.05) * moltenMass;
+                const remelt = Math.min(this.crust[k], excess / .9, dt * (this.heat[k] - 1.05) * .1);
+                if (remelt > 0) {
+                    this.crust[k] -= remelt; this.lava[k] += remelt;
+                    if (this.crust[k] < 1e-8) this.crustAge[k] = 0;
+                    this.heat[k] = Math.max(.1, (this.heat[k] * moltenMass - .9 * remelt) / this.lava[k]);
+                }
             }
             // Uncalibrated convergence hypothesis, visually exaggerated by the renderer.
             this.uplift[k] += dt * .006 * this.crust[k] * this.compression[k];
+            this.strain[k] = Math.min(1, this.strain[k] + dt * .012 * this.compression[k] * this.crust[k]);
+        }
+        // Solid material is transferred only from funded crust inventories.
+        // Convergence-induced shortening redistributes crust toward local ridges,
+        // without creating new rock or altering the molten reservoir.
+        const dc = this._crustDelta;
+        for (let j = 0; j < this.height; j++) for (let i = 0; i < this.width; i++) {
+            const k = j * this.width + i;
+            if (this.compression[k] < .15 || this.crust[k] < .01) continue;
+            const left = j * this.width + (i + this.width - 1) % this.width;
+            const right = j * this.width + (i + 1) % this.width;
+            const target = this.compression[left] > this.compression[right] ? left : right;
+            if (this.compression[target] <= this.compression[k]) continue;
+            const moved = Math.min(this.crust[k] * .015 * dt, this.crust[k] * .1);
+            dc[k] -= moved; dc[target] += moved;
+            const ageMass = moved * this.crustAge[k];
+            this._ageMassDelta[k] -= ageMass; this._ageMassDelta[target] += ageMass;
+        }
+        for (let k = 0; k < n; k++) {
+            const ageMass = this.crustAge[k] * this.crust[k] + this._ageMassDelta[k];
+            this.crust[k] += dc[k];
+            this.crustAge[k] = this.crust[k] > 1e-8 ? Math.max(0, ageMass / this.crust[k]) : 0;
         }
         this.time += dt;
     }
@@ -271,7 +305,6 @@ function advance(seconds){if(!instance)throw new Error('Initialize the demo firs
 function restart(seed){const id=instance.canvas.id;return initialize(id,seed);}
 function dispose(){if(!instance)return;const s=instance;instance=null;cancelAnimationFrame(s.frame);s.abort.abort();
     s.gl.deleteBuffer(s.buffer);s.gl.deleteVertexArray(s.vao);s.gl.deleteTexture(s.texture);s.gl.deleteTexture(s.materialTexture);s.gl.deleteProgram(s.program);}
-
 
 const phase=document.getElementById('phase'),readout=document.getElementById('readout'),play=document.getElementById('play');
 let playing=false,busy=false;
