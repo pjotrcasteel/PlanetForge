@@ -36,6 +36,7 @@ export function initialize(canvasId, seed) {
         float grain=fract(sin(dot(floor(uv*vec2(1600.,800.)),vec2(12.9898,78.233)))*43758.5453);
         float grainFine=fract(sin(dot(floor(uv*vec2(3700.,1800.)),vec2(48.327,25.199)))*12731.918);
         vec3 basalt=mix(vec3(.055,.059,.065),vec3(.19,.17,.15),grain*.65+grainFine*.2)*(.20+light*1.25);
+        float solidShare=rock/(rock+melt+.0001);
         float crustEdge=length(vec2(dFdx(solidShare),dFdy(solidShare)));
         float fracture=clamp(crustEdge*3.5,0.,1.)*smoothstep(.18,.7,solidShare);
         basalt*=1.-.48*fracture;
@@ -43,7 +44,6 @@ export function initialize(canvasId, seed) {
         vec3 lava=mix(vec3(.26,.009,.002),vec3(1.,.32,.025),temperature);
         lava+=vec3(.13,.046,.004)*clamp(state.a*6.,0.,1.);
         // Display only owned, exposed melt. An empty or frozen cell cannot glow as lava.
-        float solidShare=rock/(rock+melt+.0001);
         float openMelt=(1.-smoothstep(.25,.78,solidShare))*smoothstep(.01,.16,melt);
         lava*=mix(.65,1.,clamp(melt,0.,1.));
         vec3 surface=mix(basalt,lava,openMelt);
