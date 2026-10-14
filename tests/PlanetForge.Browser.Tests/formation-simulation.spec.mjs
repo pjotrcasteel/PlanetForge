@@ -146,7 +146,7 @@ test('Formation_VersionedRendererAndWaterOverlay_KeepOneCameraAndTerrainRevision
   await page.goto(url);
   await expect(page.getByTestId('formation-step')).toBeEnabled({ timeout: 90000 });
   const inspect = () => page.evaluate(async () => {
-    const current = await import('/js/planetRenderer.js?v=0.0.47.0');
+    const current = await import('/js/planetRenderer.js?v=0.0.48.0');
     const unversioned = await import('/js/planetRenderer.js');
     const renderer = current.getPlanetCameraSnapshot();
     const alternate = unversioned.getPlanetCameraSnapshot();
@@ -174,7 +174,7 @@ test('Formation_VersionedRendererAndWaterOverlay_KeepOneCameraAndTerrainRevision
   await page.getByTestId('formation-step').click();
   await expect(page.getByTestId('formation-time')).toHaveText('T+00:00:01', { timeout: 90000 });
   const advanced = await inspect();
-  expect(waterModuleRequests.some(requestUrl => requestUrl.includes('waterOverlay.js?v=0.0.47.0'))).toBe(true);
+  expect(waterModuleRequests.some(requestUrl => requestUrl.includes('waterOverlay.js?v=0.0.48.0'))).toBe(true);
   expect(advanced.renderer).toEqual(advanced.alternate);
   expect(advanced.overlay.terrainRevision).toBe(advanced.terrainRevision);
   expect(advanced.renderer.geometryKey).toBeTruthy();
