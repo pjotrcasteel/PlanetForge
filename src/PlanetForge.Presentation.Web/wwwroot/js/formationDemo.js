@@ -16,7 +16,7 @@ export function initialize(canvasId, seed) {
     void main(){
         uv=grid; float y=1.-2.*grid.y; float a=grid.x*6.2831853;float r=sqrt(max(0.,1.-y*y));
         vec3 p=vec3(r*cos(a),y,r*sin(a)); vec4 state=texture(field,grid);
-        float relief=min(state.b,2.)*.07+min(state.g,2.)*.015;
+        float relief=min(state.b,2.)*.07+min(state.g,2.)*.035;
         point=turn(p*(1.+relief));normal=turn(p);
         float depth=zoom-point.z;
         float scale=min(2.4,aspect*2.7);
@@ -35,19 +35,25 @@ export function initialize(canvasId, seed) {
         // Sub-cell variation is an optical basalt texture, never simulated land or relief.
         float grain=fract(sin(dot(floor(uv*vec2(1600.,800.)),vec2(12.9898,78.233)))*43758.5453);
         float grainFine=fract(sin(dot(floor(uv*vec2(3700.,1800.)),vec2(48.327,25.199)))*12731.918);
-        vec3 basalt=mix(vec3(.072,.079,.087),vec3(.19,.16,.14),grain*.65+grainFine*.2)*(.27+light*.98);
+        vec3 basalt=mix(vec3(.055,.059,.065),vec3(.19,.17,.15),grain*.65+grainFine*.2)*(.20+light*1.25);
+        float crustEdge=length(vec2(dFdx(solidShare),dFdy(solidShare)));
+        float fracture=clamp(crustEdge*3.5,0.,1.)*smoothstep(.18,.7,solidShare);
+        basalt*=1.-.48*fracture;
         float temperature=clamp((state.r-.15)/1.3,0.,1.);
         vec3 lava=mix(vec3(.26,.009,.002),vec3(1.,.32,.025),temperature);
         lava+=vec3(.13,.046,.004)*clamp(state.a*6.,0.,1.);
         // Display only owned, exposed melt. An empty or frozen cell cannot glow as lava.
         float solidShare=rock/(rock+melt+.0001);
-        float openMelt=(1.-smoothstep(.09,.88,solidShare))*smoothstep(.01,.16,melt);
+        float openMelt=(1.-smoothstep(.25,.78,solidShare))*smoothstep(.01,.16,melt);
         lava*=mix(.65,1.,clamp(melt,0.,1.));
         vec3 surface=mix(basalt,lava,openMelt);
         // Newly frozen margins and funded active rifts reveal adjacent owned liquid.
         float margin=smoothstep(.07,.4,crust)*(1.-smoothstep(.72,.98,solidShare));
         float fissure=margin*clamp(material.g*2.,0.,1.)*smoothstep(.02,.3,melt);
         surface+=vec3(.35,.066,.004)*fissure;
+        // The glowing seam requires actual neighboring exposed melt; no invented lava.
+        float lavaSeam=fracture*smoothstep(.03,.22,melt)*(1.-smoothstep(.75,.98,solidShare));
+        surface+=vec3(.55,.12,.008)*lavaSeam;
         color=vec4(pow(max(surface,vec3(0.)),vec3(.86)),1.);
     }`;
     const compile = (type, source) => {
