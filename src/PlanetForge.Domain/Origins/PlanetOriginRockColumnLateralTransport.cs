@@ -53,7 +53,7 @@ public sealed partial class PlanetOriginRockColumnField
                 if (!double.IsFinite(layers[depth].StoredEnthalpyJoules) || layers[depth].StoredEnthalpyJoules < 0.0)
                     throw new InvalidOperationException("Lateral column heat would overdraw or overflow an owned layer.");
             }
-            result[index] = new(column.Id, column.AreaSquareMeters, column.ReferenceThicknessMeters, layers);
+            result[index] = new(column.Id, column.AreaSquareMeters, column.ReferenceThicknessMeters, layers, column.ReferenceMassKilograms);
             if (result[index].ThicknessMeters(Material, Properties) / Aggregate.PlanetRadiusMeters > 0.001)
                 throw new InvalidOperationException("Lateral columns exceeded the validated thin-shell geometry envelope.");
         }

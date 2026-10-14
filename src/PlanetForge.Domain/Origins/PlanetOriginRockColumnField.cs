@@ -51,17 +51,19 @@ public readonly record struct PlanetOriginRockColumnLayer(double MassKilograms, 
 /// <summary>Immutable owned material from the radiating surface (index 0) down to the interior boundary.</summary>
 public sealed class PlanetOriginRockColumn
 {
-    internal PlanetOriginRockColumn(PlanetSurfaceGridCellId id, double area, double referenceThickness, PlanetOriginRockColumnLayer[] layers)
+    internal PlanetOriginRockColumn(PlanetSurfaceGridCellId id, double area, double referenceThickness, PlanetOriginRockColumnLayer[] layers, double? referenceMassKilograms = null)
     {
         Id = id;
         AreaSquareMeters = area;
         ReferenceThicknessMeters = referenceThickness;
+        ReferenceMassKilograms = referenceMassKilograms ?? layers.Sum(layer => layer.MassKilograms);
         Layers = Array.AsReadOnly(layers);
     }
 
     public PlanetSurfaceGridCellId Id { get; }
     public double AreaSquareMeters { get; }
     public double ReferenceThicknessMeters { get; }
+    public double ReferenceMassKilograms { get; }
     public IReadOnlyList<PlanetOriginRockColumnLayer> Layers { get; }
     public double MassKilograms => Layers.Sum(layer => layer.MassKilograms);
     public double StoredEnthalpyJoules => Layers.Sum(layer => layer.StoredEnthalpyJoules);
@@ -308,7 +310,7 @@ public sealed partial class PlanetOriginRockColumnField
                     throw new InvalidOperationException("Column step overdraws or overflows a physical rock layer; subdivide the duration.");
                 nextLayers[depth] = nextLayer;
             }
-            result[i] = new PlanetOriginRockColumn(column.Id, column.AreaSquareMeters, column.ReferenceThicknessMeters, nextLayers);
+            result[i] = new PlanetOriginRockColumn(column.Id, column.AreaSquareMeters, column.ReferenceThicknessMeters, nextLayers, column.ReferenceMassKilograms);
             if (result[i].ThicknessMeters(Material, Properties) / Aggregate.PlanetRadiusMeters > 0.001)
                 throw new InvalidOperationException("Column evolution exceeded the validated thin-shell geometry envelope.");
         }

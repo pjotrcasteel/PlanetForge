@@ -82,7 +82,7 @@ public sealed partial class PlanetOriginRockColumnField
                 _ = next.Resolve(Material);
                 layers[depth] = next;
             }
-            result[index] = new(column.Id, column.AreaSquareMeters, column.ReferenceThicknessMeters, layers);
+            result[index] = new(column.Id, column.AreaSquareMeters, column.ReferenceThicknessMeters, layers, column.ReferenceMassKilograms);
             if (result[index].ThicknessMeters(Material, Properties) / Aggregate.PlanetRadiusMeters > 0.001)
                 throw new InvalidOperationException("Melt redistribution exceeded the validated thin-shell geometry envelope.");
         }
