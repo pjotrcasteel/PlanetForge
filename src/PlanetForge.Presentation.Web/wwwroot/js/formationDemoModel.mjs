@@ -84,7 +84,7 @@ export class FormationDemoWorld {
             this.heat[k] = Math.max(.1, this.heat[k] - dt * this.cooling[k] / (1 + this.crust[k] * 8));
             const freeze = Math.min(this.lava[k], dt * Math.max(0, 1 - this.heat[k]) * .12);
             this.lava[k] -= freeze; this.crust[k] += freeze;
-            this.crustAge[k] = this.crust[k] > 1e-8 ? (this.crustAge[k] * (this.crust[k] - freeze) + freeze * dt) / this.crust[k] + dt : 0;
+            this.crustAge[k] = this.crust[k] > 1e-8 ? (this.crustAge[k] * (this.crust[k] - freeze) + freeze * dt * .5) / this.crust[k] + dt : 0;
             // A simplified rupture/remelt rule; a fracture exposes owned liquid.
             if (this.heat[k] > 1.05 && this.crust[k] > 0 && this.lava[k] > 0) {
                 // Hot owned melt must pay for remelting nearby solid; it cannot do so for free.
