@@ -24,3 +24,14 @@ test('Seed changes initial geometry and invalid steps fail before mutation', () 
     for (const dt of [-1, NaN, Infinity, 301]) assert.throws(() => a.advance(dt), RangeError);
     assert.equal(a.time, 0); assert.equal(a.inventory(), a.initialInventory);
 });
+
+test('Cooling makes persistent crust while budgeted localized remelting leaves liquid rifts', () => {
+    const w = new FormationDemoWorld(24061984, 64, 32);
+    const early = w.advance(30).coverage;
+    const mid = w.advance(30).coverage;
+    const late = w.advance(60).coverage;
+    assert.ok(early > 0 && early < mid);
+    assert.ok(mid > .6 && late >= mid - .05, 'Rift heating must not freely remelt most of the globe');
+    assert.ok(w.lava.some(x => x > .02) && w.crust.some(x => x > .18));
+    assert.ok(Math.abs(w.inventory() - w.initialInventory) < 1e-7);
+});

@@ -37,6 +37,7 @@ export class FormationDemoWorld {
             this.lava[k] = 1; this.heat[k] = 1.05 + .35 * ranked[0].p.cold + .12 * folded;
             this.reservoir[k] = 2;
         }
+        this._massDelta = new Float64Array(n); this._heatDelta = new Float64Array(n);
         this.initialInventory = this.inventory();
     }
     inventory() { return this.lava.reduce((s, x, i) => s + x + this.crust[i] + this.reservoir[i], 0); }
@@ -49,8 +50,8 @@ export class FormationDemoWorld {
         return this.stats();
     }
     tick(dt) {
-        const n = this.lava.length, dm = new Float64Array(n), dh = new Float64Array(n);
-        this.flux.fill(0);
+        const n = this.lava.length, dm = this._massDelta, dh = this._heatDelta;
+        dm.fill(0); dh.fill(0); this.flux.fill(0);
         const exchange = (a, b) => {
             const headA = this.bed[a] + this.uplift[a] + this.crust[a] + this.lava[a];
             const headB = this.bed[b] + this.uplift[b] + this.crust[b] + this.lava[b];
@@ -81,9 +82,15 @@ export class FormationDemoWorld {
             const freeze = Math.min(this.lava[k], dt * Math.max(0, 1 - this.heat[k]) * .12);
             this.lava[k] -= freeze; this.crust[k] += freeze;
             // A simplified rupture/remelt rule; a fracture exposes owned liquid.
-            if (this.heat[k] > 1.05 && this.crust[k] > 0) {
-                const remelt = Math.min(this.crust[k], dt * (this.heat[k] - 1.05) * .1);
-                this.crust[k] -= remelt; this.lava[k] += remelt;
+            if (this.heat[k] > 1.05 && this.crust[k] > 0 && this.lava[k] > 0) {
+                // Hot owned melt must pay for remelting nearby solid; it cannot do so for free.
+                // The latent-cost proxy is illustrative, not a calibrated thermodynamic equation of state.
+                const moltenMass = this.lava[k], excess = (this.heat[k] - 1.05) * moltenMass;
+                const remelt = Math.min(this.crust[k], excess / .9, dt * (this.heat[k] - 1.05) * .1);
+                if (remelt > 0) {
+                    this.crust[k] -= remelt; this.lava[k] += remelt;
+                    this.heat[k] = Math.max(.1, (this.heat[k] * moltenMass - .9 * remelt) / this.lava[k]);
+                }
             }
             // Uncalibrated convergence hypothesis, visually exaggerated by the renderer.
             this.uplift[k] += dt * .006 * this.crust[k] * this.compression[k];

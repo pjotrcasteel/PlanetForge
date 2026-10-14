@@ -40,11 +40,12 @@ export function initialize(canvasId, seed) {
         vec3 lava=mix(vec3(.26,.009,.002),vec3(1.,.32,.025),temperature);
         lava+=vec3(.13,.046,.004)*clamp(state.a*6.,0.,1.);
         // Display only owned, exposed melt. An empty or frozen cell cannot glow as lava.
-        float openMelt=(1.-smoothstep(.12,.85,crust))*smoothstep(.01,.35,melt);
+        float solidShare=rock/(rock+melt+.0001);
+        float openMelt=(1.-smoothstep(.09,.88,solidShare))*smoothstep(.01,.16,melt);
         lava*=mix(.65,1.,clamp(melt,0.,1.));
         vec3 surface=mix(basalt,lava,openMelt);
         // Newly frozen margins and funded active rifts reveal adjacent owned liquid.
-        float margin=smoothstep(.07,.4,crust)*(1.-smoothstep(.65,.97,crust));
+        float margin=smoothstep(.07,.4,crust)*(1.-smoothstep(.72,.98,solidShare));
         float fissure=margin*clamp(material.g*2.,0.,1.)*smoothstep(.02,.3,melt);
         surface+=vec3(.35,.066,.004)*fissure;
         color=vec4(pow(max(surface,vec3(0.)),vec3(.86)),1.);
