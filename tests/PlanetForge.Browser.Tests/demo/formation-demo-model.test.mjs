@@ -1,45 +1,63 @@
-import { test } from 'node:test';
+// Backward-compatible Node test entry point for the retained GitHub CI workflow.
+// The old dimensionless prototype is not in the authoritative PlanetForge snapshot:
+// exercise the snapshot's actual thermal and Earth-timeline models instead.
 import assert from 'node:assert/strict';
-import { FormationDemoWorld } from '../../../src/PlanetForge.Presentation.Web/wwwroot/js/formationDemoModel.mjs';
-test('Seeded replay conserves lava, crust and finite reservoir through cooling and flow', () => {
-    const a = new FormationDemoWorld(24061984, 64, 32), b = new FormationDemoWorld(24061984, 64, 32);
-    for (const seconds of [5, 10, 15, 30, 60, 60]) {
-        a.advance(seconds); b.advance(seconds);
-        assert.deepEqual(a.lava, b.lava); assert.deepEqual(a.crust, b.crust);
-        assert.ok(Math.abs(a.inventory() - a.initialInventory) < a.initialInventory * 1e-12);
-        for (const name of ['lava', 'crust', 'reservoir', 'heat', 'uplift']) assert.ok(a[name].every(x => Number.isFinite(x) && x >= 0));
-    }
-    assert.ok(a.crust.some(x => x > .18)); assert.ok(a.lava.some(x => x > .1));
-    assert.ok(a.uplift.some(x => x > 0)); assert.ok(a.reservoir.some(x => x < 2));
-});
-test('Playback batches and one equal-duration request evolve the same world', () => {
-    const a = new FormationDemoWorld(42, 32, 16), b = new FormationDemoWorld(42, 32, 16);
-    a.advance(30); for (let i = 0; i < 6; i++) b.advance(5);
-    assert.deepEqual(a.crust, b.crust); assert.deepEqual(a.lava, b.lava);
-    assert.equal(a.time, 30); assert.equal(b.time, 30);
-});
-test('Seed changes initial geometry and invalid steps fail before mutation', () => {
-    const a = new FormationDemoWorld(1, 32, 16), b = new FormationDemoWorld(2, 32, 16);
-    assert.notDeepEqual(a.bed, b.bed);
-    for (const dt of [-1, NaN, Infinity, 301]) assert.throws(() => a.advance(dt), RangeError);
-    assert.equal(a.time, 0); assert.equal(a.inventory(), a.initialInventory);
+import test from 'node:test';
+import {
+    PARAMETERS,
+    SECONDS_PER_YEAR,
+    crystalFraction,
+    rheologicalTransitionKelvin,
+    crustThicknessMeters,
+    createThermalHistory,
+    advanceThermalHistory,
+    physicalRate,
+} from '../../../src/PlanetForge.Presentation.Web/wwwroot/js/evolution/thermalHistory.js';
+import {
+    EARTH_START_MA,
+    EARTH_LATEST_START_MA,
+    earthAgeMa,
+    earthStartMyr,
+    earthLatestStartMyr,
+} from '../../../src/PlanetForge.Presentation.Web/wwwroot/js/evolution/earthHistory.js';
+
+test('ThermalHistory_InitialState_StartsAsMagmaOcean', () => {
+    const state = createThermalHistory();
+    assert.equal(state.regime, 'magma-ocean');
+    assert.equal(state.timeSeconds, 0);
+    assert.equal(state.potentialKelvin, PARAMETERS.initialPotentialKelvin);
+    assert.equal(state.plateOnsetSeconds, null);
 });
 
-test('Cooling makes persistent crust while budgeted localized remelting leaves liquid rifts', () => {
-    const w = new FormationDemoWorld(24061984, 64, 32);
-    const early = w.advance(30).coverage;
-    const mid = w.advance(30).coverage;
-    const late = w.advance(60).coverage;
-    assert.ok(early > 0 && early < mid);
-    assert.ok(mid > .6 && late >= mid - .05, 'Rift heating must not freely remelt most of the globe');
-    assert.ok(w.lava.some(x => x > .02) && w.crust.some(x => x > .18));
-    assert.ok(Math.abs(w.inventory() - w.initialInventory) < 1e-7);
+test('CrystalFraction_AtPhysicalBounds_RemainsClamped', () => {
+    assert.equal(crystalFraction(PARAMETERS.liquidusPotentialKelvin), 0);
+    assert.equal(crystalFraction(PARAMETERS.solidusPotentialKelvin), 1);
+    assert.equal(crystalFraction(PARAMETERS.liquidusPotentialKelvin + 100), 0);
+    assert.equal(crystalFraction(PARAMETERS.solidusPotentialKelvin - 100), 1);
+    assert.equal(crystalFraction(rheologicalTransitionKelvin()), PARAMETERS.rheologicalTransition);
 });
 
-test('Accelerated integration stays close to a ten-times-refined crust trajectory', () => {
-    const fast = new FormationDemoWorld(24061984, 32, 16), fine = new FormationDemoWorld(24061984, 32, 16);
-    fast.advance(30);
-    for (let i = 0; i < 300; i++) fine.tick(.1);
-    assert.ok(Math.abs(fast.stats().coverage - fine.stats().coverage) < .08);
-    assert.ok(Math.abs(fast.inventory() - fine.inventory()) < 1e-7);
+test('CrustGrowth_PositiveElapsedTime_IncreasesBySquareRoot', () => {
+    assert.equal(crustThicknessMeters(-1), 0);
+    const initial = crustThicknessMeters(SECONDS_PER_YEAR);
+    assert.ok(initial > 0);
+    assert.ok(Math.abs(crustThicknessMeters(4 * SECONDS_PER_YEAR) - 2 * initial) < 1e-8);
+});
+
+test('ThermalHistory_ShortFiniteStep_PreservesFiniteStateAndAdvancesClock', () => {
+    const state = createThermalHistory();
+    advanceThermalHistory(state, 1, 20000);
+    assert.equal(state.timeSeconds, 1);
+    assert.ok(Number.isFinite(state.potentialKelvin));
+    assert.ok(Number.isFinite(state.heatFlux));
+    assert.ok(state.potentialKelvin > 0);
+    assert.ok(physicalRate(state.timeSeconds, 1) > 0);
+});
+
+test('EarthHistory_AgeMapping_MatchesGeologicalReferenceEpochs', () => {
+    assert.equal(earthAgeMa(0), 4567);
+    assert.equal(earthAgeMa(4567), 0);
+    assert.equal(earthAgeMa(4700), 0);
+    assert.equal(earthAgeMa(earthStartMyr()), EARTH_START_MA);
+    assert.equal(earthAgeMa(earthLatestStartMyr()), EARTH_LATEST_START_MA);
 });

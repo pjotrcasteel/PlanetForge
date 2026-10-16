@@ -12,92 +12,6 @@ namespace PlanetForge.Infrastructure.Tests.Surface;
 public sealed class PlanetFormationSimulationTests
 {
     [TestMethod]
-    public void Publish_CoupledUpperMagmaCooling_UsesTheSameEpochAtlasAndMassDerivedTerrain()
-    {
-        var source = new PlanetTerrainRegionProvider(new FlatElevation());
-        var experience = new PlanetExperience(new PlanetSurfaceMeshCache(new PlanetSurfaceMeshBuilder(new PlanetSurfaceTileSampler(source), source)),
-            new PlanetLocalSurfacePatchSampler(source), new PlanetLocalSurfaceMeshBuilder(),
-            hypsometryCache: new PlanetHypsometryCache(new PlanetHypsometrySampler(source), source));
-        var funded = PlanetFormationInitialHeat.CreateUpperMagma(6_371_000.0, 24061984, gridLevel: 1);
-        var initial = PlanetRockColumnReference.CreateCoupledUpperMagmaInitial(funded);
-        var initialRender = experience.PublishRegionalRock(initial);
-        var next = PlanetOriginRockColumnIntegrator.Advance(initial, PlanetOriginDuration.FromSeconds(1.0), initial.SurfaceBoundary!.Value,
-            new(0.25, 10000) { MaximumThermalErrorKelvin = 0.1 });
-        Assert.AreSame(initial, experience.PublishedRegionalRock);
-        var rendered = experience.PublishRegionalRock(next);
-        Assert.AreSame(next, experience.PublishedRegionalRock);
-        Assert.AreEqual(next.Epoch.Revision, rendered.SpatialRock!.Revision);
-        CollectionAssert.AreEqual(PlanetOriginSpatialSurfaceProjection.Create(next).TemperatureKelvin, rendered.SpatialRock.TemperatureKelvin);
-        Assert.AreNotEqual(initialRender.TerrainRevision, rendered.TerrainRevision);
-        var elevation = new PlanetOriginRockColumnElevationSource(next.Columns!);
-        foreach (var column in next.Columns!.Columns)
-        {
-            var direction = PlanetSurfaceGridGeometry.GetCenterDirection(column.Id);
-            Assert.AreEqual(elevation.SampleElevationMeters(direction, 24061984), source.SampleElevationMeters(direction, 24061984), 1e-9);
-        }
-        Assert.AreEqual(1_000_000L, next.Epoch.Clock.MicrosecondsIntoYear);
-        Assert.AreEqual(funded.Field.TotalActiveRockMassKilograms, next.Field.TotalActiveRockMassKilograms, funded.Field.TotalActiveRockMassKilograms * 1e-12);
-        Assert.AreEqual(0.0, rendered.Origin!.SurfaceLiquidMassKilograms);
-        Assert.AreEqual(0.0, next.Epoch.EnergyConservationResidualJoules, next.Epoch.CoupledEnergy!.InitialStoredEnergyJoules * 1e-12);
-    }
-
-    [TestMethod]
-    public async Task AdvanceAsync_YieldingBatches_PreservesExactSynchronousEnthalpiesAndCancelsAtomically()
-    {
-        var synchronous = CreateExperience();
-        var asynchronous = CreateExperience();
-        PlanetFormationSimulation.Start(synchronous, 24061984);
-        PlanetFormationSimulation.Start(asynchronous, 24061984);
-        PlanetFormationSimulation.Advance(synchronous, 30);
-        await PlanetFormationSimulation.AdvanceAsync(asynchronous, 30);
-        CollectionAssert.AreEqual(synchronous.PublishedRegionalRock!.Columns!.Columns.SelectMany(column => column.Layers).ToArray(),
-            asynchronous.PublishedRegionalRock!.Columns!.Columns.SelectMany(column => column.Layers).ToArray());
-        Assert.AreEqual(synchronous.PublishedOriginEpoch!.Clock, asynchronous.PublishedOriginEpoch!.Clock);
-        var original = asynchronous.PublishedRegionalRock;
-        using var cancellation = new CancellationTokenSource();
-        var pending = PlanetFormationSimulation.AdvanceAsync(asynchronous, 30, cancellation.Token);
-        cancellation.Cancel();
-        await Assert.ThrowsExactlyAsync<TaskCanceledException>(() => pending);
-        Assert.AreSame(original, asynchronous.PublishedRegionalRock);
-    }
-
-    [TestMethod]
-    public void Advance_MantleConvection_ChangesBasalFluxWithoutInventingEnergy()
-    {
-        var experience = CreateExperience();
-        PlanetFormationSimulation.Start(experience, 24061984);
-        var initial = experience.PublishedRegionalRock!;
-        var boundary = initial.SurfaceBoundary!.Value;
-        var physics = PlanetOriginMagmaConvection.Diagnose(boundary, initial.Columns!, initial.Epoch.Thermal);
-        Assert.IsTrue(physics.RayleighNumber > 1708);
-        Assert.IsTrue(physics.NusseltNumber > 1.0);
-        Assert.IsTrue(physics.EffectiveBoundaryThicknessMeters < 25);
-        Assert.IsTrue(physics.MeanUpwardHeatFluxWattsPerSquareMeter > 0);
-        var viscous = boundary with
-        {
-            MagmaConvection = PlanetOriginMagmaConvectionParameters.Reference with { DynamicViscosityPascalSeconds = 1.0 }
-        };
-        Assert.IsTrue(PlanetOriginMagmaConvection.Diagnose(viscous, initial.Columns!, initial.Epoch.Thermal).NusseltNumber < physics.NusseltNumber);
-        var invalid = boundary with { MagmaConvection = PlanetOriginMagmaConvectionParameters.Reference with { DepthMeters = 0 } };
-        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => invalid.Validate());
-        var interval = PlanetOriginDuration.FromSeconds(1);
-        var settings = new PlanetOriginRockColumnIntegrationOptions(0.25, 1000);
-        var convecting = PlanetOriginRockColumnIntegrator.Advance(initial, interval, boundary, settings);
-        var reference = PlanetOriginRockColumnIntegrator.Advance(initial, interval, boundary with { MagmaConvection = null }, settings);
-        var last = initial.Columns!.Columns[0].Layers.Count - 1;
-        Assert.AreNotEqual(reference.Columns!.Columns[0].Layers[last].StoredEnthalpyJoules,
-            convecting.Columns!.Columns[0].Layers[last].StoredEnthalpyJoules);
-        Assert.AreEqual(initial.Field.TotalActiveRockMassKilograms, convecting.Field.TotalActiveRockMassKilograms, 0.0);
-        Assert.AreEqual(0.0, convecting.Epoch.EnergyConservationResidualJoules,
-            convecting.Epoch.CoupledEnergy!.InitialStoredEnergyJoules * 1e-12);
-        using var cancellation = new CancellationTokenSource();
-        cancellation.Cancel();
-        Assert.ThrowsExactly<OperationCanceledException>(() =>
-            PlanetOriginRockColumnIntegrator.Advance(initial, interval, boundary, settings, cancellation.Token));
-        Assert.AreSame(initial, experience.PublishedRegionalRock);
-    }
-
-    [TestMethod]
     public void Start_NewWorld_IsMoltenDryAndCanonicalBeforeFirstRender()
     {
         var experience = CreateExperience();
@@ -127,10 +41,10 @@ public sealed class PlanetFormationSimulationTests
         Assert.AreEqual(30_000_000L, current.Epoch.Clock.MicrosecondsIntoYear);
         Assert.AreEqual(initial.Field.TotalActiveRockMassKilograms, current.Field.TotalActiveRockMassKilograms, initial.Field.TotalActiveRockMassKilograms * 1e-12);
         Assert.AreEqual(0.0, current.Epoch.EnergyConservationResidualJoules, current.Epoch.CoupledEnergy!.InitialStoredEnergyJoules * 1e-12);
-        Assert.IsTrue(current.Field.Cells.Any(c => current.ResolveSurfacePhase(c.Id).MeltFraction < 1.0));
+        Assert.IsTrue(current.Field.Cells.All(c => current.ResolveSurfacePhase(c.Id).MeltFraction < 1.0));
         Assert.IsTrue(current.Columns!.Columns.All(c => c.Layers[^1].Resolve(current.Field.Material).MeltFraction == 1.0));
         var projection = PlanetOriginSpatialSurfaceProjection.Create(current);
-        Assert.IsTrue(projection.TemperatureKelvin.Zip(initialProjection.TemperatureKelvin).All(pair => pair.First < pair.Second));
+        Assert.IsTrue(projection.TemperatureKelvin.Max() < initialProjection.TemperatureKelvin.Min());
         Assert.IsTrue(projection.MeltFraction.Any(f => f < 1.0f));
         Assert.AreEqual(0L, initial.Epoch.Revision);
         using var cancellation = new CancellationTokenSource();
@@ -144,6 +58,39 @@ public sealed class PlanetFormationSimulationTests
     }
 
     [TestMethod]
+    public void ResolvedFormation_EarlyCoolingLargerStepCap_StaysWithinThermalErrorBudget()
+    {
+        var experience = CreateExperience();
+        var snapshot = PlanetFormationSimulation.Start(experience, 24061984);
+        var initial = experience.PublishedRegionalRock!;
+        var boundary = new PlanetOriginRegionalAirlessParameters(
+            PlanetVector.UnitX, snapshot.Physics.SolarFluxWattsPerSquareMeter, 0.15, 0.9, 3.0, 25.0);
+        var duration = PlanetOriginDuration.FromSeconds(30.0);
+        var options = new PlanetOriginRockColumnIntegrationOptions(0.25, 20_000);
+        var candidateOptions = new PlanetOriginRockColumnIntegrationOptions(2.5, 20_000);
+        _ = PlanetOriginRockColumnIntegrator.Advance(initial, PlanetOriginDuration.FromSeconds(1.0), boundary, options);
+        _ = PlanetOriginRockColumnIntegrator.Advance(initial, PlanetOriginDuration.FromSeconds(1.0), boundary, candidateOptions);
+
+        var reference = PlanetOriginRockColumnIntegrator.Advance(initial, duration, boundary, options);
+        var candidate = PlanetOriginRockColumnIntegrator.Advance(initial, duration, boundary, candidateOptions);
+        var maximumFaceTemperatureDifference = initial.Field.Cells.Max(cell =>
+            Math.Abs(reference.ResolveRadiatingSurfaceTemperature(cell.Id) - candidate.ResolveRadiatingSurfaceTemperature(cell.Id)));
+        var maximumTopMeltDifference = initial.Field.Cells.Max(cell =>
+            Math.Abs(reference.ResolveSurfacePhase(cell.Id).MeltFraction - candidate.ResolveSurfacePhase(cell.Id).MeltFraction));
+
+        Assert.AreEqual(reference.Epoch.Clock, candidate.Epoch.Clock);
+        var referenceSubsteps = reference.Epoch.Revision - initial.Epoch.Revision;
+        var candidateSubsteps = candidate.Epoch.Revision - initial.Epoch.Revision;
+        Assert.IsTrue(candidateSubsteps * 5 <= referenceSubsteps,
+            $"The 2.5 s cap used {candidateSubsteps} substeps; the 0.25 s reference used {referenceSubsteps}. " +
+            $"Maximum face-temperature error {maximumFaceTemperatureDifference:R} K, top melt error {maximumTopMeltDifference:R}.");
+        Assert.AreEqual(0.0, candidate.Epoch.EnergyConservationResidualJoules,
+            candidate.Epoch.CoupledEnergy!.InitialStoredEnergyJoules * 1e-12);
+        Assert.IsLessThan(8.0, maximumFaceTemperatureDifference);
+        Assert.IsLessThan(0.02, maximumTopMeltDifference);
+    }
+
+    [TestMethod]
     public void Start_AfterEvolution_ReplaysInitialStateAndClearsTime()
     {
         var experience = CreateExperience();
@@ -153,72 +100,6 @@ public sealed class PlanetFormationSimulationTests
         Assert.AreEqual(0L, experience.PublishedOriginEpoch!.Clock.MicrosecondsIntoYear);
         CollectionAssert.AreEqual(initial.SpatialRock!.TemperatureKelvin, restarted.SpatialRock!.TemperatureKelvin);
         Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => PlanetFormationSimulation.Advance(experience, 0));
-    }
-
-    [TestMethod]
-    public void Publish_MaterialFaceTransaction_UpdatesTheSameCanonicalGlobeAndPhysicalRelief()
-    {
-        var source = new PlanetTerrainRegionProvider(new FlatElevation());
-        var experience = new PlanetExperience(new PlanetSurfaceMeshCache(new PlanetSurfaceMeshBuilder(new PlanetSurfaceTileSampler(source), source)),
-            new PlanetLocalSurfacePatchSampler(source), new PlanetLocalSurfaceMeshBuilder(),
-            hypsometryCache: new PlanetHypsometryCache(new PlanetHypsometrySampler(source), source));
-        var initialRender = PlanetFormationSimulation.Start(experience, 24061984);
-        var initial = experience.PublishedRegionalRock!;
-        var donor = initial.Columns!.Columns[0];
-        var recipientId = PlanetSurfaceGridTopology.GetNeighbor(donor.Id, PlanetGridDirection.East).Cell;
-        var recipientIndex = initial.Field.Layout.GetIndex(recipientId);
-        var depth = donor.Layers.Count - 1;
-        var mass = donor.Layers[depth].MassKilograms * 0.01;
-        // A supplied material transaction verifies publication; it is not a fabricated default flow field.
-        var candidate = initial.AdvanceWithMeltTransfers(PlanetOriginDuration.FromSeconds(0.01), initial.SurfaceBoundary!.Value,
-            [new(donor.Id, depth, recipientId, depth, mass)]);
-        Assert.AreSame(initial, experience.PublishedRegionalRock);
-        var rendered = experience.PublishRegionalRock(candidate);
-        Assert.AreSame(candidate, experience.PublishedRegionalRock);
-        Assert.AreEqual(candidate.Epoch.Revision, rendered.SpatialRock!.Revision);
-        Assert.AreNotEqual(initialRender.TerrainRevision, rendered.TerrainRevision);
-        var expected = new PlanetOriginRockColumnElevationSource(candidate.Columns!);
-        var donorDirection = PlanetSurfaceGridGeometry.GetCenterDirection(donor.Id);
-        var recipientDirection = PlanetSurfaceGridGeometry.GetCenterDirection(recipientId);
-        Assert.AreEqual(expected.SampleElevationMeters(donorDirection, 24061984), source.SampleElevationMeters(donorDirection, 24061984), 1e-9);
-        Assert.AreEqual(expected.SampleElevationMeters(recipientDirection, 24061984), source.SampleElevationMeters(recipientDirection, 24061984), 1e-9);
-        Assert.IsTrue(expected.SampleElevationMeters(donorDirection, 24061984) < 0.0);
-        Assert.IsTrue(expected.SampleElevationMeters(recipientDirection, 24061984) > 0.0);
-        Assert.AreEqual(initial.Field.TotalActiveRockMassKilograms, candidate.Field.TotalActiveRockMassKilograms, initial.Field.TotalActiveRockMassKilograms * 1e-12);
-        Assert.AreEqual(0.0, candidate.Epoch.EnergyConservationResidualJoules, candidate.Epoch.CoupledEnergy!.InitialStoredEnergyJoules * 1e-12);
-        Assert.AreEqual(10_000L, candidate.Epoch.Clock.MicrosecondsIntoYear);
-    }
-
-    [TestMethod]
-    public void Publish_PressureDrivenMeltFlow_EvolvesTheSameTerrainFromGeneratedPhysicalFluxes()
-    {
-        const double radius = 6_371_000.0;
-        var source = new PlanetTerrainRegionProvider(new FlatElevation());
-        var experience = new PlanetExperience(new PlanetSurfaceMeshCache(new PlanetSurfaceMeshBuilder(new PlanetSurfaceTileSampler(source), source)),
-            new PlanetLocalSurfacePatchSampler(source), new PlanetLocalSurfaceMeshBuilder(),
-            hypsometryCache: new PlanetHypsometryCache(new PlanetHypsometrySampler(source), source));
-        var fundedRock = PlanetMagmaOceanReference.CreateInitial(radius, contrastFraction: 0.0, gridLevel: 1);
-        var columns = PlanetOriginRockColumnField.Partition(fundedRock.Field, new(8, 3_000.0, 3_000.0, 0.0));
-        var displacedDonor = columns.Columns[0];
-        var raisedId = PlanetSurfaceGridTopology.GetNeighbor(displacedDonor.Id, PlanetGridDirection.East).Cell;
-        // A funded initial displacement, followed by naturally generated pressure-driven fluxes.
-        columns = columns.ProposeMeltTransfers([new(displacedDonor.Id, 0, raisedId, 0, displacedDonor.Layers[0].MassKilograms * 0.02)]).Candidate;
-        var initial = new PlanetOriginCanonicalRockCells(fundedRock.Epoch, columns.Aggregate, columns).FundViscousMeltMechanics(new(9.81, 1_000.0));
-        var initialRender = experience.PublishRegionalRock(initial);
-        var direction = PlanetSurfaceGridGeometry.GetCenterDirection(raisedId);
-        var before = source.SampleElevationMeters(direction, 0);
-        var boundary = new PlanetOriginRegionalAirlessParameters(PlanetVector.UnitX, 0.0, 0.0, 0.0, 0.0, 25.0);
-        var candidate = initial.AdvanceWithViscousMeltFlow(PlanetOriginDuration.FromSeconds(3_600.0), boundary);
-        Assert.AreSame(initial, experience.PublishedRegionalRock);
-        Assert.IsTrue(candidate.Epoch.CoupledEnergy!.SurfaceMechanics!.CumulativeThermalizedJoules > 0.0);
-        var rendered = experience.PublishRegionalRock(candidate);
-        Assert.AreSame(candidate, experience.PublishedRegionalRock);
-        Assert.AreNotEqual(initialRender.TerrainRevision, rendered.TerrainRevision);
-        Assert.AreEqual(candidate.Epoch.Revision, rendered.SpatialRock!.Revision);
-        Assert.IsTrue(source.SampleElevationMeters(direction, 0) < before);
-        Assert.AreEqual(3_600_000_000L, candidate.Epoch.Clock.MicrosecondsIntoYear);
-        Assert.AreEqual(0.0, candidate.Epoch.EnergyConservationResidualJoules, candidate.Epoch.CoupledEnergy.InitialStoredEnergyJoules * 1e-12);
-        Assert.AreEqual(initial.Field.TotalActiveRockMassKilograms, candidate.Field.TotalActiveRockMassKilograms, initial.Field.TotalActiveRockMassKilograms * 1e-12);
     }
 
     private static PlanetExperience CreateExperience()

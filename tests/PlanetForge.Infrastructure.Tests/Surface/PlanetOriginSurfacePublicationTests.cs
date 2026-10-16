@@ -33,6 +33,41 @@ public sealed class PlanetOriginSurfacePublicationTests
     }
 
     [TestMethod]
+    public void ColumnElevation_AtlasInterpolationRemainsCloseToGlobalEightNearestReference()
+    {
+        var columns = Cool(CreateWorld()).Columns!;
+        var source = new PlanetOriginRockColumnElevationSource(columns);
+        var centers = columns.Columns.Select(column => PlanetSurfaceGridGeometry.GetCenterDirection(column.Id)).ToArray();
+        var heights = columns.Columns.Select(column =>
+            column.ThicknessMeters(columns.Material, columns.Properties) - column.ReferenceThicknessMeters).ToArray();
+
+        var maximumAbsoluteErrorMeters = 0.0;
+        for (var sample = 0; sample < 64; sample++)
+        {
+            var y = 1.0 - 2.0 * (sample + 0.5) / 64.0;
+            var longitude = sample * 2.399963229728653;
+            var horizontal = Math.Sqrt(1.0 - y * y);
+            var direction = new PlanetVector(horizontal * Math.Cos(longitude), y, horizontal * Math.Sin(longitude));
+            var nearest = centers.Select((center, index) => (Dot: PlanetVector.Dot(direction, center), Index: index))
+                .OrderByDescending(candidate => candidate.Dot).Take(8);
+            var weightedHeight = 0.0;
+            var totalWeight = 0.0;
+            foreach (var candidate in nearest)
+            {
+                var distance = 1.0 - candidate.Dot;
+                var weight = 1.0 / (distance * distance);
+                weightedHeight += heights[candidate.Index] * weight;
+                totalWeight += weight;
+            }
+
+            maximumAbsoluteErrorMeters = Math.Max(maximumAbsoluteErrorMeters,
+                Math.Abs(weightedHeight / totalWeight - source.SampleElevationMeters(direction, 1)));
+        }
+        Assert.IsLessThan(0.1, maximumAbsoluteErrorMeters,
+            "The bounded elevation raster must remain close to the exact eight-neighbour contraction field.");
+    }
+
+    [TestMethod]
     public void PublishOriginSurface_Failure_RestoresExactSourceAndDoesNotReuseFailedRevision()
     {
         var provider = new PlanetTerrainRegionProvider(new LegacyElevation());
@@ -41,7 +76,7 @@ public sealed class PlanetOriginSurfacePublicationTests
         Assert.ThrowsExactly<InvalidOperationException>(() => provider.PublishOriginSurface<int>(CreateWorld().Columns, () =>
         {
             failedRevision = provider.Revision;
-            Assert.AreEqual(0.0, provider.SampleElevationMeters(PlanetVector.UnitZ, 1), 0.0);
+            Assert.AreEqual(1_000.0, provider.SampleElevationMeters(PlanetVector.UnitZ, 1), 0.0);
             throw new InvalidOperationException("Projection failure after sampling candidate geometry.");
         }));
         Assert.AreSame(old, provider.CaptureSnapshot());
@@ -84,7 +119,7 @@ public sealed class PlanetOriginSurfacePublicationTests
         await writer;
         var result = await reader;
         Assert.AreEqual(1L, result.revision);
-        Assert.AreEqual(0.0, result.Item2, 0.0);
+        Assert.AreEqual(1_000.0, result.Item2, 0.0);
     }
 
     [TestMethod]
@@ -98,7 +133,7 @@ public sealed class PlanetOriginSurfacePublicationTests
         Assert.AreEqual(initial.Epoch.Revision, snapshot.SpatialRock!.Revision);
         var tile = new PlanetSurfaceTileSampler(provider).Sample(new(CubeFace.PositiveZ, 0, 0, 0), 8, 1);
         var patch = new PlanetLocalSurfacePatchSampler(provider).Sample(PlanetVector.UnitZ, 2_000.0, 8, 1, Radius, CancellationToken.None);
-        Assert.AreEqual(0.0, tile.GetPoint(4, 4).ElevationMeters, 0.0);
+        Assert.AreEqual(1_000.0, tile.GetPoint(4, 4).ElevationMeters, 0.0);
         Assert.AreEqual(tile.GetPoint(4, 4).ElevationMeters, patch.GetPoint(4, 4).ElevationMeters, 1e-9);
         var source = provider.CaptureSnapshot();
         var revision = provider.Revision;
@@ -110,14 +145,37 @@ public sealed class PlanetOriginSurfacePublicationTests
         var after = experience.PublishRegionalRock(next);
         Assert.AreEqual(next.Epoch.Revision, after.SpatialRock!.Revision);
         Assert.AreSame(next.Epoch, experience.PublishedOriginEpoch);
-        Assert.IsTrue(provider.SampleElevationMeters(PlanetVector.UnitZ, 1) < 0.0);
+        var expectedElevation = new PlanetOriginRockColumnElevationSource(next.Columns!, provider.CanonicalElevation)
+            .SampleElevationMeters(PlanetVector.UnitZ, 1);
+        Assert.AreEqual(expectedElevation, provider.SampleElevationMeters(PlanetVector.UnitZ, 1), 1e-9);
         experience.ResetRegionalRock(initial);
         Assert.AreSame(initial, experience.PublishedRegionalRock);
-        Assert.AreEqual(0.0, provider.SampleElevationMeters(PlanetVector.UnitZ, 1), 0.0);
+        Assert.AreEqual(1_000.0, provider.SampleElevationMeters(PlanetVector.UnitZ, 1), 0.0);
         experience.ClearOriginEpoch();
         Assert.IsNull(experience.PublishedOriginEpoch);
         Assert.IsNull(experience.PublishedRegionalRock);
         Assert.AreEqual(1_000.0, provider.SampleElevationMeters(PlanetVector.UnitZ, 1), 0.0);
+    }
+
+    [TestMethod]
+    public void Experience_SubMeterContraction_UpdatesThermalAtlasWithoutRebuildingOrbitalGeometry()
+    {
+        var provider = new PlanetTerrainRegionProvider(new LegacyElevation());
+        var experience = CreateExperience(provider);
+        var initial = CreateWorld();
+        var first = experience.PublishRegionalRock(initial);
+        var geometryRevision = first.TerrainRevision;
+        var oldTerrain = provider.CaptureSnapshot();
+        var next = initial.Advance(PlanetOriginDuration.FromSeconds(0.000001),
+            new(PlanetVector.UnitX, 0.0, 0.0, 0.9, 3.0, 25.0));
+
+        var updated = experience.PublishRegionalRock(next);
+
+        Assert.IsGreaterThan(first.SpatialRock!.Revision, updated.SpatialRock!.Revision);
+        Assert.AreEqual(geometryRevision, updated.TerrainRevision,
+            "Sub-metre contraction is below the orbital mesh's display resolution.");
+        Assert.AreNotSame(oldTerrain, provider.CaptureSnapshot(),
+            "The canonical source still advances so a newly built local mesh samples the latest physical field.");
     }
 
     [TestMethod]

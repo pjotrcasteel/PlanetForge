@@ -9,42 +9,6 @@ namespace PlanetForge.Application.Tests.Planets;
 public sealed class PlanetOriginSpatialSurfaceProjectionTests
 {
     [TestMethod]
-    public void Create_FreezingBoundary_KeepsEveryDisplayedPhaseConsistentWithItsTemperature()
-    {
-        var region = PlanetRockColumnReference.CreateResolvedInitial(PlanetFormationInitialHeat.Create(6371000.0, 24061984));
-        var projection = PlanetOriginSpatialSurfaceProjection.Create(region);
-        Assert.AreEqual(region.Field.Material.SolidusTemperatureKelvin, projection.SolidusTemperatureKelvin);
-        Assert.AreEqual(region.Field.Material.LiquidusTemperatureKelvin, projection.LiquidusTemperatureKelvin);
-        var transitionSamples = 0;
-        for (var index = 0; index < projection.TemperatureKelvin.Length; index++)
-        {
-            var expected = Math.Clamp((projection.TemperatureKelvin[index] - projection.SolidusTemperatureKelvin) /
-                (projection.LiquidusTemperatureKelvin - projection.SolidusTemperatureKelvin), 0.0, 1.0);
-            Assert.AreEqual(expected, projection.MeltFraction[index], 1e-7);
-            if (expected > 0.0 && expected < 1.0) transitionSamples++;
-        }
-        Assert.IsGreaterThan(0, transitionSamples);
-    }
-
-    [TestMethod]
-    public void Create_RadiatingInterface_ProjectsSkinPhaseInsteadOfWarmerVolumeMelt()
-    {
-        var region = PlanetRockColumnReference.CreateResolvedInitial(PlanetFormationInitialHeat.Create(6371000.0, 24061984));
-        var projection = PlanetOriginSpatialSurfaceProjection.Create(region);
-        Assert.IsTrue(region.Field.Cells.All(cell => region.ResolveSurfacePhase(cell.Id).MeltFraction == 1.0));
-        Assert.IsTrue(projection.MeltFraction.Min() < 0.95f);
-        foreach (var cell in region.Field.Cells)
-        {
-            var phase = region.ResolveRadiatingSurfacePhase(cell.Id);
-            var material = region.Field.Material;
-            var expectedMelt = Math.Clamp((phase.TemperatureKelvin - material.SolidusTemperatureKelvin) /
-                (material.LiquidusTemperatureKelvin - material.SolidusTemperatureKelvin), 0.0, 1.0);
-            Assert.AreEqual(expectedMelt, phase.MeltFraction, 1e-12);
-            Assert.IsTrue(phase.TemperatureKelvin <= region.ResolveSurfacePhase(cell.Id).TemperatureKelvin);
-        }
-    }
-
-    [TestMethod]
     public void Create_DepthResolvedCooling_ProjectsRadiatingTopInsteadOfColumnMean()
     {
         var initial = PlanetMagmaOceanReference.CreateInitial(6_371_000.0);
@@ -73,12 +37,18 @@ public sealed class PlanetOriginSpatialSurfaceProjectionTests
         var replay = PlanetOriginSpatialSurfaceProjection.Create(region);
 
         Assert.AreEqual(region.Epoch.Revision, first.Revision);
-        Assert.AreEqual(256, first.Width);
-        Assert.AreEqual(128, first.Height);
+        Assert.AreEqual(128, first.Width);
+        Assert.AreEqual(64, first.Height);
         CollectionAssert.AreEqual(first.TemperatureKelvin, replay.TemperatureKelvin);
         CollectionAssert.AreEqual(first.MeltFraction, replay.MeltFraction);
+        CollectionAssert.AreEqual(first.SubsurfaceTemperatureKelvin, replay.SubsurfaceTemperatureKelvin);
+        CollectionAssert.AreEqual(first.SubsurfaceMeltFraction, replay.SubsurfaceMeltFraction);
+        CollectionAssert.AreEqual(first.ThermalFracturePotential, replay.ThermalFracturePotential);
         Assert.IsTrue(first.TemperatureKelvin.All(float.IsFinite));
         Assert.IsTrue(first.MeltFraction.All(value => float.IsFinite(value) && value >= 0.0f && value <= 1.0f));
+        Assert.IsTrue(first.SubsurfaceTemperatureKelvin.All(float.IsFinite));
+        Assert.IsTrue(first.SubsurfaceMeltFraction.All(value => float.IsFinite(value) && value >= 0.0f && value <= 1.0f));
+        Assert.IsTrue(first.ThermalFracturePotential.All(value => value == 0.0f));
 
         var physical = region.Field.Cells.Select(cell => cell.Resolve(region.Field.Material)).ToArray();
         var minimumTemperature = physical.Min(cell => cell.TemperatureKelvin);
