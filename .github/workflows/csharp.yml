@@ -49,6 +49,11 @@ jobs:
       - name: Validate playable prototype state
         run: node --test tests/PlanetForge.Browser.Tests/demo/formation-demo-model.test.mjs
 
+      - name: Reject stale offline demo package
+        run: |
+          python tools/demo/package-demo.py
+          git diff --exit-code -- src/PlanetForge.Presentation.Web/wwwroot/planetforge-demo.html
+
       - name: Reject whole-canvas planet grayscale filters
         run: |
           if grep -R -n -E '#planet-canvas[^\{]*\{[^}]*filter:[^;}]*grayscale|pre-vegetation-world[^\{]*#planet-canvas[^\{]*\{[^}]*filter:' src/PlanetForge.Presentation.Web/wwwroot/css; then

@@ -1,10 +1,10 @@
 // Playable hypothesis model. Dimensionless inventories and accelerated time;
 // deliberately separate from the validated .NET thermodynamic ledger.
 export class FormationDemoWorld {
-    constructor(seed = 24061984, width = 128, height = 64) {
+    constructor(seed = 24061984, width = 256, height = 128) {
         this.seed = seed; this.width = width; this.height = height; this.time = 0;
         const n = width * height;
-        for (const name of ['lava', 'crust', 'heat', 'bed', 'uplift', 'rift', 'compression', 'cooling', 'reservoir', 'flux']) this[name] = new Float64Array(n);
+        for (const name of ['lava', 'crust', 'heat', 'bed', 'uplift', 'rift', 'compression', 'cooling', 'reservoir', 'flux', 'crustAge', 'strain']) this[name] = new Float64Array(n);
         let state = seed >>> 0;
         const random = () => { state = (Math.imul(state, 1664525) + 1013904223) >>> 0; return state / 4294967296; };
         const noise = (x, y, z) => {
@@ -30,14 +30,24 @@ export class FormationDemoWorld {
             const boundary = Math.exp(-Math.pow((ranked[1].d - ranked[0].d) * 30, 2));
             const folded = 2 * (.55 * noise(x * 5, y * 5, z * 5) + .3 * noise(x * 13, y * 13, z * 13)
                 + .15 * noise(x * 29, y * 29, z * 29)) - 1;
+            // A continuous seeded initial heat field avoids artificial step changes
+            // when nearest-region ownership changes. Region seeds are illustrative
+            // initial hypotheses, not physically resolved modern tectonic plates.
+            let thermalWeight = 0, weightedCold = 0;
+            for (const candidate of ranked) {
+                const influence = Math.exp(-5 * candidate.d);
+                thermalWeight += influence;
+                weightedCold += influence * candidate.p.cold;
+            }
+            const regionalCold = weightedCold / thermalWeight;
             this.compression[k] = ranked[0].p.convergent ? boundary : 0;
             this.rift[k] = boundary * (ranked[0].p.convergent ? .35 : 1);
             this.bed[k] = .16 * folded + .25 * ranked[0].d - .12 * boundary;
-            this.cooling[k] = .001 + .020 * ranked[0].p.cold + .002 * (folded + 1);
-            this.lava[k] = 1; this.heat[k] = 1.05 + .35 * ranked[0].p.cold + .12 * folded;
+            this.cooling[k] = .001 + .020 * regionalCold + .002 * (folded + 1);
+            this.lava[k] = 1; this.heat[k] = 1.09 + .33 * regionalCold + .14 * folded;
             this.reservoir[k] = 2;
         }
-        this._massDelta = new Float64Array(n); this._heatDelta = new Float64Array(n);
+        this._massDelta = new Float64Array(n); this._heatDelta = new Float64Array(n); this._crustDelta = new Float64Array(n); this._ageMassDelta = new Float64Array(n);
         this.initialInventory = this.inventory();
     }
     inventory() { return this.lava.reduce((s, x, i) => s + x + this.crust[i] + this.reservoir[i], 0); }
@@ -54,7 +64,7 @@ export class FormationDemoWorld {
     }
     tick(dt) {
         const n = this.lava.length, dm = this._massDelta, dh = this._heatDelta;
-        dm.fill(0); dh.fill(0); this.flux.fill(0);
+        dm.fill(0); dh.fill(0); this._crustDelta.fill(0); this._ageMassDelta.fill(0); this.flux.fill(0);
         const exchange = (a, b) => {
             const headA = this.bed[a] + this.uplift[a] + this.crust[a] + this.lava[a];
             const headB = this.bed[b] + this.uplift[b] + this.crust[b] + this.lava[b];
@@ -84,6 +94,7 @@ export class FormationDemoWorld {
             this.heat[k] = Math.max(.1, this.heat[k] - dt * this.cooling[k] / (1 + this.crust[k] * 8));
             const freeze = Math.min(this.lava[k], dt * Math.max(0, 1 - this.heat[k]) * .12);
             this.lava[k] -= freeze; this.crust[k] += freeze;
+            this.crustAge[k] = this.crust[k] > 1e-8 ? (this.crustAge[k] * (this.crust[k] - freeze) + freeze * dt * .5) / this.crust[k] + dt : 0;
             // A simplified rupture/remelt rule; a fracture exposes owned liquid.
             if (this.heat[k] > 1.05 && this.crust[k] > 0 && this.lava[k] > 0) {
                 // Hot owned melt must pay for remelting nearby solid; it cannot do so for free.
@@ -92,11 +103,34 @@ export class FormationDemoWorld {
                 const remelt = Math.min(this.crust[k], excess / .9, dt * (this.heat[k] - 1.05) * .1);
                 if (remelt > 0) {
                     this.crust[k] -= remelt; this.lava[k] += remelt;
+                    if (this.crust[k] < 1e-8) this.crustAge[k] = 0;
                     this.heat[k] = Math.max(.1, (this.heat[k] * moltenMass - .9 * remelt) / this.lava[k]);
                 }
             }
             // Uncalibrated convergence hypothesis, visually exaggerated by the renderer.
             this.uplift[k] += dt * .006 * this.crust[k] * this.compression[k];
+            this.strain[k] = Math.min(1, this.strain[k] + dt * .012 * this.compression[k] * this.crust[k]);
+        }
+        // Solid material is transferred only from funded crust inventories.
+        // Convergence-induced shortening redistributes crust toward local ridges,
+        // without creating new rock or altering the molten reservoir.
+        const dc = this._crustDelta;
+        for (let j = 0; j < this.height; j++) for (let i = 0; i < this.width; i++) {
+            const k = j * this.width + i;
+            if (this.compression[k] < .15 || this.crust[k] < .01) continue;
+            const left = j * this.width + (i + this.width - 1) % this.width;
+            const right = j * this.width + (i + 1) % this.width;
+            const target = this.compression[left] > this.compression[right] ? left : right;
+            if (this.compression[target] <= this.compression[k]) continue;
+            const moved = Math.min(this.crust[k] * .015 * dt, this.crust[k] * .1);
+            dc[k] -= moved; dc[target] += moved;
+            const ageMass = moved * this.crustAge[k];
+            this._ageMassDelta[k] -= ageMass; this._ageMassDelta[target] += ageMass;
+        }
+        for (let k = 0; k < n; k++) {
+            const ageMass = this.crustAge[k] * this.crust[k] + this._ageMassDelta[k];
+            this.crust[k] += dc[k];
+            this.crustAge[k] = this.crust[k] > 1e-8 ? Math.max(0, ageMass / this.crust[k]) : 0;
         }
         this.time += dt;
     }

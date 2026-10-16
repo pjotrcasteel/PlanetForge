@@ -16,7 +16,7 @@ export function initialize(canvasId, seed) {
     void main(){
         uv=grid; float y=1.-2.*grid.y; float a=grid.x*6.2831853;float r=sqrt(max(0.,1.-y*y));
         vec3 p=vec3(r*cos(a),y,r*sin(a)); vec4 state=texture(field,grid);
-        float relief=min(state.b,2.)*.07+min(state.g,2.)*.015;
+        float relief=min(state.b,2.)*.07+min(state.g,2.)*.035;
         point=turn(p*(1.+relief));normal=turn(p);
         float depth=zoom-point.z;
         float scale=min(2.4,aspect*2.7);
@@ -25,30 +25,67 @@ export function initialize(canvasId, seed) {
     const fragment = `#version 300 es
     precision highp float;
     uniform sampler2D field; uniform sampler2D materialField; in vec3 normal; in vec3 point; in vec2 uv; out vec4 color;
+    // Stable material gradients are measured on the simulation grid, not in view pixels.
+    float frozenFraction(vec2 sampleUv) {
+        float rock=max(0.,texture(field,sampleUv).g);
+        float melt=max(0.,texture(materialField,sampleUv).r);
+        return rock/(rock+melt+.0001);
+    }
     void main(){
         vec4 state=texture(field,uv), material=texture(materialField,uv);
         float rock=max(0.,state.g), melt=max(0.,material.r);
         float crust=clamp(rock/.18,0.,1.);
-        vec3 n=normalize(cross(dFdx(point),dFdy(point)));
+        vec3 geometry=cross(dFdx(point),dFdy(point));
+        vec3 n=length(geometry)>1e-8?normalize(geometry):normalize(normal);
         if(dot(n,normal)<0.) n=-n;
+        // Blend funded relief with the smooth-sphere normal to limit triangle glare.
+        n=normalize(mix(normalize(normal),n,.7));
         float light=max(0.,dot(n,normalize(vec3(-.6,.7,1.))));
+        float ambient=.28;
         // Sub-cell variation is an optical basalt texture, never simulated land or relief.
         float grain=fract(sin(dot(floor(uv*vec2(1600.,800.)),vec2(12.9898,78.233)))*43758.5453);
         float grainFine=fract(sin(dot(floor(uv*vec2(3700.,1800.)),vec2(48.327,25.199)))*12731.918);
-        vec3 basalt=mix(vec3(.072,.079,.087),vec3(.19,.16,.14),grain*.65+grainFine*.2)*(.27+light*.98);
-        float temperature=clamp((state.r-.15)/1.3,0.,1.);
-        vec3 lava=mix(vec3(.26,.009,.002),vec3(1.,.32,.025),temperature);
+        vec3 basalt=mix(vec3(.038,.044,.05),vec3(.17,.14,.12),grain*.65+grainFine*.2)*(ambient+light*1.14);
+        float solidShare=rock/(rock+melt+.0001);
+        vec2 texel=1./vec2(textureSize(field,0));
+        float west=frozenFraction(uv-vec2(texel.x,0.));
+        float east=frozenFraction(uv+vec2(texel.x,0.));
+        float north=frozenFraction(uv-vec2(0.,texel.y));
+        float south=frozenFraction(uv+vec2(0.,texel.y));
+        float crustEdge=length(vec2(east-west,south-north))*.7;
+        // Screen-space gradients are a shading cue, not a physical fracture field.
+        float fracture=clamp(crustEdge*3.5,0.,1.)*smoothstep(.18,.7,solidShare);
+        basalt*=1.-.48*fracture;
+        float mature=smoothstep(2.,75.,material.a);
+        basalt*=mix(1.08,.75,mature);
+        basalt*=1.-.30*clamp(material.b,0.,1.);
+        // Use actual transported heat as the radiant optical gradient.
+        // This is a dimensionless illustrative color response, not a kelvin calibration.
+        float temperature=smoothstep(.75,1.45,state.r);
+        vec3 lava=mix(vec3(.25,.009,.002),vec3(1.,.34,.024),temperature);
+        lava*=mix(.65,1.25,temperature);
         lava+=vec3(.13,.046,.004)*clamp(state.a*6.,0.,1.);
         // Display only owned, exposed melt. An empty or frozen cell cannot glow as lava.
-        float solidShare=rock/(rock+melt+.0001);
-        float openMelt=(1.-smoothstep(.09,.88,solidShare))*smoothstep(.01,.16,melt);
-        lava*=mix(.65,1.,clamp(melt,0.,1.));
+        // A thin surface crust is optically opaque even while liquid magma remains beneath it.
+        // Coverage is bounded by owned solid mass; only owned melt at a hypothesized active rift can shine through.
+        float surfaceCrust=smoothstep(.015,.18,rock);
+        // A seeded rift only opens an incandescent window while real melt is moving.
+        // This suppresses permanent glowing polygon outlines in stagnant solid rock.
+        float activeMeltFlow=smoothstep(.004,.08,state.a);
+        float riftWindow=.8*smoothstep(.25,.8,material.g)*activeMeltFlow;
+        float openMelt=(1.-surfaceCrust*(1.-riftWindow))*smoothstep(.01,.16,melt);
+        lava*=mix(.76,1.,clamp(melt,0.,1.));
         vec3 surface=mix(basalt,lava,openMelt);
         // Newly frozen margins and funded active rifts reveal adjacent owned liquid.
         float margin=smoothstep(.07,.4,crust)*(1.-smoothstep(.72,.98,solidShare));
-        float fissure=margin*clamp(material.g*2.,0.,1.)*smoothstep(.02,.3,melt);
+        float fissure=margin*clamp(material.g*2.,0.,1.)*activeMeltFlow*smoothstep(.02,.3,melt);
         surface+=vec3(.35,.066,.004)*fissure;
-        color=vec4(pow(max(surface,vec3(0.)),vec3(.86)),1.);
+        // The glowing seam requires actual neighboring exposed melt; no invented lava.
+        float lavaSeam=fracture*smoothstep(.03,.22,melt)*(1.-smoothstep(.75,.98,solidShare));
+        surface+=vec3(.35,.065,.004)*lavaSeam;
+        // Bounded response avoids featureless yellow/white highlights.
+        vec3 mapped=vec3(1.)-exp(-max(surface,vec3(0.))*1.3);
+        color=vec4(pow(clamp(mapped,0.,1.),vec3(.86)),1.);
     }`;
     const compile = (type, source) => {
         const shader = gl.createShader(type); gl.shaderSource(shader, source); gl.compileShader(shader);
@@ -70,7 +107,8 @@ export function initialize(canvasId, seed) {
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
         gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA16F, world.width, world.height, 0, gl.RGBA, gl.FLOAT, data);
     }
-    const vertices = [], w = 256, h = 128;
+    // Tessellation follows the canonical material grid: denser triangles do not invent new terrain.
+    const vertices = [], w = world.width, h = world.height;
     for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) {
         for (const [x,y] of [[i,j],[i,j+1],[i+1,j],[i+1,j],[i,j+1],[i+1,j+1]]) vertices.push(x/w,y/h);
     }
@@ -111,7 +149,7 @@ export function initialize(canvasId, seed) {
         if(s.dirty) {
             for(let i=0;i<world.lava.length;i++) {
                 data[i*4]=world.heat[i];data[i*4+1]=world.crust[i];data[i*4+2]=world.uplift[i];data[i*4+3]=world.flux[i];
-                materialData[i*4]=world.lava[i];materialData[i*4+1]=world.rift[i];materialData[i*4+2]=world.bed[i];materialData[i*4+3]=world.reservoir[i];
+                materialData[i*4]=world.lava[i];materialData[i*4+1]=world.rift[i];materialData[i*4+2]=world.strain[i];materialData[i*4+3]=world.crustAge[i];
             }
             gl.activeTexture(gl.TEXTURE0);gl.bindTexture(gl.TEXTURE_2D,texture);
             gl.texSubImage2D(gl.TEXTURE_2D,0,0,0,world.width,world.height,gl.RGBA,gl.FLOAT,data);
