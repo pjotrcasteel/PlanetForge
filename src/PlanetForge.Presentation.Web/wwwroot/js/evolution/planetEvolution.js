@@ -44,6 +44,8 @@ export const DEMO_LIBERTIES = Object.freeze([
 ]);
 
 const SEAM_WIDENING = 500;
+import { performanceMarkStart, recordPerformanceDuration, recordPerformanceReadback } from '../performanceMetrics.js';
+
 const GRID_WIDTH = 1024;
 const GRID_HEIGHT = 512;
 const AGE_TABLE_SIZE = 256;
@@ -2022,7 +2024,11 @@ export function stepEvolution(evo, wallDtSeconds) {
         if (bake) {
             processLithosphere(evo, Math.max(now - evo.lastBakeMyr, 0));
             evo.lastBakeMyr = now;
-            if (thermal.regime === 'plates' && (evo.bakeCount = (evo.bakeCount ?? 0) + 1) % 3 === 0) evo.consolidated = consolidatePlates(evo);
+            if (thermal.regime === 'plates' && (evo.bakeCount = (evo.bakeCount ?? 0) + 1) % 3 === 0) {
+                const consolidationStartedAt = performanceMarkStart();
+                evo.consolidated = consolidatePlates(evo);
+                recordPerformanceDuration('plateConsolidationCpuMs', consolidationStartedAt);
+            }
             for (let k = 0; k < evo.plates.count; k++) {
                 if (evo.plates.centers[k]) evo.plates.centers[k] = normalize3(applyRotation(rotationMatrix(evo.plates.poles[k], evo.plates.angles[k]), evo.plates.centers[k]));
                 evo.plates.angles[k] = 0;
@@ -2076,6 +2082,13 @@ function updateWater(evo, wallDt) {
 // area-weighted hypsometry of the simulated elevation field.
 function seaLevelForVolume(evo, layerKm, pinnedLevel = null) {
     if (layerKm <= 1e-4) return -100;
+    const startedAt = performanceMarkStart();
+    const result = calculateSeaLevelForVolume(evo, layerKm, pinnedLevel);
+    recordPerformanceDuration('seaLevelCalculationCpuMs', startedAt);
+    return result;
+}
+
+function calculateSeaLevelForVolume(evo, layerKm, pinnedLevel) {
     const field = readEvolutionField(evo, 'derived');
     const BIN = 0.05, MIN = -15, COUNT = 600;
     const area = evo.hypsometry ?? (evo.hypsometry = new Float64Array(COUNT));
@@ -2270,11 +2283,14 @@ export function readEvolutionField(evo, field = 'state0') {
         : field === 'compose1' || field === 'compose0' ? evo.targets.compose : evo.targets.state[evo.current];
     const attachment = field.endsWith('1') ? 1 : 0;
     const data = new Float32Array(GRID_WIDTH * GRID_HEIGHT * 4);
+    const readbackStartedAt = performanceMarkStart();
     gl.bindFramebuffer(gl.FRAMEBUFFER, target.framebuffer);
     gl.readBuffer(gl.COLOR_ATTACHMENT0 + attachment);
     gl.readPixels(0, 0, GRID_WIDTH, GRID_HEIGHT, gl.RGBA, gl.FLOAT, data);
     gl.readBuffer(gl.COLOR_ATTACHMENT0);
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    recordPerformanceReadback(data.byteLength);
+    recordPerformanceDuration('evolutionGpuReadbackCpuWaitMs', readbackStartedAt);
     return { width: GRID_WIDTH, height: GRID_HEIGHT, data };
 }
 

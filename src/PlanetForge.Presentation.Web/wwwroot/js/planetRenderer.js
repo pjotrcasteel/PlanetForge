@@ -1,4 +1,8 @@
 import { createOpticalBloom, renderOpticalBloom, disposeOpticalBloom } from './opticalBloom.js';
+import {
+    configurePerformanceMetrics, performanceMarkStart, recordPerformanceDuration,
+    recordPerformanceSample, snapshotPerformanceMetrics,
+} from './performanceMetrics.js';
 import { createThermalRadianceData, thermalTextureSize, thermalMaterialShader } from './thermalRadiance.js';
 import { clearRetainedSurfaceGeometry, retainSurfaceGeometry } from './surfaceGeometryStore.js';
 import {
@@ -48,6 +52,25 @@ export function setEvolutionClouds(visible) {
 
 export function getEvolutionDebug() { return state?.evolution ?? null; }
 
+// Opt-in via ?pfPerf=1. This report is local to the browser and contains
+// no GPU readback except counts of readbacks already required by physics.
+export function getPerformanceReport() {
+    const report = snapshotPerformanceMetrics();
+    if (!report) return null;
+    const canvas = state?.canvas;
+    return {
+        ...report,
+        canvas: canvas ? {
+            width: canvas.width, height: canvas.height, clientWidth: canvas.clientWidth,
+            clientHeight: canvas.clientHeight, devicePixelRatio: window.devicePixelRatio || 1,
+        } : null,
+        renderMode: state?.renderMode ?? null,
+        geologyRegime: state?.evolution?.thermal?.regime ?? null,
+        seed: state?.evolution?.seed ?? state?.seed ?? null,
+        activeTiles: state?.tiles?.length ?? 0,
+    };
+}
+
 export function getEvolutionStatus() {
     if (!state?.evolution) return null;
     const status = evolutionStatus(state.evolution);
@@ -80,6 +103,8 @@ const waterSurfaceClearanceMeters = 18.0;
 const globeSkirtVisibilityAltitudeMeters = 500_000.0;
 
 export function initialize(canvasId, snapshot, dotNetReference, generatorPreview = false) {
+    configurePerformanceMetrics(new URLSearchParams(window.location.search).get('pfPerf') === '1');
+    const initializeStartedAt = performanceMarkStart();
     const canvas = document.getElementById(canvasId);
     const gl = canvas?.getContext('webgl2', { antialias: true, alpha: true });
     if (!canvas || !gl) throw new Error('PlanetForge requires WebGL 2.');
@@ -91,9 +116,12 @@ export function initialize(canvasId, snapshot, dotNetReference, generatorPreview
         installInput(state);
         setPlanet(snapshot);
         installVisualTestApi();
+        if (snapshotPerformanceMetrics() !== null) window.__planetForgePerf = { report: getPerformanceReport };
         document.removeEventListener('visibilitychange', resetEvolutionFrameClock);
         document.addEventListener('visibilitychange', resetEvolutionFrameClock);
         requestAnimationFrame(render);
+        state.performanceInitialDrawPending = initializeStartedAt;
+        recordPerformanceDuration('rendererInitializeCpuMs', initializeStartedAt);
     } catch (error) {
         window.__planetForgeSurfaceError = error instanceof Error ? error.message : String(error);
         console.error('PlanetForge unified surface initialization failed.', error);
@@ -294,6 +322,8 @@ export function dispose() {
     clearRetainedSurfaceGeometry();
     if (window.__planetForgeSurfaceTest) delete window.__planetForgeSurfaceTest;
     if (window.__planetForgeSurfaceError) delete window.__planetForgeSurfaceError;
+    if (window.__planetForgePerf) delete window.__planetForgePerf;
+    configurePerformanceMetrics(false);
     state = null;
 }
 
@@ -930,12 +960,14 @@ async function requestSurfaceUpdate(s, sequence) {
         const snapshotGeometryKey = `${snapshot.seed}:${snapshot.physicalParameters.radiusMeters}:${snapshot.terrainRevision ?? 0}`;
         if (state === s && snapshotGeometryKey === s.geometryKey) {
             s.lastTerrainUpdateMs = Math.round(performance.now() - startedAt);
+            recordPerformanceSample('lodRequestRoundTripMs', s.lastTerrainUpdateMs);
             s.lastGeometryPayloadCount = (snapshot.surfaceTiles ?? []).filter(tile => tile.positions?.length > 0).length;
             s.lastSurfaceRequestSignature = signature;
             if (sequence === s.lodSequence) {
                 const commitStartedAt = performance.now();
                 setPlanet(snapshot);
                 s.lastGeometryCommitMs = Math.round(performance.now() - commitStartedAt);
+                recordPerformanceSample('lodCommitCpuMs', s.lastGeometryCommitMs);
                 s.pendingDrawStartedAt = startedAt;
                 s.surfaceRequestsCompleted++;
             } else {
@@ -1121,13 +1153,17 @@ function largestOceanConnectedArea(mask, width, height) {
 // ACTIVE mesh. Calling renderGlobe in local mode clears the canvas without
 // drawing the local terrain (which previously let black frames pass CI).
 function renderCurrentView(s) {
+    const drawStartedAt = performanceMarkStart();
     const evolution = s.evolution && s.renderMode !== 'local';
     if (evolution) renderEvolution(s);
     else if (s.renderMode === 'local' && s.localSurface) renderLocal(s);
     else renderGlobe(s);
+    recordPerformanceDuration('sceneDrawCpuSubmissionMs', drawStartedAt);
     if (evolution || (s.depthColumnsActive && s.rockDiagnosticMode === 0)) {
+        const bloomStartedAt = performanceMarkStart();
         s.opticalBloom ??= createOpticalBloom(s.gl, createProgram);
         renderOpticalBloom(s.gl, s.canvas, s.opticalBloom);
+        recordPerformanceDuration('bloomCpuSubmissionMs', bloomStartedAt);
     }
 }
 
@@ -1137,6 +1173,7 @@ function resetEvolutionFrameClock() {
 
 function render() {
     if (!state) return;
+    const frameStartedAt = performanceMarkStart();
     resize(state);
     if (state.evolution && document.hidden) {
         state.evolutionLastFrame = null;
@@ -1144,14 +1181,21 @@ function render() {
         const now = performance.now();
         if (state.evolutionLastFrame !== null) {
             const dt = (now - state.evolutionLastFrame) / 1000;
+            recordPerformanceSample('visibleFrameIntervalMs', dt * 1000);
             state.evolutionFps = (state.evolutionFps ?? 60) * 0.95 + 0.05 / Math.max(dt, 1e-3);
+            const stepStartedAt = performanceMarkStart();
             if (stepEvolution(state.evolution, dt)) state.dirty = true;
+            recordPerformanceDuration('evolutionStepCpuMs', stepStartedAt);
         }
         state.evolutionLastFrame = now;
     }
     if (state.dirty) {
         renderCurrentView(state);
         state.dirty = false;
+        if (state.performanceInitialDrawPending !== null && state.performanceInitialDrawPending !== undefined) {
+            recordPerformanceDuration('initialDrawSubmissionMs', state.performanceInitialDrawPending);
+            state.performanceInitialDrawPending = null;
+        }
         if (state.pendingDrawStartedAt !== null) {
             const submittedAt = performance.now();
             // This is CPU-side frame submission, not proof the iPhone GPU has presented it.
@@ -1162,6 +1206,7 @@ function render() {
             state.lastGestureEndedAt = null;
         }
     }
+    recordPerformanceDuration('frameCallbackCpuMs', frameStartedAt);
     requestAnimationFrame(render);
 }
 

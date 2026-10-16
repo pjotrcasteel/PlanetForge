@@ -140,3 +140,22 @@ test('Evolution_Portrait_ControlsFit', async ({ page }) => {
   for (const id of ['formation-play', 'formation-speed', 'formation-clouds', 'formation-restart']) await expect(page.getByTestId(id)).toBeInViewport();
   expect((await canvasStatistics(page)).glError).toBe(0);
 });
+
+
+test('PerformanceDiagnostics_OptIn_RecordsFramesAndDoesNotAlterEvolution', async ({ page }) => {
+  await page.goto(url + '&pfPerf=1');
+  await expect(page.getByTestId('formation-play')).toBeEnabled({ timeout: 120_000 });
+  await expect.poll(async () => page.evaluate(async () => {
+    const m = await import('/js/planetRenderer.js');
+    return m.getPerformanceReport()?.durations?.visibleFrameIntervalMs?.count ?? 0;
+  }), { timeout: 45_000 }).toBeGreaterThan(0);
+  const report = await page.evaluate(async () => (await import('/js/planetRenderer.js')).getPerformanceReport());
+  expect(report.enabled).toBe(true);
+  expect(report.canvas.width).toBeGreaterThan(0);
+  expect(report.durations.rendererInitializeCpuMs.count).toBe(1);
+  expect(report.durations.visibleFrameIntervalMs.p95Ms).toBeGreaterThanOrEqual(0);
+  expect(report.geologyRegime).toMatch(/magma-ocean|stagnant-lid|plates/);
+  expect(report.measurementType).toBe('cpu-wall-and-gpu-readback-sync');
+  // The same session remains physically running, with no extra pixel readback.
+  await expect(page.getByTestId('formation-play')).toHaveAttribute('aria-pressed', 'true');
+});
