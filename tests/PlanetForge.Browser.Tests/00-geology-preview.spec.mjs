@@ -72,7 +72,9 @@ test('GeologyPreview_AuditedTimelineDrawsMeasuredGlobalMapsWithoutTouchingMainPl
 
     await openStableBlazorPage(page, '/', '#planet-canvas');
     await expect(page.getByTestId('formation-phase')).toHaveText('Magma ocean · incandescent surface', { timeout: 60_000 });
-    await expect(page.getByTestId('formation-time')).toHaveText('T+00:00:00');
+    // The imported main globe advances continuously; the HUD reports physical
+    // duration and playback rate, not the old stopped T+00:00:00 clock.
+    await expect(page.getByTestId('formation-time')).toContainText(/s|yr|min|days|h/);
 });
 
 test('GeologyPreview_MobileLayout_FitsIPhoneWithoutHorizontalOverflow', async ({ page }) => {
