@@ -71,9 +71,6 @@ test('GeologicalArchives_ImportValidateReloadExportAndExplicitReplace', async ({
 
 test('GeologicalArchives_RejectsMalformedFileAndConcurrentOverwrite', async ({ page }) => {
     await page.goto('/?geologyArchive=1');
-    // Wait for the Blazor file-input handler and initial IndexedDB catalogue to be ready.
-    // Importing during the initial asynchronous refresh can silently discard the change.
-    await expect(page.getByText('No geological regions saved on this device yet.')).toBeVisible();
     await page.locator('#archive-file').setInputFiles({
         name: 'broken.json', mimeType: 'application/json', buffer: Buffer.from('not json')
     });

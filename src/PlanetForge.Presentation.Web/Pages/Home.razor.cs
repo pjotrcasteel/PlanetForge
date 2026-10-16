@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Components;
 using Microsoft.JSInterop;
 using PlanetForge.Application.Planets;
 using PlanetForge.Application.Rendering;
@@ -8,32 +9,33 @@ namespace PlanetForge.Presentation.Web.Pages;
 
 public partial class Home
 {
-    private string FormationTime
+    private static string FormatFlux(double wattsPerSquareMeter) => wattsPerSquareMeter >= 1000.0
+        ? $"{wattsPerSquareMeter / 1000.0:0.#} kW/m²"
+        : $"{wattsPerSquareMeter * 1000.0:0} mW/m²";
+
+    private async Task ToggleFormationPlaybackAsync()
     {
-        get
-        {
-            var seconds = playableDemo ? (long)demoReadout.Seconds : Experience.PublishedOriginEpoch is { } epoch ? (long)PlanetFormationSimulation.ElapsedSeconds(epoch.Clock) : 0L;
-            return $"{(playableDemo ? "Demo " : "")}T+{seconds / 3600:00}:{seconds / 60 % 60:00}:{seconds % 60:00}";
-        }
+        if (!formationRendererReady || rendererModule is null) return;
+        formationPlaying = !formationPlaying;
+        await rendererModule.InvokeVoidAsync("setEvolutionPlaying", disposeCancellationTokenSource.Token, formationPlaying);
     }
 
-    private string FormationPhase
+    private async Task ToggleFormationCloudsAsync()
     {
-        get
-        {
-            if (playableDemo) return demoReadout.Phase;
-            var world = Experience.PublishedRegionalRock;
-            if (world?.Columns is not { } columns) return "Initializing planet";
-            var melts = world.Field.Cells.Select(c => world.ResolveSurfacePhase(c.Id).MeltFraction).ToArray();
-            if (melts.All(f => f >= 0.999)) return "Molten surface";
-            if (melts.Any(f => f > 0.0)) return "Surface crystallizing";
-            return columns.Columns.Any(c => c.Layers[^1].Resolve(columns.Material).MeltFraction > 0.0)
-                ? "Solid surface · molten interior" : "Solid rock";
-        }
+        if (!formationRendererReady || rendererModule is null) return;
+        formationClouds = !formationClouds;
+        await rendererModule.InvokeVoidAsync("setEvolutionClouds", disposeCancellationTokenSource.Token, formationClouds);
     }
 
-    private void ToggleFormationPlayback() => formationPlaying = !formationPlaying;
+    private async Task ChangeFormationSpeedAsync(ChangeEventArgs change)
+    {
+        if (!int.TryParse(change.Value?.ToString(), out var myrPerSecond) || myrPerSecond <= 0 || rendererModule is null) return;
+        formationMaximumMyrPerSecond = myrPerSecond;
+        await rendererModule.InvokeVoidAsync("setEvolutionSpeed", disposeCancellationTokenSource.Token, myrPerSecond * 1e6);
+    }
 
+    // The planet evolves on the GPU every animation frame; Blazor only polls
+    // its status for the HUD.
     private async Task RunFormationLoopAsync()
     {
         try
@@ -41,59 +43,30 @@ public partial class Home
             while (!disposeCancellationTokenSource.IsCancellationRequested)
             {
                 await Task.Delay(250, disposeCancellationTokenSource.Token);
-                if (formationPlaying) await AdvanceFormationAsync();
+                if (rendererModule is null) continue;
+                try
+                {
+                    evolution = await rendererModule.InvokeAsync<PlanetEvolutionStatus?>("getEvolutionStatus", disposeCancellationTokenSource.Token);
+                    formationStatus = string.Empty;
+                }
+                catch (JSException error)
+                {
+                    formationStatus = "The planet evolution could not be read.";
+                    Console.Error.WriteLine(error);
+                }
+                StateHasChanged();
             }
         }
         catch (OperationCanceledException) when (disposeCancellationTokenSource.IsCancellationRequested) { }
-    }
-
-    private async Task AdvanceFormationAsync()
-    {
-        if (!continuousSimulation || formationBusy || rendererModule is null) return;
-        formationBusy = true;
-        formationStatus = string.Empty;
-        StateHasChanged();
-        try
-        {
-            await Task.Delay(16, disposeCancellationTokenSource.Token); // Present busy state before the bounded physics batch.
-            if (playableDemo)
-                demoReadout = await rendererModule.InvokeAsync<DemoReadout>("advance", disposeCancellationTokenSource.Token, formationStepSeconds);
-            else
-            {
-                snapshot = await PlanetFormationSimulation.AdvanceAsync(Experience, formationStepSeconds, disposeCancellationTokenSource.Token);
-                await SyncPlanetAsync();
-            }
-        }
-        catch (OperationCanceledException) when (disposeCancellationTokenSource.IsCancellationRequested) { }
-        catch (Exception error)
-        {
-            formationPlaying = false;
-            formationStatus = "Simulation paused: this step could not be accepted.";
-            Console.Error.WriteLine(error);
-        }
-        finally
-        {
-            formationBusy = false;
-            if (!disposeCancellationTokenSource.IsCancellationRequested) StateHasChanged();
-        }
     }
 
     private async Task RestartFormationAsync()
     {
-        if (formationBusy || !continuousSimulation) return;
-        formationPlaying = false;
+        if (!formationRendererReady || formationBusy || !continuousSimulation || rendererModule is null) return;
         formationBusy = true;
-        StateHasChanged();
         try
         {
-            await Task.Delay(16, disposeCancellationTokenSource.Token);
-            if (playableDemo && rendererModule is not null)
-                demoReadout = await rendererModule.InvokeAsync<DemoReadout>("restart", disposeCancellationTokenSource.Token, formationSeed);
-            else
-            {
-                snapshot = PlanetFormationSimulation.Start(Experience, formationSeed);
-                await SyncPlanetAsync();
-            }
+            evolution = await rendererModule.InvokeAsync<PlanetEvolutionStatus>("restartEvolution", disposeCancellationTokenSource.Token, formationSeed);
             formationStatus = string.Empty;
         }
         catch (OperationCanceledException) when (disposeCancellationTokenSource.IsCancellationRequested) { }
@@ -109,13 +82,26 @@ public partial class Home
         }
     }
 
-    private sealed class DemoReadout
-    {
-        public DemoReadout() { }
-        public double Seconds { get; set; }
-        public double Coverage { get; set; }
-        public string Phase { get; set; } = "Magma ocean";
-    }
+    private sealed record PlanetEvolutionStatus(
+        double TimeSeconds,
+        string TimeLabel,
+        string RateLabel,
+        string Regime,
+        string Phase,
+        double PotentialKelvin,
+        double CrystalFraction,
+        double HeatFluxWattsPerSquareMeter,
+        string? CrustLifetimeLabel,
+        double GlowingFraction,
+        int Rafts,
+        int Plates,
+        int Plumes,
+        double HeatPipeShare,
+        string? LidOnsetLabel,
+        string? PlateOnsetLabel,
+        double FramesPerSecond,
+        bool Playing,
+        string[]? Liberties);
 
     private DotNetObjectReference<Home>? surfaceLodReference;
     private PlanetLocalSurfaceMesh? lastFullLocalSurface;

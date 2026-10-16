@@ -10,7 +10,7 @@ import { fileURLToPath } from 'node:url';
 const directory = dirname(fileURLToPath(import.meta.url));
 const groups = [
   ['01-main-planet-geology.spec.mjs'],
-  ['foundation.spec.mjs', 'airless-reference.spec.mjs', 'regional-rock.spec.mjs', 'formation-simulation.spec.mjs', 'formation-demo.spec.mjs'],
+  ['foundation.spec.mjs', 'airless-reference.spec.mjs', 'regional-rock.spec.mjs', 'formation-simulation.spec.mjs'],
   [
     '00-geology-preview.spec.mjs',
     'camera-region-streaming.spec.mjs',

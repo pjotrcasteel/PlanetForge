@@ -1,5 +1,5 @@
 import { getRetainedSurfaceGeometry } from './surfaceGeometryStore.js';
-import { getPlanetCameraSnapshot } from './planetCameraState.js';
+import { getPlanetCameraSnapshot } from './planetRenderer.js';
 
 let state;
 

@@ -97,10 +97,6 @@ public sealed class PlanetOriginEpochState
 
     public PlanetEnvironmentTemperatureSnapshot? Temperatures => CoupledEnergy?.Temperatures;
 
-    /// <summary>Completes an unpublished interval with matched mechanical work; it neither advances time twice nor resets the revision.</summary>
-    internal PlanetOriginEpochState ThermalizeSurfaceMechanics(double joules) =>
-        new((CoupledEnergy ?? throw new InvalidOperationException("Mechanical work requires a coupled epoch.")).ThermalizeSurfaceMechanics(joules), Revision);
-
     public long Revision { get; }
 
     public PlanetOriginClock Clock => Thermal.Clock;

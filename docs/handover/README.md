@@ -7,11 +7,10 @@
 ## Start here (for every new chat or engineer)
 
 1. **[CURRENT.md](CURRENT.md)** — brief actively maintained state, exact production release, recent user acceptance, current PR, blockers, and next action. Read this first.
-2. **[PF 0.0.46.0 actual-device visual failure](PF-EARTH-20261013-A-20261013-pf046-visual-rejection.md)** — the deployed molten-scene visual rejection, exact six timestamps, root causes and immediate physical continuation gate. Do not treat a green pipeline as visible approval.
-3. **[Molten main-globe vertical slice](PF-EARTH-20261013-A-20261013-molten-main.md)** — PF 0.0.45.0 continuous primary simulation, exact release/validation evidence and open human/performance gates. Also read **[Latest solidification checkpoint](PF-EARTH-20261013-A-20261013-solidification.md)** — graded boundary/front solver, conservation recovery, matched-grid and PC evidence; verify CURRENT for deployment. Also read **[depth-column checkpoint](PF-EARTH-20261013-A-20261013-rock-columns.md)** — user visual rejection, #207–#209 formation foundation, numerical/architectural limits and recovery. Also read the [heat-coupling release snapshot](PF-EARTH-20261013-A-20261013-heat-coupling.md) and [original snapshot](PF-EARTH-20261013-A.md); preserve all history.
-4. **[CONTINUE.md](CONTINUE.md)** — paste-ready prompt to resume autonomously.
-5. [Depth-column scientific/architectural contract](../earth-origin-depth-resolved-rock-columns.md) — active formation foundation and declared limitations.
-6. [Roadmap issue #196](https://github.com/pjotrcasteel/PlanetForge/issues/196), [scientific issue #143](https://github.com/pjotrcasteel/PlanetForge/issues/143), [scientific foundation](../earth-origin-scientific-foundation.md), [older long-form model handover](../model-handover.md).
+2. **[Molten main-globe vertical slice](PF-EARTH-20261013-A-20261013-molten-main.md)** — PF 0.0.45.0 continuous primary simulation, exact release/validation evidence and open human/performance gates. Also read **[Latest solidification checkpoint](PF-EARTH-20261013-A-20261013-solidification.md)** — graded boundary/front solver, conservation recovery, matched-grid and PC evidence; verify CURRENT for deployment. Also read **[depth-column checkpoint](PF-EARTH-20261013-A-20261013-rock-columns.md)** — user visual rejection, #207–#209 formation foundation, numerical/architectural limits and recovery. Also read the [heat-coupling release snapshot](PF-EARTH-20261013-A-20261013-heat-coupling.md) and [original snapshot](PF-EARTH-20261013-A.md); preserve all history.
+3. **[CONTINUE.md](CONTINUE.md)** — paste-ready prompt to resume autonomously.
+4. [Depth-column scientific/architectural contract](../earth-origin-depth-resolved-rock-columns.md) — active formation foundation and declared limitations.
+5. [Roadmap issue #196](https://github.com/pjotrcasteel/PlanetForge/issues/196), [scientific issue #143](https://github.com/pjotrcasteel/PlanetForge/issues/143), [scientific foundation](../earth-origin-scientific-foundation.md), [older long-form model handover](../model-handover.md).
 
 ## Update protocol (not optional for substantial milestones)
 

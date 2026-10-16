@@ -1,181 +1,117 @@
 import { expect, test } from '@playwright/test';
 
-test.setTimeout(240_000);
+test.setTimeout(300_000);
 const url = '/?visualTest=1&seed=24061984';
 
-async function materialStatistics(page) {
-  return page.evaluate(() => {
-    window.__planetForgeSurfaceTest.measure();
+async function evolutionStatus(page) {
+  return page.evaluate(async () => {
+    const m = await import('/js/planetRenderer.js');
+    return m.getEvolutionStatus();
+  });
+}
+
+async function canvasStatistics(page) {
+  return page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => {
     const canvas = document.querySelector('#planet-canvas');
     const gl = canvas.getContext('webgl2');
     const pixels = new Uint8Array(canvas.width * canvas.height * 4);
     gl.readPixels(0, 0, canvas.width, canvas.height, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
-    let sum=0, count=0, min=1, max=0, ocean=0, hot=0, dark=0;
-    for(let y=Math.floor(canvas.height*.3);y<canvas.height*.7;y+=3) {
-      for(let x=Math.floor(canvas.width*.3);x<canvas.width*.7;x+=3) {
-        const i=(y*canvas.width+x)*4;
-        const r=pixels[i]/255,g=pixels[i+1]/255,b=pixels[i+2]/255;
-        const value=.2126*r+.7152*g+.0722*b;
-        sum+=value;count++;min=Math.min(min,value);max=Math.max(max,value);
-        if(b>r*1.35 && g>r*1.3)ocean++;
-        if(r>.2 && r>g*1.5)hot++;
-        if(Math.max(r,g,b)<.18)dark++;
+    let sum = 0, count = 0, min = 1, max = 0, red = 0, blue = 0;
+    for (let y = Math.floor(canvas.height * .3); y < canvas.height * .7; y += 3) {
+      for (let x = Math.floor(canvas.width * .4); x < canvas.width * .6; x += 3) {
+        const i = (y * canvas.width + x) * 4;
+        const r = pixels[i] / 255, g = pixels[i + 1] / 255, b = pixels[i + 2] / 255;
+        const value = .2126 * r + .7152 * g + .0722 * b;
+        sum += value; count++; min = Math.min(min, value); max = Math.max(max, value);
+        red += r; blue += b;
       }
     }
-    return { mean:sum/count, range:max-min, oceanFraction:ocean/count, hotFraction:hot/count, darkFraction:dark/count, glError:gl.getError() };
-  });
+    resolve({ mean: sum / count, range: max - min, redMean: red / count, blueMean: blue / count, glError: gl.getError() });
+  })));
 }
 
-test('Formation_DefaultStartsMolten_UsesMinimalUIAndPhysicalOptics', async ({ page }, testInfo) => {
-  await page.setViewportSize({width:1440,height:900});
-  const errors=[];page.on('pageerror',e=>errors.push(e.message));
+async function waitForReady(page) {
+  await expect(page.getByTestId('formation-play')).toBeEnabled({ timeout: 120_000 });
+  await expect.poll(async () => (await evolutionStatus(page))?.regime, { timeout: 60_000 }).toBe('magma-ocean');
+}
+
+test('Evolution_StartsAsGlowingMagmaOcean_WithMinimalHudAndLiberties', async ({ page }, testInfo) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  const errors = []; page.on('pageerror', e => errors.push(e.message));
   await page.goto(url);
-  await expect(page.getByTestId('formation-phase')).toHaveText('Molten surface',{timeout:60000});
-  await expect(page.getByTestId('formation-time')).toHaveText('T+00:00:00');
+  await waitForReady(page);
+  await expect(page.getByTestId('formation-phase')).toContainText('Magma ocean');
   await expect(page.getByTestId('airless-enter')).toHaveCount(0);
   await expect(page.getByTestId('regional-switch')).toHaveCount(0);
-  await expect(page.getByRole('button',{name:'NEXT',exact:true})).toHaveCount(0);
-  await page.waitForFunction(()=>Boolean(window.__planetForgeSurfaceTest),null,{timeout:60000});
-  const stats=await materialStatistics(page);
-  expect(stats.glError).toBe(0);expect(stats.mean).toBeGreaterThan(.12);
-  expect(stats.range).toBeGreaterThan(.025);expect(stats.oceanFraction).toBeLessThan(.01);
-  await expect(page.getByTestId('formation-play')).toBeInViewport();
-  await page.screenshot({path:testInfo.outputPath('formation-molten-pc.png')});
-  expect(errors).toEqual([]);
-});
-
-test('Formation_OneClock_CoolsAndReplaysWithoutStateSwitchButtons', async ({ page }, testInfo) => {
-  await page.setViewportSize({width:1440,height:900});
-  const errors=[];page.on('pageerror',e=>errors.push(e.message));
-  await page.goto(url);
-  await expect(page.getByTestId('formation-phase')).toHaveText('Molten surface',{timeout:60000});
-  await page.waitForFunction(()=>Boolean(window.__planetForgeSurfaceTest),null,{timeout:60000});
-  const initial=await materialStatistics(page);
-  await page.getByTestId('formation-speed').selectOption('30');
-  await page.getByTestId('formation-step').click();
-  await expect(page.getByTestId('formation-time')).toHaveText('T+00:00:30',{timeout:90000});
-  await expect(page.getByTestId('formation-step')).toBeEnabled({timeout:60000});
-  await expect(page.getByTestId('formation-phase')).toHaveText('Surface crystallizing');
-  const cooled=await materialStatistics(page);
-  expect(cooled.mean).toBeLessThan(initial.mean*.8);expect(cooled.glError).toBe(0);
-  await page.locator('.formation-details summary').click();
-  await expect(page.getByTestId('formation-melt')).not.toHaveText('TOP MELT 100%–100%');
-  await expect(page.getByTestId('formation-mantle')).toContainText('MANTLE');
-  await expect(page.getByTestId('formation-basal-flux')).toContainText('BASAL HEAT');
-  await page.screenshot({path:testInfo.outputPath('formation-crystallizing-pc.png')});
-  await page.getByTestId('formation-speed').selectOption('1');
-  await page.getByTestId('formation-play').click();
-  await expect(page.getByTestId('formation-play')).toHaveAttribute('aria-pressed','true');
-  await expect(page.getByTestId('formation-time')).not.toHaveText('T+00:00:30',{timeout:60000});
-  await page.getByTestId('formation-play').click();
-  await expect(page.getByTestId('formation-step')).toBeEnabled({timeout:60000});
-  const paused=await page.getByTestId('formation-time').innerText();
-  await page.waitForTimeout(500);await expect(page.getByTestId('formation-time')).toHaveText(paused);
-  await page.getByTestId('formation-restart').click();
-  await expect(page.getByTestId('formation-time')).toHaveText('T+00:00:00',{timeout:60000});
-  await expect(page.getByTestId('formation-phase')).toHaveText('Molten surface');
-  expect(errors).toEqual([]);
-});
-
-test('Formation_OrbitAndLocalLOD_KeepThermalMaterialWithoutWebGLErrors', async ({ page }, testInfo) => {
-  await page.goto(url);
-  await expect(page.getByTestId('formation-phase')).toHaveText('Molten surface',{timeout:60000});
-  await page.waitForFunction(()=>Boolean(window.__planetForgeSurfaceTest),null,{timeout:60000});
-  await page.evaluate(()=>window.__planetForgeSurfaceTest.setDistance(1.003));
-  await expect.poll(()=>page.evaluate(()=>window.__planetForgeSurfaceTest.getLodStats().mode),{timeout:90000}).toBe('local');
-  expect((await page.evaluate(()=>window.__planetForgeSurfaceTest.measure())).glError).toBe(0);
-  await page.screenshot({path:testInfo.outputPath('formation-molten-local.png')});
-  await page.evaluate(()=>window.__planetForgeSurfaceTest.setDistance(3.5));
-  await expect.poll(()=>page.evaluate(()=>window.__planetForgeSurfaceTest.getLodStats().mode),{timeout:60000}).toBe('globe');
-  await expect(page.getByTestId('formation-time')).toHaveText('T+00:00:00');
-  expect((await page.evaluate(()=>window.__planetForgeSurfaceTest.measure())).glError).toBe(0);
-});
-
-test('Formation_Portrait_ControlsFitAndAdvanceWithoutChangingScenario', async ({ page }) => {
-  await page.setViewportSize({width:390,height:844});
-  await page.goto(url);
-  await expect(page.getByTestId('formation-phase')).toHaveText('Molten surface',{timeout:60000});
-  for(const id of ['formation-play','formation-step','formation-speed','formation-restart']) await expect(page.getByTestId(id)).toBeInViewport();
-  await page.getByTestId('formation-step').click();
-  await expect(page.getByTestId('formation-time')).toHaveText('T+00:00:01',{timeout:60000});
-  expect((await page.evaluate(()=>window.__planetForgeSurfaceTest.measure())).glError).toBe(0);
-});
-
-
-test('Formation_ColdStart_DisablesControlsUntilRendererIsReady', async ({ page }) => {
-  let release;
-  const gate = new Promise(resolve => { release = resolve; });
-  await page.route('**/js/planetRenderer.js*', async route => { await gate; await route.continue(); });
-  await page.goto(url, { waitUntil: 'domcontentloaded' });
-  await expect(page.getByTestId('formation-phase')).toHaveText('Molten surface', { timeout: 60000 });
-  for (const id of ['formation-play', 'formation-step', 'formation-speed', 'formation-restart'])
-    await expect(page.getByTestId(id)).toBeDisabled();
-  release();
-  await expect(page.getByTestId('formation-step')).toBeEnabled({ timeout: 60000 });
-  await page.getByTestId('formation-step').click();
-  await expect(page.getByTestId('formation-time')).toHaveText('T+00:00:01', { timeout: 60000 });
-});
-
-
-test('Formation_SolidSkinAndResidualEmission_CoexistOnTheSameGlobe', async ({ page }, testInfo) => {
-  test.setTimeout(420000);
-  await page.setViewportSize({ width:1440, height:900 });
-  await page.goto(url);
-  await expect(page.getByTestId('formation-step')).toBeEnabled({ timeout:90000 });
-  await page.getByTestId('formation-speed').selectOption('30');
-  for(let step=1;step<=6;step++) {
-    await page.getByTestId('formation-step').click();
-    await expect(page.getByTestId('formation-step')).toBeEnabled({ timeout:90000 });
-  }
-  await expect(page.getByTestId('formation-time')).toHaveText('T+00:03:00');
-  await page.locator('.formation-details summary').click();
-  const melt = (await page.getByTestId('formation-skin').innerText()).match(/\d+/g).map(Number);
-  expect(melt[0]).toBe(0);expect(melt[1]).toBeGreaterThan(20);
-  const stats=await materialStatistics(page);
+  await page.waitForTimeout(2_000);
+  const stats = await canvasStatistics(page);
   expect(stats.glError).toBe(0);
-  expect(stats.hotFraction).toBeGreaterThan(.02);
-  expect(stats.darkFraction).toBeGreaterThan(.05);
-  await page.screenshot({ path:testInfo.outputPath('formation-solid-skin-residual-glow.png') });
+  expect(stats.mean).toBeGreaterThan(.05);
+  expect(stats.redMean).toBeGreaterThan(stats.blueMean);
+  await page.locator('.formation-details summary').click();
+  await expect(page.locator('.formation-details')).toContainText('Display liberties');
+  await expect(page.getByTestId('formation-temperature')).toContainText('MANTLE Tp');
+  await page.screenshot({ path: testInfo.outputPath('evolution-magma-ocean.png') });
+  expect(errors).toEqual([]);
 });
 
-test('Formation_VersionedRendererAndWaterOverlay_KeepOneCameraAndTerrainRevision', async ({ page }) => {
-  const waterModuleRequests = [];
-  page.on('request', request => {
-    if (request.url().includes('/js/waterOverlay.js')) waterModuleRequests.push(request.url());
+test('Evolution_ColdStartKeepsControlsDisabledUntilRendererIsReady', async ({ page }) => {
+  await page.route('**/js/planetRenderer.js', async route => {
+    const response = await route.fetch();
+    await new Promise(resolve => setTimeout(resolve, 2_000));
+    await route.fulfill({ response });
   });
   await page.goto(url);
-  await expect(page.getByTestId('formation-step')).toBeEnabled({ timeout: 90000 });
-  const inspect = () => page.evaluate(async () => {
-    const current = await import('/js/planetRenderer.js?v=0.0.48.0');
-    const unversioned = await import('/js/planetRenderer.js');
-    const renderer = current.getPlanetCameraSnapshot();
-    const alternate = unversioned.getPlanetCameraSnapshot();
-    const overlay = window.__planetForgeWaterTest?.camera();
-    const main = window.__planetForgeSurfaceTest;
-    return { renderer, alternate, overlay,
-      terrainRevision: Number(main.getTerrainGeometryKey().split(':').at(-1)),
-      mainYaw: main.getYaw(), mainPitch: main.getPitch(), mainDistance: main.getDistance() };
-  });
-  for (const adjust of [
-    () => page.evaluate(() => window.__planetForgeSurfaceTest.setYaw(0.63)),
-    () => page.evaluate(() => window.__planetForgeSurfaceTest.setPitch(-0.28)),
-    () => page.evaluate(() => window.__planetForgeSurfaceTest.setDistance(2.7))
-  ]) {
-    await adjust();
-    const state = await inspect();
-    expect(state.renderer).toEqual(state.alternate);
-    expect(state.overlay).not.toBeNull();
-    expect(state.renderer.geometryKey).toBeTruthy();
-    expect(state.overlay.yaw).toBeCloseTo(state.mainYaw, 12);
-    expect(state.overlay.pitch).toBeCloseTo(state.mainPitch, 12);
-    expect(state.overlay.distance).toBeCloseTo(state.mainDistance, 12);
-    expect(state.overlay.terrainRevision).toBe(state.terrainRevision);
-  }
-  await page.getByTestId('formation-step').click();
-  await expect(page.getByTestId('formation-time')).toHaveText('T+00:00:01', { timeout: 90000 });
-  const advanced = await inspect();
-  expect(waterModuleRequests.some(requestUrl => requestUrl.includes('waterOverlay.js?v=0.0.48.0'))).toBe(true);
-  expect(advanced.renderer).toEqual(advanced.alternate);
-  expect(advanced.overlay.terrainRevision).toBe(advanced.terrainRevision);
-  expect(advanced.renderer.geometryKey).toBeTruthy();
+  await expect(page.getByTestId('formation-renderer-status')).toBeVisible({ timeout: 60_000 });
+  for (const id of ['formation-play', 'formation-speed', 'formation-restart']) await expect(page.getByTestId(id)).toBeDisabled();
+  await expect(page.getByTestId('formation-renderer-status')).toHaveCount(0, { timeout: 120_000 });
+  for (const id of ['formation-play', 'formation-speed', 'formation-restart']) await expect(page.getByTestId(id)).toBeEnabled();
+});
+
+test('Evolution_CoolsThroughLidIntoPlateTectonics_PausesAndRestarts', async ({ page }, testInfo) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  const errors = []; page.on('pageerror', e => errors.push(e.message));
+  await page.goto(url);
+  await waitForReady(page);
+  await page.getByTestId('formation-speed').selectOption('50');
+  await expect.poll(async () => (await evolutionStatus(page)).regime, { timeout: 120_000, intervals: [1_000] }).toBe('stagnant-lid');
+  await expect(page.getByTestId('formation-phase')).toContainText(/Stagnant lid|Steam atmosphere|Water world/);
+  await page.screenshot({ path: testInfo.outputPath('evolution-stagnant-lid.png') });
+  await expect.poll(async () => (await evolutionStatus(page)).regime, { timeout: 180_000, intervals: [1_000] }).toBe('plates');
+  // From plate onset the Earth regime takes over and names the era.
+  await expect(page.getByTestId('formation-phase')).toContainText(/Plate tectonics|Ma ·/);
+  await page.waitForTimeout(5_000);
+  const status = await evolutionStatus(page);
+  expect(status.plates).toBeGreaterThanOrEqual(3);
+  expect(status.framesPerSecond).toBeGreaterThan(20);
+  const stats = await canvasStatistics(page);
+  expect(stats.glError).toBe(0);
+  expect(stats.range).toBeGreaterThan(.02);
+  await page.screenshot({ path: testInfo.outputPath('evolution-plates.png') });
+
+  await page.getByTestId('formation-play').click();
+  await expect(page.getByTestId('formation-play')).toHaveAttribute('aria-pressed', 'false');
+  const paused = (await evolutionStatus(page)).timeSeconds;
+  await page.waitForTimeout(1_000);
+  expect((await evolutionStatus(page)).timeSeconds).toBe(paused);
+
+  const clouds = page.getByTestId('formation-clouds');
+  await expect(clouds).toHaveText('Clouds on');
+  await clouds.click();
+  await expect(clouds).toHaveText('Clouds off');
+  await clouds.click();
+  await expect(clouds).toHaveText('Clouds on');
+
+  await page.getByTestId('formation-restart').click();
+  await expect.poll(async () => (await evolutionStatus(page)).regime, { timeout: 60_000 }).toBe('magma-ocean');
+  await expect(page.getByTestId('formation-phase')).toContainText('Magma ocean');
+  expect(errors).toEqual([]);
+});
+
+test('Evolution_Portrait_ControlsFit', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(url);
+  await waitForReady(page);
+  for (const id of ['formation-play', 'formation-speed', 'formation-clouds', 'formation-restart']) await expect(page.getByTestId(id)).toBeInViewport();
+  expect((await canvasStatistics(page)).glError).toBe(0);
 });

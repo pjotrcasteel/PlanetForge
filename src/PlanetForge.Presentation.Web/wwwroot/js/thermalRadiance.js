@@ -4,10 +4,10 @@
 // This module cannot mutate temperature, phase, mass, enthalpy or terrain.
 export const thermalTextureSize = 1024;
 export const maximumDisplayKelvin = 6553.5;
+export const thermalDisplayExposure = 1.0;
 const h = 6.62607015e-34;
 const c = 299792458;
 const k = 1.380649e-23;
-export const cameraExposure = 5.0;
 
 export function spectralRadiance(wavelengthNanometers, kelvin) {
     if (!Number.isFinite(wavelengthNanometers) || wavelengthNanometers <= 0 || !Number.isFinite(kelvin) || kelvin < 0)
@@ -45,17 +45,6 @@ export function visibleTristimulus(kelvin) {
 
 const referenceLuminance = visibleTristimulus(2200)[1];
 
-// Irradiance from a blackbody stellar spectrum normalized to its bolometric flux.
-// RGB here uses the SAME radiance unit as surface emission, not an arbitrary solar/1361 unit.
-export function stellarIrradianceLinear(solarFlux, stellarKelvin = 5772) {
-    if (!Number.isFinite(solarFlux) || solarFlux < 0 || !Number.isFinite(stellarKelvin) || stellarKelvin <= 0)
-        throw new RangeError('Stellar irradiance needs nonnegative finite flux and positive finite Kelvin.');
-    const spectrum = emissionLinearRadiance(stellarKelvin);
-    const bolometricRadiance = 5.670374419e-8 * stellarKelvin ** 4 / Math.PI;
-    return spectrum.map(channel => channel * solarFlux / bolometricRadiance);
-}
-const stellarRgbPerWatt = stellarIrradianceLinear(1);
-
 export function emissionLinearRadiance(kelvin) {
     const [x, y, z] = visibleTristimulus(kelvin);
     return [3.2406 * x - 1.5372 * y - 0.4986 * z, -0.9689 * x + 1.8758 * y + 0.0415 * z, 0.0557 * x - 0.2040 * y + 1.0570 * z]
@@ -63,8 +52,9 @@ export function emissionLinearRadiance(kelvin) {
 }
 
 export function emissionDisplayLinear(kelvin) {
-    const rgb = emissionLinearRadiance(kelvin).map(value => value * cameraExposure * 0.9);
-    return rgb.map(value => value / (1 + value));
+    const rgb = emissionLinearRadiance(kelvin).map(value => value * 1.4 * 0.9);
+    const peak = Math.max(...rgb);
+    return rgb.map(value => value / (1 + peak));
 }
 
 // Log-radiance retains faint red incandescence below a linear RGBA8 lookup's first quantum.
@@ -94,40 +84,53 @@ vec3 displaySrgb(vec3 linear) {
     linear = clamp(linear, 0.0, 1.0);
     return mix(12.92 * linear, 1.055 * pow(linear, vec3(1.0 / 2.4)) - 0.055, step(vec3(0.0031308), linear));
 }
-float reflectedMicrofacet(vec3 n, vec3 view, vec3 light, float roughness) {
+vec3 srgbToLinear(vec3 encoded) {
+    encoded = clamp(encoded, 0.0, 1.0);
+    return mix(encoded / 12.92, pow((encoded + 0.055) / 1.055, vec3(2.4)), step(vec3(0.04045), encoded));
+}
+float meltIsopleth(float melt, float level) {
+    float gradient = fwidth(melt);
+    float pixelWidth = max(gradient * 0.55, 0.0008);
+    float line = 1.0 - smoothstep(pixelWidth * 0.55, pixelWidth * 1.7, abs(melt - level));
+    return line * smoothstep(0.001, 0.008, gradient);
+}
+vec3 phaseMaterial(vec2 phase, vec3 subsurface, vec3 solidAlbedo, vec3 meanNormal, vec3 radial, vec3 view, vec3 light, float solarFlux) {
+    float melt = clamp(phase.y, 0.0, 1.0);
+    vec3 n = normalize(mix(radial, meanNormal, 1.0 - melt));
     float nv = max(dot(n, view), 0.0001);
     float nl = max(dot(n, light), 0.0);
     vec3 halfInput = light + view;
     vec3 halfDirection = length(halfInput) > 0.0001 ? normalize(halfInput) : n;
     float nh = max(dot(n, halfDirection), 0.0);
     float vh = max(dot(view, halfDirection), 0.0);
+    float roughness = mix(0.78, 0.10, melt);
     float alpha = roughness * roughness;
     float denominator = nh * nh * (alpha * alpha - 1.0) + 1.0;
     float distribution = alpha * alpha / max(3.14159265 * denominator * denominator, 0.000001);
     float smithK = (roughness + 1.0) * (roughness + 1.0) / 8.0;
     float geometry = nv / (nv * (1.0 - smithK) + smithK) * nl / max(nl * (1.0 - smithK) + smithK, 0.0001);
     float fresnel = 0.04 + 0.96 * pow(1.0 - vh, 5.0);
-    return distribution * geometry * fresnel / max(4.0 * nv * nl, 0.0001);
-}
-vec3 phaseMaterial(vec2 phase, vec3 meanNormal, vec3 view, vec3 light, float solarFlux) {
-    vec3 n = normalize(meanNormal);
-    float melt = clamp(phase.y, 0.0, 1.0);
-    float nv = max(dot(n, view), 0.0001);
-    float nl = max(dot(n, light), 0.0);
-    // An unresolved crystal/liquid mixture has two BRDFs. Interpolating roughness
-    // into a single polished material was giving the entire cooling globe a plastic gloss.
-    // Effective dark silicate reflectances and microfacet widths are optical hypotheses;
-    // they do not create a rock texture, topographic ridge or a moving lava flow.
-    vec3 solid = vec3(0.065, 0.070, 0.080) / 3.14159265 + vec3(reflectedMicrofacet(n, view, light, 0.88));
-    vec3 liquid = vec3(0.025) / 3.14159265 + vec3(reflectedMicrofacet(n, view, light, 0.28));
-    vec3 reflected = mix(solid, liquid, melt) * nl * max(solarFlux, 0.0) *
-        vec3(${stellarRgbPerWatt.map(value => value.toPrecision(12)).join(", ")});
+    float specular = distribution * geometry * fresnel / max(4.0 * nv * nl, 0.0001);
+    vec3 diffuseAlbedo = mix(solidAlbedo, vec3(0.035), melt);
+    vec3 reflected = (diffuseAlbedo / 3.14159265 + vec3(specular)) * nl * max(solarFlux, 0.0) / 1361.0;
+    // Opaque silicate optical hypothesis: Schlick angular emissivity for molten material.
+    // 0.984375 normalizes its cosine-weighted hemispherical mean to the solver's grey epsilon=0.9.
+    // Solid rock is rough/Lambertian. This changes angular optics, not physical heat or topography.
     float angleFresnel = 0.04 + 0.96 * pow(1.0 - nv, 5.0);
     float emissivity = mix(0.9, 0.984375 * (1.0 - angleFresnel), melt);
-    vec3 linear = (thermalRadiance(phase.x).rgb * emissivity + reflected) * ${cameraExposure.toFixed(1)};
-    // Fixed per-channel camera response allows genuinely hotter regions to saturate
-    // towards pale yellow/white. Exposure never follows the simulation temperature.
-    linear /= vec3(1.0) + linear;
+    vec3 emitted = thermalRadiance(phase.x).rgb * emissivity;
+    // Fine contour emphasis marks actual canonical melt-fraction isopleths.
+    // It adds no heat or invented fissure geometry; contours disappear with the phase field.
+    float meltFront = meltIsopleth(melt, 0.5) * smoothstep(900.0, 1450.0, phase.x);
+    float thermalFractureFront = meltIsopleth(subsurface.z, 0.5) *
+        smoothstep(0.05, 0.30, subsurface.y) * (1.0 - melt);
+    emitted *= 1.0 + 1.5 * meltFront;
+    emitted += thermalRadiance(subsurface.x).rgb * emissivity * thermalFractureFront * 2.0;
+    vec3 linear = emitted + reflected;
+    // Fixed exposure preserves temperature contrast across the cooling sequence.
+    // It never tracks simulation time and adds no energy to the physical state.
+    linear *= ${thermalDisplayExposure.toFixed(1)};
+    linear /= 1.0 + max(linear.r, max(linear.g, linear.b));
     return displaySrgb(linear);
 }
 `;
