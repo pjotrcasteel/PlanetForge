@@ -91,6 +91,8 @@ export function initialize(canvasId, snapshot, dotNetReference, generatorPreview
         installInput(state);
         setPlanet(snapshot);
         installVisualTestApi();
+        document.removeEventListener('visibilitychange', resetEvolutionFrameClock);
+        document.addEventListener('visibilitychange', resetEvolutionFrameClock);
         requestAnimationFrame(render);
     } catch (error) {
         window.__planetForgeSurfaceError = error instanceof Error ? error.message : String(error);
@@ -271,6 +273,7 @@ export async function waitForVisibleTerrain() {
 }
 
 export function dispose() {
+    document.removeEventListener('visibilitychange', resetEvolutionFrameClock);
     if (!state) return;
     if (state.lodTimer !== null) clearTimeout(state.lodTimer);
     state.lodSequence++;
@@ -1128,10 +1131,16 @@ function renderCurrentView(s) {
     }
 }
 
+function resetEvolutionFrameClock() {
+    if (state) state.evolutionLastFrame = null;
+}
+
 function render() {
     if (!state) return;
     resize(state);
-    if (state.evolution) {
+    if (state.evolution && document.hidden) {
+        state.evolutionLastFrame = null;
+    } else if (state.evolution) {
         const now = performance.now();
         if (state.evolutionLastFrame !== null) {
             const dt = (now - state.evolutionLastFrame) / 1000;

@@ -235,9 +235,11 @@ export function advancePlaybackThermalHistory(state, wallDtSeconds, cellScaleMet
         !(cellScaleMeters > 0) || maximumRainoutYearsPerSecond <= 0) {
         throw new RangeError('Playback duration, cell scale and rate limits must be finite, positive where required.');
     }
-    // An application returning from background suspension must not jump
-    // through geological epochs on its first recovered animation frame.
-    let remaining = Math.min(wallDtSeconds, 1.0);
+    // The renderer resets its playback timestamp on visibility changes.
+    // Do not discard normal foreground frame time on software/slow WebGL:
+    // otherwise the exponential clock cannot escape the magma-ocean phase.
+    // Bound unexpected long stalls to avoid skipping whole geological eras.
+    let remaining = Math.min(wallDtSeconds, 30.0);
     let rate = 0;
     while (remaining > 1e-9) {
         const step = Math.min(remaining, 0.1);

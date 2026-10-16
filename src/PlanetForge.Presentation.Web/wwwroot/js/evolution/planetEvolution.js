@@ -1966,8 +1966,10 @@ export function stepEvolution(evo, wallDtSeconds) {
     const rainoutLimit = evo.lidOnsetSeconds !== null && evo.water < 0.98
         ? RAINOUT_PLAYBACK_MYR * MYR / SECONDS_PER_YEAR : Infinity;
     const regimeBefore = thermal.regime;
-    const rate = advancePlaybackThermalHistory(thermal, elapsedWallDt,
+    const previousPhysicalSeconds = thermal.timeSeconds;
+    const rate = advancePlaybackThermalHistory(thermal, wallDtSeconds,
         raftSpacing(evo) * PARAMETERS.radiusMeters, evo.maximumYearsPerSecond, rainoutLimit);
+    const advancedPhysicalSeconds = thermal.timeSeconds - previousPhysicalSeconds;
     evo.rate = rate;
 
     if (regimeBefore === 'magma-ocean') {
@@ -2000,7 +2002,7 @@ export function stepEvolution(evo, wallDtSeconds) {
             updateExposure(evo, wallDt);
             return true;
         }
-        const dtMyr = rate * wallDt / MYR;
+        const dtMyr = advancedPhysicalSeconds / MYR;
         updatePlumes(evo, dtMyr);
         updateImpacts(evo, dtMyr);
         const now = timeMyr(evo);
@@ -2009,7 +2011,7 @@ export function stepEvolution(evo, wallDtSeconds) {
             const plates = evo.plates;
             let maximumAngle = 0;
             for (let k = 0; k < plates.count; k++) {
-                plates.angles[k] += plates.rates[k] * rate * wallDt / SECONDS_PER_YEAR;
+                plates.angles[k] += plates.rates[k] * advancedPhysicalSeconds / SECONDS_PER_YEAR;
                 transposeInto(plates.back, k * 9, rotationMatrix(plates.poles[k], plates.angles[k]));
                 maximumAngle = Math.max(maximumAngle, Math.abs(plates.angles[k]));
             }
