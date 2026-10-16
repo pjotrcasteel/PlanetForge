@@ -1,0 +1,64 @@
+name: Collect PlanetForge performance baselines
+
+on:
+  schedule:
+    - cron: '37 3 * * *'
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/performance-baseline.yml'
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: planetforge-performance-baseline
+  cancel-in-progress: true
+
+jobs:
+  collect:
+    name: Profile published PlanetForge (Chromium / SwiftShader)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+
+      - name: Install browser test dependencies
+        working-directory: tests/PlanetForge.Browser.Tests
+        run: |
+          npm ci --no-audit --no-fund
+          npx playwright install --with-deps chromium
+
+      - name: Capture automated fixed-seed performance baselines
+        id: collect
+        continue-on-error: true
+        env:
+          PLANETFORGE_BASE_URL: https://pjotrcasteel.github.io/PlanetForge/
+        run: node tests/PlanetForge.Browser.Tests/automation/collect-baseline.mjs
+
+      - name: Store machine-readable performance report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: planetforge-performance-baseline
+          path: artifacts/performance-baseline.json
+          if-no-files-found: warn
+          retention-days: 90
+
+      - name: Update issue 239 with latest measured results
+        if: always()
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node tests/PlanetForge.Browser.Tests/automation/publish-baseline.mjs
+
+      - name: Fail if a baseline profile failed
+        if: steps.collect.outcome != 'success'
+        run: exit 1
