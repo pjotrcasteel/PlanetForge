@@ -12,7 +12,7 @@
 // Display liberties are listed in DEMO_LIBERTIES and surfaced in the HUD.
 
 import {
-    PARAMETERS, SECONDS_PER_YEAR, createThermalHistory, advanceThermalHistory, physicalRate,
+    PARAMETERS, SECONDS_PER_YEAR, createThermalHistory, advancePlaybackThermalHistory,
     crystalFraction, crustThicknessMeters, crustSurfaceKelvin, formatDuration, rheologicalTransitionKelvin,
 } from './thermalHistory.js';
 import { createRaftSystem, advanceRafts, mulberry32, randomDirection, maximumRafts, binSlots } from './crustRafts.js';
@@ -1947,7 +1947,10 @@ export function setEvolutionSpeed(evo, yearsPerSecond) {
 
 export function stepEvolution(evo, wallDtSeconds) {
     if (!evo.playing) return false;
-    const wallDt = Math.min(Math.max(wallDtSeconds, 0), 0.1);
+    const elapsedWallDt = Math.min(Math.max(wallDtSeconds, 0), 1.0);
+    // GPU raft motion remains bounded per frame; thermal time must not be lost
+    // merely because a device cannot sustain 10 WebGL frames per second.
+    const wallDt = Math.min(elapsedWallDt, 0.1);
     if (wallDt <= 0) return false;
     if (timeMyr(evo) >= PRESENT_MYR) {
         // The present day: geology is frozen, the weather keeps moving.
@@ -1959,12 +1962,15 @@ export function stepEvolution(evo, wallDtSeconds) {
     evo.wallTime += wallDt;
     updateMagmaImpacts(evo);
     const thermal = evo.thermal;
-    let rate = physicalRate(thermal.timeSeconds, evo.maximumYearsPerSecond, 3.5);
     // Steam rain-out lasts ~1 Myr: play it slowly enough to watch.
-    if (evo.lidOnsetSeconds !== null && evo.water < 0.98) rate = Math.min(rate, RAINOUT_PLAYBACK_MYR * MYR);
-    evo.rate = rate;
+    const rainoutLimit = evo.lidOnsetSeconds !== null && evo.water < 0.98
+        ? RAINOUT_PLAYBACK_MYR * MYR / SECONDS_PER_YEAR : Infinity;
     const regimeBefore = thermal.regime;
-    advanceThermalHistory(thermal, rate * wallDt, raftSpacing(evo) * PARAMETERS.radiusMeters);
+    const previousPhysicalSeconds = thermal.timeSeconds;
+    const rate = advancePlaybackThermalHistory(thermal, wallDtSeconds,
+        raftSpacing(evo) * PARAMETERS.radiusMeters, evo.maximumYearsPerSecond, rainoutLimit);
+    const advancedPhysicalSeconds = thermal.timeSeconds - previousPhysicalSeconds;
+    evo.rate = rate;
 
     if (regimeBefore === 'magma-ocean') {
         const magma = thermal.magma;
@@ -1996,7 +2002,7 @@ export function stepEvolution(evo, wallDtSeconds) {
             updateExposure(evo, wallDt);
             return true;
         }
-        const dtMyr = rate * wallDt / MYR;
+        const dtMyr = advancedPhysicalSeconds / MYR;
         updatePlumes(evo, dtMyr);
         updateImpacts(evo, dtMyr);
         const now = timeMyr(evo);
@@ -2005,7 +2011,7 @@ export function stepEvolution(evo, wallDtSeconds) {
             const plates = evo.plates;
             let maximumAngle = 0;
             for (let k = 0; k < plates.count; k++) {
-                plates.angles[k] += plates.rates[k] * rate * wallDt / SECONDS_PER_YEAR;
+                plates.angles[k] += plates.rates[k] * advancedPhysicalSeconds / SECONDS_PER_YEAR;
                 transposeInto(plates.back, k * 9, rotationMatrix(plates.poles[k], plates.angles[k]));
                 maximumAngle = Math.max(maximumAngle, Math.abs(plates.angles[k]));
             }

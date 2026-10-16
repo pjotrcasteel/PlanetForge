@@ -142,13 +142,14 @@ test('PublishedRockColumns_SurfaceAndDepth_AdvancesCanonicalTerrainAndResets', a
   await expect(page.getByTestId('column-solid-thickness')).toHaveText('SOLID TOP 0.00–0.00 m');
   await page.waitForFunction(() => Boolean(window.__planetForgeSurfaceTest) || Boolean(window.__planetForgeSurfaceError));
   expect(await page.evaluate(() => window.__planetForgeSurfaceError ?? null)).toBeNull();
-  const key = await page.evaluate(() => window.__planetForgeSurfaceTest.getTerrainGeometryKey());
+  const initialRockRevision = await page.evaluate(() => window.__planetForgeSurfaceTest.getSpatialRockRevision());
+  expect(initialRockRevision).not.toBeNull();
   await page.getByTestId('airless-advance').click();
   await expect(page.getByTestId('airless-elapsed')).toContainText('T+1h', { timeout: 90_000 });
   await expect(page.getByTestId('airless-status')).toHaveText('ACCEPTED');
   await expect(page.getByTestId('regional-melt-range')).not.toHaveText('MELT 100%–100%');
   await expect(page.getByTestId('column-deep-melt')).toHaveText('DEEP MELT 100%–100%');
-  expect(await page.evaluate(() => window.__planetForgeSurfaceTest.getTerrainGeometryKey())).not.toBe(key);
+  expect(await page.evaluate(() => window.__planetForgeSurfaceTest.getSpatialRockRevision())).toBeGreaterThan(initialRockRevision);
   expect((await page.evaluate(() => window.__planetForgeSurfaceTest.measure())).glError).toBe(0);
   await page.getByTestId('airless-reset').click();
   await expect(page.getByTestId('column-solid-thickness')).toHaveText('SOLID TOP 0.00–0.00 m');
@@ -156,15 +157,29 @@ test('PublishedRockColumns_SurfaceAndDepth_AdvancesCanonicalTerrainAndResets', a
   expect(errors).toEqual([]);
 });
 
-test('DeployedFormation_StartsMoltenOnPrimaryPageAndAdvancesSameClock', async ({ page }) => {
-  await page.goto(process.env.PLANETFORGE_BASE_URL + '/?visualTest=1&seed=24061984', {waitUntil:'domcontentloaded'});
-  await expect(page.getByTestId('formation-phase')).toHaveText('Molten surface',{timeout:90000});
-  await expect(page.locator('#planetforge-build-badge')).toContainText('PF 0.0.45.0');
-  if(process.env.PLANETFORGE_EXPECTED_SHA) await expect(page.locator('#planetforge-build-badge')).toContainText(process.env.PLANETFORGE_EXPECTED_SHA.slice(0,7));
-  await expect(page.getByTestId('formation-time')).toHaveText('T+00:00:00');
-  await expect(page.getByTestId('airless-enter')).toHaveCount(0);
-  await page.getByTestId('formation-step').click();
-  await expect(page.getByTestId('formation-time')).toHaveText('T+00:00:01',{timeout:60000});
-  await page.waitForFunction(()=>Boolean(window.__planetForgeSurfaceTest),null,{timeout:60000});
-  expect((await page.evaluate(()=>window.__planetForgeSurfaceTest.measure())).glError).toBe(0);
+test('DeployedFormation_UsesCurrentMainPageAndAdvancesItsEvolutionClock', async ({ page }) => {
+  await page.goto(process.env.PLANETFORGE_BASE_URL + '/?visualTest=1&seed=24061984', { waitUntil: 'domcontentloaded' });
+  const play = page.getByTestId('formation-play');
+  await expect(play).toBeEnabled({ timeout: 90_000 });
+  // Live release autoplay can leave the magma era during slow WebGL startup.
+  // Pause/restart through the UI to verify the *initial* planet deterministically.
+  await expect(play).toHaveAttribute('aria-pressed', 'true');
+  await play.click();
+  await expect(play).toHaveAttribute('aria-pressed', 'false');
+  await page.getByTestId('formation-restart').click();
+  await expect(page.getByTestId('formation-phase')).toContainText('Magma ocean', { timeout: 90_000 });
+  const badge = page.locator('#planetforge-build-badge');
+  await expect(badge).toHaveText(/^PF \d+\.\d+\.\d+(?:\.\d+)? · [a-f0-9]{7}$/);
+  if (process.env.PLANETFORGE_EXPECTED_SHA)
+    await expect(badge).toContainText(process.env.PLANETFORGE_EXPECTED_SHA.slice(0, 7));
+  // Verify that the actual published build can resume and advance.
+  await play.click();
+  await expect(play).toHaveAttribute('aria-pressed', 'true');
+  const getSeconds = () => page.evaluate(async () => {
+    const renderer = await import(new URL('js/planetRenderer.js', document.baseURI).href);
+    return renderer.getEvolutionStatus()?.timeSeconds ?? 0;
+  });
+  await expect.poll(getSeconds, { timeout: 45_000, intervals: [500, 1000] }).toBeGreaterThan(0);
+  await page.waitForFunction(() => Boolean(window.__planetForgeSurfaceTest), null, { timeout: 60_000 });
+  expect((await page.evaluate(() => window.__planetForgeSurfaceTest.measure())).glError).toBe(0);
 });

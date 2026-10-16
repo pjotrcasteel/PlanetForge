@@ -91,6 +91,8 @@ export function initialize(canvasId, snapshot, dotNetReference, generatorPreview
         installInput(state);
         setPlanet(snapshot);
         installVisualTestApi();
+        document.removeEventListener('visibilitychange', resetEvolutionFrameClock);
+        document.addEventListener('visibilitychange', resetEvolutionFrameClock);
         requestAnimationFrame(render);
     } catch (error) {
         window.__planetForgeSurfaceError = error instanceof Error ? error.message : String(error);
@@ -271,6 +273,7 @@ export async function waitForVisibleTerrain() {
 }
 
 export function dispose() {
+    document.removeEventListener('visibilitychange', resetEvolutionFrameClock);
     if (!state) return;
     if (state.lodTimer !== null) clearTimeout(state.lodTimer);
     state.lodSequence++;
@@ -1012,6 +1015,9 @@ function installVisualTestApi() {
         // Debugging identity of the real shared terrain revision; never an
         // independent visual-only geology or shader mode.
         getTerrainGeometryKey() { return state?.geometryKey ?? null; },
+        // The canonical material atlas advances every accepted physical epoch;
+        // the orbital mesh may legitimately retain its revision for <1 m relief.
+        getSpatialRockRevision() { return state?.spatialRockRevision ?? null; },
         getSeed() { return state?.seed ?? null; },
         measure() {
             if (!state) return null;
@@ -1125,10 +1131,16 @@ function renderCurrentView(s) {
     }
 }
 
+function resetEvolutionFrameClock() {
+    if (state) state.evolutionLastFrame = null;
+}
+
 function render() {
     if (!state) return;
     resize(state);
-    if (state.evolution) {
+    if (state.evolution && document.hidden) {
+        state.evolutionLastFrame = null;
+    } else if (state.evolution) {
         const now = performance.now();
         if (state.evolutionLastFrame !== null) {
             const dt = (now - state.evolutionLastFrame) / 1000;

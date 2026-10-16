@@ -12,7 +12,8 @@ test('RockColumns_PhysicalSolidTopOverMoltenDepth_UsesSharedTerrainAndResets', a
   await expect(page.getByTestId('column-deep-melt')).toHaveText('DEEP MELT 100%–100%');
   await page.waitForFunction(() => Boolean(window.__planetForgeSurfaceTest) || Boolean(window.__planetForgeSurfaceError), null, { timeout: 60_000 });
   expect(await page.evaluate(() => window.__planetForgeSurfaceError ?? null)).toBeNull();
-  const key = await page.evaluate(() => window.__planetForgeSurfaceTest.getTerrainGeometryKey());
+  const initialRockRevision = await page.evaluate(() => window.__planetForgeSurfaceTest.getSpatialRockRevision());
+  expect(initialRockRevision).not.toBeNull();
   expect((await page.evaluate(() => window.__planetForgeSurfaceTest.measure())).glError).toBe(0);
   await page.screenshot({ path: testInfo.outputPath('columns-molten-surface.png') });
   for (let hour = 1; hour <= 4; hour++) {
@@ -23,7 +24,11 @@ test('RockColumns_PhysicalSolidTopOverMoltenDepth_UsesSharedTerrainAndResets', a
   await expect(page.getByTestId('regional-melt-range')).toHaveText('MELT 0%–0%');
   await expect(page.getByTestId('column-solid-thickness')).not.toHaveText('SOLID TOP 0.00–0.00 m');
   await expect(page.getByTestId('column-deep-melt')).toHaveText('DEEP MELT 100%–100%');
-  expect(await page.evaluate(() => window.__planetForgeSurfaceTest.getTerrainGeometryKey())).not.toBe(key);
+  // Sub-metre contraction updates the canonical thermal atlas without requiring
+  // an orbital-mesh rebuild. Mesh revisions reflect geometric change only.
+  const cooledRockRevision = await page.evaluate(() => window.__planetForgeSurfaceTest.getSpatialRockRevision());
+  expect(cooledRockRevision).toBeGreaterThan(initialRockRevision);
+  expect((await page.evaluate(() => window.__planetForgeSurfaceTest.getLodStats())).surfaceSolidFraction).toBeGreaterThan(0);
   expect((await page.evaluate(() => window.__planetForgeSurfaceTest.measure())).glError).toBe(0);
   await expect(page.getByTestId('airless-advance')).toBeInViewport();
   await page.screenshot({ path: testInfo.outputPath('columns-solid-top-molten-depth.png') });
@@ -66,7 +71,8 @@ test('ResolvedColumns_PC_CoolsFundedDepthAndResetsSharedPlanet', async ({ page }
   await expect(page.getByTestId('column-solid-thickness')).toHaveText('SOLID TOP 0.00–0.00 m');
   await expect(page.getByTestId('column-front-depth')).toContainText('64 LAYERS');
   await page.waitForFunction(() => Boolean(window.__planetForgeSurfaceTest), null, { timeout: 60_000 });
-  const original = await page.evaluate(() => window.__planetForgeSurfaceTest.getTerrainGeometryKey());
+  const initialRockRevision = await page.evaluate(() => window.__planetForgeSurfaceTest.getSpatialRockRevision());
+  expect(initialRockRevision).not.toBeNull();
   await page.screenshot({ path: testInfo.outputPath('resolved-columns-pc-initial.png') });
   for (let hour = 1; hour <= 4; hour++) {
     await page.getByTestId('airless-advance').click();
@@ -76,7 +82,9 @@ test('ResolvedColumns_PC_CoolsFundedDepthAndResetsSharedPlanet', async ({ page }
   await expect(page.getByTestId('regional-melt-range')).toHaveText('TOP CELL MELT 0%–0%');
   await expect(page.getByTestId('column-front-depth')).not.toContainText('SOLIDUS 0.000–0.000');
   await expect(page.getByTestId('column-deep-melt')).toHaveText('DEEP MELT 100%–100%');
-  expect(await page.evaluate(() => window.__planetForgeSurfaceTest.getTerrainGeometryKey())).not.toBe(original);
+  const cooledRockRevision = await page.evaluate(() => window.__planetForgeSurfaceTest.getSpatialRockRevision());
+  expect(cooledRockRevision).toBeGreaterThan(initialRockRevision);
+  expect((await page.evaluate(() => window.__planetForgeSurfaceTest.getLodStats())).surfaceSolidFraction).toBeGreaterThan(0);
   expect((await page.evaluate(() => window.__planetForgeSurfaceTest.measure())).glError).toBe(0);
   await page.getByTestId('rock-map-select').selectOption('temperature');
   await expect(page.getByTestId('airless-elapsed')).toContainText('T+4h');

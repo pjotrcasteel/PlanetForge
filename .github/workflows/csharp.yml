@@ -49,6 +49,9 @@ jobs:
       - name: Validate playable prototype state
         run: node --test tests/PlanetForge.Browser.Tests/demo/formation-demo-model.test.mjs
 
+      - name: Validate thermal playback across slow and fast frames
+        run: node --test tests/PlanetForge.Browser.Tests/evolution-thermal-playback.test.mjs
+
       - name: Reject whole-canvas planet grayscale filters
         run: |
           if grep -R -n -E '#planet-canvas[^\{]*\{[^}]*filter:[^;}]*grayscale|pre-vegetation-world[^\{]*#planet-canvas[^\{]*\{[^}]*filter:' src/PlanetForge.Presentation.Web/wwwroot/css; then

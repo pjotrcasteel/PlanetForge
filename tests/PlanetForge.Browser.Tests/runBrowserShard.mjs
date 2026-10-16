@@ -45,10 +45,31 @@ if (!Number.isInteger(shard) || shard < 1 || shard > groups.length) {
 }
 
 const executable = process.platform === 'win32' ? 'npx.cmd' : 'npx';
-const result = spawnSync(executable, ['playwright', 'test', ...groups[shard - 1]], {
-  cwd: directory,
-  stdio: 'inherit',
-  env: process.env
-});
-if (result.error) console.error(result.error);
-process.exit(result.status ?? 1);
+
+function runTests(specs, outputDirectory = null) {
+  const args = ['playwright', 'test', ...specs];
+  if (outputDirectory) args.push('--output', outputDirectory);
+  const result = spawnSync(executable, args, {
+    cwd: directory,
+    stdio: 'inherit',
+    env: process.env
+  });
+  if (result.error) console.error(result.error);
+  return result.status ?? 1;
+}
+
+if (shard !== 2) process.exit(runTests(groups[shard - 1]));
+
+// Physical and formation specs allocate large WebGL textures. Give each spec
+// a fresh Chromium/SwiftShader process, so previous contexts cannot starve
+// the next test. Retain the one-worker limit and fail if ANY spec fails.
+const isolated = ['formation-simulation.spec.mjs', ...groups[1].filter(spec => spec !== 'formation-simulation.spec.mjs')];
+let failed = false;
+for (const spec of isolated) {
+  console.log(`Browser shard 2: running ${spec} in an isolated browser process`);
+  // Preserve each spec's screenshots, errors and traces: Playwright cleans
+  // its output directory at the beginning of every separate invocation.
+  const output = `artifacts/test-results/shard2-${spec.replace('.spec.mjs', '')}`;
+  if (runTests([spec], output) !== 0) failed = true;
+}
+process.exit(failed ? 1 : 0);
