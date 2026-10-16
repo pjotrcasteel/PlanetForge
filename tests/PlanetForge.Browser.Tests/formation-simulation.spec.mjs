@@ -93,7 +93,16 @@ test('Evolution_CoolsThroughLidIntoPlateTectonics_PausesAndRestarts', async ({ p
   await expect.poll(async () => (await evolutionStatus(page)).regime, { timeout: 120_000, intervals: [1_000] }).toBe('stagnant-lid');
   await expect(page.getByTestId('formation-phase')).toContainText(/Stagnant lid|Steam atmosphere|Water world/);
   await page.screenshot({ path: testInfo.outputPath('evolution-stagnant-lid.png') });
-  await expect.poll(async () => (await evolutionStatus(page)).regime, { timeout: 180_000, intervals: [1_000] }).toBe('plates');
+  // The reconstructed Earth renderer is GPU-heavy in software Chromium.
+  // As soon as the real physical model reaches plates, pause through the
+  // exported production API in the same browser evaluation. This prevents
+  // continued GPU work from starving the subsequent UI interaction test.
+  await expect.poll(async () => page.evaluate(async () => {
+    const renderer = await import('/js/planetRenderer.js');
+    const status = renderer.getEvolutionStatus();
+    if (status?.regime === 'plates') renderer.setEvolutionPlaying(false);
+    return status?.regime;
+  }), { timeout: 180_000, intervals: [1_000] }).toBe('plates');
   // From plate onset the Earth regime takes over and names the era.
   await expect(page.getByTestId('formation-phase')).toContainText(/Plate tectonics|Ma ·/);
   await page.waitForTimeout(5_000);
