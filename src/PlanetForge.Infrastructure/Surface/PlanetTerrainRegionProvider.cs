@@ -12,10 +12,12 @@ namespace PlanetForge.Infrastructure.Surface;
 /// </summary>
 public sealed class PlanetTerrainRegionProvider(IPlanetElevationSource canonicalElevation) : IPlanetElevationRevisionSource, IPlanetOriginSurfacePublication
 {
+    private const double OrbitalMeshRefreshToleranceMeters = 1.0;
     private readonly object publicationGate = new();
     private PublishedTerrain published = new(canonicalElevation ?? throw new ArgumentNullException(nameof(canonicalElevation)), 0);
 
     private PublishedTerrain? originBase;
+    private PlanetOriginRockColumnElevationSource? originMeshBaseline;
     private long allocatedRevision;
 
     public long Revision { get { lock (publicationGate) return published.Revision; } }
@@ -44,22 +46,34 @@ public sealed class PlanetTerrainRegionProvider(IPlanetElevationSource canonical
     public T PublishOriginSurface<T>(PlanetOriginRockColumnField? columns, Func<T> publishWorld)
     {
         ArgumentNullException.ThrowIfNull(publishWorld);
-        var elevation = columns is null ? null : new PlanetOriginRockColumnElevationSource(columns);
+        var elevation = columns is null ? null : new PlanetOriginRockColumnElevationSource(columns, canonicalElevation);
         lock (publicationGate)
         {
             var previous = published;
             var previousBase = originBase;
+            var previousMeshBaseline = originMeshBaseline;
             try
             {
                 if (elevation is not null)
                 {
                     originBase ??= published;
-                    published = new PublishedTerrain(elevation, NextRevision());
+                    var geometryChanged = originMeshBaseline is null ||
+                        !originMeshBaseline.IsWithinDisplacementTolerance(elevation, OrbitalMeshRefreshToleranceMeters);
+                    if (geometryChanged)
+                    {
+                        originMeshBaseline = elevation;
+                        published = new PublishedTerrain(elevation, NextRevision());
+                    }
+                    else
+                    {
+                        published = new PublishedTerrain(elevation, published.Revision);
+                    }
                 }
                 else if (originBase is not null)
                 {
                     published = new PublishedTerrain(originBase.Elevation, NextRevision());
                     originBase = null;
+                    originMeshBaseline = null;
                 }
                 return publishWorld();
             }
@@ -67,6 +81,7 @@ public sealed class PlanetTerrainRegionProvider(IPlanetElevationSource canonical
             {
                 published = previous;
                 originBase = previousBase;
+                originMeshBaseline = previousMeshBaseline;
                 // Never reuse a failed geometry revision: caches may have sampled it.
                 throw;
             }

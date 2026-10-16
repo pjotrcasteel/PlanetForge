@@ -12,55 +12,51 @@ namespace PlanetForge.Application.Planets;
 /// </summary>
 public static class PlanetFormationSimulation
 {
+    public const double InitialThermalContrastFraction = 0.25;
+    private const double EarlyCoolingMaximumStepSeconds = 2.5;
+
     public static PlanetRenderSnapshot Start(PlanetExperience experience, int seed)
     {
         ArgumentNullException.ThrowIfNull(experience);
         experience.SetSeed(seed);
         var solarFlux = PlanetPhysicsCalculator.Calculate(EarthReference.CreateParameters()).SolarFluxWattsPerSquareMeter;
-        var funded = PlanetFormationInitialHeat.Create(EarthReference.MeanRadiusMeters, seed);
-        var fundedColumns = PlanetRockColumnReference.CreateResolvedInitial(funded, 64, solarFlux);
-        var candidate = new PlanetOriginCanonicalRockCells(fundedColumns.Epoch, fundedColumns.Field, fundedColumns.Columns)
-        {
-            SurfaceBoundary = Boundary(solarFlux)
-        };
+        var candidate = PlanetRockColumnReference.CreateResolvedInitial(EarthReference.MeanRadiusMeters, 64, solarFlux, InitialThermalContrastFraction);
         _ = experience.PublishRegionalRock(candidate);
         return experience.CreateInitialRenderSnapshot();
     }
 
     public static PlanetRenderSnapshot Advance(PlanetExperience experience, int seconds, CancellationToken cancellationToken = default)
     {
-        var (current, boundary, cap) = Prepare(experience, seconds);
-        var candidate = PlanetOriginRockColumnIntegrator.Advance(current, PlanetOriginDuration.FromSeconds(seconds), boundary, new(cap, 20_000), cancellationToken);
+        ArgumentNullException.ThrowIfNull(experience);
+        if (seconds is < 1 or > 3600) throw new ArgumentOutOfRangeException(nameof(seconds));
+        var current = experience.PublishedRegionalRock ?? throw new InvalidOperationException("Start the formation world before advancing it.");
+        var elapsed = ElapsedSeconds(current.Epoch.Clock);
+        // Keep a finer cap through the early thermal transient; this bounds solver work without changing elapsed time.
+        var cap = elapsed < 600.0 ? EarlyCoolingMaximumStepSeconds : 5.0;
+        var candidate = PlanetOriginRockColumnIntegrator.Advance(current, PlanetOriginDuration.FromSeconds(seconds),
+            Boundary(experience.CreateSnapshot().Physics.SolarFluxWattsPerSquareMeter), new(cap, 20_000), cancellationToken);
         cancellationToken.ThrowIfCancellationRequested();
         return experience.PublishRegionalRock(candidate);
     }
 
-    /// <summary>Same accepted substeps and one atomic publication; UI work may run between bounded candidate batches.</summary>
-    public static async Task<PlanetRenderSnapshot> AdvanceAsync(PlanetExperience experience, int seconds, CancellationToken cancellationToken = default)
-    {
-        var (current, boundary, cap) = Prepare(experience, seconds);
-        var candidate = await PlanetOriginRockColumnIntegrator.AdvanceAsync(current, PlanetOriginDuration.FromSeconds(seconds),
-            boundary, new(cap, 20_000), cancellationToken);
-        cancellationToken.ThrowIfCancellationRequested();
-        return experience.PublishRegionalRock(candidate);
-    }
-
-    private static (PlanetOriginCanonicalRockCells World, PlanetOriginRegionalAirlessParameters Boundary, double Cap) Prepare(PlanetExperience experience, int seconds)
+    public static async Task<PlanetRenderSnapshot> AdvanceAsync(
+        PlanetExperience experience, int seconds, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(experience);
         if (seconds is < 1 or > 3600) throw new ArgumentOutOfRangeException(nameof(seconds));
-        var world = experience.PublishedRegionalRock ?? throw new InvalidOperationException("Start the formation world before advancing it.");
-        var elapsed = ElapsedSeconds(world.Epoch.Clock);
-        var cap = elapsed < 60.0 ? 0.25 : elapsed < 600.0 ? 1.0 : 5.0;
-        return (world, Boundary(experience.CreateSnapshot().Physics.SolarFluxWattsPerSquareMeter), cap);
+        var current = experience.PublishedRegionalRock ?? throw new InvalidOperationException("Start the formation world before advancing it.");
+        var elapsed = ElapsedSeconds(current.Epoch.Clock);
+        // Keep the synchronous and asynchronous paths on the same accuracy policy and exact substep sequence.
+        var cap = elapsed < 600.0 ? EarlyCoolingMaximumStepSeconds : 5.0;
+        var candidate = await PlanetOriginRockColumnIntegrator.AdvanceAsync(current, PlanetOriginDuration.FromSeconds(seconds),
+            Boundary(experience.CreateSnapshot().Physics.SolarFluxWattsPerSquareMeter), new(cap, 20_000), cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
+        return experience.PublishRegionalRock(candidate);
     }
 
     public static double ElapsedSeconds(PlanetOriginClock clock) =>
         (clock.YearsSinceSolarSystemFormation - PlanetOriginClock.EarthAccretionReference.YearsSinceSolarSystemFormation) *
         PlanetThermalEnergyBudget.JulianYearSeconds + clock.MicrosecondsIntoYear / 1_000_000.0;
 
-    private static PlanetOriginRegionalAirlessParameters Boundary(double solarFlux) => new(PlanetVector.UnitX, solarFlux, 0.15, 0.9, 3.0, 25.0)
-    {
-        MagmaConvection = PlanetOriginMagmaConvectionParameters.Reference
-    };
+    private static PlanetOriginRegionalAirlessParameters Boundary(double solarFlux) => new(PlanetVector.UnitX, solarFlux, 0.15, 0.9, 3.0, 25.0);
 }

@@ -58,10 +58,10 @@ public sealed class PlanetRegionalCoolingReferenceTests
             proposed.Epoch.CoupledEnergy!.InitialStoredEnergyJoules * 1e-11);
         Assert.AreEqual(0.0, proposed.Epoch.WaterConservationResidualKilograms, 0.0);
 
-        Assert.AreEqual(256, next.SpatialRock.Width);
-        Assert.AreEqual(128, next.SpatialRock.Height);
-        Assert.AreEqual(256 * 128, next.SpatialRock.TemperatureKelvin.Length);
-        Assert.AreEqual(256 * 128, next.SpatialRock.MeltFraction.Length);
+        Assert.AreEqual(128, next.SpatialRock.Width);
+        Assert.AreEqual(64, next.SpatialRock.Height);
+        Assert.AreEqual(128 * 64, next.SpatialRock.TemperatureKelvin.Length);
+        Assert.AreEqual(128 * 64, next.SpatialRock.MeltFraction.Length);
         Assert.IsGreaterThan(next.SpatialRock.TemperatureKelvin.Min(), next.SpatialRock.TemperatureKelvin.Max());
         Assert.IsLessThan(first.SpatialRock.TemperatureKelvin.Average(), next.SpatialRock.TemperatureKelvin.Average());
         Assert.AreEqual(0L, initial.Epoch.Revision);
