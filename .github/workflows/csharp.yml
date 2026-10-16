@@ -55,6 +55,12 @@ jobs:
       - name: Validate opt-in performance statistics
         run: node --test tests/PlanetForge.Browser.Tests/performance-metrics.test.mjs
 
+      - name: Validate automated benchmark report formatting
+        run: |
+          node --test tests/PlanetForge.Browser.Tests/automation/report-baseline.test.mjs
+          node --check tests/PlanetForge.Browser.Tests/automation/collect-baseline.mjs
+          node --check tests/PlanetForge.Browser.Tests/automation/publish-baseline.mjs
+
       - name: Reject whole-canvas planet grayscale filters
         run: |
           if grep -R -n -E '#planet-canvas[^\{]*\{[^}]*filter:[^;}]*grayscale|pre-vegetation-world[^\{]*#planet-canvas[^\{]*\{[^}]*filter:' src/PlanetForge.Presentation.Web/wwwroot/css; then
