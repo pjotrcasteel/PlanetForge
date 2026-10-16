@@ -12,6 +12,9 @@ async function evolutionStatus(page) {
 
 async function canvasStatistics(page) {
   return page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => {
+    // Without preserveDrawingBuffer, WebGL may clear the previous draw before
+    // a separate readPixels call. Render and sample in the SAME callback.
+    window.__planetForgeSurfaceTest.measure();
     const canvas = document.querySelector('#planet-canvas');
     const gl = canvas.getContext('webgl2');
     const pixels = new Uint8Array(canvas.width * canvas.height * 4);
@@ -77,7 +80,10 @@ test('Evolution_ColdStartKeepsControlsDisabledUntilRendererIsReady', async ({ pa
 });
 
 test('Evolution_CoolsThroughLidIntoPlateTectonics_PausesAndRestarts', async ({ page }, testInfo) => {
-  await page.setViewportSize({ width: 1440, height: 900 });
+  // SwiftShader's 1440x900 planetary fragment pass can starve browser input
+  // for minutes. This test covers stage transitions at a normal 960x600
+  // viewport; dedicated visual tests still exercise desktop/portrait sizes.
+  await page.setViewportSize({ width: 960, height: 600 });
   const errors = []; page.on('pageerror', e => errors.push(e.message));
   await page.goto(url);
   await waitForReady(page);
