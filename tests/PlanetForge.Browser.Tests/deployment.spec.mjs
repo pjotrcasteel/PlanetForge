@@ -159,12 +159,22 @@ test('PublishedRockColumns_SurfaceAndDepth_AdvancesCanonicalTerrainAndResets', a
 
 test('DeployedFormation_UsesCurrentMainPageAndAdvancesItsEvolutionClock', async ({ page }) => {
   await page.goto(process.env.PLANETFORGE_BASE_URL + '/?visualTest=1&seed=24061984', { waitUntil: 'domcontentloaded' });
+  const play = page.getByTestId('formation-play');
+  await expect(play).toBeEnabled({ timeout: 90_000 });
+  // Live release autoplay can leave the magma era during slow WebGL startup.
+  // Pause/restart through the UI to verify the *initial* planet deterministically.
+  await expect(play).toHaveAttribute('aria-pressed', 'true');
+  await play.click();
+  await expect(play).toHaveAttribute('aria-pressed', 'false');
+  await page.getByTestId('formation-restart').click();
   await expect(page.getByTestId('formation-phase')).toContainText('Magma ocean', { timeout: 90_000 });
-  await expect(page.getByTestId('formation-play')).toBeEnabled({ timeout: 90_000 });
   const badge = page.locator('#planetforge-build-badge');
   await expect(badge).toHaveText(/^PF \d+\.\d+\.\d+(?:\.\d+)? · [a-f0-9]{7}$/);
   if (process.env.PLANETFORGE_EXPECTED_SHA)
     await expect(badge).toContainText(process.env.PLANETFORGE_EXPECTED_SHA.slice(0, 7));
+  // Verify that the actual published build can resume and advance.
+  await play.click();
+  await expect(play).toHaveAttribute('aria-pressed', 'true');
   const getSeconds = () => page.evaluate(async () => {
     const renderer = await import(new URL('js/planetRenderer.js', document.baseURI).href);
     return renderer.getEvolutionStatus()?.timeSeconds ?? 0;
