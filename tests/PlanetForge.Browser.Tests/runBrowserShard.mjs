@@ -46,8 +46,10 @@ if (!Number.isInteger(shard) || shard < 1 || shard > groups.length) {
 
 const executable = process.platform === 'win32' ? 'npx.cmd' : 'npx';
 
-function runTests(specs) {
-  const result = spawnSync(executable, ['playwright', 'test', ...specs], {
+function runTests(specs, outputDirectory = null) {
+  const args = ['playwright', 'test', ...specs];
+  if (outputDirectory) args.push('--output', outputDirectory);
+  const result = spawnSync(executable, args, {
     cwd: directory,
     stdio: 'inherit',
     env: process.env
@@ -65,6 +67,9 @@ const isolated = ['formation-simulation.spec.mjs', ...groups[1].filter(spec => s
 let failed = false;
 for (const spec of isolated) {
   console.log(`Browser shard 2: running ${spec} in an isolated browser process`);
-  if (runTests([spec]) !== 0) failed = true;
+  // Preserve each spec's screenshots, errors and traces: Playwright cleans
+  // its output directory at the beginning of every separate invocation.
+  const output = `artifacts/test-results/shard2-${spec.replace('.spec.mjs', '')}`;
+  if (runTests([spec], output) !== 0) failed = true;
 }
 process.exit(failed ? 1 : 0);
