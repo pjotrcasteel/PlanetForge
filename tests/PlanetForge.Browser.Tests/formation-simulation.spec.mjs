@@ -31,7 +31,15 @@ async function canvasStatistics(page) {
 }
 
 async function waitForReady(page) {
-  await expect(page.getByTestId('formation-play')).toBeEnabled({ timeout: 120_000 });
+  const play = page.getByTestId('formation-play');
+  await expect(play).toBeEnabled({ timeout: 120_000 });
+  // Startup can advance geological time while software WebGL is compiling.
+  // Freeze and restart via the real UI so each visual assertion begins at a
+  // deterministic magma-ocean frame without changing production autoplay.
+  await expect(play).toHaveAttribute('aria-pressed', 'true');
+  await play.click();
+  await expect(play).toHaveAttribute('aria-pressed', 'false');
+  await page.getByTestId('formation-restart').click();
   await expect.poll(async () => (await evolutionStatus(page))?.regime, { timeout: 60_000 }).toBe('magma-ocean');
 }
 
@@ -74,6 +82,8 @@ test('Evolution_CoolsThroughLidIntoPlateTectonics_PausesAndRestarts', async ({ p
   await page.goto(url);
   await waitForReady(page);
   await page.getByTestId('formation-speed').selectOption('50');
+  await page.getByTestId('formation-play').click();
+  await expect(page.getByTestId('formation-play')).toHaveAttribute('aria-pressed', 'true');
   await expect.poll(async () => (await evolutionStatus(page)).regime, { timeout: 120_000, intervals: [1_000] }).toBe('stagnant-lid');
   await expect(page.getByTestId('formation-phase')).toContainText(/Stagnant lid|Steam atmosphere|Water world/);
   await page.screenshot({ path: testInfo.outputPath('evolution-stagnant-lid.png') });
