@@ -224,6 +224,31 @@ export function physicalRate(timeSeconds, maximumYearsPerSecond, wallSecondsPerD
     return Math.min(logarithmic, maximumYearsPerSecond * SECONDS_PER_YEAR);
 }
 
+// Integrate the wall-clock budget in bounded increments, independent of GPU
+// frame rate. Dropping all but 100 ms of a slow frame makes a fast-forward
+// replay arbitrarily slow on software WebGL and mobile GPUs. The thermodynamic
+// integrator still owns all temperature, latent heat and regime transitions.
+export function advancePlaybackThermalHistory(state, wallDtSeconds, cellScaleMeters,
+    maximumYearsPerSecond, maximumRainoutYearsPerSecond = Infinity) {
+    if (!Number.isFinite(wallDtSeconds) || wallDtSeconds < 0 ||
+        !Number.isFinite(maximumYearsPerSecond) || maximumYearsPerSecond <= 0 ||
+        !(cellScaleMeters > 0) || maximumRainoutYearsPerSecond <= 0) {
+        throw new RangeError('Playback duration, cell scale and rate limits must be finite, positive where required.');
+    }
+    // An application returning from background suspension must not jump
+    // through geological epochs on its first recovered animation frame.
+    let remaining = Math.min(wallDtSeconds, 1.0);
+    let rate = 0;
+    while (remaining > 1e-9) {
+        const step = Math.min(remaining, 0.1);
+        rate = Math.min(physicalRate(state.timeSeconds, maximumYearsPerSecond, 3.5),
+            maximumRainoutYearsPerSecond * SECONDS_PER_YEAR);
+        advanceThermalHistory(state, rate * step, cellScaleMeters);
+        remaining -= step;
+    }
+    return rate;
+}
+
 export function formatDuration(seconds) {
     const years = seconds / SECONDS_PER_YEAR;
     if (seconds < 120) return `${seconds.toFixed(0)} s`;

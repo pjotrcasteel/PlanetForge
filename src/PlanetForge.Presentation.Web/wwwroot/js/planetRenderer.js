@@ -1012,6 +1012,9 @@ function installVisualTestApi() {
         // Debugging identity of the real shared terrain revision; never an
         // independent visual-only geology or shader mode.
         getTerrainGeometryKey() { return state?.geometryKey ?? null; },
+        // The canonical material atlas advances every accepted physical epoch;
+        // the orbital mesh may legitimately retain its revision for <1 m relief.
+        getSpatialRockRevision() { return state?.spatialRockRevision ?? null; },
         getSeed() { return state?.seed ?? null; },
         measure() {
             if (!state) return null;
