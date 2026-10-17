@@ -23,3 +23,9 @@ For real iPhone Safari, keep the explicit opt-in `?pfPerf=1` profile and paired 
 ## Follow-up
 
 Add stage-aware profiling across molten, lid and reconstructed Earth history once the nightly baseline is stable; investigate the 8 MiB sync field readback and full-res bloom next. See issue #239 and the [runtime metric reference](PF-PERF-01-runtime-baseline.md).
+
+## PF-PERF-03 — allocation-stable geological readbacks
+
+The periodic physics operations `seaLevelForVolume` and `consolidatePlates` now explicitly request reusable per-field 8 MiB CPU buffers. Plate consolidation also reuses its 1 MiB owner-id scratch array. They still perform **the exact same full-resolution 1024×512 GPU readback and algorithms**; this change reduces allocations/GC, not GPU synchronization or field precision. The exported/default `readEvolutionField(evo, field)` retains independent snapshot semantics for external diagnostics and tests. Production frame quality, model equations and seed progression are unchanged.
+
+Instrumented scene submission is also split into stars, globe surface and atmosphere; CPU wall-clock timings may include GPU stalls. The star pass now uses the known full-canvas viewport dimensions from `planetRenderer.prepareFrame` instead of querying GL state every frame. Scene pixels should remain identical. Node tests assert scratch identity, fresh readback contents and public snapshot independence; full browser regression remains mandatory.
