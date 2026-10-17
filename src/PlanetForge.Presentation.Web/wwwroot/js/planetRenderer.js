@@ -1235,6 +1235,7 @@ function renderEvolution(s) {
     const light = normalize([0, 1, 2].map(i => forward[i] * 0.5 - right[i] * 0.75 + up[i] * 0.42));
     renderEvolutionGlobe(s.evolution, {
         viewProjection, light, camera: eye, tiles: s.tiles, thermalRadianceTexture: s.thermalRadianceTexture,
+        viewportWidth: canvas.width, viewportHeight: canvas.height,
     });
 }
 
