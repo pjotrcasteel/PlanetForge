@@ -188,6 +188,7 @@
                 <section class="formation-event-timeline formation-event-focused" aria-label="Special-event real-time inspection" data-testid="special-event-focus">
                     <strong>@focus.Title</strong>
                     <span data-testid="event-elapsed">LOCAL T+@focus.ElapsedSeconds.ToString("0.0") s · 1× REAL TIME</span>
+                    <small>Parent geological epoch: @FormatEventEpoch(focus.PlanetSeconds)</small>
                     <small>Planetary geological time is paused · @focus.Scale</small>
                     <button type="button" data-testid="special-event-exit" @onclick="ExitSpecialEventAsync">Return to planet</button>
                     <details><summary>Model limits</summary><small>@focus.Limitations</small></details>
@@ -201,7 +202,7 @@
                     @foreach (var item in events.Reverse().Take(3))
                     {
                         <button type="button" @key="item.Id" data-testid="special-event-enter" disabled="@(!item.Inspectable)"
-                                @onclick="() => EnterSpecialEventAsync(item.Id)">@item.Title · @(item.Inspectable ? "Inspect" : "Replay unavailable")</button>
+                                @onclick="() => EnterSpecialEventAsync(item.Id)">@item.Title · @FormatEventEpoch(item.PlanetSeconds) · @(item.Inspectable ? "Inspect" : "Replay unavailable")</button>
                     }
                 </section>
             }
