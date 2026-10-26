@@ -52,5 +52,5 @@ export function advanceRealtimeSeconds(elapsedSeconds, frameSeconds) {
         !Number.isFinite(frameSeconds) || frameSeconds < 0)
         throw new RangeError('Invalid real-time event interval.');
     // A suspended/background tab never fast-forwards the close-up.
-    return elapsedSeconds + Math.min(frameSeconds, 0.1);
+    return elapsedSeconds + Math.min(frameSeconds, 1.0);
 }
