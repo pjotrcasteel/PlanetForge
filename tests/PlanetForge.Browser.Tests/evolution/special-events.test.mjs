@@ -33,7 +33,8 @@ test('Close-up camera follows physical event direction without changing parent e
 test('Real-time event clock advances one second per wall second without catch-up on hidden tabs', () => {
     assert.equal(advanceRealtimeSeconds(0, 0.05), 0.05);
     assert.equal(advanceRealtimeSeconds(7, 0.1), 7.1);
-    assert.equal(advanceRealtimeSeconds(7, 120), 7.1);
+    assert.equal(advanceRealtimeSeconds(7, 0.5), 7.5);
+    assert.equal(advanceRealtimeSeconds(7, 120), 8);
     assert.throws(() => advanceRealtimeSeconds(0, -1), RangeError);
     assert.throws(() => advanceRealtimeSeconds(Infinity, 1), RangeError);
 });
