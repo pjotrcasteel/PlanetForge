@@ -175,14 +175,36 @@
         @if (continuousSimulation)
         {
             <div class="formation-controls" aria-label="Simulation controls">
-                <button type="button" data-testid="formation-play" disabled="@(!formationRendererReady)" aria-pressed="@(formationPlaying ? "true" : "false")" @onclick="ToggleFormationPlaybackAsync">@(formationPlaying ? "Pause" : "Play")</button>
-                <select aria-label="Maximum simulated time per second" data-testid="formation-speed" value="@formationMaximumMyrPerSecond" @onchange="ChangeFormationSpeedAsync" disabled="@(!formationRendererReady)">
+                <button type="button" data-testid="formation-play" disabled="@(!formationRendererReady || specialEventsStatus?.Focus is not null)" aria-pressed="@(formationPlaying ? "true" : "false")" @onclick="ToggleFormationPlaybackAsync">@(formationPlaying ? "Pause" : "Play")</button>
+                <select aria-label="Maximum simulated time per second" data-testid="formation-speed" value="@formationMaximumMyrPerSecond" @onchange="ChangeFormationSpeedAsync" disabled="@(!formationRendererReady || specialEventsStatus?.Focus is not null)">
                     <option value="1">≤ 1 Myr / s</option><option value="5">≤ 5 Myr / s</option><option value="10">≤ 10 Myr / s</option>
                     <option value="20">≤ 20 Myr / s</option><option value="50">≤ 50 Myr / s</option>
                 </select>
-                <button type="button" data-testid="formation-clouds" disabled="@(!formationRendererReady)" aria-pressed="@(formationClouds ? "true" : "false")" @onclick="ToggleFormationCloudsAsync">@(formationClouds ? "Clouds on" : "Clouds off")</button>
-                <button type="button" data-testid="formation-restart" disabled="@(!formationRendererReady || formationBusy)" @onclick="RestartFormationAsync">Restart</button>
+                <button type="button" data-testid="formation-clouds" disabled="@(!formationRendererReady || specialEventsStatus?.Focus is not null)" aria-pressed="@(formationClouds ? "true" : "false")" @onclick="ToggleFormationCloudsAsync">@(formationClouds ? "Clouds on" : "Clouds off")</button>
+                <button type="button" data-testid="formation-restart" disabled="@(!formationRendererReady || formationBusy || specialEventsStatus?.Focus is not null)" @onclick="RestartFormationAsync">Restart</button>
             </div>
+            @if (specialEventsStatus?.Focus is { } focus)
+            {
+                <section class="formation-event-timeline formation-event-focused" aria-label="Special-event real-time inspection" data-testid="special-event-focus">
+                    <strong>@focus.Title</strong>
+                    <span data-testid="event-elapsed">LOCAL T+@focus.ElapsedSeconds.ToString("0.0") s · 1× REAL TIME</span>
+                    <small>Planetary geological time is paused · @focus.Scale</small>
+                    <button type="button" data-testid="special-event-exit" @onclick="ExitSpecialEventAsync">Return to planet</button>
+                    <details><summary>Model limits</summary><small>@focus.Limitations</small></details>
+                </section>
+            }
+            else if (specialEventsStatus?.Events is { Length: > 0 } events)
+            {
+                <section class="formation-event-timeline" aria-label="Special events timeline" data-testid="special-events-timeline">
+                    <strong>KEY MOMENTS</strong>
+                    <small>Observed events from this planet · latest first</small>
+                    @foreach (var item in events.Reverse().Take(3))
+                    {
+                        <button type="button" @key="item.Id" data-testid="special-event-enter"
+                                @onclick="() => EnterSpecialEventAsync(item.Id)">@item.Title · Inspect</button>
+                    }
+                </section>
+            }
         }
         else if (airlessReferenceActive)
         {
