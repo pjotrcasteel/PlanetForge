@@ -37,7 +37,7 @@
             <ul class="archive-entries" aria-label="Stored archive keys">
                 @foreach (var key in listing.Keys)
                 {
-                    <li><button class="archive-key" @onclick="() => InspectSavedAsync(key)" disabled="@busy">@key</button></li>
+                    <li @key="key"><button class="archive-key" @onclick="() => InspectSavedAsync(key)" disabled="@busy">@key</button></li>
                 }
             </ul>
             <div class="archive-pager">

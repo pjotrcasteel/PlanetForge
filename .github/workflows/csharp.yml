@@ -53,7 +53,9 @@ jobs:
         run: node --test tests/PlanetForge.Browser.Tests/evolution-thermal-playback.test.mjs
 
       - name: Validate opt-in performance statistics
-        run: node --test tests/PlanetForge.Browser.Tests/performance-metrics.test.mjs
+        run: |
+          node --test tests/PlanetForge.Browser.Tests/performance-metrics.test.mjs
+          node --test tests/PlanetForge.Browser.Tests/evolution-readback-buffer.test.mjs
 
       - name: Validate automated benchmark report formatting
         run: |

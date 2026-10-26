@@ -1692,9 +1692,11 @@ function processLithosphere(evo, dtMyr) {
 function consolidatePlates(evo, continentMinority = 0.3) {
     const gl = evo.gl;
     const W = GRID_WIDTH, H = GRID_HEIGHT, N = W * H;
-    const field = readEvolutionField(evo, 'state0');
+    const field = readEvolutionField(evo, 'state0', true);
     const data = field.data;
-    const ids = new Int16Array(N);
+    // The full plate map is rewritten before it is read. Reuse its storage
+    // instead of generating another 1 MiB allocation on every consolidation.
+    const ids = evo.plateIdsScratch ?? (evo.plateIdsScratch = new Int16Array(N));
     for (let i = 0; i < N; i++) ids[i] = Math.round(data[i * 4]);
     const unified = unifyContinents(evo, data, ids, continentMinority);
     const label = evo.labelScratch ?? (evo.labelScratch = new Int32Array(N));
@@ -2089,7 +2091,7 @@ function seaLevelForVolume(evo, layerKm, pinnedLevel = null) {
 }
 
 function calculateSeaLevelForVolume(evo, layerKm, pinnedLevel) {
-    const field = readEvolutionField(evo, 'derived');
+    const field = readEvolutionField(evo, 'derived', true);
     const BIN = 0.05, MIN = -15, COUNT = 600;
     const area = evo.hypsometry ?? (evo.hypsometry = new Float64Array(COUNT));
     area.fill(0);
@@ -2182,8 +2184,9 @@ function renderStars(evo, frame) {
     gl.useProgram(evo.programs.stars);
     gl.uniformMatrix4fv(u.uInverseViewProjection, false, invert4(frame.viewProjection));
     gl.uniform3fv(u.uCamera, frame.camera);
-    const viewport = gl.getParameter(gl.VIEWPORT);
-    gl.uniform2f(u.uViewport, viewport[2], viewport[3]);
+    // Renderer has already set the viewport to the full canvas in
+    // prepareFrame; avoid synchronous WebGL state queries on each frame.
+    gl.uniform2f(u.uViewport, frame.viewportWidth, frame.viewportHeight);
     gl.disable(gl.DEPTH_TEST);
     gl.depthMask(false);
     gl.bindVertexArray(evo.vao);
@@ -2193,7 +2196,10 @@ function renderStars(evo, frame) {
 
 export function renderEvolutionGlobe(evo, frame) {
     const gl = evo.gl;
+    const starsStartedAt = performanceMarkStart();
     renderStars(evo, frame);
+    recordPerformanceDuration('starsCpuSubmissionMs', starsStartedAt);
+    const surfaceStartedAt = performanceMarkStart();
     const camLength = Math.hypot(frame.camera[0], frame.camera[1], frame.camera[2]) || 1;
     evo.viewDirection = [frame.camera[0] / camLength, frame.camera[1] / camLength, frame.camera[2] / camLength];
     const u = evo.uniforms.globe;
@@ -2257,7 +2263,9 @@ export function renderEvolutionGlobe(evo, frame) {
         gl.vertexAttribPointer(evo.globePosition, 3, gl.FLOAT, false, 0, 0);
         gl.drawArrays(gl.TRIANGLES, 0, tile.surfaceVertexCount);
     }
+    recordPerformanceDuration('globeSurfaceCpuSubmissionMs', surfaceStartedAt);
     // Atmosphere: additive in-scatter through a thin shell (limb glow).
+    const atmosphereStartedAt = performanceMarkStart();
     gl.uniform1f(u.uShell, ATMOSPHERE_SHELL);
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.ONE, gl.ONE);
@@ -2272,17 +2280,26 @@ export function renderEvolutionGlobe(evo, frame) {
     gl.disableVertexAttribArray(evo.globePosition);
     gl.bindVertexArray(null);
     gl.activeTexture(gl.TEXTURE0);
+    recordPerformanceDuration('atmosphereCpuSubmissionMs', atmosphereStartedAt);
 }
 
 // ----------------------------------------------------------------- status --
 
 // Diagnostics: read back a lithosphere field as a flat equirectangular map.
-export function readEvolutionField(evo, field = 'state0') {
+export function readEvolutionField(evo, field = 'state0', reuse = false) {
     const gl = evo.gl;
     const target = field === 'derived' ? evo.targets.derived
         : field === 'compose1' || field === 'compose0' ? evo.targets.compose : evo.targets.state[evo.current];
     const attachment = field.endsWith('1') ? 1 : 0;
-    const data = new Float32Array(GRID_WIDTH * GRID_HEIGHT * 4);
+    // Internal consumers finish synchronously and can safely share a scratch
+    // array for each field; the public/default API still returns independent
+    // copies to preserve callers' snapshot semantics.
+    const scratch = reuse ? (evo.fieldReadbackScratch ??= new Map()) : null;
+    let data = scratch?.get(field);
+    if (!data) {
+        data = new Float32Array(GRID_WIDTH * GRID_HEIGHT * 4);
+        scratch?.set(field, data);
+    }
     const readbackStartedAt = performanceMarkStart();
     gl.bindFramebuffer(gl.FRAMEBUFFER, target.framebuffer);
     gl.readBuffer(gl.COLOR_ATTACHMENT0 + attachment);
