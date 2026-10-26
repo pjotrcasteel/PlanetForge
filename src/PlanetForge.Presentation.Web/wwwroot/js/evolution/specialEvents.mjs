@@ -25,7 +25,7 @@ export function captureImpactEvents(history, impacts, planetSeconds, seed) {
             type: 'magma-impact',
             planetSeconds,
             direction: impact.direction.map(value => value / length),
-            born: impact.born,
+            born: impact.born, impactSeed: impact.seed,
             limitations: 'Illustrative, viewer-biased impact flux; no resolved crater chemistry or surface-scale physics.'
         });
         ids.add(id);
