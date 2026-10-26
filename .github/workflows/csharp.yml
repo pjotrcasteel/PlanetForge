@@ -49,6 +49,9 @@ jobs:
       - name: Validate playable prototype state
         run: node --test tests/PlanetForge.Browser.Tests/demo/formation-demo-model.test.mjs
 
+      - name: Validate special-event clock and seeded bookmarks
+        run: node --test tests/PlanetForge.Browser.Tests/evolution/special-events.test.mjs
+
       - name: Validate thermal playback across slow and fast frames
         run: node --test tests/PlanetForge.Browser.Tests/evolution-thermal-playback.test.mjs
 
