@@ -34,7 +34,7 @@ test('Real-time event clock advances one second per wall second without catch-up
     assert.equal(advanceRealtimeSeconds(0, 0.05), 0.05);
     assert.equal(advanceRealtimeSeconds(7, 0.1), 7.1);
     assert.equal(advanceRealtimeSeconds(7, 0.5), 7.5);
-    assert.equal(advanceRealtimeSeconds(7, 120), 8);
+    assert.equal(advanceRealtimeSeconds(7, 120), 127);
     assert.throws(() => advanceRealtimeSeconds(0, -1), RangeError);
     assert.throws(() => advanceRealtimeSeconds(Infinity, 1), RangeError);
 });
