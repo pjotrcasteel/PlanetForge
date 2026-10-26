@@ -134,8 +134,16 @@ test('GeologicalArchives_DeletionIsScopedToOneEpoch', async ({ page }) => {
     }, { a: archiveKey, b: archiveKey.replace('50000000', '0'), json: archive(20) });
     await page.locator('#archive-refresh').click();
     await page.locator('.archive-key').filter({ hasText: 'YBP:50000000' }).click();
+    await expect(page.getByTestId('archive-preview')).toContainText('50000000 years before present');
     await page.locator('#archive-delete-start').click();
     await page.locator('#archive-delete-confirm').click();
+    await expect(page.getByTestId('archive-status')).toContainText('Selected regional archive deleted');
     await expect(page.locator('.archive-key')).toHaveCount(1);
     await expect(page.locator('.archive-key').first()).toContainText('YBP:0');
+    const stored = await page.evaluate(async ({ oldKey, remainingKey }) => {
+        const store = await import('./js/geologicalRegionStore.js');
+        return { deleted: await store.loadArchive(oldKey), remaining: await store.loadArchive(remainingKey) };
+    }, { oldKey: archiveKey, remainingKey: archiveKey.replace('50000000', '0') });
+    expect(stored.deleted).toBeNull();
+    expect(JSON.parse(stored.remaining).YearsBeforePresent).toBe(0);
 });
