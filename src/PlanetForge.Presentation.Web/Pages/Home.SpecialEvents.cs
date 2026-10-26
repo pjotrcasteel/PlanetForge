@@ -6,6 +6,15 @@ public partial class Home
 {
     private PlanetSpecialEventStatus? specialEventsStatus;
 
+    private static string FormatEventEpoch(double seconds)
+    {
+        const double secondsPerYear = 31_557_600.0;
+        var years = seconds / secondsPerYear;
+        return years >= 1_000_000.0 ? $"T+{years / 1_000_000.0:0.###} Myr"
+            : years >= 1_000.0 ? $"T+{years / 1_000.0:0.##} kyr"
+            : years >= 1.0 ? $"T+{years:0.##} years" : $"T+{seconds:0} s";
+    }
+
     private async Task EnterSpecialEventAsync(string eventId)
     {
         if (!formationRendererReady || rendererModule is null || specialEventsStatus?.Focus is not null) return;
