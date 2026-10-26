@@ -142,6 +142,33 @@ test('Evolution_Portrait_ControlsFit', async ({ page }) => {
 });
 
 
+test('Evolution_RegionalHandoff_ReadsRealParentGpuFieldWithoutChangingGeologicalEpoch', async ({ page }) => {
+  await page.setViewportSize({ width: 720, height: 460 });
+  await page.goto(url);
+  await waitForReady(page);
+  const proof = await page.evaluate(async () => {
+    const renderer = await import('/js/planetRenderer.js');
+    const before = renderer.getEvolutionStatus().timeSeconds;
+    const first = renderer.getEvolutionRegion([1, 0, 0]);
+    const second = renderer.getEvolutionRegion([-1, 0, 0], 3);
+    const after = renderer.getEvolutionStatus().timeSeconds;
+    return { before, after, first, second };
+  });
+  expect(proof.after).toBe(proof.before);
+  expect(proof.first.epochSeconds).toBe(proof.before);
+  expect(proof.first.sourceWidth).toBe(1024);
+  expect(proof.first.sourceHeight).toBe(512);
+  expect(proof.first.samples).toHaveLength(5);
+  expect(proof.first.samples[2][2].elevationMeters).toEqual(expect.any(Number));
+  expect(Number.isFinite(proof.first.samples[2][2].elevationMeters)).toBe(true);
+  expect(proof.second.samples).toHaveLength(3);
+  expect(proof.second.center.column).toBe(0);
+  // A second GPU readback may reuse its scratch array, but the first
+  // handoff remains an independently-owned snapshot of the original epoch.
+  expect(proof.first.center.column).toBe(512);
+});
+
+
 test('PerformanceDiagnostics_OptIn_RecordsFramesAndDoesNotAlterEvolution', async ({ page }) => {
   await page.goto(url + '&pfPerf=1');
   await expect(page.getByTestId('formation-play')).toBeEnabled({ timeout: 120_000 });
