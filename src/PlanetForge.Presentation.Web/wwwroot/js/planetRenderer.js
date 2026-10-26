@@ -59,6 +59,7 @@ export function getEvolutionDebug() { return state?.evolution ?? null; }
 // First playable event bookmark: a witnessed event from the seeded GPU model.
 // The geological epoch is held fixed while the local event clock runs at 1x.
 export function getSpecialEventStatus() {
+    advanceFocusedEventClock(state, performance.now());
     return {
         events: (state?.eventHistory ?? []).map(event => ({
             id: event.id, title: event.title, planetSeconds: event.planetSeconds,
@@ -98,7 +99,7 @@ export function enterSpecialEvent(id) {
     };
     setEvolutionModelPlaying(state.evolution, false);
     state.evolutionLastFrame = null;
-    state.eventFrameLast = null;
+    state.eventFrameLast = performance.now();
     state.dirty = true;
     return getSpecialEventStatus();
 }
@@ -1234,7 +1235,38 @@ function renderCurrentView(s) {
 }
 
 function resetEvolutionFrameClock() {
-    if (state) state.evolutionLastFrame = null;
+    if (!state) return;
+    state.evolutionLastFrame = null;
+    // Suspension never converts time spent in a hidden tab into event seconds.
+    state.eventFrameLast = null;
+}
+
+function advanceFocusedEventClock(s, now) {
+    if (!s?.eventFocus) return;
+    if (document.hidden) {
+        s.eventFrameLast = null;
+        return;
+    }
+    if (s.eventFrameLast === null) {
+        s.eventFrameLast = now;
+        return;
+    }
+    const dt = Math.max(0, (now - s.eventFrameLast) / 1000);
+    s.eventFrameLast = now;
+    if (dt <= 0) return;
+    const focus = s.eventFocus;
+    // Keep real elapsed time exact even on a GPU-bound device. This clock is
+    // sampled by both the HUD and renderer and cannot advance geology.
+    focus.elapsedSeconds = advanceRealtimeSeconds(focus.elapsedSeconds, dt);
+    s.evolution.wallTime += dt;
+    focus.transition = Math.min(1, focus.transition + dt);
+    const eased = focus.transition * focus.transition * (3 - 2 * focus.transition);
+    const deltaYaw = Math.atan2(Math.sin(focus.target.yaw - focus.origin.yaw),
+        Math.cos(focus.target.yaw - focus.origin.yaw));
+    s.yaw = focus.origin.yaw + deltaYaw * eased;
+    s.pitch = focus.origin.pitch + (focus.target.pitch - focus.origin.pitch) * eased;
+    s.distance = focus.origin.distance + (focus.target.distance - focus.origin.distance) * eased;
+    s.dirty = true;
 }
 
 function render() {
@@ -1242,25 +1274,8 @@ function render() {
     const frameStartedAt = performanceMarkStart();
     resize(state);
     if (state.eventFocus && !document.hidden) {
-        const now = performance.now();
-        if (state.eventFrameLast !== null) {
-            const dt = Math.min(Math.max((now - state.eventFrameLast) / 1000, 0), 1.0);
-            const focus = state.eventFocus;
-            focus.elapsedSeconds = advanceRealtimeSeconds(focus.elapsedSeconds, dt);
-            // The already-created impact optical response can evolve in real
-            // seconds, but rock, climate and the geological clock stay frozen.
-            state.evolution.wallTime += dt;
-            focus.transition = Math.min(1, focus.transition + dt / 1.0);
-            const eased = focus.transition * focus.transition * (3 - 2 * focus.transition);
-            const deltaYaw = Math.atan2(Math.sin(focus.target.yaw - focus.origin.yaw),
-                Math.cos(focus.target.yaw - focus.origin.yaw));
-            state.yaw = focus.origin.yaw + deltaYaw * eased;
-            state.pitch = focus.origin.pitch + (focus.target.pitch - focus.origin.pitch) * eased;
-            state.distance = focus.origin.distance + (focus.target.distance - focus.origin.distance) * eased;
-        }
-        state.eventFrameLast = now;
+        advanceFocusedEventClock(state, performance.now());
         state.evolutionLastFrame = null;
-        state.dirty = true;
     } else if (state.evolution && document.hidden) {
         state.eventFrameLast = null;
         state.evolutionLastFrame = null;
