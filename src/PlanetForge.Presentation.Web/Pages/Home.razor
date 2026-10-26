@@ -200,8 +200,8 @@
                     <small>Observed events from this planet · latest first</small>
                     @foreach (var item in events.Reverse().Take(3))
                     {
-                        <button type="button" @key="item.Id" data-testid="special-event-enter"
-                                @onclick="() => EnterSpecialEventAsync(item.Id)">@item.Title · Inspect</button>
+                        <button type="button" @key="item.Id" data-testid="special-event-enter" disabled="@(!item.Inspectable)"
+                                @onclick="() => EnterSpecialEventAsync(item.Id)">@item.Title · @(item.Inspectable ? "Inspect" : "Replay unavailable")</button>
                     }
                 </section>
             }
