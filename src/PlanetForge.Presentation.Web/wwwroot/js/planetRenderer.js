@@ -78,6 +78,10 @@ export function getPerformanceReport() {
 export function getEvolutionRegion(direction, footprint = 5) {
     if (!state?.evolution) return null;
     const evolution = state.evolution;
+    // The derived lithosphere field is not the magma-ocean model. Returning
+    // its initial zeroed texture would fabricate an apparent solid surface.
+    if (!evolution.lithosphereReady)
+        throw new Error('No physically derived lithosphere is available yet; the surface is magma ocean.');
     const epochSeconds = evolution.thermal.timeSeconds;
     const field = readEvolutionField(evolution, 'derived', true);
     return captureRegionalHandoff({
