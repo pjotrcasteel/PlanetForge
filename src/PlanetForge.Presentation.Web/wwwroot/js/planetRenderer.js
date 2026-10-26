@@ -1244,7 +1244,7 @@ function render() {
     if (state.eventFocus && !document.hidden) {
         const now = performance.now();
         if (state.eventFrameLast !== null) {
-            const dt = Math.min(Math.max((now - state.eventFrameLast) / 1000, 0), 0.1);
+            const dt = Math.min(Math.max((now - state.eventFrameLast) / 1000, 0), 1.0);
             const focus = state.eventFocus;
             focus.elapsedSeconds = advanceRealtimeSeconds(focus.elapsedSeconds, dt);
             // The already-created impact optical response can evolve in real
