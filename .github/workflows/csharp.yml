@@ -57,6 +57,9 @@ jobs:
           node --test tests/PlanetForge.Browser.Tests/performance-metrics.test.mjs
           node --test tests/PlanetForge.Browser.Tests/evolution-readback-buffer.test.mjs
 
+      - name: Validate S0 to S1 regional source handoff
+        run: node --test tests/PlanetForge.Browser.Tests/evolution/regional-handoff.test.mjs
+
       - name: Validate automated benchmark report formatting
         run: |
           node --test tests/PlanetForge.Browser.Tests/automation/report-baseline.test.mjs
