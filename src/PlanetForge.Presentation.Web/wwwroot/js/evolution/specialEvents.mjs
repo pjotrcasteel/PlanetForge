@@ -51,6 +51,7 @@ export function advanceRealtimeSeconds(elapsedSeconds, frameSeconds) {
     if (!Number.isFinite(elapsedSeconds) || elapsedSeconds < 0 ||
         !Number.isFinite(frameSeconds) || frameSeconds < 0)
         throw new RangeError('Invalid real-time event interval.');
-    // A suspended/background tab never fast-forwards the close-up.
-    return elapsedSeconds + Math.min(frameSeconds, 1.0);
+    // Caller excludes hidden-tab time using visibilitychange; frame delays while
+    // the tab remains visible must not slow the promised 1x event clock.
+    return elapsedSeconds + frameSeconds;
 }
