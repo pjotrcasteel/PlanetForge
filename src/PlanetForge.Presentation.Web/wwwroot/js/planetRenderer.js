@@ -64,7 +64,7 @@ export function getSpecialEventStatus() {
             id: event.id, title: event.title, planetSeconds: event.planetSeconds,
             inspectable: Boolean(state?.evolution?.magmaImpacts?.some(
                 impact => Math.abs(impact.born - event.born) < 1e-6 &&
-                    Math.abs(impact.seed - Number(event.id.split('-').at(-1))) < 1e-6)) &&
+                    Math.abs(impact.seed - event.impactSeed) < 1e-6)) &&
                 state.evolution.wallTime - event.born < 30,
             limitations: event.limitations
         })),
@@ -86,7 +86,7 @@ export function enterSpecialEvent(id) {
     if (!event) throw new Error('This event is no longer in the bounded timeline.');
     const currentlyActive = state.evolution.magmaImpacts.some(impact =>
         Math.abs(impact.born - event.born) < 1e-6 &&
-        Math.abs(impact.seed - Number(event.id.split('-').at(-1))) < 1e-6);
+        Math.abs(impact.seed - event.impactSeed) < 1e-6);
     if (!currentlyActive || state.evolution.wallTime - event.born >= 30)
         throw new Error('The model cannot replay this event after its optical state expires.');
     const target = orbitForEvent(event.direction);
