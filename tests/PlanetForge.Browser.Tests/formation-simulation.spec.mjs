@@ -52,6 +52,12 @@ test('Evolution_StartsAsGlowingMagmaOcean_WithMinimalHudAndLiberties', async ({ 
   await page.goto(url);
   await waitForReady(page);
   await expect(page.getByTestId('formation-phase')).toContainText('Magma ocean');
+  const rejectsUnformedCrust = await page.evaluate(async () => {
+    const renderer = await import('/js/planetRenderer.js');
+    try { renderer.getEvolutionRegion([1, 0, 0]); return false; }
+    catch (error) { return String(error.message).includes('magma ocean'); }
+  });
+  expect(rejectsUnformedCrust).toBe(true);
   await expect(page.getByTestId('airless-enter')).toHaveCount(0);
   await expect(page.getByTestId('regional-switch')).toHaveCount(0);
   await page.waitForTimeout(2_000);
@@ -93,6 +99,24 @@ test('Evolution_CoolsThroughLidIntoPlateTectonics_PausesAndRestarts', async ({ p
   await expect.poll(async () => (await evolutionStatus(page)).regime, { timeout: 120_000, intervals: [1_000] }).toBe('stagnant-lid');
   await expect(page.getByTestId('formation-phase')).toContainText(/Stagnant lid|Steam atmosphere|Water world/);
   await page.screenshot({ path: testInfo.outputPath('evolution-stagnant-lid.png') });
+  // The S0→S1 handoff is a snapshot of the actual consolidated surface;
+  // never call it before the mantle has formed a physical lithosphere.
+  const handoff = await page.evaluate(async () => {
+    const renderer = await import('/js/planetRenderer.js');
+    const before = renderer.getEvolutionStatus().timeSeconds;
+    const first = renderer.getEvolutionRegion([1, 0, 0]);
+    const second = renderer.getEvolutionRegion([-1, 0, 0], 3);
+    return { before, after: renderer.getEvolutionStatus().timeSeconds, first, second };
+  });
+  expect(handoff.after).toBe(handoff.before);
+  expect(handoff.first.epochSeconds).toBe(handoff.before);
+  expect(handoff.first.sourceWidth).toBe(1024);
+  expect(handoff.first.sourceHeight).toBe(512);
+  expect(handoff.first.samples).toHaveLength(5);
+  expect(Number.isFinite(handoff.first.samples[2][2].elevationMeters)).toBe(true);
+  expect(handoff.second.samples).toHaveLength(3);
+  expect(handoff.second.center.column).toBe(0);
+  expect(handoff.first.center.column).toBe(512);
   // The reconstructed Earth renderer is GPU-heavy in software Chromium.
   // As soon as the real physical model reaches plates, pause through the
   // exported production API in the same browser evaluation. This prevents
@@ -139,33 +163,6 @@ test('Evolution_Portrait_ControlsFit', async ({ page }) => {
   await waitForReady(page);
   for (const id of ['formation-play', 'formation-speed', 'formation-clouds', 'formation-restart']) await expect(page.getByTestId(id)).toBeInViewport();
   expect((await canvasStatistics(page)).glError).toBe(0);
-});
-
-
-test('Evolution_RegionalHandoff_ReadsRealParentGpuFieldWithoutChangingGeologicalEpoch', async ({ page }) => {
-  await page.setViewportSize({ width: 720, height: 460 });
-  await page.goto(url);
-  await waitForReady(page);
-  const proof = await page.evaluate(async () => {
-    const renderer = await import('/js/planetRenderer.js');
-    const before = renderer.getEvolutionStatus().timeSeconds;
-    const first = renderer.getEvolutionRegion([1, 0, 0]);
-    const second = renderer.getEvolutionRegion([-1, 0, 0], 3);
-    const after = renderer.getEvolutionStatus().timeSeconds;
-    return { before, after, first, second };
-  });
-  expect(proof.after).toBe(proof.before);
-  expect(proof.first.epochSeconds).toBe(proof.before);
-  expect(proof.first.sourceWidth).toBe(1024);
-  expect(proof.first.sourceHeight).toBe(512);
-  expect(proof.first.samples).toHaveLength(5);
-  expect(proof.first.samples[2][2].elevationMeters).toEqual(expect.any(Number));
-  expect(Number.isFinite(proof.first.samples[2][2].elevationMeters)).toBe(true);
-  expect(proof.second.samples).toHaveLength(3);
-  expect(proof.second.center.column).toBe(0);
-  // A second GPU readback may reuse its scratch array, but the first
-  // handoff remains an independently-owned snapshot of the original epoch.
-  expect(proof.first.center.column).toBe(512);
 });
 
 
