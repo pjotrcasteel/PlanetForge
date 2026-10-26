@@ -162,7 +162,9 @@ test('PerformanceDiagnostics_OptIn_RecordsFramesAndDoesNotAlterEvolution', async
 
 
 test('Evolution_WitnessedImpact_EntersRealtimeFocusWithoutAdvancingGeologicalEpoch', async ({ page }, testInfo) => {
-  await page.setViewportSize({ width: 960, height: 600 });
+  // Keep software-WebGL CI responsive: spatial correctness is covered at full
+  // resolution elsewhere; this test specifically validates the time handoff.
+  await page.setViewportSize({ width: 720, height: 460 });
   const errors = []; page.on('pageerror', e => errors.push(e.message));
   await page.goto(url);
   await waitForReady(page);
@@ -186,7 +188,7 @@ test('Evolution_WitnessedImpact_EntersRealtimeFocusWithoutAdvancingGeologicalEpo
   const epoch = (await evolutionStatus(page)).timeSeconds;
   await expect.poll(async () => page.evaluate(async () =>
     (await import('/js/planetRenderer.js')).getSpecialEventStatus().focus?.elapsedSeconds ?? 0),
-  { timeout: 15_000 }).toBeGreaterThan(0.5);
+  { timeout: 35_000 }).toBeGreaterThan(0.5);
   expect((await evolutionStatus(page)).timeSeconds).toBe(epoch);
   const close = await page.evaluate(async () => (await import('/js/planetRenderer.js')).getPlanetCameraSnapshot());
   expect(close.distance).toBeLessThan(before.distance);
