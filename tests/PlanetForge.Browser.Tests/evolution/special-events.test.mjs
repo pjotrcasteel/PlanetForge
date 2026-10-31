@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { captureImpactEvents, orbitForEvent, advanceRealtimeSeconds } from
+import { captureImpactEvents, orbitForEvent, advanceRealtimeSeconds, eventFocusCameraBlend, AUTOMATIC_EVENT_FOCUS_SECONDS } from
     '../../../src/PlanetForge.Presentation.Web/wwwroot/js/evolution/specialEvents.mjs';
 
 test('Witnessed impact bookmarks follow actual seeded model state, deduplicate and remain bounded', () => {
@@ -37,4 +37,16 @@ test('Real-time event clock advances one second per wall second without catch-up
     assert.equal(advanceRealtimeSeconds(7, 120), 127);
     assert.throws(() => advanceRealtimeSeconds(0, -1), RangeError);
     assert.throws(() => advanceRealtimeSeconds(Infinity, 1), RangeError);
+});
+
+test('Automatic zoom arrives, briefly holds, then returns to the original globe', () => {
+    assert.equal(AUTOMATIC_EVENT_FOCUS_SECONDS, 14);
+    assert.equal(eventFocusCameraBlend(0), 0);
+    assert.ok(eventFocusCameraBlend(0.6) > 0);
+    assert.equal(eventFocusCameraBlend(1.2), 1);
+    assert.equal(eventFocusCameraBlend(11), 1);
+    assert.ok(eventFocusCameraBlend(13) > 0 && eventFocusCameraBlend(13) < 1);
+    assert.equal(eventFocusCameraBlend(14), 0);
+    assert.equal(eventFocusCameraBlend(30), 0);
+    assert.throws(() => eventFocusCameraBlend(-1), RangeError);
 });

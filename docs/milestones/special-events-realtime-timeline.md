@@ -1,6 +1,6 @@
 # E7 / Life-M0 — witnessed special events, regional focus, and 1× local time
 
-**Workstream:** PF-EARTH-20261013-A. **Status:** implementation candidate, not deployed or visually accepted.
+**Workstream:** PF-EARTH-20261013-A. **Status:** horizontal auto-focus implementation candidate; automated checks and human device review pending.
 
 ## Accepted interaction
 
@@ -9,16 +9,29 @@ the evolving model produces an event with an actual location and parent geologic
 The first admitted type is the existing seeded magma-ocean impact. The timeline is capped at the
 eight most recently witnessed events; restarting the planet clears these bookings.
 
-Selecting a bookmark:
-1. Records the exact parent epoch, the camera pose, and whether S0 was playing.
+The bottom-mounted horizontal timeline uses **small circular event markers** and a moving
+present-time indicator. Their positions are on a clearly labelled **logarithmic
+4.567-Gyr scale**, to keep early impacts visible rather than collapsing them
+at the origin. The markers preserve actual measured event times, with no
+invented date or geological occurrence.
+
+When the playing S0 model produces a new witnessed impact, the camera
+**automatically** enters the regional close-up; a user can also select a
+still-inspectable marker. This transition:
+1. Captures the parent epoch, camera pose, and playback state.
 2. Pauses S0 without replacing or cloning the evolving planet.
-3. Eases the same main globe's camera to the event's *actual* spherical direction, limited to a
-   regional orbital close-up because the S0 GPU simulation resolves approximately 39 km/texel.
-4. Advances a **separate event time counter at 1 second per real visible second**.
-   The pre-existing impact optical sequence may progress on this local clock; the geological
-   epoch, tectonics and atmosphere do not advance. A hidden tab does not accumulate catch-up.
-5. Restores the prior camera and playback state on return. The parent geological epoch is
-   unchanged except when normal S0 playback was running before and is resumed afterward.
+3. Eases the existing GPU globe toward the model event's spherical location
+   during the first 1.2 seconds, holds the view and eases back over the
+   final 2 seconds of a 14-second viewing window.
+4. Advances a **separate local event clock at one simulated second per real
+   visible second**. Geological time stays frozen. A hidden tab never
+   accumulates catch-up.
+5. Preserves the next impact's scheduled visual countdown during inspection, so
+   close-ups cannot chain immediately merely because local event time passed.
+6. Restores the camera and prior playback automatically after the window;
+   **Return now** allows the viewer to exit early. Past optical states cannot
+   be replayed as if they still existed.
+
 
 The event clock is not an independent invented geological timeline: it is explicitly a
 bounded read-only inspection session. The impact emitter is itself a declared *visual hypothesis*
@@ -29,8 +42,8 @@ physical real-time crater formation, local LOD equivalence, fluid chemistry or a
 
 - Pure tests: no duplicate events, eight-event retention, stable geographical orientation,
   invalid direction rejection, 1× clock and background elapsed-time safety.
-- Browser: real seeded impact emitter creates an event, selecting it stops the identical
-  physical epoch, eases the camera, advances local seconds, and exit restores prior orbit/playback.
+- Browser: the real seeded impact emitter produces a dot and automatically enters the original
+  globe's local close-up; the parent epoch is stable and the camera/playback auto-restore.
 - Existing Earth/Snowball research routes and seed replay must remain untouched.
 - Full .NET build, WASM, browser shards, production exact-SHA smoke and iPhone/PC visual review
   before labeling a release complete.

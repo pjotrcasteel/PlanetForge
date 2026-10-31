@@ -183,48 +183,58 @@
                 <button type="button" data-testid="formation-clouds" disabled="@(!formationRendererReady || specialEventsStatus?.Focus is not null)" aria-pressed="@(formationClouds ? "true" : "false")" @onclick="ToggleFormationCloudsAsync">@(formationClouds ? "Clouds on" : "Clouds off")</button>
                 <button type="button" data-testid="formation-restart" disabled="@(!formationRendererReady || formationBusy || specialEventsStatus?.Focus is not null)" @onclick="RestartFormationAsync">Restart</button>
             </div>
-            @if (specialEventsStatus?.Focus is { } focus)
-            {
-                <section class="formation-event-timeline formation-event-focused" aria-label="Special-event real-time inspection" data-testid="special-event-focus">
-                    <strong>@focus.Title</strong>
-                    <span data-testid="event-elapsed">LOCAL T+@focus.ElapsedSeconds.ToString("0.0") s · 1× REAL TIME</span>
-                    <small>Parent geological epoch: @FormatEventEpoch(focus.PlanetSeconds)</small>
-                    <small>Planetary geological time is paused · @focus.Scale</small>
-                    <button type="button" data-testid="special-event-exit" @onclick="ExitSpecialEventAsync">Return to planet</button>
-                    <details><summary>Model limits</summary><small>@focus.Limitations</small></details>
-                </section>
-            }
-            else
-            {
-                <section class="formation-event-timeline" aria-label="Special events timeline" data-testid="special-events-timeline">
-                    <div class="formation-event-header">
-                        <strong>KEY MOMENTS</strong>
-                        <span class="formation-event-count">@(specialEventsStatus?.Events.Length ?? 0) / 8</span>
+            <section class="formation-event-timeline @(specialEventsStatus?.Focus is not null ? "is-inspecting" : "")"
+                     aria-label="Horizontal geological events timeline" data-testid="special-events-timeline">
+                <div class="formation-event-header">
+                    <span class="formation-event-kicker">EARTH HISTORY <small>· LOG TIME</small></span>
+                    <span class="formation-event-count">@(specialEventsStatus?.Events.Length ?? 0) / 8 EVENTS</span>
+                </div>
+                @if (specialEventsStatus?.Focus is { } focus)
+                {
+                    <div class="formation-event-focus" data-testid="special-event-focus" aria-label="Automatic regional event inspection">
+                        <div class="formation-event-focus-copy">
+                            <strong>@focus.Title <span>· AUTO ZOOM</span></strong>
+                            <span data-testid="event-elapsed">LOCAL T+@focus.ElapsedSeconds.ToString("0.0") s · 1× REAL TIME</span>
+                            <small>@FormatEventEpoch(focus.PlanetSeconds) · Geological epoch paused · @focus.Scale</small>
+                        </div>
+                        <button type="button" class="formation-event-return" data-testid="special-event-exit" @onclick="ExitSpecialEventAsync">Return now</button>
+                        <details><summary>Model limits</summary><small>@focus.Limitations</small></details>
                     </div>
-                    <small>Observed on this Earth · oldest to newest</small>
+                }
+                else
+                {
+                    <p class="formation-event-summary" role="status">
+                        @(specialEventsStatus?.Events.Length > 0
+                            ? "Observed events marked below · The next witnessed impact zooms in automatically."
+                            : "Travel through Earth history · Witnessed impacts trigger an automatic close-up.")
+                    </p>
+                }
+                <div class="formation-time-track" role="group" aria-label="Observed events along logarithmic geological time"
+                     data-testid="special-event-rail">
+                    <div class="formation-time-progress" style="@($"width: {TimelinePosition(evolution?.TimeSeconds ?? 0)};")"></div>
+                    <span class="formation-time-playhead" style="@($"left: {TimelinePosition(evolution?.TimeSeconds ?? 0)};")"
+                          aria-label="@($"Current epoch: {FormatEventEpoch(evolution?.TimeSeconds ?? 0)}")"></span>
                     @if (specialEventsStatus?.Events is { Length: > 0 } events)
                     {
-                        <ol class="formation-event-track" aria-label="Observed geological events">
-                            @foreach (var item in events)
-                            {
-                                <li class="formation-event-entry @(item.Inspectable ? "is-live" : "is-past")" @key="item.Id">
-                                    <button type="button" data-testid="special-event-enter" disabled="@(!item.Inspectable)"
-                                            aria-label="@($"{item.Title}, {FormatEventEpoch(item.PlanetSeconds)}. {(item.Inspectable ? "Zoom into live event" : "Replay expired")}")"
-                                            @onclick="() => EnterSpecialEventAsync(item.Id)">
-                                        <span class="formation-event-title">@item.Title</span>
-                                        <span class="formation-event-epoch">@FormatEventEpoch(item.PlanetSeconds)</span>
-                                        <span class="formation-event-action">@(item.Inspectable ? "Zoom in · 1× time" : "Optical replay expired")</span>
-                                    </button>
-                                </li>
-                            }
-                        </ol>
+                        @foreach (var item in events)
+                        {
+                            <button type="button" @key="item.Id"
+                                    class="formation-time-dot @(specialEventsStatus?.Focus?.Id == item.Id ? "is-focused" : item.Inspectable ? "is-live" : "is-past")"
+                                    data-testid="special-event-enter"
+                                    style="@($"left: {TimelinePosition(item.PlanetSeconds)};")"
+                                    disabled="@(!item.Inspectable || specialEventsStatus?.Focus is not null)"
+                                    title="@($"{item.Title} · {FormatEventEpoch(item.PlanetSeconds)}")"
+                                    aria-label="@($"{item.Title}, {FormatEventEpoch(item.PlanetSeconds)}. {(item.Inspectable ? "Zoom to this event" : "Optical replay expired")}")"
+                                    @onclick="() => EnterSpecialEventAsync(item.Id)"></button>
+                        }
                     }
-                    else
-                    {
-                        <p class="formation-event-empty" role="status">Watching the evolving Earth. Key moments appear here when the simulation witnesses them.</p>
-                    }
-                </section>
-            }
+                </div>
+                <div class="formation-time-axis">
+                    <span>FORMATION</span>
+                    <span data-testid="special-event-epoch">@FormatEventEpoch(evolution?.TimeSeconds ?? 0)</span>
+                    <span>4.567 Ga</span>
+                </div>
+            </section>
         }
         else if (airlessReferenceActive)
         {
