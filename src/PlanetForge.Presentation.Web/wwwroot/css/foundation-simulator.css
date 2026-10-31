@@ -442,98 +442,143 @@
     .formation-controls button, .formation-controls select { padding: 8px 10px; font-size: 12px; }
 }
 
-/* Key moments use the main planet and a second, clearly labelled local clock.
-   Keep the event control away from the orbital HUD and primary playback bar. */
+/* Geological events share the original globe and geological clock. The
+   logarithmic rail gives early Myr-scale events room on a 4.567-Gyr history. */
 .formation-event-timeline {
     position: absolute;
     z-index: 11;
-    top: calc(env(safe-area-inset-top, 0px) + 22px);
-    right: 24px;
-    width: min(260px, calc(100vw - 48px));
-    display: flex;
-    flex-direction: column;
-    align-items: stretch;
-    gap: 6px;
-    padding: 12px 14px;
+    left: 50%;
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 112px);
+    transform: translateX(-50%);
+    width: min(760px, calc(100vw - 30px));
+    padding: 12px 20px 10px;
+    border: 1px solid #ad804c68;
+    border-radius: 16px;
+    background: #0c1011e7;
+    backdrop-filter: blur(12px);
     color: #f2e6d2;
-    border: 1px solid #ad804c55;
-    border-radius: 14px;
-    background: #0c1011e8;
-    font: 12px/1.35 system-ui, sans-serif;
+    font: 12px/1.4 system-ui, sans-serif;
+    box-shadow: 0 8px 30px #0005;
 }
-.formation-event-timeline strong { letter-spacing: .07em; font-size: 12px; }
-.formation-event-timeline span { color: #f5cf94; font-variant-numeric: tabular-nums; }
-.formation-event-timeline small { color: #c2b8a8; line-height: 1.4; }
-.formation-event-timeline button {
-    min-height: 40px;
-    border: 1px solid #b89a7555;
-    border-radius: 9px;
-    padding: 8px 10px;
-    color: #f8e6ce;
-    background: #393027;
-    font: inherit;
+.formation-event-header, .formation-time-axis {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+}
+.formation-event-kicker { font-weight: 700; font-size: 11px; letter-spacing: .14em; color: #f4cf9d; }
+.formation-event-kicker small { font-size: 9px; color: #a79a8a; letter-spacing: .08em; }
+.formation-event-count { color: #b8a58a; font-size: 10px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.formation-event-summary { margin: 3px 0 0; color: #bcb2a4; font-size: 11px; }
+.formation-time-track {
+    position: relative;
+    height: 26px;
+    margin: 6px 8px 0;
+}
+.formation-time-track::before {
+    content: "";
+    position: absolute;
+    left: 0; right: 0; top: 12px;
+    height: 2px; border-radius: 4px;
+    background: #8a776055;
+}
+.formation-time-progress {
+    position: absolute;
+    left: 0; top: 12px; height: 2px;
+    background: linear-gradient(90deg, #8b6a41, #efba78);
+    max-width: 100%; border-radius: 4px;
+    transition: width .25s linear;
+}
+.formation-time-playhead {
+    position: absolute;
+    top: 2px;
+    width: 2px; height: 23px;
+    transform: translateX(-50%);
+    background: #fff0cb;
+    box-shadow: 0 0 8px #ffcc87a8;
+    pointer-events: none;
+    transition: left .25s linear;
+}
+.formation-time-playhead::after {
+    content: "";
+    position: absolute; left: -3px; top: -3px;
+    width: 8px; height: 8px;
+    background: #fff3d7; border-radius: 50%;
+    box-shadow: 0 0 9px #ffc579;
+}
+.formation-time-dot {
+    position: absolute;
+    z-index: 2;
+    top: 13px;
+    left: 0;
+    width: 13px; height: 13px; min-height: 13px;
+    padding: 0;
+    transform: translate(-50%, -50%);
+    border: 2px solid #e3c6a0;
+    border-radius: 50%;
+    background: #8a6152;
+    box-shadow: 0 0 0 3px #151719b3;
     cursor: pointer;
+    transition: transform .2s ease, box-shadow .2s ease, background .2s ease;
 }
-.formation-event-timeline button:focus-visible { outline: 2px solid #e8ae69; outline-offset: 3px; }
-.formation-event-timeline details summary { cursor: pointer; }
+.formation-time-dot.is-live {
+    background: #ffbe6b; border-color: #ffedc9;
+    box-shadow: 0 0 0 3px #151719b3, 0 0 12px #ffa64b91;
+}
+.formation-time-dot.is-focused {
+    background: #ffdfa0; border-color: #fff5db;
+    box-shadow: 0 0 0 4px #ffbc6580, 0 0 15px #ffbb5b9c;
+}
+.formation-time-dot.is-past { background: #7e6b5b; border-color: #b8a38a; cursor: default; }
+.formation-time-dot:not(:disabled):hover, .formation-time-dot:not(:disabled):focus-visible {
+    transform: translate(-50%, -50%) scale(1.45);
+    outline: 2px solid #fff1ce;
+    outline-offset: 3px;
+}
+.formation-time-axis { font-size: 10px; color: #ae9c86; letter-spacing: .05em; }
+.formation-time-axis span:nth-child(2) { color: #f4ce98; font-variant-numeric: tabular-nums; }
+.formation-event-focus {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    margin-top: 7px;
+    padding: 8px 10px;
+    background: #372716cd;
+    border: 1px solid #d49b5566;
+    border-radius: 10px;
+}
+.formation-event-focus-copy { display: flex; flex: 1; flex-direction: column; gap: 2px; min-width: 0; }
+.formation-event-focus strong { font-size: 12px; color: #fff2d3; }
+.formation-event-focus strong span { color: #e5ae71; font-size: 10px; }
+.formation-event-focus-copy > span { font-size: 11px; color: #ffd395; font-variant-numeric: tabular-nums; }
+.formation-event-focus small { font-size: 10px; color: #c5b3a1; }
+.formation-event-return {
+    flex-shrink: 0;
+    padding: 8px 11px;
+    min-height: 34px;
+    border: 1px solid #c49d6c;
+    border-radius: 8px;
+    background: #54371f;
+    color: #fff0d3;
+    font: inherit; cursor: pointer;
+}
+.formation-event-return:focus-visible, .formation-event-focus summary:focus-visible { outline: 2px solid #f9c283; outline-offset: 3px; }
+.formation-event-focus details { max-width: 105px; font-size: 10px; color: #c5b3a1; }
+.formation-event-focus summary { cursor: pointer; }
 @media (max-width: 680px) {
     .formation-event-timeline {
-        top: auto;
-        bottom: calc(env(safe-area-inset-bottom, 0px) + 110px);
-        right: 12px;
-        max-width: min(220px, calc(100vw - 24px));
-        padding: 9px 11px;
+        bottom: calc(env(safe-area-inset-bottom, 0px) + 112px);
+        width: calc(100vw - 20px);
+        padding: 9px 12px 8px;
     }
-    .formation-event-timeline button { min-height: 38px; }
+    .formation-event-summary { font-size: 10px; }
+    .formation-time-track { margin: 7px 6px 0; }
+    .formation-event-focus { flex-wrap: wrap; gap: 5px 8px; padding: 7px; }
+    .formation-event-focus-copy { flex-basis: 66%; }
+    .formation-event-focus small { font-size: 9px; }
+    .formation-event-return { min-height: 31px; padding: 5px 8px; }
+    .formation-event-focus details { max-width: none; flex-basis: 100%; }
 }
-
-
-/* Chronological event rail: only genuinely witnessed and currently replayable
-   moments are actionable. Preserve the real planet as the visual backdrop. */
-.formation-event-header { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
-.formation-event-count { font-size: 11px; color: #e9b779; }
-.formation-event-track {
-    display: flex;
-    flex-direction: column;
-    gap: 0;
-    margin: 3px 0 0;
-    padding: 0 0 0 5px;
-    list-style: none;
-    max-height: min(42vh, 370px);
-    overflow-y: auto;
-    scrollbar-width: thin;
-    scrollbar-color: #bd925a55 transparent;
-}
-.formation-event-entry { position: relative; padding: 0 0 12px 17px; border-left: 1px solid #906d4a88; }
-.formation-event-entry:last-child { padding-bottom: 0; border-left-color: transparent; }
-.formation-event-entry::before {
-    position: absolute;
-    content: "";
-    top: 13px;
-    left: -5px;
-    width: 9px;
-    height: 9px;
-    border-radius: 50%;
-    background: #655d50;
-    border: 1px solid #b99b72;
-}
-.formation-event-entry.is-live::before { background: #ffc273; border-color: #ffe0b1; box-shadow: 0 0 10px #ffc27390; }
-.formation-event-track .formation-event-entry button {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 3px;
-    width: 100%;
-    text-align: left;
-    background: #292824e8;
-}
-.formation-event-track .formation-event-entry.is-live button { border-color: #e6ad7088; background: #493322db; }
-.formation-event-track .formation-event-entry button:disabled { opacity: .67; cursor: default; }
-.formation-event-title { font-weight: 650; color: #f8e6ce; }
-.formation-event-epoch { font-size: 11px; color: #cab9a4; }
-.formation-event-action { font-size: 11px; color: #f5cf94; }
-.formation-event-empty { margin: 7px 0 1px; color: #cab9a4; font-size: 12px; line-height: 1.45; }
-@media (max-width: 680px) {
-    .formation-event-track { max-height: min(26vh, 180px); }
-    .formation-event-timeline { width: min(230px, calc(100vw - 24px)); }
+@media (prefers-reduced-motion: reduce) {
+    .formation-time-progress, .formation-time-playhead, .formation-time-dot { transition: none; }
 }

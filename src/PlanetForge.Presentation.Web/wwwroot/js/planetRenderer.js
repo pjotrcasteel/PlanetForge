@@ -5,7 +5,7 @@ import {
 } from './performanceMetrics.js';
 import { createThermalRadianceData, thermalTextureSize, thermalMaterialShader } from './thermalRadiance.js';
 import { clearRetainedSurfaceGeometry, retainSurfaceGeometry } from './surfaceGeometryStore.js';
-import { captureImpactEvents, orbitForEvent, advanceRealtimeSeconds } from './evolution/specialEvents.mjs';
+import { captureImpactEvents, orbitForEvent, advanceRealtimeSeconds, eventFocusCameraBlend, AUTOMATIC_EVENT_FOCUS_SECONDS } from './evolution/specialEvents.mjs';
 import {
     createEvolution, disposeEvolution, stepEvolution, renderEvolutionGlobe, evolutionStatus,
     setEvolutionPlaying as setEvolutionModelPlaying, setEvolutionSpeed as setEvolutionModelSpeed,
@@ -1257,10 +1257,16 @@ function advanceFocusedEventClock(s, now) {
     const focus = s.eventFocus;
     // Keep real elapsed time exact even on a GPU-bound device. This clock is
     // sampled by both the HUD and renderer and cannot advance geology.
-    focus.elapsedSeconds = advanceRealtimeSeconds(focus.elapsedSeconds, dt);
-    s.evolution.wallTime += dt;
-    focus.transition = Math.min(1, focus.transition + dt);
-    const eased = focus.transition * focus.transition * (3 - 2 * focus.transition);
+    const remaining = Math.max(0, AUTOMATIC_EVENT_FOCUS_SECONDS - focus.elapsedSeconds);
+    const advancedSeconds = Math.min(dt, remaining);
+    focus.elapsedSeconds = advanceRealtimeSeconds(focus.elapsedSeconds, advancedSeconds);
+    s.evolution.wallTime += advancedSeconds;
+    if (focus.elapsedSeconds >= AUTOMATIC_EVENT_FOCUS_SECONDS) {
+        // Undo the regional orbit and resume the exact parent model/camera.
+        exitSpecialEvent();
+        return;
+    }
+    const eased = eventFocusCameraBlend(focus.elapsedSeconds);
     const deltaYaw = Math.atan2(Math.sin(focus.target.yaw - focus.origin.yaw),
         Math.cos(focus.target.yaw - focus.origin.yaw));
     s.yaw = focus.origin.yaw + deltaYaw * eased;
@@ -1287,8 +1293,15 @@ function render() {
             state.evolutionFps = (state.evolutionFps ?? 60) * 0.95 + 0.05 / Math.max(dt, 1e-3);
             const stepStartedAt = performanceMarkStart();
             if (stepEvolution(state.evolution, dt)) state.dirty = true;
+            const previouslyWitnessedId = state.eventHistory.at(-1)?.id;
             state.eventHistory = captureImpactEvents(state.eventHistory, state.evolution.magmaImpacts,
                 state.evolution.thermal.timeSeconds, state.evolution.seed);
+            const newestEvent = state.eventHistory.at(-1);
+            if (newestEvent && newestEvent.id !== previouslyWitnessedId && state.evolution.playing) {
+                // Only witnessed events from the live model trigger an automatic
+                // zoom. The logged geological timestamp remains unchanged.
+                enterSpecialEvent(newestEvent.id);
+            }
             recordPerformanceDuration('evolutionStepCpuMs', stepStartedAt);
         }
         state.evolutionLastFrame = now;

@@ -15,6 +15,18 @@ public partial class Home
             : years >= 1.0 ? $"T+{years:0.##} years" : $"T+{seconds:0} s";
     }
 
+    // A linear 4.567-Gyr rail hides early impacts at one pixel. Log time
+    // distributes witnessed events without changing their real epochs.
+    private static string TimelinePosition(double planetSeconds)
+    {
+        const double secondsPerYear = 31_557_600.0;
+        const double earthAgeYears = 4_567_000_000.0;
+        var years = double.IsFinite(planetSeconds)
+            ? Math.Clamp(planetSeconds / secondsPerYear, 0.0, earthAgeYears) : 0.0;
+        var percent = 100.0 * Math.Log10(1.0 + years) / Math.Log10(1.0 + earthAgeYears);
+        return percent.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture) + "%";
+    }
+
     private async Task EnterSpecialEventAsync(string eventId)
     {
         if (!formationRendererReady || rendererModule is null || specialEventsStatus?.Focus is not null) return;

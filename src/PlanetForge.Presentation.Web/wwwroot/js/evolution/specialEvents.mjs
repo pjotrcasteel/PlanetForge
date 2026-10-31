@@ -3,6 +3,20 @@
 // a separate wall-time clock. Never add these seconds to the 4.567 Gyr epoch.
 const MAX_EVENTS = 8;
 
+// The main globe remains at the event for 11 seconds, with smooth approach
+// and retreat, before geological playback resumes automatically.
+export const AUTOMATIC_EVENT_FOCUS_SECONDS = 14;
+
+export function eventFocusCameraBlend(elapsedSeconds) {
+    if (!Number.isFinite(elapsedSeconds) || elapsedSeconds < 0)
+        throw new RangeError('Invalid automatic event focus time.');
+    const smoothstep = t => t * t * (3 - 2 * t);
+    const arriving = smoothstep(Math.min(1, elapsedSeconds / 1.2));
+    const departing = smoothstep(Math.max(0, Math.min(1,
+        (AUTOMATIC_EVENT_FOCUS_SECONDS - elapsedSeconds) / 2)));
+    return arriving * departing;
+}
+
 export function captureImpactEvents(history, impacts, planetSeconds, seed) {
     if (!Array.isArray(history) || !Array.isArray(impacts) || !Number.isFinite(planetSeconds))
         throw new TypeError('Special-event capture requires a valid epoch and impact collection.');

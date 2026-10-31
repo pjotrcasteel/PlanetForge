@@ -161,47 +161,61 @@ test('PerformanceDiagnostics_OptIn_RecordsFramesAndDoesNotAlterEvolution', async
 });
 
 
-test('Evolution_WitnessedImpact_EntersRealtimeFocusWithoutAdvancingGeologicalEpoch', async ({ page }, testInfo) => {
-  // Keep software-WebGL CI responsive: spatial correctness is covered at full
-  // resolution elsewhere; this test specifically validates the time handoff.
+test('Evolution_WitnessedImpact_AutoZoomsFromHorizontalTimeline_ThenResumesGeology', async ({ page }, testInfo) => {
+  // Use the real seeded model emitter; only its next arrival time is accelerated.
   await page.setViewportSize({ width: 720, height: 460 });
   const errors = []; page.on('pageerror', e => errors.push(e.message));
   await page.goto(url);
   await waitForReady(page);
 
-  await expect(page.getByTestId('special-events-timeline')).toBeVisible();
-  await expect(page.getByTestId('special-events-timeline')).toContainText('KEY MOMENTS');
+  const timeline = page.getByTestId('special-events-timeline');
+  const rail = page.getByTestId('special-event-rail');
+  await expect(timeline).toBeVisible();
+  await expect(timeline).toContainText('EARTH HISTORY');
+  await expect(timeline).toContainText('LOG TIME');
+  const railBox = await rail.boundingBox();
+  expect(railBox.width).toBeGreaterThan(railBox.height * 8);
 
-  // Force the EXISTING seeded impact emitter's next scheduled arrival now.
-  // This is not a synthetic bookmark: the live model still chooses its
-  // direction, size and effects using its original deterministic generator.
+  const before = await page.evaluate(async () =>
+    (await import('/js/planetRenderer.js')).getPlanetCameraSnapshot());
   await page.evaluate(async () => {
     const renderer = await import('/js/planetRenderer.js');
     const model = renderer.getEvolutionDebug();
     model.nextMagmaImpact = 0;
     renderer.setEvolutionPlaying(true);
   });
-  await expect(page.getByTestId('special-events-timeline').locator('button:not([disabled])').last()).toBeVisible({ timeout: 45_000 });
-  await expect(page.getByTestId('special-events-timeline')).toContainText('Zoom in · 1× time');
-  const before = await page.evaluate(async () => (await import('/js/planetRenderer.js')).getPlanetCameraSnapshot());
-  await page.getByTestId('special-events-timeline').locator('button:not([disabled])').last().click();
-  await expect(page.getByTestId('special-event-focus')).toBeVisible();
-  await expect(page.getByTestId('special-event-focus')).toContainText('1× REAL TIME');
+
+  // No click: the renderer detects the witnessed impact and zooms by itself.
+  const focusPanel = page.getByTestId('special-event-focus');
+  await expect(focusPanel).toBeVisible({ timeout: 45_000 });
+  await expect(focusPanel).toContainText('AUTO ZOOM');
+  await expect(focusPanel).toContainText('1× REAL TIME');
   await expect(page.getByTestId('formation-play')).toBeDisabled();
+  const marker = page.getByTestId('special-event-enter').last();
+  await expect(marker).toBeVisible();
+  const dot = await marker.boundingBox();
+  expect(Math.abs(dot.width - dot.height)).toBeLessThan(2);
+  expect(dot.width).toBeLessThan(20);
 
   const epoch = (await evolutionStatus(page)).timeSeconds;
   await expect.poll(async () => page.evaluate(async () =>
     (await import('/js/planetRenderer.js')).getSpecialEventStatus().focus?.elapsedSeconds ?? 0),
-  { timeout: 35_000 }).toBeGreaterThan(0.5);
+  { timeout: 25_000 }).toBeGreaterThan(1.3);
   expect((await evolutionStatus(page)).timeSeconds).toBe(epoch);
-  const close = await page.evaluate(async () => (await import('/js/planetRenderer.js')).getPlanetCameraSnapshot());
+  const close = await page.evaluate(async () =>
+    (await import('/js/planetRenderer.js')).getPlanetCameraSnapshot());
   expect(close.distance).toBeLessThan(before.distance);
-  await page.screenshot({ path: testInfo.outputPath('special-impact-regional-focus.png') });
+  await page.screenshot({ path: testInfo.outputPath('special-impact-horizontal-auto-zoom.png') });
 
-  await page.getByTestId('special-event-exit').click();
-  await expect(page.getByTestId('special-event-focus')).toHaveCount(0);
+  // After a brief inspection the original camera and playback return by themselves.
+  await expect.poll(async () => page.evaluate(async () =>
+    (await import('/js/planetRenderer.js')).getSpecialEventStatus().focus),
+  { timeout: 30_000 }).toBeNull();
+  await expect(focusPanel).toHaveCount(0);
   await expect(page.getByTestId('formation-play')).toBeEnabled();
-  const restored = await page.evaluate(async () => (await import('/js/planetRenderer.js')).getPlanetCameraSnapshot());
+  const restored = await page.evaluate(async () =>
+    (await import('/js/planetRenderer.js')).getPlanetCameraSnapshot());
   expect(restored.distance).toBeCloseTo(before.distance, 6);
+  expect((await evolutionStatus(page)).playing).toBe(true);
   expect(errors).toEqual([]);
 });
