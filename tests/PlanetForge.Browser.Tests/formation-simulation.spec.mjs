@@ -217,5 +217,11 @@ test('Evolution_WitnessedImpact_AutoZoomsFromHorizontalTimeline_ThenResumesGeolo
     (await import('/js/planetRenderer.js')).getPlanetCameraSnapshot());
   expect(restored.distance).toBeCloseTo(before.distance, 6);
   expect((await evolutionStatus(page)).playing).toBe(true);
+  // The next impact's visual countdown was paused during the 14-second
+  // close-up; planetary playback must have time to move before another zoom.
+  await page.waitForTimeout(1_200);
+  expect((await evolutionStatus(page)).timeSeconds).toBeGreaterThan(epoch);
+  expect(await page.evaluate(async () =>
+    (await import('/js/planetRenderer.js')).getSpecialEventStatus().focus)).toBeNull();
   expect(errors).toEqual([]);
 });

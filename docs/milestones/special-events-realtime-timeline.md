@@ -26,7 +26,9 @@ still-inspectable marker. This transition:
 4. Advances a **separate local event clock at one simulated second per real
    visible second**. Geological time stays frozen. A hidden tab never
    accumulates catch-up.
-5. Restores the camera and prior playback automatically after the window;
+5. Preserves the next impact's scheduled visual countdown during inspection, so
+   close-ups cannot chain immediately merely because local event time passed.
+6. Restores the camera and prior playback automatically after the window;
    **Return now** allows the viewer to exit early. Past optical states cannot
    be replayed as if they still existed.
 

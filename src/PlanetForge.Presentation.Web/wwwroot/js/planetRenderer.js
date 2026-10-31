@@ -110,6 +110,12 @@ export function exitSpecialEvent() {
     state.yaw = focus.origin.yaw;
     state.pitch = focus.origin.pitch;
     state.distance = focus.origin.distance;
+    // The impact emitter's next arrival is scheduled against wallTime. Local
+    // inspection advances the optical clock, but must not consume the
+    // remaining interval to the next geological-playback event.
+    if (Number.isFinite(state.evolution.nextMagmaImpact)) {
+        state.evolution.nextMagmaImpact += focus.elapsedSeconds;
+    }
     state.eventFocus = null;
     state.eventFrameLast = null;
     setEvolutionModelPlaying(state.evolution, focus.wasPlaying);
