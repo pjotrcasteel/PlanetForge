@@ -67,9 +67,9 @@ public partial class Home
 
     private sealed record PlanetSpecialEventStatus(PlanetSpecialEvent[] Events, PlanetSpecialEventFocus? Focus);
 
-    private sealed record PlanetSpecialEvent(string Id, string Title, double PlanetSeconds, bool Inspectable, string Limitations);
+    private sealed record PlanetSpecialEvent(string Id, string Title, double PlanetSeconds, bool Inspectable, string Source, string Limitations);
 
     private sealed record PlanetSpecialEventFocus(
         string Id, string Title, double ElapsedSeconds, double PlanetSeconds,
-        string Scale, string TimeRate, string Limitations);
+        string Scale, string TimeRate, string Source, string Limitations);
 }

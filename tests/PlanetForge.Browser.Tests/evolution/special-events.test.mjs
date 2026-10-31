@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { captureImpactEvents, orbitForEvent, advanceRealtimeSeconds, eventFocusCameraBlend, AUTOMATIC_EVENT_FOCUS_SECONDS } from
+import { captureImpactEvents, captureEarthMilestoneEvents, snapshotEarthMilestoneState, orbitForEvent, advanceRealtimeSeconds, eventFocusCameraBlend, AUTOMATIC_EVENT_FOCUS_SECONDS } from
     '../../../src/PlanetForge.Presentation.Web/wwwroot/js/evolution/specialEvents.mjs';
 
 test('Witnessed impact bookmarks follow actual seeded model state, deduplicate and remain bounded', () => {
@@ -49,4 +49,40 @@ test('Automatic zoom arrives, briefly holds, then returns to the original globe'
     assert.equal(eventFocusCameraBlend(14), 0);
     assert.equal(eventFocusCameraBlend(30), 0);
     assert.throws(() => eventFocusCameraBlend(-1), RangeError);
+});
+
+test('Ordinary Hadean impacts are background activity, never key-moment transitions', () => {
+    const initial = { lithosphereReady: false, water: 0, regime: 'magma-ocean' };
+    assert.deepEqual(captureEarthMilestoneEvents([], initial, initial, 5000, 42), []);
+    // An actual impact entering S0's optical buffer changes none of these
+    // physical milestones and therefore cannot cause an automatic zoom.
+    const model = { thermal: { regime: 'magma-ocean' }, lithosphereReady: false,
+        water: 0, magmaImpacts: [{ born: 5, seed: 3, direction: [0, 1, 0] }] };
+    assert.deepEqual(snapshotEarthMilestoneState(model), initial);
+    assert.deepEqual(captureEarthMilestoneEvents([], initial,
+        snapshotEarthMilestoneState(model), 7000, 42), []);
+});
+
+test('Only once-per-run modeled planetary thresholds create major timeline markers', () => {
+    const magma = { lithosphereReady: false, water: 0, regime: 'magma-ocean' };
+    const lid = { lithosphereReady: true, water: 0, regime: 'stagnant-lid' };
+    const ocean = { ...lid, water: 0.52 };
+    const plates = { ...ocean, water: 1, regime: 'plates' };
+    let events = captureEarthMilestoneEvents([], magma, lid, 1e12, 42);
+    assert.equal(events.length, 1);
+    assert.equal(events[0].title, 'Persistent rocky lid forms');
+    assert.equal(events[0].scope, 'global');
+    assert.equal(events[0].source, 'Model-state threshold');
+
+    events = captureEarthMilestoneEvents(events, lid, ocean, 2e12, 42);
+    assert.equal(events.length, 2);
+    assert.equal(events[1].title, 'Steam rains out into oceans');
+
+    events = captureEarthMilestoneEvents(events, ocean, plates, 3e12, 42);
+    assert.equal(events.length, 3);
+    assert.equal(events[2].title, 'Plate tectonics begins (model)');
+    assert.deepEqual(captureEarthMilestoneEvents(events, plates, plates, 4e12, 42), events);
+    assert.deepEqual(captureEarthMilestoneEvents([], magma, magma, 0, 42), []);
+    assert.throws(() => snapshotEarthMilestoneState({ water: NaN, thermal: { regime: 'plates' } }), TypeError);
+    assert.throws(() => captureEarthMilestoneEvents([], magma, { ...ocean, water: NaN }, 1e12, 42), TypeError);
 });

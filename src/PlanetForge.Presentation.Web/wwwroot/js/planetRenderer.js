@@ -5,7 +5,7 @@ import {
 } from './performanceMetrics.js';
 import { createThermalRadianceData, thermalTextureSize, thermalMaterialShader } from './thermalRadiance.js';
 import { clearRetainedSurfaceGeometry, retainSurfaceGeometry } from './surfaceGeometryStore.js';
-import { captureImpactEvents, orbitForEvent, advanceRealtimeSeconds, eventFocusCameraBlend, AUTOMATIC_EVENT_FOCUS_SECONDS } from './evolution/specialEvents.mjs';
+import { captureEarthMilestoneEvents, snapshotEarthMilestoneState, orbitForEvent, advanceRealtimeSeconds, eventFocusCameraBlend, AUTOMATIC_EVENT_FOCUS_SECONDS } from './evolution/specialEvents.mjs';
 import {
     createEvolution, disposeEvolution, stepEvolution, renderEvolutionGlobe, evolutionStatus,
     setEvolutionPlaying as setEvolutionModelPlaying, setEvolutionSpeed as setEvolutionModelSpeed,
@@ -56,17 +56,25 @@ export function setEvolutionClouds(visible) {
 
 export function getEvolutionDebug() { return state?.evolution ?? null; }
 
-// First playable event bookmark: a witnessed event from the seeded GPU model.
-// The geological epoch is held fixed while the local event clock runs at 1x.
+// Key moments now follow material changes in the *same* Earth model.
+// Generic magma impacts are ambient visual activity, never auto-focus targets.
+function isEventInspectable(s, event) {
+    if (!s?.evolution || !event) return false;
+    if (event.type === 'earth-milestone')
+        return s.evolution.thermal.timeSeconds === event.planetSeconds;
+    // A future exceptional, explicitly admitted impact may use this path.
+    return event.type === 'magma-impact' && Boolean(s.evolution.magmaImpacts.some(impact =>
+        Math.abs(impact.born - event.born) < 1e-6 &&
+        Math.abs(impact.seed - event.impactSeed) < 1e-6)) &&
+        s.evolution.wallTime - event.born < 30;
+}
 export function getSpecialEventStatus() {
     advanceFocusedEventClock(state, performance.now());
     return {
         events: (state?.eventHistory ?? []).map(event => ({
             id: event.id, title: event.title, planetSeconds: event.planetSeconds,
-            inspectable: Boolean(state?.evolution?.magmaImpacts?.some(
-                impact => Math.abs(impact.born - event.born) < 1e-6 &&
-                    Math.abs(impact.seed - event.impactSeed) < 1e-6)) &&
-                state.evolution.wallTime - event.born < 30,
+            inspectable: isEventInspectable(state, event),
+            source: event.source ?? 'Model event',
             limitations: event.limitations
         })),
         focus: state?.eventFocus ? {
@@ -74,8 +82,11 @@ export function getSpecialEventStatus() {
             title: state.eventFocus.title,
             elapsedSeconds: state.eventFocus.elapsedSeconds,
             planetSeconds: state.eventFocus.planetSeconds,
-            scale: 'Regional orbital close-up · GPU surface ~39 km/texel',
-            timeRate: '1 simulated event second / real second',
+            scale: state.eventFocus.scope === 'global'
+                ? 'Planetary orbital close-up · same S0 GPU globe, no site-specific geometry'
+                : 'Regional orbital close-up · GPU surface ~39 km/texel',
+            source: state.eventFocus.source,
+            timeRate: '1 inspection second / real second · parent geology paused',
             limitations: state.eventFocus.limitations
         } : null
     };
@@ -85,15 +96,15 @@ export function enterSpecialEvent(id) {
     if (!state?.evolution || state.eventFocus) throw new Error('No event-capable planet is available.');
     const event = state.eventHistory.find(candidate => candidate.id === id);
     if (!event) throw new Error('This event is no longer in the bounded timeline.');
-    const currentlyActive = state.evolution.magmaImpacts.some(impact =>
-        Math.abs(impact.born - event.born) < 1e-6 &&
-        Math.abs(impact.seed - event.impactSeed) < 1e-6);
-    if (!currentlyActive || state.evolution.wallTime - event.born >= 30)
-        throw new Error('The model cannot replay this event after its optical state expires.');
-    const target = orbitForEvent(event.direction);
+    if (!isEventInspectable(state, event))
+        throw new Error('The model cannot rewind to a past event without a saved physical state.');
+    const target = event.scope === 'global'
+        ? { yaw: state.yaw, pitch: state.pitch, distance: Math.min(state.distance, 1.35) }
+        : orbitForEvent(event.direction);
     state.eventFocus = {
         id: event.id, title: event.title, planetSeconds: event.planetSeconds,
-        limitations: event.limitations, elapsedSeconds: 0, target, transition: 0,
+        scope: event.scope, source: event.source ?? 'Model event',
+        limitations: event.limitations, elapsedSeconds: 0, target,
         origin: { yaw: state.yaw, pitch: state.pitch, distance: state.distance },
         wasPlaying: state.evolution.playing
     };
@@ -110,9 +121,8 @@ export function exitSpecialEvent() {
     state.yaw = focus.origin.yaw;
     state.pitch = focus.origin.pitch;
     state.distance = focus.origin.distance;
-    // The impact emitter's next arrival is scheduled against wallTime. Local
-    // inspection advances the optical clock, but must not consume the
-    // remaining interval to the next geological-playback event.
+    // The ambient impact emitter uses wallTime. Local inspection advances the
+    // optical clock but cannot consume its scheduled geological-playback interval.
     if (Number.isFinite(state.evolution.nextMagmaImpact)) {
         state.evolution.nextMagmaImpact += focus.elapsedSeconds;
     }
@@ -1298,14 +1308,16 @@ function render() {
             recordPerformanceSample('visibleFrameIntervalMs', dt * 1000);
             state.evolutionFps = (state.evolutionFps ?? 60) * 0.95 + 0.05 / Math.max(dt, 1e-3);
             const stepStartedAt = performanceMarkStart();
+            const before = snapshotEarthMilestoneState(state.evolution);
             if (stepEvolution(state.evolution, dt)) state.dirty = true;
             const previouslyWitnessedId = state.eventHistory.at(-1)?.id;
-            state.eventHistory = captureImpactEvents(state.eventHistory, state.evolution.magmaImpacts,
+            state.eventHistory = captureEarthMilestoneEvents(state.eventHistory, before,
+                snapshotEarthMilestoneState(state.evolution),
                 state.evolution.thermal.timeSeconds, state.evolution.seed);
             const newestEvent = state.eventHistory.at(-1);
             if (newestEvent && newestEvent.id !== previouslyWitnessedId && state.evolution.playing) {
-                // Only witnessed events from the live model trigger an automatic
-                // zoom. The logged geological timestamp remains unchanged.
+                // Geological turning points can enter a planet-wide inspection.
+                // Ordinary impacts keep rendering without hijacking the camera.
                 enterSpecialEvent(newestEvent.id);
             }
             recordPerformanceDuration('evolutionStepCpuMs', stepStartedAt);

@@ -161,10 +161,9 @@ test('PerformanceDiagnostics_OptIn_RecordsFramesAndDoesNotAlterEvolution', async
 });
 
 
-test('Evolution_WitnessedImpact_AutoZoomsFromHorizontalTimeline_ThenResumesGeology', async ({ page }, testInfo) => {
-  // Use the existing seeded model, accelerating only the next impact arrival.
+test('Evolution_KeyMilestone_AutoZooms_WhileOrdinaryImpactsStayAmbient', async ({ page }, testInfo) => {
   await page.setViewportSize({ width: 720, height: 460 });
-  const errors = []; page.on('pageerror', e => errors.push(e.message));
+  const errors = []; page.on('pageerror', error => errors.push(error.message));
   await page.goto(url);
   await waitForReady(page);
 
@@ -172,27 +171,39 @@ test('Evolution_WitnessedImpact_AutoZoomsFromHorizontalTimeline_ThenResumesGeolo
   const rail = page.getByTestId('special-event-rail');
   await expect(timeline).toBeVisible();
   await expect(timeline).toContainText('EARTH HISTORY');
-  await expect(timeline).toContainText('LOG TIME');
+  await expect(timeline).toContainText('Major planetary changes');
   const railBox = await rail.boundingBox();
   expect(railBox.width).toBeGreaterThan(railBox.height * 8);
   const before = await page.evaluate(async () =>
     (await import('/js/planetRenderer.js')).getPlanetCameraSnapshot());
 
-  // Collect local-clock/camera samples *inside* Chromium while the event is
-  // active. SwiftShader UI queries can stall for >14 seconds, after the
-  // automatic close-up has already correctly returned to geological time.
+  // Monitor the real thermal transition inside Chromium: SwiftShader-backed
+  // Playwright UI calls can outlast a 14-second close-up.
   await page.evaluate(async () => {
     const renderer = await import('/js/planetRenderer.js');
-    const probe = {
-      samples: [], sawFocus: false, completed: false
-    };
-    window.__pfAutoFocusProbe = probe;
+    const model = renderer.getEvolutionDebug();
+    const probe = { samples: [], sawFocus: false, sawImpact: false,
+      sawFocusHud: false, sawDisabledControls: false, dotSize: null,
+      completed: false, timelineEvents: [] };
+    window.__pfKeyMomentProbe = probe;
     const timer = setInterval(() => {
-      const focus = renderer.getSpecialEventStatus().focus;
-      if (focus) {
+      const status = renderer.getSpecialEventStatus();
+      probe.sawImpact ||= model.magmaImpacts.length > 0;
+      probe.timelineEvents = status.events;
+      const focusHud = document.querySelector('[data-testid="special-event-focus"]');
+      probe.sawFocusHud ||= Boolean(focusHud?.textContent?.includes('Model-state threshold'));
+      probe.sawDisabledControls ||= Boolean(document.querySelector('[data-testid="formation-play"]')?.disabled);
+      const dot = document.querySelector('[data-testid="special-event-enter"]');
+      if (dot && !probe.dotSize) {
+        const bounds = dot.getBoundingClientRect();
+        probe.dotSize = { width: bounds.width, height: bounds.height };
+      }
+      if (status.focus) {
         probe.sawFocus = true;
         probe.samples.push({
-          elapsed: focus.elapsedSeconds,
+          title: status.focus.title,
+          source: status.focus.source,
+          elapsed: status.focus.elapsedSeconds,
           epoch: renderer.getEvolutionStatus().timeSeconds,
           distance: renderer.getPlanetCameraSnapshot().distance
         });
@@ -201,44 +212,43 @@ test('Evolution_WitnessedImpact_AutoZoomsFromHorizontalTimeline_ThenResumesGeolo
         probe.completed = true;
       }
     }, 75);
-    const model = renderer.getEvolutionDebug();
+    // The real seeded impact emitter still runs, but only a physically
+    // observed solid-lid transition should claim a key-moment zoom.
     model.nextMagmaImpact = 0;
+    renderer.setEvolutionSpeed(50e6);
     renderer.setEvolutionPlaying(true);
   });
 
-  // The camera enters automatically; clicking a marker is not required.
-  const focusPanel = page.getByTestId('special-event-focus');
-  await expect(focusPanel).toBeVisible({ timeout: 45_000 });
-  await expect(focusPanel).toContainText('AUTO ZOOM');
-  await expect(focusPanel).toContainText('1× REAL TIME');
-  await expect(page.getByTestId('formation-play')).toBeDisabled();
-  const marker = page.getByTestId('special-event-enter').last();
-  await expect(marker).toBeVisible();
-  const dot = await marker.boundingBox();
-  expect(Math.abs(dot.width - dot.height)).toBeLessThan(2);
-  expect(dot.width).toBeLessThan(20);
-  await page.screenshot({ path: testInfo.outputPath('special-impact-horizontal-auto-zoom.png') });
-
-  // Browser-side samples survive after the short focus ends. Verify the
-  // close-up really reached the event and never advanced geological time.
-  await expect.poll(async () => page.evaluate(() => window.__pfAutoFocusProbe.completed),
+  await expect.poll(async () => page.evaluate(() => window.__pfKeyMomentProbe.sawFocus),
+    { timeout: 120_000, intervals: [250] }).toBe(true);
+  // Capture a real WebGL frame while the browser-side probe records the
+  // HUD and camera; do not race the short auto-return with slow UI calls.
+  await page.screenshot({ path: testInfo.outputPath('first-rocky-lid-key-moment.png') });
+  await expect.poll(async () => page.evaluate(() => window.__pfKeyMomentProbe.completed),
     { timeout: 30_000 }).toBe(true);
-  const samples = await page.evaluate(() => window.__pfAutoFocusProbe.samples);
-  expect(samples.length).toBeGreaterThan(1);
-  expect(Math.max(...samples.map(s => s.elapsed))).toBeGreaterThan(1.3);
-  expect(Math.min(...samples.map(s => s.distance))).toBeLessThan(before.distance);
-  expect(new Set(samples.map(s => s.epoch)).size).toBe(1);
+  const probe = await page.evaluate(() => window.__pfKeyMomentProbe);
+  expect(probe.sawImpact).toBe(true);
+  expect(probe.sawFocusHud).toBe(true);
+  expect(probe.sawDisabledControls).toBe(true);
+  expect(Math.abs(probe.dotSize.width - probe.dotSize.height)).toBeLessThan(2);
+  expect(probe.dotSize.width).toBeLessThan(20);
+  const marker = page.getByTestId('special-event-enter').first();
+  await expect(marker).toHaveAttribute('aria-label', /Persistent rocky lid forms/);
+  expect(probe.samples.length).toBeGreaterThan(1);
+  expect(probe.samples[0].title).toBe('Persistent rocky lid forms');
+  expect(probe.samples[0].source).toBe('Model-state threshold');
+  expect(Math.max(...probe.samples.map(sample => sample.elapsed))).toBeGreaterThan(1.3);
+  expect(Math.min(...probe.samples.map(sample => sample.distance))).toBeLessThan(before.distance);
+  expect(new Set(probe.samples.map(sample => sample.epoch)).size).toBe(1);
+  expect(probe.timelineEvents.every(event => !/impact/i.test(event.title))).toBe(true);
 
-  await expect(focusPanel).toHaveCount(0);
+  await expect(page.getByTestId('special-event-focus')).toHaveCount(0);
   await expect(page.getByTestId('formation-play')).toBeEnabled();
   const restored = await page.evaluate(async () =>
     (await import('/js/planetRenderer.js')).getPlanetCameraSnapshot());
   expect(restored.distance).toBeCloseTo(before.distance, 6);
   expect((await evolutionStatus(page)).playing).toBe(true);
-  // Local inspection does not spend the countdown to the next real impact.
   await page.waitForTimeout(1_200);
-  expect((await evolutionStatus(page)).timeSeconds).toBeGreaterThan(samples[0].epoch);
-  expect(await page.evaluate(async () =>
-    (await import('/js/planetRenderer.js')).getSpecialEventStatus().focus)).toBeNull();
+  expect((await evolutionStatus(page)).timeSeconds).toBeGreaterThan(probe.samples[0].epoch);
   expect(errors).toEqual([]);
 });
