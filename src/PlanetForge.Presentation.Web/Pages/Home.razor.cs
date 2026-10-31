@@ -47,6 +47,10 @@ public partial class Home
                 try
                 {
                     evolution = await rendererModule.InvokeAsync<PlanetEvolutionStatus?>("getEvolutionStatus", disposeCancellationTokenSource.Token);
+                    // Automatic key-moment inspection pauses the JS model and
+                    // later resumes it. Keep the UI button truthful even when
+                    // playback changed without a click in Blazor.
+                    formationPlaying = evolution?.Playing ?? formationPlaying;
                     specialEventsStatus = await rendererModule.InvokeAsync<PlanetSpecialEventStatus?>("getSpecialEventStatus", disposeCancellationTokenSource.Token);
                     formationStatus = string.Empty;
                 }
