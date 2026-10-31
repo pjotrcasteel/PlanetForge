@@ -169,6 +169,9 @@ test('Evolution_WitnessedImpact_EntersRealtimeFocusWithoutAdvancingGeologicalEpo
   await page.goto(url);
   await waitForReady(page);
 
+  await expect(page.getByTestId('special-events-timeline')).toBeVisible();
+  await expect(page.getByTestId('special-events-timeline')).toContainText('KEY MOMENTS');
+
   // Force the EXISTING seeded impact emitter's next scheduled arrival now.
   // This is not a synthetic bookmark: the live model still chooses its
   // direction, size and effects using its original deterministic generator.
@@ -178,9 +181,10 @@ test('Evolution_WitnessedImpact_EntersRealtimeFocusWithoutAdvancingGeologicalEpo
     model.nextMagmaImpact = 0;
     renderer.setEvolutionPlaying(true);
   });
-  await expect(page.getByTestId('special-events-timeline')).toBeVisible({ timeout: 45_000 });
+  await expect(page.getByTestId('special-events-timeline').locator('button:not([disabled])').last()).toBeVisible({ timeout: 45_000 });
+  await expect(page.getByTestId('special-events-timeline')).toContainText('Zoom in · 1× time');
   const before = await page.evaluate(async () => (await import('/js/planetRenderer.js')).getPlanetCameraSnapshot());
-  await page.getByTestId('special-event-enter').first().click();
+  await page.getByTestId('special-events-timeline').locator('button:not([disabled])').last().click();
   await expect(page.getByTestId('special-event-focus')).toBeVisible();
   await expect(page.getByTestId('special-event-focus')).toContainText('1× REAL TIME');
   await expect(page.getByTestId('formation-play')).toBeDisabled();

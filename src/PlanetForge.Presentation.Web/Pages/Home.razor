@@ -194,15 +194,34 @@
                     <details><summary>Model limits</summary><small>@focus.Limitations</small></details>
                 </section>
             }
-            else if (specialEventsStatus?.Events is { Length: > 0 } events)
+            else
             {
                 <section class="formation-event-timeline" aria-label="Special events timeline" data-testid="special-events-timeline">
-                    <strong>KEY MOMENTS</strong>
-                    <small>Observed events from this planet · latest first</small>
-                    @foreach (var item in events.Reverse().Take(3))
+                    <div class="formation-event-header">
+                        <strong>KEY MOMENTS</strong>
+                        <span class="formation-event-count">@(specialEventsStatus?.Events.Length ?? 0) / 8</span>
+                    </div>
+                    <small>Observed on this Earth · oldest to newest</small>
+                    @if (specialEventsStatus?.Events is { Length: > 0 } events)
                     {
-                        <button type="button" @key="item.Id" data-testid="special-event-enter" disabled="@(!item.Inspectable)"
-                                @onclick="() => EnterSpecialEventAsync(item.Id)">@item.Title · @FormatEventEpoch(item.PlanetSeconds) · @(item.Inspectable ? "Inspect" : "Replay unavailable")</button>
+                        <ol class="formation-event-track" aria-label="Observed geological events">
+                            @foreach (var item in events)
+                            {
+                                <li class="formation-event-entry @(item.Inspectable ? "is-live" : "is-past")" @key="item.Id">
+                                    <button type="button" data-testid="special-event-enter" disabled="@(!item.Inspectable)"
+                                            aria-label="@($"{item.Title}, {FormatEventEpoch(item.PlanetSeconds)}. {(item.Inspectable ? "Zoom into live event" : "Replay expired")}")"
+                                            @onclick="() => EnterSpecialEventAsync(item.Id)">
+                                        <span class="formation-event-title">@item.Title</span>
+                                        <span class="formation-event-epoch">@FormatEventEpoch(item.PlanetSeconds)</span>
+                                        <span class="formation-event-action">@(item.Inspectable ? "Zoom in · 1× time" : "Optical replay expired")</span>
+                                    </button>
+                                </li>
+                            }
+                        </ol>
+                    }
+                    else
+                    {
+                        <p class="formation-event-empty" role="status">Watching the evolving Earth. Key moments appear here when the simulation witnesses them.</p>
                     }
                 </section>
             }
