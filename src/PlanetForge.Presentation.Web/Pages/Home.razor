@@ -186,8 +186,14 @@
             <section class="formation-event-timeline @(specialEventsStatus?.Focus is not null ? "is-inspecting" : "")"
                      aria-label="Horizontal geological events timeline" data-testid="special-events-timeline">
                 <div class="formation-event-header">
-                    <span class="formation-event-kicker">EARTH HISTORY <small>· LOG TIME</small></span>
-                    <span class="formation-event-count">@(specialEventsStatus?.Events.Length ?? 0) KEY MOMENTS</span>
+                    <div class="formation-event-identity">
+                        <span class="formation-event-kicker">EARTH HISTORY <small>· THE LONG NOW</small></span>
+                        <strong>Our planet, unfolding</strong>
+                    </div>
+                    <div class="formation-event-epoch-readout">
+                        <span class="formation-event-eon">@TimelineEon(evolution?.TimeSeconds ?? 0)</span>
+                        <strong data-testid="special-event-epoch">@FormatEventEpoch(evolution?.TimeSeconds ?? 0)</strong>
+                    </div>
                 </div>
                 @if (specialEventsStatus?.Focus is { } focus)
                 {
@@ -201,16 +207,17 @@
                         <details><summary>Model limits</summary><small>@focus.Limitations</small></details>
                     </div>
                 }
-                else
-                {
-                    <p class="formation-event-summary" role="status">
-                        @(specialEventsStatus?.Events.Length > 0
-                            ? "Major planetary transitions are marked below · Routine impacts stay in the background."
-                            : "Travel through Earth history · Major planetary changes trigger close-ups, not every impact.")
-                    </p>
-                }
-                <div class="formation-time-track" role="group" aria-label="Observed events along logarithmic geological time"
+                <div class="formation-event-meta">
+                    <span class="formation-event-count">@(specialEventsStatus?.Events.Length ?? 0) @((specialEventsStatus?.Events.Length ?? 0) == 1 ? "KEY MOMENT" : "KEY MOMENTS")</span>
+                    <span class="formation-event-scale">LOGARITHMIC · 4.567 BILLION YEARS</span>
+                </div>
+                <div class="formation-time-track" role="group" aria-label="Observed key events and present cursor along logarithmic geological time"
                      data-testid="special-event-rail">
+                    <div class="formation-time-ticks" aria-hidden="true">
+                        <span class="formation-time-tick" style="left:31.06%"><small>1 kyr</small></span>
+                        <span class="formation-time-tick" style="left:62.12%"><small>1 Myr</small></span>
+                        <span class="formation-time-tick" style="left:93.17%"><small>1 Gyr</small></span>
+                    </div>
                     <div class="formation-time-progress" style="@($"width: {TimelinePosition(evolution?.TimeSeconds ?? 0)};")"></div>
                     <span class="formation-time-playhead" style="@($"left: {TimelinePosition(evolution?.TimeSeconds ?? 0)};")"
                           aria-label="@($"Current epoch: {FormatEventEpoch(evolution?.TimeSeconds ?? 0)}")"></span>
@@ -230,9 +237,21 @@
                     }
                 </div>
                 <div class="formation-time-axis">
-                    <span>FORMATION</span>
-                    <span data-testid="special-event-epoch">@FormatEventEpoch(evolution?.TimeSeconds ?? 0)</span>
-                    <span>4.567 Ga</span>
+                    <span>EARTH FORMS</span>
+                    <span>PRESENT DAY</span>
+                </div>
+                @if (specialEventsStatus?.Events is { Length: > 0 } seenEvents && specialEventsStatus?.Focus is null)
+                {
+                    <div class="formation-event-recent" aria-label="Latest recorded key moment">
+                        <span>LATEST</span>
+                        <strong>@(seenEvents[^1].Title)</strong>
+                        <span>@(FormatEventEpoch(seenEvents[^1].PlanetSeconds))</span>
+                    </div>
+                }
+                <div class="formation-event-legend">
+                    <span><i class="formation-event-legend-now"></i> NOW</span>
+                    <span><i class="formation-event-legend-moment"></i> ZOOM MOMENT</span>
+                    <small>Routine impacts stay in the background</small>
                 </div>
             </section>
         }

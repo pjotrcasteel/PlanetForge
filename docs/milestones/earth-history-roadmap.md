@@ -133,6 +133,9 @@ artefacts; orogen timing not yet validated against geology.
 - **Exit:** at 0 Ma, major basins (Amazon, Nile, Mississippi, Congo…) emerge from the elevation data.
 
 ### E7 — Earth-history time UI and curated key moments
+
+**Implementation sequence and visual/device gates:** [Journey milestone plan](earth-journey-milestone-plan.md). The E7 first release is state-driven; the cinematic timeline is a visual enhancement, not new invented geological history.
+
 **First slice in place (0.0.50.x):** a horizontal logarithmic 4.567-Gyr rail,
 live-epoch cursor and small dot markers. The initial release zoomed on every
 seeded Hadean impact; the next slice corrects this: **ordinary impacts remain
