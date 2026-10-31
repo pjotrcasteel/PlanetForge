@@ -441,3 +441,99 @@
     .formation-controls { gap: 5px; padding: 6px; }
     .formation-controls button, .formation-controls select { padding: 8px 10px; font-size: 12px; }
 }
+
+/* Key moments use the main planet and a second, clearly labelled local clock.
+   Keep the event control away from the orbital HUD and primary playback bar. */
+.formation-event-timeline {
+    position: absolute;
+    z-index: 11;
+    top: calc(env(safe-area-inset-top, 0px) + 22px);
+    right: 24px;
+    width: min(260px, calc(100vw - 48px));
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 6px;
+    padding: 12px 14px;
+    color: #f2e6d2;
+    border: 1px solid #ad804c55;
+    border-radius: 14px;
+    background: #0c1011e8;
+    font: 12px/1.35 system-ui, sans-serif;
+}
+.formation-event-timeline strong { letter-spacing: .07em; font-size: 12px; }
+.formation-event-timeline span { color: #f5cf94; font-variant-numeric: tabular-nums; }
+.formation-event-timeline small { color: #c2b8a8; line-height: 1.4; }
+.formation-event-timeline button {
+    min-height: 40px;
+    border: 1px solid #b89a7555;
+    border-radius: 9px;
+    padding: 8px 10px;
+    color: #f8e6ce;
+    background: #393027;
+    font: inherit;
+    cursor: pointer;
+}
+.formation-event-timeline button:focus-visible { outline: 2px solid #e8ae69; outline-offset: 3px; }
+.formation-event-timeline details summary { cursor: pointer; }
+@media (max-width: 680px) {
+    .formation-event-timeline {
+        top: auto;
+        bottom: calc(env(safe-area-inset-bottom, 0px) + 110px);
+        right: 12px;
+        max-width: min(220px, calc(100vw - 24px));
+        padding: 9px 11px;
+    }
+    .formation-event-timeline button { min-height: 38px; }
+}
+
+
+/* Chronological event rail: only genuinely witnessed and currently replayable
+   moments are actionable. Preserve the real planet as the visual backdrop. */
+.formation-event-header { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.formation-event-count { font-size: 11px; color: #e9b779; }
+.formation-event-track {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    margin: 3px 0 0;
+    padding: 0 0 0 5px;
+    list-style: none;
+    max-height: min(42vh, 370px);
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: #bd925a55 transparent;
+}
+.formation-event-entry { position: relative; padding: 0 0 12px 17px; border-left: 1px solid #906d4a88; }
+.formation-event-entry:last-child { padding-bottom: 0; border-left-color: transparent; }
+.formation-event-entry::before {
+    position: absolute;
+    content: "";
+    top: 13px;
+    left: -5px;
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: #655d50;
+    border: 1px solid #b99b72;
+}
+.formation-event-entry.is-live::before { background: #ffc273; border-color: #ffe0b1; box-shadow: 0 0 10px #ffc27390; }
+.formation-event-track .formation-event-entry button {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 3px;
+    width: 100%;
+    text-align: left;
+    background: #292824e8;
+}
+.formation-event-track .formation-event-entry.is-live button { border-color: #e6ad7088; background: #493322db; }
+.formation-event-track .formation-event-entry button:disabled { opacity: .67; cursor: default; }
+.formation-event-title { font-weight: 650; color: #f8e6ce; }
+.formation-event-epoch { font-size: 11px; color: #cab9a4; }
+.formation-event-action { font-size: 11px; color: #f5cf94; }
+.formation-event-empty { margin: 7px 0 1px; color: #cab9a4; font-size: 12px; line-height: 1.45; }
+@media (max-width: 680px) {
+    .formation-event-track { max-height: min(26vh, 180px); }
+    .formation-event-timeline { width: min(230px, calc(100vw - 24px)); }
+}

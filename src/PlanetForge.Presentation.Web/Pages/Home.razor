@@ -175,14 +175,56 @@
         @if (continuousSimulation)
         {
             <div class="formation-controls" aria-label="Simulation controls">
-                <button type="button" data-testid="formation-play" disabled="@(!formationRendererReady)" aria-pressed="@(formationPlaying ? "true" : "false")" @onclick="ToggleFormationPlaybackAsync">@(formationPlaying ? "Pause" : "Play")</button>
-                <select aria-label="Maximum simulated time per second" data-testid="formation-speed" value="@formationMaximumMyrPerSecond" @onchange="ChangeFormationSpeedAsync" disabled="@(!formationRendererReady)">
+                <button type="button" data-testid="formation-play" disabled="@(!formationRendererReady || specialEventsStatus?.Focus is not null)" aria-pressed="@(formationPlaying ? "true" : "false")" @onclick="ToggleFormationPlaybackAsync">@(formationPlaying ? "Pause" : "Play")</button>
+                <select aria-label="Maximum simulated time per second" data-testid="formation-speed" value="@formationMaximumMyrPerSecond" @onchange="ChangeFormationSpeedAsync" disabled="@(!formationRendererReady || specialEventsStatus?.Focus is not null)">
                     <option value="1">≤ 1 Myr / s</option><option value="5">≤ 5 Myr / s</option><option value="10">≤ 10 Myr / s</option>
                     <option value="20">≤ 20 Myr / s</option><option value="50">≤ 50 Myr / s</option>
                 </select>
-                <button type="button" data-testid="formation-clouds" disabled="@(!formationRendererReady)" aria-pressed="@(formationClouds ? "true" : "false")" @onclick="ToggleFormationCloudsAsync">@(formationClouds ? "Clouds on" : "Clouds off")</button>
-                <button type="button" data-testid="formation-restart" disabled="@(!formationRendererReady || formationBusy)" @onclick="RestartFormationAsync">Restart</button>
+                <button type="button" data-testid="formation-clouds" disabled="@(!formationRendererReady || specialEventsStatus?.Focus is not null)" aria-pressed="@(formationClouds ? "true" : "false")" @onclick="ToggleFormationCloudsAsync">@(formationClouds ? "Clouds on" : "Clouds off")</button>
+                <button type="button" data-testid="formation-restart" disabled="@(!formationRendererReady || formationBusy || specialEventsStatus?.Focus is not null)" @onclick="RestartFormationAsync">Restart</button>
             </div>
+            @if (specialEventsStatus?.Focus is { } focus)
+            {
+                <section class="formation-event-timeline formation-event-focused" aria-label="Special-event real-time inspection" data-testid="special-event-focus">
+                    <strong>@focus.Title</strong>
+                    <span data-testid="event-elapsed">LOCAL T+@focus.ElapsedSeconds.ToString("0.0") s · 1× REAL TIME</span>
+                    <small>Parent geological epoch: @FormatEventEpoch(focus.PlanetSeconds)</small>
+                    <small>Planetary geological time is paused · @focus.Scale</small>
+                    <button type="button" data-testid="special-event-exit" @onclick="ExitSpecialEventAsync">Return to planet</button>
+                    <details><summary>Model limits</summary><small>@focus.Limitations</small></details>
+                </section>
+            }
+            else
+            {
+                <section class="formation-event-timeline" aria-label="Special events timeline" data-testid="special-events-timeline">
+                    <div class="formation-event-header">
+                        <strong>KEY MOMENTS</strong>
+                        <span class="formation-event-count">@(specialEventsStatus?.Events.Length ?? 0) / 8</span>
+                    </div>
+                    <small>Observed on this Earth · oldest to newest</small>
+                    @if (specialEventsStatus?.Events is { Length: > 0 } events)
+                    {
+                        <ol class="formation-event-track" aria-label="Observed geological events">
+                            @foreach (var item in events)
+                            {
+                                <li class="formation-event-entry @(item.Inspectable ? "is-live" : "is-past")" @key="item.Id">
+                                    <button type="button" data-testid="special-event-enter" disabled="@(!item.Inspectable)"
+                                            aria-label="@($"{item.Title}, {FormatEventEpoch(item.PlanetSeconds)}. {(item.Inspectable ? "Zoom into live event" : "Replay expired")}")"
+                                            @onclick="() => EnterSpecialEventAsync(item.Id)">
+                                        <span class="formation-event-title">@item.Title</span>
+                                        <span class="formation-event-epoch">@FormatEventEpoch(item.PlanetSeconds)</span>
+                                        <span class="formation-event-action">@(item.Inspectable ? "Zoom in · 1× time" : "Optical replay expired")</span>
+                                    </button>
+                                </li>
+                            }
+                        </ol>
+                    }
+                    else
+                    {
+                        <p class="formation-event-empty" role="status">Watching the evolving Earth. Key moments appear here when the simulation witnesses them.</p>
+                    }
+                </section>
+            }
         }
         else if (airlessReferenceActive)
         {

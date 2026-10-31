@@ -5,6 +5,7 @@ import {
 } from './performanceMetrics.js';
 import { createThermalRadianceData, thermalTextureSize, thermalMaterialShader } from './thermalRadiance.js';
 import { clearRetainedSurfaceGeometry, retainSurfaceGeometry } from './surfaceGeometryStore.js';
+import { captureImpactEvents, orbitForEvent, advanceRealtimeSeconds } from './evolution/specialEvents.mjs';
 import {
     createEvolution, disposeEvolution, stepEvolution, renderEvolutionGlobe, evolutionStatus,
     setEvolutionPlaying as setEvolutionModelPlaying, setEvolutionSpeed as setEvolutionModelSpeed,
@@ -19,6 +20,9 @@ export function startEvolution(seed, maximumYearsPerSecond = 20e6) {
     if (!state) throw new Error('Renderer not initialized.');
     if (state.evolution) disposeEvolution(state.evolution);
     state.evolution = createEvolution(state.gl, (Number(seed) >>> 0) || 1, createProgram, { maximumYearsPerSecond });
+    state.eventHistory = [];
+    state.eventFocus = null;
+    state.eventFrameLast = null;
     state.evolutionLastFrame = null;
     state.dirty = true;
     return evolutionStatus(state.evolution);
@@ -35,7 +39,7 @@ export function restartEvolution(seed) {
 }
 
 export function setEvolutionPlaying(playing) {
-    if (!state?.evolution) return;
+    if (!state?.evolution || state.eventFocus) return;
     setEvolutionModelPlaying(state.evolution, playing);
     state.evolutionLastFrame = null;
 }
@@ -51,6 +55,68 @@ export function setEvolutionClouds(visible) {
 }
 
 export function getEvolutionDebug() { return state?.evolution ?? null; }
+
+// First playable event bookmark: a witnessed event from the seeded GPU model.
+// The geological epoch is held fixed while the local event clock runs at 1x.
+export function getSpecialEventStatus() {
+    advanceFocusedEventClock(state, performance.now());
+    return {
+        events: (state?.eventHistory ?? []).map(event => ({
+            id: event.id, title: event.title, planetSeconds: event.planetSeconds,
+            inspectable: Boolean(state?.evolution?.magmaImpacts?.some(
+                impact => Math.abs(impact.born - event.born) < 1e-6 &&
+                    Math.abs(impact.seed - event.impactSeed) < 1e-6)) &&
+                state.evolution.wallTime - event.born < 30,
+            limitations: event.limitations
+        })),
+        focus: state?.eventFocus ? {
+            id: state.eventFocus.id,
+            title: state.eventFocus.title,
+            elapsedSeconds: state.eventFocus.elapsedSeconds,
+            planetSeconds: state.eventFocus.planetSeconds,
+            scale: 'Regional orbital close-up · GPU surface ~39 km/texel',
+            timeRate: '1 simulated event second / real second',
+            limitations: state.eventFocus.limitations
+        } : null
+    };
+}
+
+export function enterSpecialEvent(id) {
+    if (!state?.evolution || state.eventFocus) throw new Error('No event-capable planet is available.');
+    const event = state.eventHistory.find(candidate => candidate.id === id);
+    if (!event) throw new Error('This event is no longer in the bounded timeline.');
+    const currentlyActive = state.evolution.magmaImpacts.some(impact =>
+        Math.abs(impact.born - event.born) < 1e-6 &&
+        Math.abs(impact.seed - event.impactSeed) < 1e-6);
+    if (!currentlyActive || state.evolution.wallTime - event.born >= 30)
+        throw new Error('The model cannot replay this event after its optical state expires.');
+    const target = orbitForEvent(event.direction);
+    state.eventFocus = {
+        id: event.id, title: event.title, planetSeconds: event.planetSeconds,
+        limitations: event.limitations, elapsedSeconds: 0, target, transition: 0,
+        origin: { yaw: state.yaw, pitch: state.pitch, distance: state.distance },
+        wasPlaying: state.evolution.playing
+    };
+    setEvolutionModelPlaying(state.evolution, false);
+    state.evolutionLastFrame = null;
+    state.eventFrameLast = performance.now();
+    state.dirty = true;
+    return getSpecialEventStatus();
+}
+
+export function exitSpecialEvent() {
+    if (!state?.eventFocus) return getSpecialEventStatus();
+    const focus = state.eventFocus;
+    state.yaw = focus.origin.yaw;
+    state.pitch = focus.origin.pitch;
+    state.distance = focus.origin.distance;
+    state.eventFocus = null;
+    state.eventFrameLast = null;
+    setEvolutionModelPlaying(state.evolution, focus.wasPlaying);
+    state.evolutionLastFrame = null;
+    state.dirty = true;
+    return getSpecialEventStatus();
+}
 
 // Opt-in via ?pfPerf=1. This report is local to the browser and contains
 // no GPU readback except counts of readbacks already required by physics.
@@ -343,6 +409,7 @@ function createState(canvas, gl, dotNetReference) {
         canvas, gl, dotNetReference, globeProgram, localProgram, generatorPreview: false, renderMode: 'globe', geometryKey: null,
         surfaceKey: null, tileBufferCache: new Map(), tiles: [], localSurface: null, localRockAnchor: null,
         yaw: -0.65, pitch: 0.24, distance: initialOrbitDistance(canvas), localYaw: -0.65, localPitch: geologicalPreviewMode ? 1.30 : 0.72,
+        eventHistory: [], eventFocus: null, eventFrameLast: null,
         localCameraAltitudeMeters: null, scaleHud: createLocalScaleHud(canvas), detailHud: createTerrainDetailHud(canvas),
         activePointers: new Map(), pinchDistance: null,
         lodTimer: null, lodSequence: 0, lastSurfaceRequestSignature: null, lastTerrainUpdateMs: null, lastGeometryPayloadCount: 0,
@@ -1168,14 +1235,49 @@ function renderCurrentView(s) {
 }
 
 function resetEvolutionFrameClock() {
-    if (state) state.evolutionLastFrame = null;
+    if (!state) return;
+    state.evolutionLastFrame = null;
+    // Suspension never converts time spent in a hidden tab into event seconds.
+    state.eventFrameLast = null;
+}
+
+function advanceFocusedEventClock(s, now) {
+    if (!s?.eventFocus) return;
+    if (document.hidden) {
+        s.eventFrameLast = null;
+        return;
+    }
+    if (s.eventFrameLast === null) {
+        s.eventFrameLast = now;
+        return;
+    }
+    const dt = Math.max(0, (now - s.eventFrameLast) / 1000);
+    s.eventFrameLast = now;
+    if (dt <= 0) return;
+    const focus = s.eventFocus;
+    // Keep real elapsed time exact even on a GPU-bound device. This clock is
+    // sampled by both the HUD and renderer and cannot advance geology.
+    focus.elapsedSeconds = advanceRealtimeSeconds(focus.elapsedSeconds, dt);
+    s.evolution.wallTime += dt;
+    focus.transition = Math.min(1, focus.transition + dt);
+    const eased = focus.transition * focus.transition * (3 - 2 * focus.transition);
+    const deltaYaw = Math.atan2(Math.sin(focus.target.yaw - focus.origin.yaw),
+        Math.cos(focus.target.yaw - focus.origin.yaw));
+    s.yaw = focus.origin.yaw + deltaYaw * eased;
+    s.pitch = focus.origin.pitch + (focus.target.pitch - focus.origin.pitch) * eased;
+    s.distance = focus.origin.distance + (focus.target.distance - focus.origin.distance) * eased;
+    s.dirty = true;
 }
 
 function render() {
     if (!state) return;
     const frameStartedAt = performanceMarkStart();
     resize(state);
-    if (state.evolution && document.hidden) {
+    if (state.eventFocus && !document.hidden) {
+        advanceFocusedEventClock(state, performance.now());
+        state.evolutionLastFrame = null;
+    } else if (state.evolution && document.hidden) {
+        state.eventFrameLast = null;
         state.evolutionLastFrame = null;
     } else if (state.evolution) {
         const now = performance.now();
@@ -1185,6 +1287,8 @@ function render() {
             state.evolutionFps = (state.evolutionFps ?? 60) * 0.95 + 0.05 / Math.max(dt, 1e-3);
             const stepStartedAt = performanceMarkStart();
             if (stepEvolution(state.evolution, dt)) state.dirty = true;
+            state.eventHistory = captureImpactEvents(state.eventHistory, state.evolution.magmaImpacts,
+                state.evolution.thermal.timeSeconds, state.evolution.seed);
             recordPerformanceDuration('evolutionStepCpuMs', stepStartedAt);
         }
         state.evolutionLastFrame = now;
