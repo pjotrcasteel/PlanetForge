@@ -1,6 +1,6 @@
 # E7 / Life-M0 — curated geological turning points and future life zooms
 
-**Workstream:** PF-EARTH-20261013-A. **Status:** E7 curated-event policy implementation candidate; device review pending. The E7 horizontal UI and 1× S0 camera handoff shipped in 0.0.50.0.
+**Workstream:** PF-EARTH-20261013-A. **Status:** E7 model-triggered turning points and 1× S0 camera handoff shipped in 0.0.51.0; the more expressive horizontal timeline is the next visual slice, pending iPhone/desktop review. Follow delivery order and acceptance gates in [the journey milestone plan](earth-journey-milestone-plan.md).
 
 ## Accepted interaction
 
