@@ -1,6 +1,6 @@
 # Origin of Life — multi-scale zoom roadmap
 
-Status: **plan only**, nothing below is implemented. Follows stage 8 ("Habitability and life") of
+Status: **M0 partial candidate in PR #245**. The source-grid S0→S1 immutable regional handoff and its tests are implemented, but the active event viewer does not yet consume it. All true surface/vent/molecular stages remain unimplemented; full CI and integration are pending. Follows stage 8 ("Habitability and life") of
 `planetary-evolution-visible-integration.md`, and keeps its rule: **no deterministic claim about how life
 began**. The open hypotheses stay explicit, and every simplification goes into a per-scale liberties list,
 the way `DEMO_LIBERTIES` works today.
@@ -24,6 +24,12 @@ by the scale above it, not a canned animation. Gamify it later, on top of the sa
    contrast them with black smokers, and later with warm little ponds, which need wet–dry cycles.
    Outcomes can fail. That is scientifically honest and a good basis for gameplay.
 5. **Deterministic and seeded**, so moments can be replayed, tested and shared.
+
+## First gated S0 → S1 snapshot (candidate, October 26, 2026)
+
+The existing `planetRenderer.getEvolutionRegion(direction, footprint)` now requests **one explicit GPU readback** of the current S0 `derived` lithosphere field and copies its actual 3×3/5×5/7×7 samples into an immutable object. It carries seed, parent geological epoch, planet radius, exact equirectangular cell locations, elevation relative to the model's own datum, shallow source-resolution geometry, and the derived thermal/material optical proxies. No pixels are invented. Longitude seams and pole clamps are tested. The ordinary 60-fps draw loop is unchanged.
+
+The **S1 model/mesh and full visual zoom are not yet implemented**. It remains a parent-field sample at 1024×512 resolution, approximately 39 km per texel. Do not substitute its upscaled pixels for a convincing vent/canyon scene. An event must only hand off to S1 after genuine regional dynamics, separate time-rate contracts, consistency/regression checks, and correct camera origin have been established.
 
 ## Scale ladder
 

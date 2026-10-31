@@ -15,7 +15,7 @@ public partial class Home
 
     private async Task ToggleFormationPlaybackAsync()
     {
-        if (!formationRendererReady || rendererModule is null) return;
+        if (!formationRendererReady || rendererModule is null || specialEventsStatus?.Focus is not null) return;
         formationPlaying = !formationPlaying;
         await rendererModule.InvokeVoidAsync("setEvolutionPlaying", disposeCancellationTokenSource.Token, formationPlaying);
     }
@@ -29,7 +29,7 @@ public partial class Home
 
     private async Task ChangeFormationSpeedAsync(ChangeEventArgs change)
     {
-        if (!int.TryParse(change.Value?.ToString(), out var myrPerSecond) || myrPerSecond <= 0 || rendererModule is null) return;
+        if (!int.TryParse(change.Value?.ToString(), out var myrPerSecond) || myrPerSecond <= 0 || rendererModule is null || specialEventsStatus?.Focus is not null) return;
         formationMaximumMyrPerSecond = myrPerSecond;
         await rendererModule.InvokeVoidAsync("setEvolutionSpeed", disposeCancellationTokenSource.Token, myrPerSecond * 1e6);
     }
@@ -47,6 +47,7 @@ public partial class Home
                 try
                 {
                     evolution = await rendererModule.InvokeAsync<PlanetEvolutionStatus?>("getEvolutionStatus", disposeCancellationTokenSource.Token);
+                    specialEventsStatus = await rendererModule.InvokeAsync<PlanetSpecialEventStatus?>("getSpecialEventStatus", disposeCancellationTokenSource.Token);
                     formationStatus = string.Empty;
                 }
                 catch (JSException error)
@@ -62,11 +63,12 @@ public partial class Home
 
     private async Task RestartFormationAsync()
     {
-        if (!formationRendererReady || formationBusy || !continuousSimulation || rendererModule is null) return;
+        if (!formationRendererReady || formationBusy || !continuousSimulation || rendererModule is null || specialEventsStatus?.Focus is not null) return;
         formationBusy = true;
         try
         {
             evolution = await rendererModule.InvokeAsync<PlanetEvolutionStatus>("restartEvolution", disposeCancellationTokenSource.Token, formationSeed);
+            specialEventsStatus = await rendererModule.InvokeAsync<PlanetSpecialEventStatus>("getSpecialEventStatus", disposeCancellationTokenSource.Token);
             formationStatus = string.Empty;
         }
         catch (OperationCanceledException) when (disposeCancellationTokenSource.IsCancellationRequested) { }

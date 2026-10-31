@@ -52,6 +52,13 @@ test('Evolution_StartsAsGlowingMagmaOcean_WithMinimalHudAndLiberties', async ({ 
   await page.goto(url);
   await waitForReady(page);
   await expect(page.getByTestId('formation-phase')).toContainText('Magma ocean');
+  const rejectsUnformedCrust = await page.evaluate(async () => {
+    const renderer = await import('/js/planetRenderer.js');
+    try { renderer.getEvolutionRegion([1, 0, 0]); return false; }
+    catch (error) { return String(error.message).includes('magma ocean'); }
+  });
+  expect(rejectsUnformedCrust).toBe(true);
+
   await expect(page.getByTestId('airless-enter')).toHaveCount(0);
   await expect(page.getByTestId('regional-switch')).toHaveCount(0);
   await page.waitForTimeout(2_000);
@@ -158,4 +165,50 @@ test('PerformanceDiagnostics_OptIn_RecordsFramesAndDoesNotAlterEvolution', async
   expect(report.measurementType).toBe('cpu-wall-and-gpu-readback-sync');
   // The same session remains physically running, with no extra pixel readback.
   await expect(page.getByTestId('formation-play')).toHaveAttribute('aria-pressed', 'true');
+});
+
+
+test('Evolution_WitnessedImpact_EntersRealtimeFocusWithoutAdvancingGeologicalEpoch', async ({ page }, testInfo) => {
+  // Keep software-WebGL CI responsive: spatial correctness is covered at full
+  // resolution elsewhere; this test specifically validates the time handoff.
+  await page.setViewportSize({ width: 720, height: 460 });
+  const errors = []; page.on('pageerror', e => errors.push(e.message));
+  await page.goto(url);
+  await waitForReady(page);
+
+  await expect(page.getByTestId('special-events-timeline')).toBeVisible();
+  await expect(page.getByTestId('special-events-timeline')).toContainText('KEY MOMENTS');
+
+  // Force the EXISTING seeded impact emitter's next scheduled arrival now.
+  // This is not a synthetic bookmark: the live model still chooses its
+  // direction, size and effects using its original deterministic generator.
+  await page.evaluate(async () => {
+    const renderer = await import('/js/planetRenderer.js');
+    const model = renderer.getEvolutionDebug();
+    model.nextMagmaImpact = 0;
+    renderer.setEvolutionPlaying(true);
+  });
+  await expect(page.getByTestId('special-events-timeline').locator('button:not([disabled])').last()).toBeVisible({ timeout: 45_000 });
+  await expect(page.getByTestId('special-events-timeline')).toContainText('Zoom in · 1× time');
+  const before = await page.evaluate(async () => (await import('/js/planetRenderer.js')).getPlanetCameraSnapshot());
+  await page.getByTestId('special-events-timeline').locator('button:not([disabled])').last().click();
+  await expect(page.getByTestId('special-event-focus')).toBeVisible();
+  await expect(page.getByTestId('special-event-focus')).toContainText('1× REAL TIME');
+  await expect(page.getByTestId('formation-play')).toBeDisabled();
+
+  const epoch = (await evolutionStatus(page)).timeSeconds;
+  await expect.poll(async () => page.evaluate(async () =>
+    (await import('/js/planetRenderer.js')).getSpecialEventStatus().focus?.elapsedSeconds ?? 0),
+  { timeout: 35_000 }).toBeGreaterThan(0.5);
+  expect((await evolutionStatus(page)).timeSeconds).toBe(epoch);
+  const close = await page.evaluate(async () => (await import('/js/planetRenderer.js')).getPlanetCameraSnapshot());
+  expect(close.distance).toBeLessThan(before.distance);
+  await page.screenshot({ path: testInfo.outputPath('special-impact-regional-focus.png') });
+
+  await page.getByTestId('special-event-exit').click();
+  await expect(page.getByTestId('special-event-focus')).toHaveCount(0);
+  await expect(page.getByTestId('formation-play')).toBeEnabled();
+  const restored = await page.evaluate(async () => (await import('/js/planetRenderer.js')).getPlanetCameraSnapshot());
+  expect(restored.distance).toBeCloseTo(before.distance, 6);
+  expect(errors).toEqual([]);
 });

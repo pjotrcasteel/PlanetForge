@@ -1,5 +1,14 @@
 # PlanetForge — active continuation state
 
+## GitHub source-of-truth refresh — 2026-10-26
+
+- Verified `main`: `42e99fe2cb93574c925ef3b1d05c839efaf1fe27` (#242 performance sampling). Last successful app Pages deployment found: `723ecf18d53450636ae7ac03513850c449fc8b09` (run 38980045571); later perf commits do not themselves trigger an app deploy. Post-import `buildVersion.js` still shows obsolete `0.0.45.0`, although merged #232 targeted a 0.0.48 illustrative demo. **Do not equate this value to a new live release.**
+- The merged #236 project import makes `wwwroot/js/evolution/` and the default main `planetRenderer.js` the authoritative continuous GPU Earth-history simulation. The older standalone 0.0.49 demo renderer is absent on current main; #233 was therefore closed as superseded, not accepted. Older duplicate #228–#231 research branches were closed after integration via #232. Historical refinement #218 remains independent.
+- #243 performance branch has a scoped archaeological archive deletion regression fix (stable Blazor row identities and asserted epoch deletion). Its build/.NET/WASM checks passed; the corrected browser shards are the merge gate.
+- **#244 candidate, not merged:** witnessed seeded magma-ocean impact events on the main GPU planet become bounded bookmarks. A user can freeze the geological epoch, ease the real camera to the event, run a local 1× real-time optical event clock, and return to the saved camera/playback. This is only a regional orbital close-up (~39 km/texel), not physical vent or molecule LOD. New Node and Playwright tests and mobile HUD are staged; full CI, Pages smoke and human visual acceptance remain required. Target visible version 0.0.49.0, **not yet released**.
+- The user wants to finish visual/performance stability before deeper E7 key-moment/timescale zoom and eventually M0–M8 life-scale simulations. No standalone fake planet, invented physical rain/life or multi-scale handoff may be claimed complete merely because this first event interface exists.
+
+
 **Workstream:** PF-EARTH-20261013-A. **Strategy:** vertical scientific/rendering slices; one continuous canonical formation world.
 
 ## Current merged release
