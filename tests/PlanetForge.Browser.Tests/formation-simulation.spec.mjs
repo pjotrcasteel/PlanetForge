@@ -35,19 +35,27 @@ async function canvasStatistics(page) {
 
 async function waitForReady(page) {
   const play = page.getByTestId('formation-play');
-  await expect(play).toBeEnabled({ timeout: 120_000 });
-  // Startup can advance geological time while software WebGL is compiling.
-  // Freeze and restart via the real UI so each visual assertion begins at a
-  // deterministic magma-ocean frame without changing production autoplay.
-  await expect(play).toHaveAttribute('aria-pressed', 'true');
-  await play.click();
-  await expect(play).toHaveAttribute('aria-pressed', 'false');
+  // Rendering may advance through a key moment while SwiftShader compiles.
+  // Wait for the actual renderer, then stop its real model clock directly;
+  // the Play button may be temporarily disabled during automatic inspection.
+  await expect(play).toBeVisible({ timeout: 120_000 });
+  await expect(page.getByTestId('formation-renderer-status'))
+    .toHaveCount(0, { timeout: 120_000 });
+  await page.evaluate(async () => {
+    const renderer = await import('/js/planetRenderer.js');
+    if (renderer.getSpecialEventStatus().focus) renderer.exitSpecialEvent();
+    renderer.setEvolutionPlaying(false);
+  });
+  await expect(play).toBeEnabled({ timeout: 30_000 });
+  await expect(play).toHaveAttribute('aria-pressed', 'false', { timeout: 30_000 });
   await page.getByTestId('formation-restart').click();
   await expect.poll(async () => (await evolutionStatus(page))?.regime, { timeout: 60_000 }).toBe('magma-ocean');
 }
 
 test('Evolution_StartsAsGlowingMagmaOcean_WithMinimalHudAndLiberties', async ({ page }, testInfo) => {
-  await page.setViewportSize({ width: 1440, height: 900 });
+  // Magma color/readback is resolution-independent. Keep the GPU pass small
+  // enough for SwiftShader; the viewport suites cover desktop/portrait layout.
+  await page.setViewportSize({ width: 960, height: 600 });
   const errors = []; page.on('pageerror', e => errors.push(e.message));
   await page.goto(url);
   await waitForReady(page);
@@ -134,8 +142,13 @@ test('Evolution_CoolsThroughLidIntoPlateTectonics_PausesAndRestarts', async ({ p
   expect((await evolutionStatus(page)).timeSeconds).toBe(paused);
   await page.getByTestId('formation-play').click();
   await expect(page.getByTestId('formation-play')).toHaveAttribute('aria-pressed', 'true');
-  await expect.poll(async () => (await evolutionStatus(page)).timeSeconds, { timeout: 15_000 })
-    .toBeGreaterThan(paused);
+  await expect.poll(async () => page.evaluate(async () => {
+    const renderer = await import('/js/planetRenderer.js');
+    // Fast-forwarding may encounter another major key moment between the
+    // Play click and this poll. Complete that inspection before advancing.
+    if (renderer.getSpecialEventStatus().focus) renderer.exitSpecialEvent();
+    return renderer.getEvolutionStatus().timeSeconds;
+  }), { timeout: 45_000, intervals: [500] }).toBeGreaterThan(paused);
   await page.getByTestId('formation-play').click();
   await expect(page.getByTestId('formation-play')).toHaveAttribute('aria-pressed', 'false');
 
