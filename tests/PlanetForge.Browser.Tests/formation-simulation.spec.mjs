@@ -52,6 +52,13 @@ test('Evolution_StartsAsGlowingMagmaOcean_WithMinimalHudAndLiberties', async ({ 
   await page.goto(url);
   await waitForReady(page);
   await expect(page.getByTestId('formation-phase')).toContainText('Magma ocean');
+  const rejectsUnformedCrust = await page.evaluate(async () => {
+    const renderer = await import('/js/planetRenderer.js');
+    try { renderer.getEvolutionRegion([1, 0, 0]); return false; }
+    catch (error) { return String(error.message).includes('magma ocean'); }
+  });
+  expect(rejectsUnformedCrust).toBe(true);
+
   await expect(page.getByTestId('airless-enter')).toHaveCount(0);
   await expect(page.getByTestId('regional-switch')).toHaveCount(0);
   await page.waitForTimeout(2_000);

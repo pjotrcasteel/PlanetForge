@@ -6,8 +6,9 @@ import {
 import { createThermalRadianceData, thermalTextureSize, thermalMaterialShader } from './thermalRadiance.js';
 import { clearRetainedSurfaceGeometry, retainSurfaceGeometry } from './surfaceGeometryStore.js';
 import { captureImpactEvents, orbitForEvent, advanceRealtimeSeconds } from './evolution/specialEvents.mjs';
+import { captureRegionalHandoff } from './evolution/regionalHandoff.mjs';
 import {
-    createEvolution, disposeEvolution, stepEvolution, renderEvolutionGlobe, evolutionStatus,
+    createEvolution, disposeEvolution, stepEvolution, renderEvolutionGlobe, evolutionStatus, readEvolutionField,
     setEvolutionPlaying as setEvolutionModelPlaying, setEvolutionSpeed as setEvolutionModelSpeed,
     setEvolutionClouds as setEvolutionModelClouds,
 } from './evolution/planetEvolution.js';
@@ -135,6 +136,25 @@ export function getPerformanceReport() {
         seed: state?.evolution?.seed ?? state?.seed ?? null,
         activeTiles: state?.tiles?.length ?? 0,
     };
+}
+
+// Read a small immutable S1-sized geographic window from S0's *actual*
+// GPU-derived lithosphere field. This is explicit/on-demand because GPU
+// synchronization must never be inserted into the ordinary rendering loop.
+export function getEvolutionRegion(direction, footprint = 5) {
+    if (!state?.evolution) return null;
+    const evolution = state.evolution;
+    // The derived lithosphere field is not the magma-ocean model. Returning
+    // its initial zeroed texture would fabricate an apparent solid surface.
+    if (!evolution.lithosphereReady)
+        throw new Error('No physically derived lithosphere is available yet; the surface is magma ocean.');
+    const epochSeconds = evolution.thermal.timeSeconds;
+    const field = readEvolutionField(evolution, 'derived', true);
+    return captureRegionalHandoff({
+        field, direction, footprint, seed: evolution.seed,
+        epochSeconds, planetRadiusMeters: state.planetRadiusMeters,
+        seaLevelKilometers: evolution.water > 0.001 ? evolution.seaLevel : 0
+    });
 }
 
 export function getEvolutionStatus() {

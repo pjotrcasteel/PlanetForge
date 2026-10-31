@@ -52,6 +52,9 @@ jobs:
       - name: Validate special-event clock and seeded bookmarks
         run: node --test tests/PlanetForge.Browser.Tests/evolution/special-events.test.mjs
 
+      - name: Validate S0 to S1 regional source handoff
+        run: node --test tests/PlanetForge.Browser.Tests/evolution/regional-handoff.test.mjs
+
       - name: Validate thermal playback across slow and fast frames
         run: node --test tests/PlanetForge.Browser.Tests/evolution-thermal-playback.test.mjs
 
