@@ -713,35 +713,54 @@
 .formation-event-return:focus-visible, .formation-event-focus summary:focus-visible { outline: 2px solid #f9c283; outline-offset: 3px; }
 .formation-event-focus details { max-width: 105px; font-size: 10px; color: #c5b3a1; }
 .formation-event-focus summary { cursor: pointer; }
+/* On phones the planet remains the hero: one age readout, the event rail,
+   and (only when present) a single-line latest milestone. The full observatory
+   labels and legend stay available on larger screens. */
 @media (max-width: 680px) {
     .formation-event-timeline {
         bottom: calc(env(safe-area-inset-bottom, 0px) + 112px);
         width: calc(100vw - 20px);
-        padding: 13px 13px 11px;
+        padding: 10px 13px 8px;
         border-radius: 18px;
     }
-    .formation-event-kicker { font-size: 9px; letter-spacing: .12em; }
+    .formation-event-header { align-items: center; gap: 8px; }
+    .formation-event-identity > strong { display: none; }
+    .formation-event-kicker { font-size: 10px; letter-spacing: .1em; }
     .formation-event-kicker small { font-size: 8px; }
+    .formation-event-epoch-readout { gap: 0; }
     .formation-event-eon { font-size: 9px; }
-    .formation-event-meta { margin-top: 10px; }
-    .formation-event-count { font-size: 9px; }
-    .formation-event-scale { font-size: 8px; letter-spacing: .04em; }
-    .formation-time-track { margin: 0 9px; }
-    .formation-event-recent { gap: 6px; margin-top: 8px; }
+    .formation-event-epoch-readout > strong { font-size: 14px; line-height: 1.15; }
+    .formation-event-meta, .formation-event-legend { display: none; }
+    .formation-time-track { height: 54px; margin: -1px 9px 0; }
+    .formation-time-axis { margin-top: -1px; font-size: 9px; letter-spacing: .065em; }
+    .formation-event-recent {
+        gap: 6px;
+        margin-top: 5px;
+        padding: 4px 7px;
+        border-color: #bf925022;
+        background: #a8774020;
+    }
     .formation-event-recent strong { font-size: 10px; }
-    .formation-event-legend { gap: 11px; margin-top: 8px; }
-    .formation-event-focus { flex-wrap: wrap; gap: 5px 8px; padding: 7px; }
+    .formation-event-recent span:last-child { display: none; }
+    .formation-event-focus { flex-wrap: wrap; gap: 5px 8px; margin-top: 6px; padding: 7px; }
     .formation-event-focus-copy { flex-basis: 66%; }
     .formation-event-focus small { font-size: 9px; }
-    .formation-event-return { min-height: 31px; padding: 5px 8px; }
+    .formation-event-return { min-height: 34px; padding: 5px 8px; }
     .formation-event-focus details { max-width: none; flex-basis: 100%; }
 }
 @media (max-width: 425px) {
-    .formation-event-identity > strong { font-size: 16px; }
-    .formation-event-epoch-readout > strong { font-size: 13px; }
-    .formation-event-scale { max-width: 50%; }
-    .formation-event-legend small { display: none; }
-    .formation-event-recent span:last-child { font-size: 9px; }
+    .formation-event-timeline { width: calc(100vw - 16px); padding: 9px 12px 7px; }
+    .formation-event-kicker small { display: none; }
+    .formation-event-eon { font-size: 8px; }
+    .formation-event-epoch-readout > strong { font-size: 14px; }
+    .formation-time-tick small { font-size: 8px; }
+    .formation-event-recent {
+        padding: 2px 0 0;
+        border: 0;
+        background: transparent;
+    }
+    .formation-event-recent span:first-child { font-size: 8px; }
+    .formation-event-recent strong { font-size: 10px; }
 }
 @media (prefers-reduced-motion: reduce) {
     .formation-time-progress, .formation-time-playhead, .formation-time-dot::before { transition: none; }
