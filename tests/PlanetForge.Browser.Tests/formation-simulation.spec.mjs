@@ -142,7 +142,7 @@ test('Evolution_CoolsThroughLidIntoPlateTectonics_PausesAndRestarts', async ({ p
   expect((await evolutionStatus(page)).timeSeconds).toBe(paused);
   await page.getByTestId('formation-play').click();
   await expect(page.getByTestId('formation-play')).toHaveAttribute('aria-pressed', 'true');
-  await expect.poll(async () => page.evaluate(async () => {
+  await expect.poll(async () => page.evaluate(async (pausedSeconds) => {
     const renderer = await import('/js/planetRenderer.js');
     // Fast-forwarding may encounter another major key moment between the
     // Play click and this poll. Complete that inspection before advancing.
@@ -150,9 +150,9 @@ test('Evolution_CoolsThroughLidIntoPlateTectonics_PausesAndRestarts', async ({ p
     const status = renderer.getEvolutionStatus();
     // Stop at the first actual post-resume step before another key moment
     // can disable the UI button on this accelerated thermal run.
-    if (status.timeSeconds > paused) renderer.setEvolutionPlaying(false);
+    if (status.timeSeconds > pausedSeconds) renderer.setEvolutionPlaying(false);
     return status.timeSeconds;
-  }), { timeout: 45_000, intervals: [500] }).toBeGreaterThan(paused);
+  }, paused), { timeout: 45_000, intervals: [500] }).toBeGreaterThan(paused);
   await expect.poll(async () => (await evolutionStatus(page)).playing, { timeout: 15_000 }).toBe(false);
   await expect(page.getByTestId('special-event-focus')).toHaveCount(0);
   await expect(page.getByTestId('formation-play')).toHaveAttribute('aria-pressed', 'false', { timeout: 15_000 });
