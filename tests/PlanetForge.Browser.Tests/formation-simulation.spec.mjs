@@ -93,12 +93,22 @@ test('Evolution_CoolsThroughLidIntoPlateTectonics_PausesAndRestarts', async ({ p
   await expect.poll(async () => (await evolutionStatus(page)).regime, { timeout: 120_000, intervals: [1_000] }).toBe('stagnant-lid');
   await expect(page.getByTestId('formation-phase')).toContainText(/Stagnant lid|Steam atmosphere|Water world/);
   await page.screenshot({ path: testInfo.outputPath('evolution-stagnant-lid.png') });
+  // This test measures the thermal regimes, not the cinematic hold duration.
+  // Return from a real key moment so its 14-second pause cannot consume the
+  // already GPU-heavy integration-test timeout.
+  await page.evaluate(async () => {
+    const renderer = await import('/js/planetRenderer.js');
+    if (renderer.getSpecialEventStatus().focus) renderer.exitSpecialEvent();
+  });
   // The reconstructed Earth renderer is GPU-heavy in software Chromium.
   // As soon as the real physical model reaches plates, pause through the
   // exported production API in the same browser evaluation. This prevents
   // continued GPU work from starving the subsequent UI interaction test.
   await expect.poll(async () => page.evaluate(async () => {
     const renderer = await import('/js/planetRenderer.js');
+    // Any ocean/plate key moment can enter while the accelerated geological
+    // model runs. Return via production API before reading the next regime.
+    if (renderer.getSpecialEventStatus().focus) renderer.exitSpecialEvent();
     const status = renderer.getEvolutionStatus();
     if (status?.regime === 'plates') renderer.setEvolutionPlaying(false);
     return status?.regime;
@@ -114,11 +124,20 @@ test('Evolution_CoolsThroughLidIntoPlateTectonics_PausesAndRestarts', async ({ p
   expect(stats.range).toBeGreaterThan(.02);
   await page.screenshot({ path: testInfo.outputPath('evolution-plates.png') });
 
-  await page.getByTestId('formation-play').click();
+  // The test stopped at plates deliberately; Blazor should reflect this
+  // pause after its next 250-ms HUD poll, with no inspection locking controls.
+  await expect(page.getByTestId('special-event-focus')).toHaveCount(0, { timeout: 20_000 });
+  await expect(page.getByTestId('formation-play')).toBeEnabled({ timeout: 20_000 });
   await expect(page.getByTestId('formation-play')).toHaveAttribute('aria-pressed', 'false');
   const paused = (await evolutionStatus(page)).timeSeconds;
   await page.waitForTimeout(1_000);
   expect((await evolutionStatus(page)).timeSeconds).toBe(paused);
+  await page.getByTestId('formation-play').click();
+  await expect(page.getByTestId('formation-play')).toHaveAttribute('aria-pressed', 'true');
+  await expect.poll(async () => (await evolutionStatus(page)).timeSeconds, { timeout: 15_000 })
+    .toBeGreaterThan(paused);
+  await page.getByTestId('formation-play').click();
+  await expect(page.getByTestId('formation-play')).toHaveAttribute('aria-pressed', 'false');
 
   const clouds = page.getByTestId('formation-clouds');
   await expect(clouds).toHaveText('Clouds on');
@@ -208,6 +227,9 @@ test('Evolution_KeyMilestone_AutoZooms_WhileOrdinaryImpactsStayAmbient', async (
           distance: renderer.getPlanetCameraSnapshot().distance
         });
       } else if (probe.sawFocus) {
+        // Freeze the resumed parent before the next major milestone can
+        // immediately start its own 14-second inspection.
+        renderer.setEvolutionPlaying(false);
         clearInterval(timer);
         probe.completed = true;
       }
@@ -247,8 +269,15 @@ test('Evolution_KeyMilestone_AutoZooms_WhileOrdinaryImpactsStayAmbient', async (
   const restored = await page.evaluate(async () =>
     (await import('/js/planetRenderer.js')).getPlanetCameraSnapshot());
   expect(restored.distance).toBeCloseTo(before.distance, 6);
-  expect((await evolutionStatus(page)).playing).toBe(true);
-  await page.waitForTimeout(1_200);
-  expect((await evolutionStatus(page)).timeSeconds).toBeGreaterThan(probe.samples[0].epoch);
+  expect((await evolutionStatus(page)).playing).toBe(false);
+  // A slow resume proves we returned to the original planet clock without
+  // immediately triggering another unrelated geological milestone.
+  await page.evaluate(async () => {
+    const renderer = await import('/js/planetRenderer.js');
+    renderer.setEvolutionSpeed(1e6);
+    renderer.setEvolutionPlaying(true);
+  });
+  await expect.poll(async () => (await evolutionStatus(page)).timeSeconds, { timeout: 15_000 })
+    .toBeGreaterThan(probe.samples[0].epoch);
   expect(errors).toEqual([]);
 });
