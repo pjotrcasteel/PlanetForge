@@ -15,6 +15,20 @@ public partial class Home
             : years >= 1.0 ? $"T+{years:0.##} years" : $"T+{seconds:0} s";
     }
 
+    // Geological eons are display context, derived from elapsed model time
+    // against a 4.567-Gyr formation age. They do not declare a new model event.
+    private static string TimelineEon(double planetSeconds)
+    {
+        const double secondsPerYear = 31_557_600.0;
+        const double earthAgeYears = 4_567_000_000.0;
+        var elapsedYears = double.IsFinite(planetSeconds)
+            ? Math.Clamp(planetSeconds / secondsPerYear, 0.0, earthAgeYears) : 0.0;
+        var remainingGa = (earthAgeYears - elapsedYears) / 1_000_000_000.0;
+        return remainingGa >= 4.0 ? "HADEAN"
+            : remainingGa >= 2.5 ? "ARCHEAN"
+            : remainingGa >= 0.5388 ? "PROTEROZOIC" : "PHANEROZOIC";
+    }
+
     // A linear 4.567-Gyr rail hides early impacts at one pixel. Log time
     // distributes witnessed events without changing their real epochs.
     private static string TimelinePosition(double planetSeconds)
