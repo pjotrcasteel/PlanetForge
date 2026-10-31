@@ -220,9 +220,10 @@ test('Evolution_KeyMilestone_AutoZooms_WhileOrdinaryImpactsStayAmbient', async (
   const rail = page.getByTestId('special-event-rail');
   await expect(timeline).toBeVisible();
   await expect(timeline).toContainText('EARTH HISTORY');
-  await expect(timeline).toContainText('Major planetary changes');
+  await expect(timeline).toContainText('ZOOM MOMENT');
+  await expect(timeline).toContainText('Routine impacts stay in the background');
   const railBox = await rail.boundingBox();
-  expect(railBox.width).toBeGreaterThan(railBox.height * 8);
+  expect(railBox.width).toBeGreaterThan(railBox.height * 5);
   const before = await page.evaluate(async () =>
     (await import('/js/planetRenderer.js')).getPlanetCameraSnapshot());
 
@@ -245,7 +246,9 @@ test('Evolution_KeyMilestone_AutoZooms_WhileOrdinaryImpactsStayAmbient', async (
       const dot = document.querySelector('[data-testid="special-event-enter"]');
       if (dot && !probe.dotSize) {
         const bounds = dot.getBoundingClientRect();
-        probe.dotSize = { width: bounds.width, height: bounds.height };
+        const sphere = window.getComputedStyle(dot, '::before');
+        probe.dotSize = { width: bounds.width, height: bounds.height,
+          sphereWidth: parseFloat(sphere.width), sphereHeight: parseFloat(sphere.height) };
       }
       if (status.focus) {
         probe.sawFocus = true;
@@ -286,7 +289,10 @@ test('Evolution_KeyMilestone_AutoZooms_WhileOrdinaryImpactsStayAmbient', async (
   expect(probe.sawDisabledControls).toBe(true);
   expect(probe.sawPausedModel).toBe(true);
   expect(Math.abs(probe.dotSize.width - probe.dotSize.height)).toBeLessThan(2);
-  expect(probe.dotSize.width).toBeLessThan(20);
+  // The visual sphere stays small, while its transparent touch target is usable on phones.
+  expect(probe.dotSize.width).toBeGreaterThanOrEqual(36);
+  expect(probe.dotSize.sphereWidth).toBeLessThanOrEqual(16);
+  expect(Math.abs(probe.dotSize.sphereWidth - probe.dotSize.sphereHeight)).toBeLessThan(2);
   const marker = page.getByTestId('special-event-enter').first();
   await expect(marker).toHaveAttribute('aria-label', /Persistent rocky lid forms/);
   // Software WebGL may stall 75-ms probes for the entire cinematic hold.
