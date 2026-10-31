@@ -132,14 +132,62 @@ artefacts; orogen timing not yet validated against geology.
   globe; ice sheets from the climate balance; ties to the existing world-engine terrain LODs.
 - **Exit:** at 0 Ma, major basins (Amazon, Nile, Mississippi, Congo…) emerge from the elevation data.
 
-### E7 — Time UI & key moments
-- Named era markers (Pangaea, Rodinia, snowballs, GOE…), scrub/jump, per-era time-rate presets so key
-  intervals are watchable; shared with life-track key moments (M1).
-- **Exit:** a full 4.567 Gyr run watchable in ~5 min with every era legible.
+### E7 — Earth-history time UI and curated key moments
+**First slice in place (0.0.50.x):** a horizontal logarithmic 4.567-Gyr rail,
+live-epoch cursor and small dot markers. The initial release zoomed on every
+seeded Hadean impact; the next slice corrects this: **ordinary impacts remain
+ambient, not milestones**. State-derived planetary turning points now drive
+the orbital focus, without invented location-specific geometry.
+
+**Event authority (required for every marker and future S1+ zoom):**
+
+- **Model observed:** an actual transition in S0/S1+ state, e.g. lid onset,
+  half-inventory ocean rain-out, simplified plate-regime onset. The event's
+  timestamp is that of the model state and the HUD says "Model-state threshold".
+- **Historical reconstruction:** a scientifically sourced interval or
+  location (never described as emergent from the model). The visual scene
+  must carry the corresponding forcing/geometry, date uncertainty and source.
+- **Experimental/hypothesis:** plausible local abiogenesis conditions and
+  modelled reactions; this is an experiment, not a claim of reconstructing
+  the single actual origin of terrestrial life.
+- **Ambient:** ordinary impacts, meteor showers, volcanism, cloud changes
+  and small fluctuations. Render normally but **do not pause or auto-zoom**.
+
+**Zoom discipline:** global changes may produce an honest closer orbital
+view of the S0 globe; a site-specific drop into an ocean, vent, cell or animal
+requires a valid S0→S1→… geographic/material/energy handoff and the
+relevant scale-specific solver. A historical marker is not automatically
+a playable simulation. Old events need real snapshots before replay.
+
+**Curated Earth-history event catalogue (future E7/M track, not yet simulated as
+individual events):**
+
+| Approximate age | Key moment | Authority / prerequisite | Target perspective |
+| --- | --- | --- | --- |
+| ~4.5 Ga | Moon-forming giant impact | Giant-impact hypothesis; Earth/Moon dynamics and sourced uncertainty | Planetary cinematic only when forcing exists |
+| Hadean | Persistent lid, oceans and early heat/hydrothermal circulation | S0 rocky lid and ocean condensation first; S1–S2 for vents | Orbit → ocean floor |
+| ≥3.5 Ga (older claims debated) | Evidence for early microbial life | Fossil/geochemical interpretation, distinct from **simulated** abiogenesis | Microbial habitat, only with biosphere model |
+| ~2.4 Ga | Great Oxidation Event | Geochemical record + explicit oxygen budget; S0 E5 system model | Microbes ↔ atmosphere/ocean |
+| Proterozoic | Eukaryotic complexity and multicellularity | Evolutionary/fossil evidence and biological population model | Cell populations/tissues |
+| ~540 Ma | Cambrian animal diversification | Fossil record + ecology model | Shallow marine habitat |
+| ~470–450 Ma | Plants and invertebrates colonize land | Plant record / early terrestrial arthropod traces | Coastline and terrestrial ecosystem |
+| ~375 Ma | Tetrapods move onto land | Fossil reconstruction (not the first terrestrial animals) | Water-edge habitat |
+| 252 Ma and 66 Ma | Mass extinctions; Chicxulub for 66 Ma | Geological forcing + biological survival/extinction model | Impact/climate/ecosystem |
+| Present | Today's continents, ecosystems and geography | ETOPO and palaeo-reconstruction convergence | Return to planet |
+
+These approximate dates are **research anchors**, not pretended one-frame
+birthdates. Significant transitions span intervals, can be contested, and are
+often not directly observable from the fossil record. The next E7 slices add
+reconstruction provenance, uncertainty intervals, event priority, and scrub/
+jump only with valid physical-state checkpoints.
+
+**Exit:** a full 4.567-Gyr run is watchable in ~5 min with substantive events
+visually legible, no ambient-event camera spam, and each zoom labelled by
+model/reconstruction/hypothesis and available physical scale.
 
 ## Status
 Planet generation (magma ocean → present) is frozen after the final refinement round; development moves to
-the origin-of-life zoom (life track). E5 box model, E6 and E7 (Timespiral-style key-moment UI) remain open.
+the origin-of-life zoom (life track). E5 box model and E6 remain open; E7 has a first horizontal rail/curation implementation but historical and biological event integration remains open.
 
 ## Order
 E0 → E1 → E2 → E3 is the critical path (gets real Earth on screen fastest, working back in time).

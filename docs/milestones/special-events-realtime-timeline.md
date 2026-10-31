@@ -1,52 +1,73 @@
-# E7 / Life-M0 — witnessed special events, regional focus, and 1× local time
+# E7 / Life-M0 — curated geological turning points and future life zooms
 
-**Workstream:** PF-EARTH-20261013-A. **Status:** horizontal auto-focus implementation candidate; automated checks and human device review pending.
+**Workstream:** PF-EARTH-20261013-A. **Status:** E7 curated-event policy implementation candidate; device review pending. The E7 horizontal UI and 1× S0 camera handoff shipped in 0.0.50.0.
 
 ## Accepted interaction
 
-The existing S0 GPU Earth-history planet is the parent. A named event enters the timeline only when
-the evolving model produces an event with an actual location and parent geological clock.
-The first admitted type is the existing seeded magma-ocean impact. The timeline is capped at the
-eight most recently witnessed events; restarting the planet clears these bookings.
+A **key moment is not every simulated visual effect**. Hadean impact storms may include
+enormous numbers of impacts in reality. The existing S0 magma-impact renderer is an
+illustrative, viewer-biased display hypothesis, not a measured bombardment record.
+Those ordinary impact flashes continue as **ambient planet activity**: no marker,
+no automatic camera hijack, no false “historic meteor event.”
 
-The bottom-mounted horizontal timeline uses **small circular event markers** and a moving
-present-time indicator. Their positions are on a clearly labelled **logarithmic
-4.567-Gyr scale**, to keep early impacts visible rather than collapsing them
-at the origin. The markers preserve actual measured event times, with no
-invented date or geological occurrence.
+The horizontal rail shows a moving epoch indicator and small circular markers on a
+clearly labelled logarithmic scale from planetary formation to 4.567 Gyr of elapsed
+history. Each admitted event has a source classification and its actual model or
+reconstructed epoch. Key moments are limited to material changes, not arbitrary
+timed cutscenes.
 
-When the playing S0 model produces a new witnessed impact, the camera
-**automatically** enters the regional close-up; a user can also select a
-still-inspectable marker. This transition:
-1. Captures the parent epoch, camera pose, and playback state.
-2. Pauses S0 without replacing or cloning the evolving planet.
-3. Eases the existing GPU globe toward the model event's spherical location
-   during the first 1.2 seconds, holds the view and eases back over the
-   final 2 seconds of a 14-second viewing window.
-4. Advances a **separate local event clock at one simulated second per real
-   visible second**. Geological time stays frozen. A hidden tab never
-   accumulates catch-up.
-5. Preserves the next impact's scheduled visual countdown during inspection, so
-   close-ups cannot chain immediately merely because local event time passed.
-6. Restores the camera and prior playback automatically after the window;
-   **Return now** allows the viewer to exit early. Past optical states cannot
-   be replayed as if they still existed.
+| Class | Trigger | Auto zoom? | Scientific claim |
+| --- | --- | --- | --- |
+| Ambient (ordinary impacts, eruptions) | Existing visual emitter | No | Display hypothesis only |
+| Planetary turning point (first slice) | Actual S0 rocky-lid formation, 50% ocean-inventory rain-out, simplified plate-regime onset | Yes, planetary orbital close-up | Exact **model** threshold, not a historically observed location |
+| Exceptional geological occurrence (future) | Documented Moon-forming/Chicxulub-scale event plus appropriate forcing/location | Only with state/reconstruction handoff | Label inference, reconstruction, and date uncertainty |
+| Origin-of-life experiment (future) | M2–M6 local environment and kinetic thresholds | Only once the real S1–S4 solver exists | A **hypothesis-dependent outcome**, never Earth's proven one-time historical origin |
+| Evolutionary landmark (future) | Biosphere model or sourced historical constraint with geographic context | Only with corresponding habitat/organism simulation | Distinguish reconstruction, fossil evidence, and model hypothesis |
 
+### Implemented first-slice events
 
-The event clock is not an independent invented geological timeline: it is explicitly a
-bounded read-only inspection session. The impact emitter is itself a declared *visual hypothesis*
-biased toward the visible hemisphere, not a calibrated global impact-rate model. No claim of
-physical real-time crater formation, local LOD equivalence, fluid chemistry or abiogenesis.
+1. **Persistent rocky lid forms** when `lithosphereReady` changes false → true.
+2. **Steam rains out into oceans** when S0's normalized condensed water inventory
+   crosses 0.5. This does **not** claim to date Earth's first water.
+3. **Plate tectonics begins (model)** when the thermal regime first becomes
+   `plates`. Earth's true plate-tectonics onset remains debated.
+
+The camera eases from the existing orbit toward a closer view of the **same**
+GPU planet for 14 visible local seconds (1.2 s approach, 2 s retreat). An event
+without a local spatial coordinate gets a **planet-wide** close-up—not a fabricated
+specific ocean, rock formation, vent or tectonic boundary. Parent geological
+time is frozen; the independent inspection clock runs 1× only while visible.
+On exit, the original camera, geological playback and ambient-impact countdown
+resume. Past states cannot be replayed without a stored physical checkpoint.
+
+A current event marker can be inspected while its model state is still current.
+Older dots are archival until physical snapshot/replay support exists. Restarting
+the seeded planet resets the milestone history. The key-moment list is bounded
+to 64 markers; ordinary impacts do not consume slots.
 
 ## Acceptance gates
 
-- Pure tests: no duplicate events, eight-event retention, stable geographical orientation,
-  invalid direction rejection, 1× clock and background elapsed-time safety.
-- Browser: the real seeded impact emitter produces a dot and automatically enters the original
-  globe's local close-up; the parent epoch is stable and the camera/playback auto-restore.
-- Existing Earth/Snowball research routes and seed replay must remain untouched.
-- Full .NET build, WASM, browser shards, production exact-SHA smoke and iPhone/PC visual review
-  before labeling a release complete.
+- Pure tests: ambient impacts do not enter the key-moment list; state-driven
+  thresholds admit each geological event once and in chronological order.
+- Browser: actual evolving S0 stage change produces the dot, a planetary
+  auto-zoom, a fixed geological epoch during local time, and a restored
+  original orbit with resumed playback. Confirm ordinary impacts remain visual.
+- Existing seed replay, Earth history, performance readbacks and Snowball/rock
+  research routes stay unchanged.
+- Full .NET/WASM, browser shards, published exact-SHA smoke, and separate
+  iPhone/PC visual review before full device acceptance.
+- No fabricated early atmosphere chemistry, vents, protocells, polymers,
+  individual animal organisms, or geological history.
+
+### Scientific provenance
+
+- Experimental protocell membranes are a plausible hypothesis, not direct
+  fossils of Earth's first cell: https://www.nature.com/articles/s43247-024-01372-0
+- Polymer synthesis in water faces genuine thermodynamic/kinetic constraints:
+  https://www.nature.com/articles/s41570-024-00648-5
+- Earliest life evidence and land colonization dates have uncertainty:
+  https://astrobiology.nasa.gov/news/oldest-evidence-for-early-life-on-earth-dated-to-at-least-377-billion-years/
+  and https://pubmed.ncbi.nlm.nih.gov/14731304/
 
 ## Next slices
 

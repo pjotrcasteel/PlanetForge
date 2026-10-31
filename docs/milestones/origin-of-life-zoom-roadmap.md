@@ -24,6 +24,9 @@ by the scale above it, not a canned animation. Gamify it later, on top of the sa
    contrast them with black smokers, and later with warm little ponds, which need wet–dry cycles.
    Outcomes can fail. That is scientifically honest and a good basis for gameplay.
 5. **Deterministic and seeded**, so moments can be replayed, tested and shared.
+6. **No asserted one-true-origin chain.** Membrane self-assembly and polymer formation
+   can be explored in either order or together. Each requires real precursor chemistry;
+   a run's success is a hypothesis-driven model result, not a historical fact.
 
 ## Scale ladder
 
@@ -108,6 +111,63 @@ by the scale above it, not a canned animation. Gamify it later, on top of the sa
 - Progress is gated by real thresholds. A science codex unlocks references. Seeds/moments can be shared.
 - **Exit:** a playable loop from the planet to a protocell, with telemetry and usability tests.
 
+## Key moments across prebiotic chemistry and the rise of life
+
+The player should be able to follow a chain of progressively smaller,
+scientifically constrained experiments—not a scripted sequence in which
+Earth's **first** membrane definitely preceded its **first** polymer, or
+vice versa. Those orderings and settings remain contested. The UI presents
+parallel hypotheses and lets them combine when local physics supports it.
+
+| Milestone | Moment worthy of a zoom | Trigger / what must be real |
+| --- | --- | --- |
+| M1–M2 | A habitable ocean setting and active vent | S0 water/crust + S1 ridge/bathymetry + S2 water/rock/heat flux |
+| M3 | Stable pore gradients | S3 concentrations, pH, heat and mineral boundary fields |
+| M4 | A polymer chain grows, breaks or templates | S4 stochastic chemistry with mass balance and competing hydrolysis |
+| M5 | Amphiphiles self-assemble into a vesicle | S4 membrane phase behavior in a supported pH/salinity window |
+| M6 | A protocell encapsulates a replicator, grows or fails | Both M4 and M5 outcomes; energy/material budget and inheritance |
+| M7 | Early microbial ecosystem changes local chemistry | Explicit biosphere ↔ geochemistry coupling; outcome can fail |
+| M8 | Gamified Observe / Experiment / Challenge | Progress from real thresholds; no guaranteed creation of life |
+
+M4 and M5 are **parallel experimental branches**, not certified chronological
+historical events. The first surviving replicating protocell in a run is
+a *model outcome*, not a claim to have recreated the origin of terrestrial life.
+The same rule applies to any synthetic first-metabolism/first-RNA milestone.
+
+### M9 — Early evolution and oxygenic ecosystems (future)
+
+- Keep lineage-level heritable variation, replication error, selection,
+  growth, extinction and environmental feedback coupled. Track populations,
+  not just the first successful protocell.
+- Allow model-dependent microbial mats, novel metabolic pathways and eventual
+  oxygenic photosynthesis. The source-backed Great Oxidation Event (~2.4 Ga)
+  is a *historical Earth-history anchor*, not automatically the frame
+  in which the first oxygen-producing microbe appears.
+- **Exit:** meaningful ecological transitions emerge from feedback and remain
+  explorable from orbit down to organisms with documented uncertainty.
+
+### M10 — Eukaryotes, multicellularity and animal diversification (future)
+
+- Transition from microbial communities to more complex cells, symbiosis,
+  multicellular developmental programs and marine food webs.
+- Historic markers (eukaryotes, multicellular life, Cambrian radiation)
+  use fossil/phylogenetic constraints; a game's emergent lineage is a
+  simulation and is labelled separately.
+- **Exit:** visible evolutionary lineage history with replayable physical
+  habitat context, rather than a sequence of predetermined monster reveals.
+
+### M11 — Life conquers land (future)
+
+- First land plants and terrestrial arthropods are separate evolutionary
+  milestones; vertebrate tetrapod land entry comes much later.
+  Earliest known terrestrial animal traces are roughly 450 Ma, while
+  tetrapod transitions are associated with the Late Devonian (~375 Ma).
+- Zoom from globe to coastline, soil, plant and small arthropod habitats
+  through genuine elevation, atmospheric and ecosystem models.
+- **Exit:** correctly ordered, sourced, visually explorable key moments from
+  microbial life to early land ecosystems, with time uncertainty and
+  species-specific environmental constraints.
+
 ## Cross-cutting
 - **Performance:** each scale ≥ 30 fps on the demo laptop. Compute budgets set per milestone.
 - **Testing:** unit tests for kinetics and conservation (C# or JS). Playwright tests for zoom transitions
@@ -115,6 +175,7 @@ by the scale above it, not a canned animation. Gamify it later, on top of the sa
 - **Honesty:** each scale shows its liberties and the hypothesis it is under in the HUD.
 - **Order and parallelism:** M0 → M1 → M2 are sequential. M3–M5 can be prototyped as standalone
   sandboxes in parallel, then integrated. M6 needs M4+M5. M8 can start design after M2.
+  M9–M11 require the validated ecological/lineage and habitat foundations; no fixed dates masquerade as model output.
 
 ## Decisions (2026-10-14)
 1. **Compute:** WebGPU compute for the particle/reaction scales (S3–S4). The existing WebGL2 globe stays

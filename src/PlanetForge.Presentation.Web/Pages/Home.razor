@@ -187,7 +187,7 @@
                      aria-label="Horizontal geological events timeline" data-testid="special-events-timeline">
                 <div class="formation-event-header">
                     <span class="formation-event-kicker">EARTH HISTORY <small>· LOG TIME</small></span>
-                    <span class="formation-event-count">@(specialEventsStatus?.Events.Length ?? 0) / 8 EVENTS</span>
+                    <span class="formation-event-count">@(specialEventsStatus?.Events.Length ?? 0) KEY MOMENTS</span>
                 </div>
                 @if (specialEventsStatus?.Focus is { } focus)
                 {
@@ -195,7 +195,7 @@
                         <div class="formation-event-focus-copy">
                             <strong>@focus.Title <span>· AUTO ZOOM</span></strong>
                             <span data-testid="event-elapsed">LOCAL T+@focus.ElapsedSeconds.ToString("0.0") s · 1× REAL TIME</span>
-                            <small>@FormatEventEpoch(focus.PlanetSeconds) · Geological epoch paused · @focus.Scale</small>
+                            <small>@focus.Source · @FormatEventEpoch(focus.PlanetSeconds) · Geological epoch paused · @focus.Scale</small>
                         </div>
                         <button type="button" class="formation-event-return" data-testid="special-event-exit" @onclick="ExitSpecialEventAsync">Return now</button>
                         <details><summary>Model limits</summary><small>@focus.Limitations</small></details>
@@ -205,8 +205,8 @@
                 {
                     <p class="formation-event-summary" role="status">
                         @(specialEventsStatus?.Events.Length > 0
-                            ? "Observed events marked below · The next witnessed impact zooms in automatically."
-                            : "Travel through Earth history · Witnessed impacts trigger an automatic close-up.")
+                            ? "Major planetary transitions are marked below · Routine impacts stay in the background."
+                            : "Travel through Earth history · Major planetary changes trigger close-ups, not every impact.")
                     </p>
                 }
                 <div class="formation-time-track" role="group" aria-label="Observed events along logarithmic geological time"
@@ -223,8 +223,8 @@
                                     data-testid="special-event-enter"
                                     style="@($"left: {TimelinePosition(item.PlanetSeconds)};")"
                                     disabled="@(!item.Inspectable || specialEventsStatus?.Focus is not null)"
-                                    title="@($"{item.Title} · {FormatEventEpoch(item.PlanetSeconds)}")"
-                                    aria-label="@($"{item.Title}, {FormatEventEpoch(item.PlanetSeconds)}. {(item.Inspectable ? "Zoom to this event" : "Optical replay expired")}")"
+                                    title="@($"{item.Title} · {FormatEventEpoch(item.PlanetSeconds)} · {item.Source}")"
+                                    aria-label="@($"{item.Title}, {FormatEventEpoch(item.PlanetSeconds)}, {item.Source}. {(item.Inspectable ? "Inspect live transition" : "Past model state not replayable")}")"
                                     @onclick="() => EnterSpecialEventAsync(item.Id)"></button>
                         }
                     }
