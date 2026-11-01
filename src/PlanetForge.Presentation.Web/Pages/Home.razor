@@ -204,7 +204,9 @@
                             <small>@focus.Source · @FormatEventEpoch(focus.PlanetSeconds) · Geological epoch paused · @focus.Scale</small>
                         </div>
                         <button type="button" class="formation-event-return" data-testid="special-event-exit" @onclick="ExitSpecialEventAsync">Return now</button>
-                        <details><summary>Model limits</summary><small>@focus.Limitations</small></details>
+                        <details><summary>Evidence &amp; limits</summary>
+                            <small>@EventAuthorityLabel(focus.Authority) · @focus.Trigger · @focus.Uncertainty · @focus.Limitations</small>
+                        </details>
                     </div>
                 }
                 <div class="formation-event-meta">
@@ -230,8 +232,8 @@
                                     data-testid="special-event-enter"
                                     style="@($"left: {TimelinePosition(item.PlanetSeconds)};")"
                                     disabled="@(!item.Inspectable || specialEventsStatus?.Focus is not null)"
-                                    title="@($"{item.Title} · {FormatEventEpoch(item.PlanetSeconds)} · {item.Source}")"
-                                    aria-label="@($"{item.Title}, {FormatEventEpoch(item.PlanetSeconds)}, {item.Source}. {(item.Inspectable ? "Inspect live transition" : "Past model state not replayable")}")"
+                                    title="@($"{item.Title} · {FormatEventEpoch(item.PlanetSeconds)} · {EventAuthorityLabel(item.Authority)} · {item.Source}")"
+                                    aria-label="@($"{item.Title}, {FormatEventEpoch(item.PlanetSeconds)}, {EventAuthorityLabel(item.Authority)}. {(item.Inspectable ? "Inspect live transition" : "Past model state not replayable")}")"
                                     @onclick="() => EnterSpecialEventAsync(item.Id)"></button>
                         }
                     }
@@ -242,11 +244,33 @@
                 </div>
                 @if (specialEventsStatus?.Events is { Length: > 0 } seenEvents && specialEventsStatus?.Focus is null)
                 {
-                    <div class="formation-event-recent" aria-label="Latest recorded key moment">
-                        <span>LATEST</span>
-                        <strong>@(seenEvents[^1].Title)</strong>
-                        <span>@(FormatEventEpoch(seenEvents[^1].PlanetSeconds))</span>
-                    </div>
+                    <details class="formation-event-recent" aria-label="Recorded geological event log"
+                             data-testid="special-event-log">
+                        <summary>
+                            <span>LATEST</span>
+                            <strong>@(seenEvents[^1].Title)</strong>
+                            <span class="formation-event-recent-epoch">@(FormatEventEpoch(seenEvents[^1].PlanetSeconds))</span>
+                        </summary>
+                        <ol class="formation-event-records">
+                            @foreach (var item in seenEvents.Reverse())
+                            {
+                                <li @key="item.Id">
+                                    <div class="formation-record-title">
+                                        <strong>@item.Title</strong>
+                                        <span>@FormatEventEpoch(item.PlanetSeconds)</span>
+                                    </div>
+                                    <span class="formation-record-authority">@EventAuthorityLabel(item.Authority) · PRIORITY @item.Priority</span>
+                                    <p>@item.Trigger · @item.Scale</p>
+                                    <p>@item.Source</p>
+                                    <small>Recorded model step: @FormatEventEpoch(item.Interval.StartSeconds) – @FormatEventEpoch(item.Interval.EndSeconds). @item.Uncertainty</small>
+                                    @if (!item.Inspectable)
+                                    {
+                                        <small>Past model state · replay unavailable until E7-C</small>
+                                    }
+                                </li>
+                            }
+                        </ol>
+                    </details>
                 }
                 <div class="formation-event-legend">
                     <span><i class="formation-event-legend-now"></i> NOW</span>
