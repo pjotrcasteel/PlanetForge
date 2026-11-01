@@ -30,9 +30,9 @@ export function stepEarthMoonFormation(formation, elapsedSeconds, maximumYearsPe
     formation.visualSeconds += dt;
     switch (formation.stage) {
         case 'accretion': {
-            // The 1x setting must remain watchable on a phone, and 50x can skip
-            // intermediate collisions but never skip the exceptional Theia event.
-            const yearsPerSecond = Math.max(5e6, maximumYearsPerSecond);
+            // Respect the visible 1×/5×/.../50× speed exactly. Fast
+            // playback may skip ambient collisions, never the giant-impact scene.
+            const yearsPerSecond = maximumYearsPerSecond;
             formation.playbackYearsPerSecond = yearsPerSecond;
             formation.ageYears = Math.min(IMPACT_AGE_YEARS, formation.ageYears + dt * yearsPerSecond);
             if (formation.ageYears >= IMPACT_AGE_YEARS) {
