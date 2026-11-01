@@ -208,13 +208,13 @@ vec3 rockySurface(vec3 pos, vec3 norm, vec3 rd, float hot, float theia, float ti
     vec3 diffuse = rock * (0.10 + 1.10*max(dot(norm,normalize(LIGHT)),0.0));
     vec3 halfDir = normalize(normalize(LIGHT) - rd);
     float spec = pow(max(dot(norm, halfDir),0.0),26.0) * (0.07+0.09*geologic);
-    float thermalFraction = clamp(hot);
+    float thermalFraction = clamp(hot,0.0,1.0);
     vec3 deepMagma = mix(vec3(0.39,0.016,0.003), vec3(1.0,0.26,0.035),lava);
     vec3 incandescent = mix(deepMagma,vec3(2.7,1.14,0.38),pow(lava,4.0)*0.40);
     vec3 visible = mix(diffuse + vec3(spec), incandescent,
         thermalFraction*(0.66+0.34*lava));
     visible += incandescent*lava*thermalFraction*0.55;
-    float fresnel = pow(1.0 - clamp(dot(norm,-rd)),4.5);
+    float fresnel = pow(1.0 - clamp(dot(norm,-rd),0.0,1.0),4.5);
     visible += fresnel*mix(vec3(0.028,0.055,0.10),vec3(0.44,0.10,0.025),thermalFraction);
     if (theia > 0.5) visible = diffuse*0.7 + vec3(spec*0.55) + lava*vec3(0.012,0.007,0.005);
     return visible;
@@ -234,12 +234,12 @@ void main() {
     vec3 up = normalize(cross(right,forward));
     vec3 ray = normalize(forward+right*uv.x*uAspect*uTanHalfFov+up*uv.y*uTanHalfFov);
     vec3 camera = uCamera;
-    float growth = smoothstep(0.0,1.0,clamp(uAge/60.0));
-    float earthRadius = mix(0.34,0.97,pow(growth,0.54));
+    float growth = smoothstep(0.0,1.0,clamp(uAge/60.0,0.0,1.0));
+    float earthRadius = mix(0.035,0.97,pow(growth,0.54));
     float collision = step(1.0,uStage);
     if (uStage>1.5) earthRadius=1.0;
     vec3 earth = vec3(0.0);
-    vec3 theia = right*(2.65-2.09*clamp(uProgress)) + up*0.12;
+    vec3 theia = right*(2.65-2.09*clamp(uProgress,0.0,1.0)) + up*0.12;
     float theiaVisible = 0.0;
     if (uStage < 0.5) {
         theiaVisible = smoothstep(0.68,0.91,growth);
