@@ -19,6 +19,10 @@ import { createRaftSystem, advanceRafts, mulberry32, randomDirection, maximumRaf
 import { emissionLinearRadiance, thermalMaterialShader } from '../thermalRadiance.js';
 import { selectFirstPlateFocus } from './specialEvents.mjs';
 import {
+    createEarthMoonFormation, stepEarthMoonFormation, earthMoonFormationStatus,
+    renderEarthMoonFormation, disposeEarthMoonFormation, HANDOFF_AGE_YEARS,
+} from './earthMoonFormation.mjs';
+import {
     EARTH_LIBERTIES, loadEarthAssets, createEarthHistory, prepareEarthHistory, disposeEarthHistory, startEarthHistory,
     stepEarthHistory, deriveEarthHistory, earthHistoryStatus, earthLatestStartMyr,
 } from './earthHistory.js';
@@ -1400,7 +1404,8 @@ export function createEvolution(gl, seed, createProgram, options = {}) {
     const vao = gl.createVertexArray();
 
     const evo = {
-        gl, seed, random, programs, vao,
+        gl, seed, random, programs, vao, createProgram,
+        formation: createEarthMoonFormation(seed),
         textures: { state0, state1, compose0, compose1, derived, raftPosition, raftVelocity, raftFrame, raftLink, bins, ageTable },
         targets, current: 0,
         uniforms: {
@@ -1490,6 +1495,7 @@ export function disposeEvolution(evo) {
     const gl = evo.gl;
     evo.disposed = true;
     disposeEarthHistory(evo.earth);
+    disposeEarthMoonFormation(evo.formation, gl);
     for (const program of Object.values(evo.programs)) gl.deleteProgram(program);
     const t = evo.textures;
     for (const texture of [...t.state0, ...t.state1, t.compose0, t.compose1, t.derived, t.raftPosition, t.raftVelocity, t.raftFrame, t.raftLink, t.bins, t.ageTable]) {
@@ -1988,6 +1994,17 @@ export function setEvolutionSpeed(evo, yearsPerSecond) {
 
 export function stepEvolution(evo, wallDtSeconds) {
     if (!evo.playing) return false;
+    // Formation is a separate reconstructed era, not an acceleration of the
+    // magma-ocean solver. Its geological clock meets that solver at 82 Myr.
+    if (evo.formation && !evo.formation.complete) {
+        const advanced = stepEarthMoonFormation(evo.formation, wallDtSeconds, evo.maximumYearsPerSecond);
+        if (advanced && evo.formation.complete) {
+            evo.thermal.timeSeconds = HANDOFF_AGE_YEARS * SECONDS_PER_YEAR;
+            evo.postImpactStartSeconds = evo.thermal.timeSeconds;
+            evo.rate = 0;
+        }
+        return advanced;
+    }
     const elapsedWallDt = Math.min(Math.max(wallDtSeconds, 0), 1.0);
     // GPU raft motion remains bounded per frame; thermal time must not be lost
     // merely because a device cannot sustain 10 WebGL frames per second.
@@ -2233,6 +2250,10 @@ function renderStars(evo, frame) {
 
 export function renderEvolutionGlobe(evo, frame) {
     const gl = evo.gl;
+    if (evo.formation && !evo.formation.complete) {
+        renderEarthMoonFormation(evo.formation, gl, evo.createProgram, frame);
+        return;
+    }
     const starsStartedAt = performanceMarkStart();
     renderStars(evo, frame);
     recordPerformanceDuration('starsCpuSubmissionMs', starsStartedAt);
@@ -2358,6 +2379,30 @@ function livePlates(evo) {
 
 export function evolutionStatus(evo) {
     const t = evo.thermal;
+    if (evo.formation && !evo.formation.complete) {
+        const formation = earthMoonFormationStatus(evo.formation);
+        return {
+            timeSeconds: formation.timeSeconds,
+            timeLabel: formatDuration(formation.timeSeconds),
+            rateLabel: formation.rateLabel,
+            regime: 'formation',
+            phase: formation.phase,
+            playing: evo.playing,
+            potentialKelvin: null,
+            crystalFraction: 0,
+            heatFluxWattsPerSquareMeter: null,
+            crustLifetimeLabel: null,
+            glowingFraction: 0,
+            convectionVelocity: 0,
+            rafts: 0, plates: 0, plumes: 0, impacts: 0,
+            landFraction: 0, felsicFraction: 0, heatPipeShare: 0,
+            lidOnsetLabel: null, plateOnsetLabel: null,
+            rheologicalTransitionKelvin: rheologicalTransitionKelvin(),
+            exposure: 1, earthHistory: null,
+            liberties: [formation.limitations, ...DEMO_LIBERTIES],
+            formation,
+        };
+    }
     const phi = crystalFraction(t.potentialKelvin);
     let phase;
     if (evo.earth?.active && t.regime !== 'magma-ocean' && evo.steam <= 0.2) {
