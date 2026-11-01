@@ -74,6 +74,7 @@ test('F0 mobile Earth-Moon formation renders proto-Earth, Theia collision, eject
         expect(graphics.width).toBeGreaterThan(0);
         expect(graphics.height).toBeGreaterThan(0);
         expect(graphics.glError).toBe(0);
+        expect(errors, scene.name + ' must compile and render without JavaScript errors').toEqual([]);
         const screenshot = await page.screenshot({ path: testInfo.outputPath('f0-' + scene.name + '.png') });
         if (scene.name === 'proto-earth-accretion') {
             // Single-surface quality gate: central planet pixels must contain
