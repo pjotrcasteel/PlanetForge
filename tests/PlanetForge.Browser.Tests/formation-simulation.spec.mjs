@@ -245,8 +245,7 @@ test('Evolution_Portrait_ControlsFit', async ({ page }, testInfo) => {
   await expect(page.getByTestId('timeline-origin-node')).toHaveCount(1);
   await expect(page.getByTestId('timeline-present-node')).toHaveCount(1);
   const dockBox = await page.locator('.formation-controls').boundingBox();
-  expect(dockBox.y).toBeGreaterThanOrEqual(hudBox.y);
-  expect(dockBox.y - hudBox.y).toBeLessThan(65);
+  expect(Math.abs(dockBox.y - hudBox.y)).toBeLessThan(2);
   expect(dockBox.y + dockBox.height).toBeLessThan(railBox.y);
   const controls = await page.locator('.formation-controls button').evaluateAll(buttons =>
     buttons.map(button => {
