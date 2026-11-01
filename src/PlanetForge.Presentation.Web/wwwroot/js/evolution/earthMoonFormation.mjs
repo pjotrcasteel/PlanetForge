@@ -223,30 +223,49 @@ vec3 background(vec3 rd) {
     galaxy *= 0.012 + 0.02*fbm(rd*65.0);
     return vec3(0.0014,0.0018,0.0031) + galaxy*vec3(0.42,0.53,0.78) + glint*vec3(0.84,0.91,1.0);
 }
-vec3 rockySurface(vec3 pos, vec3 norm, vec3 rd, float hot, float theia, float time) {
-    vec3 p = norm * 4.5 + vec3(uSeed*0.011, 0.0, time*0.004);
-    float geologic = fbm(p);
-    float detail = fbm(p*6.3);
-    float fracture = abs(fbm(p*2.1) - 0.48);
-    float crust = smoothstep(0.15,0.70,geologic*0.76+detail*0.24);
-    vec3 rock = mix(vec3(0.012,0.018,0.024),vec3(0.15,0.125,0.105),crust);
-    rock = mix(rock,vec3(0.25,0.21,0.175),0.23*detail);
-    // Young cooling proto-Earth may be patchily molten, but not covered by
-    // coherent plate boundaries. Breakup is visually chaotic and multiscale.
-    float lava = (1.0 - smoothstep(0.0,0.25,fracture)) * (0.40 + 0.60*detail);
-    lava *= smoothstep(0.30, 0.62, 1.0 - geologic*0.48);
-    vec3 diffuse = rock * (0.10 + 1.10*max(dot(norm,normalize(LIGHT)),0.0));
-    vec3 halfDir = normalize(normalize(LIGHT) - rd);
-    float spec = pow(max(dot(norm, halfDir),0.0),26.0) * (0.07+0.09*geologic);
-    float thermalFraction = clamp(hot,0.0,1.0);
-    vec3 deepMagma = mix(vec3(0.39,0.016,0.003), vec3(1.0,0.26,0.035),lava);
-    vec3 incandescent = mix(deepMagma,vec3(2.7,1.14,0.38),pow(lava,4.0)*0.40);
-    vec3 visible = mix(diffuse + vec3(spec), incandescent,
-        thermalFraction*(0.66+0.34*lava));
-    visible += incandescent*lava*thermalFraction*0.55;
-    float fresnel = pow(1.0 - clamp(dot(norm,-rd),0.0,1.0),4.5);
-    visible += fresnel*mix(vec3(0.028,0.055,0.10),vec3(0.44,0.10,0.025),thermalFraction);
-    if (theia > 0.5) visible = diffuse*0.7 + vec3(spec*0.55) + lava*vec3(0.012,0.007,0.005);
+vec3 rockySurface(vec3 pos, vec3 norm, vec3 rd, float hot, float kind, float time) {
+    // Multi-scale silicate materials: broad dark rock, granular regolith,
+    // irregular flowing melt. No Voronoi polygon "plate" outlines at F0.
+    vec3 q = norm * 4.8 + vec3(uSeed * 0.011, 0.0, time * 0.003);
+    float low = fbm(q * 0.85);
+    float mid = fbm(q * 2.8 + 17.2);
+    float grain = noise3(q * 18.0 + 2.0);
+    float flows = fbm(q * 1.35 + vec3(time * 0.014, -time * 0.009, 0.0));
+    float veins = 1.0 - smoothstep(0.035, 0.18, abs(mid - 0.49));
+    float melt = clamp(0.12 + 0.60 * smoothstep(0.37, 0.69, flows)
+        + 0.32 * veins + 0.18 * (grain - 0.5), 0.0, 1.0);
+    vec3 basalt = mix(vec3(0.018, 0.022, 0.027),
+        vec3(0.20, 0.17, 0.15), smoothstep(0.30, 0.76, low));
+    basalt *= 0.80 + 0.36 * grain;
+    vec3 sun = normalize(LIGHT);
+    float nl = max(dot(norm, sun), 0.0);
+    vec3 halfDir = normalize(sun - rd);
+    float spec = pow(max(dot(norm, halfDir), 0.0), 40.0)
+        * (0.025 + 0.045 * grain);
+    vec3 reflected = basalt * (0.035 + 1.25 * nl) + vec3(spec);
+    float thermal = clamp(hot, 0.0, 1.0);
+    // Approximate visible incandescent silicate emission with dark cooling
+    // islands, cherry-red melt, and a few near-white upwelling filaments.
+    vec3 redMelt = mix(vec3(0.23, 0.010, 0.002),
+        vec3(1.55, 0.27, 0.026), smoothstep(0.18, 0.88, melt));
+    vec3 whiteHot = vec3(2.7, 1.13, 0.29) *
+        pow(max(0.0, (melt - 0.65) / 0.35), 3.0) * thermal;
+    vec3 incandescent = (redMelt + whiteHot) * (0.48 + thermal * 0.72);
+    float exposed = thermal * (0.52 + melt * 0.46);
+    // Theia remains a mostly solid, dusty differentiated protoplanet.
+    if (kind > 0.5 && kind < 1.5) {
+        exposed *= 0.11;
+        incandescent *= 0.42;
+    }
+    // The newborn Moon is also hot; it must not look like a modern grey orb
+    // five seconds after leaving a vapour-and-melt-rich collision.
+    if (kind > 1.5) exposed *= 0.64;
+    vec3 visible = mix(reflected, incandescent, exposed);
+    visible += incandescent * veins * thermal * (kind < 0.5 ? 0.12 : 0.025);
+    float mu = clamp(dot(norm, -rd), 0.0, 1.0);
+    float fresnel = pow(1.0 - mu, 4.3);
+    visible += fresnel * mix(vec3(0.03, 0.055, 0.065),
+        vec3(0.32, 0.09, 0.025), thermal) * (kind < 0.5 ? 1.0 : 0.35);
     return visible;
 }
 vec3 limbGlow(vec3 ro, vec3 rd, vec3 center, float radius, vec3 color, float strength) {
@@ -255,6 +274,28 @@ vec3 limbGlow(vec3 ro, vec3 rd, vec3 center, float radius, vec3 color, float str
     float d = max(0.0,impact-radius);
     float fade = exp(-d*d / max(0.0001,0.035*radius*radius));
     return color * strength * fade * clamp(impact/radius,0.0,1.0);
+}
+// A layered, widening silicate vapour curtain. This is a low-cost cinematic
+// radiance approximation of ejecta, not an impact hydrodynamics solution.
+vec3 impactVapor(vec3 camera, vec3 rd, vec3 right, vec3 up, vec3 forward) {
+    float young = clamp((uProgress - 0.10) / 0.78, 0.0, 1.0);
+    float strength = smoothstep(0.08,0.34,uProgress) *
+        (1.0 - smoothstep(0.70,1.0,uProgress));
+    vec3 axis = normalize(right*0.62 + up*0.78 + forward*0.10);
+    vec3 source = right*0.73 + up*0.21;
+    vec3 centre = source + axis*(0.15 + 1.12*young);
+    float t = max(0.0, dot(centre-camera, rd));
+    vec3 q = camera + rd*t;
+    vec3 rel = q-centre;
+    float axial = dot(rel, axis);
+    float radial = length(rel - axis*axial);
+    float rough = 0.75 + 0.45*noise3(q*8.0+vec3(uSeconds*0.09));
+    float width = (0.15 + 0.72*young) * (1.0 - 0.45*clamp(abs(axial),0.0,1.0));
+    float cloud = exp(-pow(radial*rough/max(width,0.05),2.0)) *
+        exp(-pow(axial/(0.36+1.1*young),2.0));
+    vec3 ash = mix(vec3(0.54,0.11,0.018),vec3(1.9,0.80,0.24),
+        clamp(1.0-young+cloud*0.2,0.0,1.0));
+    return ash*cloud*strength*1.6;
 }
 void main() {
     vec2 uv = vUv*2.0-1.0;
@@ -266,10 +307,11 @@ void main() {
     vec3 camera = uCamera;
     float growth = smoothstep(0.0,1.0,clamp(uAge/60.0,0.0,1.0));
     float earthRadius = mix(0.035,0.97,pow(growth,0.54));
-    float collision = step(1.0,uStage);
     if (uStage>1.5) earthRadius=1.0;
     vec3 earth = vec3(0.0);
-    vec3 theia = right*(2.65-2.09*clamp(uProgress,0.0,1.0)) + up*0.12;
+    // Grazing impact geometry: the collider enters the camera's central
+    // third as contact approaches, including on a tall narrow phone screen.
+    vec3 theia = right*(2.42-1.93*clamp(uProgress,0.0,1.0)) + up*0.24;
     float theiaVisible = 0.0;
     if (uStage < 0.5) {
         theiaVisible = smoothstep(0.68,0.91,growth);
@@ -290,20 +332,25 @@ void main() {
     if (theiaVisible>0.001 && theiaHit.x>0.0 && theiaHit.x<nearest) { nearest=theiaHit.x; body=1.0; }
     if (moonVisible>0.001 && moonHit.x>0.0 && moonHit.x<nearest) { nearest=moonHit.x; body=2.0; }
     vec3 col = background(ray);
-    // A thin analytic orbital debris sheet gives the post-impact orbit scale.
+    // Finite-thickness, partially opaque hot orbital debris: broad dust
+    // structure punctuated by cooler, darker clumps, not a hairline ellipse.
     if (uStage>1.5) {
-        float diskOpacity = uStage>2.5 ? 0.18 : (1.0-uProgress*0.78);
-        vec3 diskNormal = normalize(up + forward*0.35);
+        float diskOpacity = uStage>2.5 ? 0.35 : (1.12-uProgress*0.58);
+        vec3 diskNormal = normalize(up + forward*0.27);
         float plane = dot(ray,diskNormal);
         if (abs(plane)>0.0001) {
             float distanceToPlane = -dot(camera,diskNormal)/plane;
             vec3 q = camera+ray*distanceToPlane;
             float r=length(q);
-            float band = smoothstep(0.58,0.82,r)*(1.0-smoothstep(1.8,2.30,r));
-            float dust=fbm(q*19.0+vec3(uSeconds*0.02));
-            float density = band*(0.28+0.72*dust)*diskOpacity;
-            if (distanceToPlane>0.0 && distanceToPlane<nearest)
-                col += density*vec3(0.85,0.31,0.13)*0.35;
+            float band = smoothstep(0.60,0.90,r)*(1.0-smoothstep(2.05,2.65,r));
+            float dust=fbm(q*11.0+vec3(uSeconds*0.035));
+            float furrows = 0.75 + 0.25*sin(r*33.0 + atan(q.y,q.x)*8.0);
+            float density = band*(0.18+0.82*dust)*furrows*diskOpacity;
+            if (distanceToPlane>0.0 && distanceToPlane<nearest) {
+                vec3 smoulder = mix(vec3(0.23,0.20,0.18),vec3(1.12,0.38,0.08),
+                    clamp(1.0-uProgress*0.72,0.0,1.0));
+                col += density*smoulder*0.82;
+            }
         }
     }
     if (body>=0.0) {
@@ -311,23 +358,32 @@ void main() {
         float radius=body<0.5 ? earthRadius : body<1.5 ? 0.49 : moonRadius;
         vec3 pos = camera+ray*nearest;
         vec3 norm = normalize(pos-center);
-        float hot = body<0.5 ? mix(0.16,0.86,growth) : 0.0;
+        float hot = body<0.5 ? mix(0.25,0.88,growth) : 0.10;
         if (uStage>0.5 && body<0.5)
-            hot = mix(0.86,1.0,smoothstep(0.1,0.35,uProgress));
-        if (body>1.5) hot = 0.03;
-        col = rockySurface(pos,norm,ray,hot,body>0.5?1.0:0.0,uSeconds);
-        float atmo = body<0.5 ? 0.17 : 0.0;
+            hot = mix(0.88,1.0,smoothstep(0.14,0.42,uProgress));
+        if (body>1.5) hot = uStage>2.5 ? 0.36 : mix(0.86,0.45,uProgress);
+        col = rockySurface(pos,norm,ray,hot,body,uSeconds);
+        if (body>0.5 && body<1.5 && uStage>0.5) {
+            // Theia fragments into an irregular cloud rather than fading as
+            // a pristine, suddenly disappearing smooth ball.
+            float breakup = smoothstep(0.22,0.57,uProgress);
+            float fragmentation = noise3(norm*24.0+vec3(uSeconds*0.08));
+            col = mix(col,background(ray),
+                breakup*smoothstep(0.2,0.8,fragmentation)*0.85);
+        }
+        float atmo = body<0.5 ? 0.24 : 0.0;
         col += pow(1.0-max(dot(norm,-ray),0.0),4.0)*atmo*vec3(0.32,0.20,0.15);
     }
-    // Flash and expanding shock are cinematic approximations, never counted as
-    // a physical explosion or as a second geological impact event.
+    // Glowing splashed mantle and a turbulent ejecta curtain at the grazing
+    // contact point. A hard flash is brief; dusty vapour survives afterward.
     if (uStage>0.5 && uStage<1.5) {
-        vec3 epicenter = right*0.62;
+        vec3 epicenter = right*0.77 + up*0.18;
         float d=length(cross(ray,normalize(epicenter-camera)));
-        float peak=exp(-pow((uProgress-0.30)/0.125,2.0));
-        float glare = exp(-d*d/0.003)*peak;
-        col+=glare*vec3(2.1,0.77,0.21);
-        col+=exp(-d*d/0.035)*peak*vec3(0.40,0.09,0.012);
+        float peak=exp(-pow((uProgress-0.36)/0.115,2.0));
+        float glare = exp(-d*d/0.0025)*peak;
+        col += glare*vec3(3.5,1.72,0.53);
+        col += exp(-d*d/0.021)*peak*vec3(0.70,0.19,0.025);
+        col += impactVapor(camera,ray,right,up,forward);
     }
     float ejectaStrength = uStage>0.5 && uStage<1.5 ? smoothstep(0.15,0.5,uProgress)
         : uStage>1.5 ? (uStage>2.5?0.15:1.0-uProgress*0.5):0.0;
@@ -350,6 +406,7 @@ uniform float uProgress;
 uniform float uSeed;
 uniform float uViewHeight;
 out float vHeat;
+out float vOpacity;
 float h(float x) { return fract(sin(x*127.1+uSeed*1.97)*43758.5453); }
 void main() {
     float id = float(gl_VertexID)+1.0;
@@ -357,37 +414,62 @@ void main() {
     vec3 right = normalize(cross(forward,vec3(0,1,0)));
     if (length(right)<0.01) right=vec3(1,0,0);
     vec3 up=normalize(cross(right,forward));
-    float r = 0.70 + pow(h(id*3.31),0.65)*1.5;
-    float a = id*2.399963 + uSeconds*(0.4/pow(r,1.5)) + h(id*7.21);
-    vec3 p = right*(cos(a)*r)+up*(sin(a)*r*0.28)+forward*(sin(a)*r*0.7);
-    if (uStage<0.5) {
-        float grow = clamp(uProgress,0.0,1.0);
-        p = right*(cos(a)*(1.2+1.7*h(id*3.31)))+
-            up*(sin(a)*1.0)+forward*(sin(a*1.73)*1.0);
-        p *= mix(1.3,0.6,grow);
+    float jitter=h(id*13.73);
+    float r = 0.78 + pow(h(id*3.31),0.70)*1.9;
+    float a = id*2.399963 + uSeconds*(0.55/pow(r,1.5)) + h(id*7.21);
+    vec3 p = right*(cos(a)*r) + up*(sin(a)*r*0.27) + forward*(sin(a)*r*0.36);
+    vOpacity = 0.56 + 0.44*h(id*2.41);
+    vHeat = h(id*1.19);
+    if (uStage < 0.5) {
+        // Swarming planetesimals, gradually captured by growing proto-Earth.
+        float growth=clamp(uProgress,0.0,1.0);
+        p = right*(cos(a)*(1.1+2.0*h(id*3.31))) +
+            up*(sin(a)*1.1)+forward*(sin(a*1.73)*0.9);
+        p *= mix(1.32,0.66,growth);
+        vHeat *= 0.22;
+        if (h(id*3.51)>0.38) vOpacity=0.0;
+    } else if (uStage < 1.5) {
+        // A conical curtain launched from the grazing contact point.
+        // Particle trajectories are illustrative, not integrated orbital
+        // mechanics or SPH/pressure-driven ejecta.
+        float t=clamp((uProgress-0.12)/0.84,0.0,1.0);
+        float phi=id*2.399963 + jitter*3.0;
+        vec3 direction=normalize(right*(0.4+0.6*h(id*3.3)) +
+            up*(0.20+sin(phi)*0.70) + forward*(cos(phi)*0.43));
+        float distance=(0.20+3.0*t)*(0.23+0.77*h(id*9.73));
+        p = right*0.72+up*0.22+direction*distance-up*(t*t*0.28);
+        vHeat = mix(0.3,1.0,h(id*3.73));
+        vOpacity *= smoothstep(0.07,0.20,uProgress)*(1.0-t*0.40);
+    } else {
+        // The ejecta settles into a thick, differentially orbiting debris
+        // field. Small point sprites provide real parallax over the hot disk.
+        p += up*(h(id*5.2)-0.5)*0.18;
+        vOpacity *= uStage>2.5 ? 0.15 : (0.90-0.52*uProgress);
+        vHeat *= uStage>2.5 ? 0.15 : (0.90-0.55*uProgress);
     }
     vec3 delta=p-uCamera;
     float depth=dot(delta,forward);
     vec2 ndc=vec2(dot(delta,right)/(max(depth,0.01)*uTanHalfFov*uAspect),
         dot(delta,up)/(max(depth,0.01)*uTanHalfFov));
     gl_Position=vec4(ndc,0.2,1.0);
-    float size = mix(1.4,4.0,h(id*5.11));
-    gl_PointSize = min(10.0,size*uViewHeight/850.0);
-    vHeat = h(id*1.19);
-    if (depth<=0.0 || (uStage<0.5 && h(id*3.51) > 0.3)
-        || (uStage>0.5 && uStage<1.5 && uProgress<0.15))
-        gl_PointSize=0.0;
+    float size=mix(1.0,4.5,h(id*5.11));
+    gl_PointSize=min(9.0,size*uViewHeight/920.0);
+    // Suppress particles behind Earth's projected silhouette.
+    if (depth>length(uCamera) && length(cross(normalize(delta),forward))<0.99/length(uCamera))
+        vOpacity*=0.10;
+    if (depth<=0.0 || vOpacity<0.015) gl_PointSize=0.0;
 }`;
 
 const ejectaFragment = `#version 300 es
 precision highp float;
 in float vHeat;
+in float vOpacity;
 out vec4 outColor;
 void main() {
     float r=length(gl_PointCoord-0.5)*2.0;
     if (r>1.0) discard;
-    float alpha=pow(1.0-r,2.0)*0.68;
-    vec3 color=mix(vec3(0.42,0.38,0.34),vec3(1.0,0.42,0.10),vHeat);
+    float alpha=pow(1.0-r,1.6)*0.74*vOpacity;
+    vec3 color=mix(vec3(0.31,0.27,0.24),vec3(1.55,0.51,0.14),vHeat);
     outColor=vec4(color,alpha);
 }`;
 
@@ -435,7 +517,7 @@ export function renderEarthMoonFormation(formation, gl, createProgram, frame) {
     gl.uniform1f(ejectaU.uViewHeight,frame.viewportHeight);
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.SRC_ALPHA,gl.ONE);
-    gl.drawArrays(gl.POINTS,0,320);
+    gl.drawArrays(gl.POINTS,0,2600);
     gl.disable(gl.BLEND);
     gl.depthMask(true);
     gl.bindVertexArray(null);
