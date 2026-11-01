@@ -10,6 +10,7 @@ public partial class Home
     {
         const double secondsPerYear = 31_557_600.0;
         var years = seconds / secondsPerYear;
+        if (years >= 1_000_000_000.0) return $"T+{years / 1_000_000_000.0:0.###} Gyr";
         if (years >= 1_000_000.0) return $"T+{years / 1_000_000.0:0.###} Myr";
         if (years >= 1_000.0) return $"T+{years / 1_000.0:0.##} kyr";
         if (years >= 1.0) return $"T+{years:0.##} years";
@@ -33,50 +34,86 @@ public partial class Home
             : remainingGa >= 0.5388 ? "PROTEROZOIC" : "PHANEROZOIC";
     }
 
-    // E7-A: the chapter rail is deliberately ordinal, not a fake time scale.
-    // Exact sampled model times remain available in each recorded-event log.
+    // E7-A: a true linear time camera. The narrow rail is locally to scale and
+    // follows the model clock; the slim overview remains to scale across 4.567 Gyr.
+    // Historical anchors are approximate evidence dates, NEVER model events.
+    private const double TimelineSecondsPerYear = 31_557_600.0;
+    private const double TimelineEarthAgeYears = 4_567_000_000.0;
+
     private sealed record TimelineChapter(
-        string Key, string Title, int PositionPercent, bool IsPresent = false, bool IsModeled = false);
+        string Key, string Title, double ElapsedYears, string EvidenceNote, bool IsPresent = false);
 
     private static readonly TimelineChapter[] TimelineChapters =
     [
-        new("formation", "Earth forms", 0),
-        new("solid-lid", "Rocky lid", 11, IsModeled: true),
-        new("ocean-rainout", "First oceans", 22, IsModeled: true),
-        new("plate-onset", "Plate regime (model)", 33, IsModeled: true),
-        new("first-life", "First life", 44),
-        new("oxygen", "Atmospheric oxygenation", 55),
-        new("complex-cells", "Complex cells", 66),
-        new("animals", "First animals", 77),
-        new("life-on-land", "Life on land", 88),
-        new("present", "Present day", 100, true)
+        new("formation", "Earth forms", 0, "Reference start of Earth's 4.567-billion-year history."),
+        new("moon", "Moon-forming collision", 60_000_000,
+            "Approximate timing within Earth's first 100 million years; the impact is not simulated."),
+        new("first-crust", "Ancient crust evidence", 167_000_000,
+            "Jack Hills zircons are about 4.4 billion years old; the first crust may be older."),
+        new("early-oceans", "Early oceans", 267_000_000,
+            "Evidence suggests liquid water by 4.3–4.4 billion years ago; exact onset is unknown."),
+        new("first-life", "Earliest life evidence", 867_000_000,
+            "Possible biological signals by 3.7 billion years ago; the actual origin of life is unknown."),
+        new("oxygen", "Great Oxidation Event", 2_167_000_000,
+            "Major atmospheric oxygenation around 2.4 billion years ago."),
+        new("complex-cells", "Complex cells", 2_567_000_000,
+            "Eukaryotic cells evolved roughly 2 billion years ago; dating is approximate."),
+        new("animals", "First animals", 3_767_000_000,
+            "Molecular evidence suggests animal origins around 800 million years ago."),
+        new("life-on-land", "Early land animals", 4_137_000_000,
+            "Land-animal fossils appear around 443–419 million years ago."),
+        new("present", "Present day", TimelineEarthAgeYears, "Current day.", IsPresent: true)
     ];
 
+    private sealed record TimelineLens(double StartYears, double SpanYears, double NowYears)
+    {
+        public double EndYears => StartYears + SpanYears;
+
+        public bool Contains(double elapsedYears) =>
+            elapsedYears >= StartYears && elapsedYears <= EndYears;
+
+        public string CssPosition(double elapsedYears)
+        {
+            // Values beyond the visible lens are clipped; keep DOM nodes in the
+            // model for previews, but avoid enormous offscreen CSS coordinates.
+            var percent = Math.Clamp(100.0 * (elapsedYears - StartYears) / SpanYears, -100.0, 200.0);
+            return percent.ToString("0.######", System.Globalization.CultureInfo.InvariantCulture) + "%";
+        }
+    }
+
+    private TimelineLens CurrentTimelineLens()
+    {
+        var seconds = evolution?.TimeSeconds ?? 0;
+        var nowYears = double.IsFinite(seconds)
+            ? Math.Clamp(seconds / TimelineSecondsPerYear, 0.0, TimelineEarthAgeYears)
+            : 0.0;
+
+        // Continuous zoom-out: first a kyr-scale model window, later a Gyr-scale
+        // window. Equal horizontal distances always mean equal time IN the window.
+        // At formation the cursor moves to 32%; then the strip scrolls under it.
+        var spanYears = Math.Clamp(25_000.0 + 3.0 * nowYears, 25_000.0, 1_500_000_000.0);
+        var startYears = Math.Max(0.0, nowYears - spanYears * 0.32);
+        startYears = Math.Min(startYears, TimelineEarthAgeYears - spanYears);
+        return new(startYears, spanYears, nowYears);
+    }
+
+    private static string GlobalTimelinePosition(double elapsedYears) =>
+        (100.0 * elapsedYears / TimelineEarthAgeYears)
+            .ToString("0.######", System.Globalization.CultureInfo.InvariantCulture) + "%";
+
+    private static string FormatTimelineYears(double years)
+    {
+        if (years >= 1_000_000_000.0) return $"{years / 1_000_000_000.0:0.##} Gyr";
+        if (years >= 1_000_000.0) return $"{years / 1_000_000.0:0.##} Myr";
+        if (years >= 1_000.0) return $"{years / 1_000.0:0.##} kyr";
+        return $"{years:0} yr";
+    }
+
+    private static string AgeOfChapter(TimelineChapter chapter) =>
+        chapter.IsPresent ? "Today"
+            : $"{(TimelineEarthAgeYears - chapter.ElapsedYears) / 1_000_000_000.0:0.###} Ga ago";
+
     private TimelineChapter? selectedTimelineChapter;
-
-    private PlanetSpecialEvent? GetRecordedEventForChapter(TimelineChapter chapter)
-    {
-        if (chapter.Key is "formation" or "present" || specialEventsStatus?.Events is null)
-        {
-            return null;
-        }
-
-        return Array.Find(specialEventsStatus.Events,
-            recorded => recorded.Id.EndsWith("-" + chapter.Key, StringComparison.Ordinal));
-    }
-
-    private string TimelineNowPosition()
-    {
-        var latestPercent = 0;
-        foreach (var chapter in TimelineChapters)
-        {
-            if (GetRecordedEventForChapter(chapter) is not null)
-            {
-                latestPercent = Math.Max(latestPercent, chapter.PositionPercent);
-            }
-        }
-        return latestPercent.ToString(System.Globalization.CultureInfo.InvariantCulture) + "%";
-    }
 
     private void SelectTimelineChapter(TimelineChapter chapter) => selectedTimelineChapter = chapter;
     private void DismissTimelineChapter() => selectedTimelineChapter = null;
