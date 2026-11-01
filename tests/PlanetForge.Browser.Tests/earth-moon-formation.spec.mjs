@@ -46,7 +46,9 @@ test('F0 mobile Earth-Moon formation renders proto-Earth, Theia collision, eject
 
     const cases = [
         { name: 'proto-earth-accretion', stage: 'accretion', years: 45e6, seconds: 7, progress: 0 },
+        { name: 'theia-approach', stage: 'impact', years: 60e6, seconds: 0.8, progress: 0.8 },
         { name: 'theia-giant-impact', stage: 'impact', years: 60e6, seconds: 3.2, progress: 3.2 },
+        { name: 'theia-ejecta-curtain', stage: 'impact', years: 60e6, seconds: 5.5, progress: 5.5 },
         { name: 'orbiting-debris-moon', stage: 'moon-assembly', years: 60e6 + 0.8, seconds: 17, progress: 9 },
         { name: 'postimpact-hot-earth', stage: 'aftermath', years: 60e6 + 1, seconds: 28, progress: 1 },
     ];
