@@ -91,6 +91,9 @@ test('Evolution_ColdStartKeepsControlsDisabledUntilRendererIsReady', async ({ pa
 });
 
 test('Evolution_CoolsThroughLidIntoPlateTectonics_PausesAndRestarts', async ({ page }, testInfo) => {
+  // A full S0 lid→plates integration is variable under CI software WebGL.
+  // Keep a per-test safety margin without relaxing assertion-level deadlines.
+  test.setTimeout(420_000);
   // SwiftShader's 1440x900 planetary fragment pass can starve browser input
   // for minutes. This test covers stage transitions at a normal 960x600
   // viewport; dedicated visual tests still exercise desktop/portrait sizes.
@@ -183,10 +186,6 @@ test('Evolution_CoolsThroughLidIntoPlateTectonics_PausesAndRestarts', async ({ p
   await expect(page.getByTestId('formation-restart')).toBeEnabled({ timeout: 30_000 });
   await page.getByTestId('formation-restart').click();
   await expect(page.getByTestId('formation-restart-overlay')).toBeVisible();
-  await page.getByTestId('formation-restart-cancel').click();
-  await expect(page.getByTestId('formation-restart-overlay')).toHaveCount(0);
-  await expect((await evolutionStatus(page)).regime).toBe('plates');
-  await page.getByTestId('formation-restart').click();
   await page.getByTestId('formation-restart-confirm').click();
   await expect.poll(async () => (await evolutionStatus(page)).regime, { timeout: 60_000 }).toBe('magma-ocean');
   await expect(page.getByTestId('formation-phase')).toContainText('Magma ocean');
@@ -216,6 +215,11 @@ test('Evolution_Portrait_ControlsFit', async ({ page }) => {
   const timeBefore = (await evolutionStatus(page)).timeSeconds;
   await page.getByTestId('timeline-planned-node').nth(3).click();
   await expect(page.getByTestId('timeline-planned-preview')).toContainText('First life');
+  expect((await evolutionStatus(page)).timeSeconds).toBe(timeBefore);
+  await page.getByTestId('formation-restart').click();
+  await expect(page.getByTestId('formation-restart-overlay')).toBeVisible();
+  await page.getByTestId('formation-restart-cancel').click();
+  await expect(page.getByTestId('formation-restart-overlay')).toHaveCount(0);
   expect((await evolutionStatus(page)).timeSeconds).toBe(timeBefore);
   expect((await canvasStatistics(page)).glError).toBe(0);
 });
