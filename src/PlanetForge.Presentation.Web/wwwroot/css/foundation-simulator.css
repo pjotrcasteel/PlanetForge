@@ -551,7 +551,7 @@
 .formation-restart-actions .is-confirm { background: #cc9255; border-color: #e2b27a; color: #1b140d; font-weight: 700; }
 .formation-restart-actions button:focus-visible { outline: 2px solid #9fe5df; outline-offset: 3px; }
 @media (max-width: 600px) {
-    .formation-simulation .formation-hud { top: calc(env(safe-area-inset-top, 0px) + 10px); left: 11px; width: min(276px, calc(100vw - 94px)); }
+    .formation-simulation .formation-hud { top: calc(env(safe-area-inset-top, 0px) + 10px); left: 11px; width: min(274px, calc(100vw - 116px)); }
     .formation-controls {
         /* Match the phase HUD's exact mobile top edge. */
         top: calc(env(safe-area-inset-top, 0px) + 10px);
