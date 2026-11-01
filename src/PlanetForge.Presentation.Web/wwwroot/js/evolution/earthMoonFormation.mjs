@@ -223,85 +223,54 @@ vec3 background(vec3 rd) {
     galaxy *= 0.012 + 0.02*fbm(rd*65.0);
     return vec3(0.0014,0.0018,0.0031) + galaxy*vec3(0.42,0.53,0.78) + glint*vec3(0.84,0.91,1.0);
 }
-// Irregular, warped silica raft boundaries. The randomized 3D cell
-// distances avoid the regular two-family line grid from the rejected shot.
-vec3 silicaHash(vec3 p) {
-    p = fract(p*vec3(0.1031,0.11369,0.13787));
-    p += dot(p,p.yxz+19.19);
-    return fract((p.xxy+p.yxx)*p.zyx);
-}
-float silicaRaftBorder(vec3 p) {
-    vec3 base = floor(p);
-    float nearest = 100.0;
-    float runnerUp = 100.0;
-    for (int x=-1; x<=1; x++) {
-        for (int y=-1; y<=1; y++) {
-            for (int z=-1; z<=1; z++) {
-                vec3 cell = base+vec3(float(x),float(y),float(z));
-                vec3 center = cell+silicaHash(cell);
-                float d = length(p-center);
-                if (d<nearest) {
-                    runnerUp=nearest;
-                    nearest=d;
-                } else if (d<runnerUp) {
-                    runnerUp=d;
-                }
-            }
-        }
-    }
-    return runnerUp-nearest;
-}
-// Visualized transient cooling rafts on the pre-impact magma ocean.
-// They are NOT mature tectonic plates. Photo references: basaltic lava
-// lakes have dark, rough quenched crust and narrow glowing melt seams.
+// Proto-Earth F0.5a: one material shot. The surface is an incandescent
+// silicate melt ocean with dark transient quenched scum. No stable tectonic
+// plates are implied. The spectrum and coverage are visual reconstructions.
 vec3 protoEarthSurface(vec3 n, vec3 rd, float hot, float time) {
-    vec3 q=n*6.5+vec3(uSeed*0.011,0.0,time*0.0014);
-    float basin=fbm(q*0.73+4.2);
-    float convection=fbm(q*1.37+vec3(time*0.006,-time*0.004,11.3));
-    float granules=noise3(q*31.0+23.6);
-    float ash=noise3(q*66.0+61.7);
-    vec3 warping = vec3(basin-0.5,convection-0.5,basin-convection);
-    float edge=silicaRaftBorder(q*0.88+warping*2.25);
-    float flow=clamp(0.65*basin+0.35*convection,0.0,1.0);
-    // Local and fragmented rafts: the bright seams are organic, not
-    // concentric halos or a repeated crosshatched lattice.
-    float active=smoothstep(0.23,0.68,flow);
-    float seam=(1.0-smoothstep(0.040,0.175,edge))*active;
-    float brightCore=(1.0-smoothstep(0.008,0.083,edge))*active;
-    float pool=smoothstep(0.69,0.82,convection)*0.52;
-    float melt=clamp(seam+pool,0.0,1.0);
+    vec3 q=n*6.2+vec3(uSeed*0.011,0.0,time*0.0012);
+    // Multi-scale turbulent domains instead of circles, cellular polygons,
+    // crosshatched sine lines or expensive per-pixel nearest-cell loops.
+    float warp=fbm(q*0.71+vec3(4.2,1.1,6.3));
+    vec3 shifted=q+vec3(1.2*(warp-0.5),
+        0.8*(warp-0.5),-1.1*(warp-0.5));
+    float crustField=fbm(shifted*0.86+11.7);
+    float flow=fbm(shifted*2.25+vec3(time*0.005,-time*0.003,13.1));
+    float grit=noise3(q*23.0+31.5);
+    float ash=noise3(q*67.0+61.7);
+    // Cooling rafts are mottled and partially broken, not outlined in neon.
+    float crust=smoothstep(0.38+hot*0.018,0.58+hot*0.018,
+        crustField*0.72+flow*0.28);
+    float fracture=1.0-smoothstep(0.018,0.094,abs(flow-0.49));
+    float molten=clamp((1.0-crust)*0.92+fracture*crust*0.21,0.0,1.0);
+    vec3 bump=vec3(grit-0.5,
+        noise3(q*23.0+vec3(19.7,4.2,32.5))-0.5,
+        noise3(q*23.0+vec3(4.1,23.2,11.9))-0.5);
+    vec3 rockNormal=normalize(n+0.48*crust*(bump-n*dot(n,bump)));
 
-    vec3 bump=vec3(granules-0.5,
-        noise3(q*25.0+vec3(9.1,27.3,5.1))-0.5,
-        noise3(q*25.0+vec3(17.8,3.4,29.7))-0.5);
-    vec3 roughNormal=normalize(n+0.56*(bump-n*dot(n,bump)));
-    // Match the existing main globe's cinematic camera-relative Sun: a
-    // visible terminator and highlights without an unlit black disk.
+    // Same upper-left cinematic Sun setup as the regular main globe.
     vec3 towardEye=normalize(uCamera);
     vec3 right=normalize(cross(vec3(0.0,1.0,0.0),towardEye));
     if (length(right)<0.01) right=vec3(1.0,0.0,0.0);
     vec3 above=normalize(cross(towardEye,right));
-    vec3 sunlight=normalize(towardEye*0.61-right*0.66+above*0.43);
-    float daylight=max(dot(roughNormal,sunlight),0.0);
+    vec3 sun=normalize(towardEye*0.62-right*0.64+above*0.43);
+    float sunlight=max(dot(rockNormal,sun),0.0);
+    vec3 basalt=mix(vec3(0.042,0.045,0.049),
+        vec3(0.245,0.205,0.168),smoothstep(0.24,0.79,crustField));
+    basalt*=0.68+0.38*grit+0.13*ash;
+    vec3 rock=basalt*(0.036+1.32*sunlight);
 
-    vec3 basalt=mix(vec3(0.053,0.055,0.058),
-        vec3(0.255,0.215,0.174),smoothstep(0.21,0.77,basin));
-    basalt*=0.67+0.37*granules+0.17*ash;
-    vec3 rock=basalt*(0.048+1.36*daylight);
-    float temperature=clamp(0.24+0.67*hot
-        +0.16*(convection-0.5),0.0,1.0);
-    vec3 ember=mix(vec3(0.42,0.020,0.002),
-        vec3(2.28,0.68,0.075),smoothstep(0.20,0.92,temperature));
-    float radiance=pow(smoothstep(0.14,0.98,temperature),2.4);
-    vec3 magma=ember*radiance*(0.81+0.24*ash);
-    // Wide dim red heat transitions into a narrow hotter molten seam.
-    vec3 color=rock*(1.0-melt)
-        + magma*(brightCore+pool*0.85)
-        + vec3(0.22,0.034,0.004)*radiance*max(0.0,seam-brightCore);
-    vec3 halfway=normalize(sunlight-rd);
-    float mineralGlint=pow(max(dot(roughNormal,halfway),0.0),18.0)
-        * daylight;
-    color+=vec3(0.14)*mineralGlint*(1.0-melt)*0.025;
+    // Broad cooled cherry-red melt and smaller incandescent overturning.
+    // A restrained self-lit palette avoids uniform bright orange and
+    // unphysical white-hot spots.
+    float heat=clamp(0.25+0.66*hot+0.27*(flow-0.5),0.0,1.0);
+    vec3 hotTint=mix(vec3(0.34,0.014,0.002),
+        vec3(1.92,0.53,0.054),smoothstep(0.27,0.97,heat));
+    float thermal=pow(smoothstep(0.17,1.0,heat),2.45);
+    vec3 lava=hotTint*thermal*(0.76+0.32*flow);
+    vec3 color=rock*(1.0-molten)+lava*molten;
+    vec3 halfway=normalize(sun-rd);
+    float mineralGlint=pow(max(dot(rockNormal,halfway),0.0),19.0)*sunlight;
+    color+=vec3(0.13)*mineralGlint*crust*0.030;
     return max(color,vec3(0.0));
 }
 vec3 rockySurface(vec3 pos, vec3 norm, vec3 rd, float hot, float kind, float time) {
