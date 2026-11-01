@@ -1,9 +1,10 @@
 // F0 Earth-Moon formation prologue: deterministic, evidence-labelled reconstruction.
+// Moon assembly advances a scenario-local year, not another 22 million years.
 // Theia's orbit/debris are a visual scenario, NOT a solved hydrodynamic giant impact.
 // The 60 Myr selected impact instant is a scenario parameter within a broad disputed window.
 export const SECONDS_PER_YEAR = 365.25 * 24 * 3600;
 export const IMPACT_AGE_YEARS = 60e6;
-export const HANDOFF_AGE_YEARS = 82e6;
+export const HANDOFF_AGE_YEARS = IMPACT_AGE_YEARS + 1;
 export const IMPACT_SCENE_SECONDS = 9;
 export const MOON_SCENE_SECONDS = 12;
 export const AFTERMATH_SECONDS = 3;
@@ -91,7 +92,7 @@ export function earthMoonFormationStatus(formation) {
         timeSeconds: formation.ageYears * SECONDS_PER_YEAR,
         stage: formation.stage,
         // The time ratio is explicitly 0 during the short-lived collision.
-        rateLabel: formation.playbackYearsPerSecond <= 0 ? 'impact-time close-up'
+        rateLabel: formation.stage !== 'accretion' ? 'local impact-time close-up'
             : (formation.playbackYearsPerSecond / 1e6).toFixed(1) + ' Myr / s',
         authority: 'reconstruction',
         source: 'NASA Moon Formation; National Academies 2023 Earth-Moon formation',
