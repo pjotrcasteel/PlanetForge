@@ -25,6 +25,7 @@ test('F0 mobile Earth-Moon formation renders proto-Earth, Theia collision, eject
         state.ageYears = formation.IMPACT_AGE_YEARS;
         formation.stepEarthMoonFormation(state, 3.4, 20e6);
         const afterSlowFrame = state.stageSeconds;
+        const afterSlowFrameLabel = formation.earthMoonFormationStatus(state).rateLabel;
         formation.stepEarthMoonFormation(state, 9, 20e6);
         const afterBoundary = { stage: state.stage, seconds: state.stageSeconds };
         formation.stepEarthMoonFormation(state, 40, 20e6);
@@ -32,10 +33,11 @@ test('F0 mobile Earth-Moon formation renders proto-Earth, Theia collision, eject
         const crossing = formation.createEarthMoonFormation(8);
         crossing.ageYears = 59e6;
         formation.stepEarthMoonFormation(crossing, 12, 20e6);
-        return { afterSlowFrame, afterBoundary, finished,
+        return { afterSlowFrame, afterSlowFrameLabel, afterBoundary, finished,
             accretionBoundary: { stage: crossing.stage, seconds: crossing.stageSeconds } };
     });
     expect(clock.afterSlowFrame).toBeCloseTo(3.4, 5);
+    expect(clock.afterSlowFrameLabel).toContain('3.4 / 9 s');
     expect(clock.afterBoundary.stage).toBe('moon-assembly');
     expect(clock.afterBoundary.seconds).toBeCloseTo(3.4, 5);
     expect(clock.finished).toBe(true);
