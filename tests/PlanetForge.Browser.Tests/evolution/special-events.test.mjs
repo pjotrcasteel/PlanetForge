@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { captureImpactEvents, captureEarthMilestoneEvents, snapshotEarthMilestoneState, EARTH_EVENT_CATALOG, orbitForEvent, advanceRealtimeSeconds, eventFocusCameraBlend, AUTOMATIC_EVENT_FOCUS_SECONDS } from
+import { captureImpactEvents, captureEarthMilestoneEvents, snapshotEarthMilestoneState, EARTH_EVENT_CATALOG, selectFirstPlateFocus, orbitForEvent, advanceRealtimeSeconds, eventFocusCameraBlend, AUTOMATIC_EVENT_FOCUS_SECONDS } from
     '../../../src/PlanetForge.Presentation.Web/wwwroot/js/evolution/specialEvents.mjs';
 
 test('Witnessed impact bookmarks follow actual seeded model state, deduplicate and remain bounded', () => {
@@ -28,6 +28,29 @@ test('Close-up camera follows physical event direction without changing parent e
     assert.equal(equator.pitch, 0);
     assert.throws(() => orbitForEvent([0, 0, 0]), RangeError);
     assert.throws(() => orbitForEvent([NaN, 0, 1]), TypeError);
+});
+
+test('First tectonic plate inspection chooses an actual seeded plate edge, never a random ocean facing', () => {
+    const width = 48, height = 24;
+    const data = new Float32Array(width * height * 4);
+    for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
+        const p = (y * width + x) * 4;
+        data[p] = x < width / 2 ? 0 : 1;
+        data[p + 2] = y === 16 ? 24 : 0; // visible crust near one boundary
+    }
+    const feature = selectFirstPlateFocus({ width, height, data });
+    assert.ok(feature);
+    assert.equal(feature.plateId, 0);
+    assert.equal(feature.adjacentPlateId, 1);
+    assert.equal(feature.gridY, 16); // prioritises modeled crust, not screen position
+    assert.ok(Math.abs(Math.hypot(...feature.direction) - 1) < 1e-12);
+    assert.match(feature.basis, /GPU plate-ownership boundary/);
+    assert.deepEqual(selectFirstPlateFocus({ width, height, data }), feature);
+
+    // A one-plate lid has no edge: never invent a focus coordinate.
+    data.fill(0);
+    assert.equal(selectFirstPlateFocus({ width, height, data }), null);
+    assert.equal(selectFirstPlateFocus({ width: 0, height, data }), null);
 });
 
 test('Real-time event clock advances one second per wall second without catch-up on hidden tabs', () => {
