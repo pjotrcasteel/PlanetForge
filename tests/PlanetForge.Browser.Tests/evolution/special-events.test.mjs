@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { captureImpactEvents, captureEarthMilestoneEvents, snapshotEarthMilestoneState, orbitForEvent, advanceRealtimeSeconds, eventFocusCameraBlend, AUTOMATIC_EVENT_FOCUS_SECONDS } from
+import { captureImpactEvents, captureEarthMilestoneEvents, snapshotEarthMilestoneState, EARTH_EVENT_CATALOG, orbitForEvent, advanceRealtimeSeconds, eventFocusCameraBlend, AUTOMATIC_EVENT_FOCUS_SECONDS } from
     '../../../src/PlanetForge.Presentation.Web/wwwroot/js/evolution/specialEvents.mjs';
 
 test('Witnessed impact bookmarks follow actual seeded model state, deduplicate and remain bounded', () => {
@@ -72,7 +72,12 @@ test('Only once-per-run modeled planetary thresholds create major timeline marke
     assert.equal(events.length, 1);
     assert.equal(events[0].title, 'Persistent rocky lid forms');
     assert.equal(events[0].scope, 'global');
-    assert.equal(events[0].source, 'Model-state threshold');
+    assert.match(events[0].source, /^Model-state threshold/);
+    assert.equal(events[0].authority, 'model-observed');
+    assert.equal(events[0].scale, 'S0 planet-wide thermal state');
+    assert.equal(events[0].priority, 3);
+    assert.deepEqual(events[0].interval, { startSeconds: 1e12, endSeconds: 1e12 });
+    assert.match(events[0].uncertainty, /not date Earth/);
 
     events = captureEarthMilestoneEvents(events, lid, ocean, 2e12, 42);
     assert.equal(events.length, 2);
@@ -85,4 +90,35 @@ test('Only once-per-run modeled planetary thresholds create major timeline marke
     assert.deepEqual(captureEarthMilestoneEvents([], magma, magma, 0, 42), []);
     assert.throws(() => snapshotEarthMilestoneState({ water: NaN, thermal: { regime: 'plates' } }), TypeError);
     assert.throws(() => captureEarthMilestoneEvents([], magma, { ...ocean, water: NaN }, 1e12, 42), TypeError);
+});
+
+test('E7-B catalog is immutable, bounded to live observed states, and honestly reports uncertainty', () => {
+    assert.equal(EARTH_EVENT_CATALOG.length, 3);
+    assert.ok(Object.isFrozen(EARTH_EVENT_CATALOG));
+    for (const entry of EARTH_EVENT_CATALOG) {
+        assert.ok(Object.isFrozen(entry));
+        assert.equal(entry.authority, 'model-observed');
+        assert.equal(entry.scope, 'global');
+        assert.ok(entry.priority >= 1);
+        assert.ok(entry.trigger && entry.scale && entry.source && entry.uncertainty);
+        assert.ok(!/first cell|giant impact|GOE|land animals/i.test(entry.title));
+    }
+
+    const before = { lithosphereReady: false, water: 0, regime: 'magma-ocean' };
+    const after = { ...before, lithosphereReady: true };
+    const events = captureEarthMilestoneEvents([], before, after, 5e12, 42, 4e12);
+    assert.deepEqual(events[0].interval, { startSeconds: 4e12, endSeconds: 5e12 });
+    assert.equal(events[0].planetSeconds, events[0].interval.endSeconds);
+    assert.equal(events[0].authority, 'model-observed');
+    assert.deepEqual(captureEarthMilestoneEvents(events, before, after, 6e12, 42, 5e12), events);
+    assert.throws(() => captureEarthMilestoneEvents([], before, after, 5e12, 42, 6e12), TypeError);
+    assert.throws(() => captureEarthMilestoneEvents([], before, after, 5e12, 42, -1), TypeError);
+
+    // A populated (bounded) history may carry already-witnessed milestones.
+    // The catalogue alone never creates a future event or decorative impact.
+    assert.deepEqual(captureEarthMilestoneEvents([], after, after, 7e12, 42, 6e12), []);
+    const prefilled = Array.from({ length: 70 }, (_, i) => ({ id: `existing-${i}` }));
+    const bounded = captureEarthMilestoneEvents(prefilled, before, after, 5e12, 42, 4e12);
+    assert.equal(bounded.length, 64);
+    assert.equal(bounded.at(-1).title, 'Persistent rocky lid forms');
 });

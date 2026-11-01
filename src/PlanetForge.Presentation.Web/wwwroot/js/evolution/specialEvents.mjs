@@ -53,10 +53,48 @@ export function captureImpactEvents(history, impacts, planetSeconds, seed) {
     return next;
 }
 
-// E7: an intentionally small set of observable planetary turning points.
-// Ordinary impacts continue in the GPU model; they are not automatically
-// promoted to timeline markers or orbit changes.
+// E7-B: only transitions that the live S0 model can actually witness.
+// The catalogue is immutable. Historical reconstructions and hypotheses belong
+// in the roadmap until they have vetted evidence and a compatible scene/state.
 const MAX_KEY_EVENTS = 64;
+export const EARTH_EVENT_CATALOG = Object.freeze([
+    Object.freeze({
+        key: 'solid-lid',
+        title: 'Persistent rocky lid forms',
+        authority: 'model-observed',
+        trigger: 'lithosphereReady changes from false to true',
+        scope: 'global',
+        scale: 'S0 planet-wide thermal state',
+        priority: 3,
+        source: 'Model-state threshold · S0 lithosphere readiness',
+        uncertainty: 'Model integration-step interval only. Does not date Earth’s first crust or locate a specific site.',
+        limitations: 'Global S0 solidification threshold, not an observed first crust location. No regional mesh or surface chemistry is resolved.'
+    }),
+    Object.freeze({
+        key: 'ocean-rainout',
+        title: 'Steam rains out into oceans',
+        authority: 'model-observed',
+        trigger: 'model water inventory crosses 50% from below',
+        scope: 'global',
+        scale: 'S0 global water inventory',
+        priority: 3,
+        source: 'Model-state threshold · S0 ocean condensation',
+        uncertainty: 'Model integration-step interval only. The 50% threshold is not a historical age for first liquid water.',
+        limitations: 'The model ocean inventory crossed 50%. This is a model threshold, not a dated claim about Earth\'s very first water.'
+    }),
+    Object.freeze({
+        key: 'plate-onset',
+        title: 'Plate tectonics begins (model)',
+        authority: 'model-observed',
+        trigger: 'S0 thermal regime changes into plates',
+        scope: 'global',
+        scale: 'S0 planet-wide thermal regime',
+        priority: 2,
+        source: 'Model-state threshold · S0 plate regime',
+        uncertainty: 'Model integration-step interval only. The onset of modern-style Earth plate tectonics remains debated.',
+        limitations: 'Simplified S0 thermal regime transition. The real onset of modern-style plate tectonics is debated; this does not identify a local plate boundary.'
+    })
+]);
 
 export function snapshotEarthMilestoneState(evolution) {
     if (!evolution || !evolution.thermal ||
@@ -69,41 +107,32 @@ export function snapshotEarthMilestoneState(evolution) {
     };
 }
 
-export function captureEarthMilestoneEvents(history, before, after, planetSeconds, seed) {
+export function captureEarthMilestoneEvents(history, before, after, planetSeconds, seed,
+    stepStartSeconds = planetSeconds) {
     if (!Array.isArray(history) || !before || !after ||
         !Number.isFinite(planetSeconds) || !Number.isFinite(seed) ||
-        !Number.isFinite(before.water) || !Number.isFinite(after.water))
-        throw new TypeError('Key moments require valid planetary state transitions.');
+        !Number.isFinite(stepStartSeconds) || stepStartSeconds < 0 ||
+        stepStartSeconds > planetSeconds || !Number.isFinite(before.water) ||
+        !Number.isFinite(after.water) ||
+        typeof before.regime !== 'string' || typeof after.regime !== 'string')
+        throw new TypeError('Key moments require valid planetary state transitions and a time interval.');
     const next = history.slice(-MAX_KEY_EVENTS);
     const seen = new Set(next.map(event => event.id));
-    const milestones = [
-        {
-            key: 'solid-lid',
-            title: 'Persistent rocky lid forms',
-            crossed: !before.lithosphereReady && after.lithosphereReady,
-            limitations: 'Global S0 solidification threshold, not an observed first crust location. No regional mesh or surface chemistry is resolved.'
-        },
-        {
-            key: 'ocean-rainout',
-            title: 'Steam rains out into oceans',
-            crossed: before.water < 0.5 && after.water >= 0.5,
-            limitations: 'The model ocean inventory crossed 50%. This is a model threshold, not a dated claim about Earth\'s very first water.'
-        },
-        {
-            key: 'plate-onset',
-            title: 'Plate tectonics begins (model)',
-            crossed: before.regime !== 'plates' && after.regime === 'plates',
-            limitations: 'Simplified S0 thermal regime transition. The real onset of modern-style plate tectonics is debated; this does not identify a local plate boundary.'
-        }
-    ];
-    for (const milestone of milestones) {
-        if (!milestone.crossed) continue;
+    const crossed = {
+        'solid-lid': !before.lithosphereReady && after.lithosphereReady,
+        'ocean-rainout': before.water < 0.5 && after.water >= 0.5,
+        'plate-onset': before.regime !== 'plates' && after.regime === 'plates'
+    };
+    for (const milestone of EARTH_EVENT_CATALOG) {
+        if (!crossed[milestone.key]) continue;
         const id = `earth-${seed}-${milestone.key}`;
         if (seen.has(id)) continue;
         next.push({
-            id, title: milestone.title, type: 'earth-milestone',
-            scope: 'global', source: 'Model-state threshold',
-            planetSeconds, limitations: milestone.limitations
+            ...milestone,
+            id,
+            type: 'earth-milestone',
+            interval: { startSeconds: stepStartSeconds, endSeconds: planetSeconds },
+            planetSeconds
         });
         seen.add(id);
         if (next.length > MAX_KEY_EVENTS) {

@@ -300,9 +300,22 @@ test('Evolution_KeyMilestone_AutoZooms_WhileOrdinaryImpactsStayAmbient', async (
   // remain meaningful regardless of how many timer callbacks run.
   expect(probe.samples.length).toBeGreaterThanOrEqual(1);
   expect(probe.samples[0].title).toBe('Persistent rocky lid forms');
-  expect(probe.samples[0].source).toBe('Model-state threshold');
+  expect(probe.samples[0].source).toMatch(/^Model-state threshold/);
   expect(probe.samples[0].scale).toMatch(/Planetary orbital close-up/);
   expect(probe.timelineEvents.every(event => !/impact/i.test(event.title))).toBe(true);
+  expect(probe.timelineEvents.every(event =>
+    event.authority === 'model-observed' &&
+    event.scope === 'global' &&
+    event.interval.startSeconds <= event.planetSeconds &&
+    event.interval.endSeconds === event.planetSeconds &&
+    event.trigger && event.source && event.uncertainty && event.scale)).toBe(true);
+  const eventLog = page.getByTestId('special-event-log');
+  await expect(eventLog).toBeVisible();
+  await expect(eventLog).not.toHaveAttribute('open', '');
+  await eventLog.locator('summary').click();
+  await expect(eventLog).toHaveAttribute('open', '');
+  await expect(eventLog).toContainText('MODEL OBSERVATION');
+  await expect(eventLog).toContainText('Recorded model step:');
 
   await expect(page.getByTestId('special-event-focus')).toHaveCount(0);
   await expect(page.getByTestId('formation-play')).toBeEnabled();

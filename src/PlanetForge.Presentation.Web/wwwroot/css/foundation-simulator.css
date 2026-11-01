@@ -658,19 +658,44 @@
 }
 .formation-time-axis span:last-child { color: #b4c5c2; }
 .formation-event-recent {
-    display: flex;
-    gap: 8px;
-    align-items: center;
     min-width: 0;
     margin-top: 9px;
-    padding: 7px 9px;
     border: 1px solid #bf925039;
     border-radius: 9px;
     background: linear-gradient(90deg, #72502a31, #3448431e);
 }
-.formation-event-recent span:first-child { color: #e5b678; font-weight: 700; font-size: 9px; letter-spacing: .11em; }
-.formation-event-recent strong { flex: 1; min-width: 0; color: #f0dcc2; font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.formation-event-recent span:last-child { color: #b5b4a6; font-size: 10px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.formation-event-recent > summary {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    min-width: 0;
+    padding: 7px 9px;
+    list-style: none;
+    cursor: pointer;
+}
+.formation-event-recent > summary::-webkit-details-marker { display: none; }
+.formation-event-recent > summary:focus-visible { outline: 2px solid #f9c283; outline-offset: 2px; }
+.formation-event-recent > summary span:first-child { color: #e5b678; font-weight: 700; font-size: 9px; letter-spacing: .11em; }
+.formation-event-recent > summary strong { flex: 1; min-width: 0; color: #f0dcc2; font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.formation-event-recent-epoch { color: #b5b4a6; font-size: 10px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.formation-event-recent > summary::after { content: 'LOG ▾'; font-size: 9px; color: #e6be85; white-space: nowrap; }
+.formation-event-recent[open] > summary::after { content: 'CLOSE ▴'; }
+.formation-event-records {
+    list-style: none;
+    max-height: 200px;
+    overflow-y: auto;
+    margin: 0 8px 8px;
+    padding: 2px 0 0;
+    border-top: 1px solid #bf925039;
+}
+.formation-event-records li { padding: 9px 2px; border-bottom: 1px solid #b6a17f24; }
+.formation-event-records li:last-child { border-bottom: 0; }
+.formation-record-title { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
+.formation-record-title strong { color: #f0dcc2; font-size: 11px; }
+.formation-record-title span { color: #c3bcae; font-size: 10px; font-variant-numeric: tabular-nums; }
+.formation-record-authority { display: block; margin-top: 3px; color: #f5c184; font-size: 9px; font-weight: 650; letter-spacing: .05em; }
+.formation-event-records p, .formation-event-records small { display: block; margin: 3px 0 0; color: #c4c5b9; font-size: 10px; line-height: 1.45; }
+.formation-event-records small { color: #9eaaa6; }
 .formation-event-legend {
     justify-content: flex-start;
     gap: 13px;
@@ -734,14 +759,14 @@
     .formation-time-track { height: 54px; margin: -1px 9px 0; }
     .formation-time-axis { margin-top: -1px; font-size: 9px; letter-spacing: .065em; }
     .formation-event-recent {
-        gap: 6px;
         margin-top: 5px;
-        padding: 4px 7px;
         border-color: #bf925022;
         background: #a8774020;
     }
-    .formation-event-recent strong { font-size: 10px; }
-    .formation-event-recent span:last-child { display: none; }
+    .formation-event-recent > summary { gap: 6px; padding: 4px 7px; }
+    .formation-event-recent > summary strong { font-size: 10px; }
+    .formation-event-recent-epoch { display: none; }
+    .formation-event-records { max-height: min(38vh, 210px); }
     .formation-event-focus { flex-wrap: wrap; gap: 5px 8px; margin-top: 6px; padding: 7px; }
     .formation-event-focus-copy { flex-basis: 66%; }
     .formation-event-focus small { font-size: 9px; }
@@ -754,13 +779,10 @@
     .formation-event-eon { font-size: 8px; }
     .formation-event-epoch-readout > strong { font-size: 14px; }
     .formation-time-tick small { font-size: 8px; }
-    .formation-event-recent {
-        padding: 2px 0 0;
-        border: 0;
-        background: transparent;
-    }
-    .formation-event-recent span:first-child { font-size: 8px; }
-    .formation-event-recent strong { font-size: 10px; }
+    .formation-event-recent { border: 0; background: transparent; }
+    .formation-event-recent > summary { padding: 2px 0 0; }
+    .formation-event-recent > summary span:first-child { font-size: 8px; }
+    .formation-event-recent > summary strong { font-size: 10px; }
 }
 @media (prefers-reduced-motion: reduce) {
     .formation-time-progress, .formation-time-playhead, .formation-time-dot::before { transition: none; }

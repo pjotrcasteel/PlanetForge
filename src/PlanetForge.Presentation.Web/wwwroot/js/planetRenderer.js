@@ -75,6 +75,9 @@ export function getSpecialEventStatus() {
             id: event.id, title: event.title, planetSeconds: event.planetSeconds,
             inspectable: isEventInspectable(state, event),
             source: event.source ?? 'Model event',
+            authority: event.authority, trigger: event.trigger,
+            uncertainty: event.uncertainty, interval: event.interval,
+            scale: event.scale, priority: event.priority, scope: event.scope,
             limitations: event.limitations
         })),
         focus: state?.eventFocus ? {
@@ -86,6 +89,8 @@ export function getSpecialEventStatus() {
                 ? 'Planetary orbital close-up · same S0 GPU globe, no site-specific geometry'
                 : 'Regional orbital close-up · GPU surface ~39 km/texel',
             source: state.eventFocus.source,
+            authority: state.eventFocus.authority, trigger: state.eventFocus.trigger,
+            uncertainty: state.eventFocus.uncertainty,
             timeRate: '1 inspection second / real second · parent geology paused',
             limitations: state.eventFocus.limitations
         } : null
@@ -104,6 +109,8 @@ export function enterSpecialEvent(id) {
     state.eventFocus = {
         id: event.id, title: event.title, planetSeconds: event.planetSeconds,
         scope: event.scope, source: event.source ?? 'Model event',
+        authority: event.authority, trigger: event.trigger,
+        uncertainty: event.uncertainty,
         limitations: event.limitations, elapsedSeconds: 0, target,
         origin: { yaw: state.yaw, pitch: state.pitch, distance: state.distance },
         wasPlaying: state.evolution.playing
@@ -1308,12 +1315,13 @@ function render() {
             recordPerformanceSample('visibleFrameIntervalMs', dt * 1000);
             state.evolutionFps = (state.evolutionFps ?? 60) * 0.95 + 0.05 / Math.max(dt, 1e-3);
             const stepStartedAt = performanceMarkStart();
+            const stepStartSeconds = state.evolution.thermal.timeSeconds;
             const before = snapshotEarthMilestoneState(state.evolution);
             if (stepEvolution(state.evolution, dt)) state.dirty = true;
             const previouslyWitnessedId = state.eventHistory.at(-1)?.id;
             state.eventHistory = captureEarthMilestoneEvents(state.eventHistory, before,
                 snapshotEarthMilestoneState(state.evolution),
-                state.evolution.thermal.timeSeconds, state.evolution.seed);
+                state.evolution.thermal.timeSeconds, state.evolution.seed, stepStartSeconds);
             const newestEvent = state.eventHistory.at(-1);
             if (newestEvent && newestEvent.id !== previouslyWitnessedId && state.evolution.playing) {
                 // Geological turning points can enter a planet-wide inspection.

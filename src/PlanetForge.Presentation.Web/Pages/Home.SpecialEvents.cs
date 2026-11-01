@@ -81,9 +81,24 @@ public partial class Home
 
     private sealed record PlanetSpecialEventStatus(PlanetSpecialEvent[] Events, PlanetSpecialEventFocus? Focus);
 
-    private sealed record PlanetSpecialEvent(string Id, string Title, double PlanetSeconds, bool Inspectable, string Source, string Limitations);
+    private static string EventAuthorityLabel(string authority) => authority switch
+    {
+        "model-observed" => "MODEL OBSERVATION",
+        "reconstruction" => "RECONSTRUCTION",
+        "hypothesis" => "HYPOTHESIS",
+        _ => "UNVERIFIED"
+    };
+
+    private sealed record PlanetEventInterval(double StartSeconds, double EndSeconds);
+
+    private sealed record PlanetSpecialEvent(
+        string Id, string Title, double PlanetSeconds, bool Inspectable,
+        string Source, string Authority, string Trigger, string Uncertainty,
+        PlanetEventInterval Interval, string Scale, int Priority, string Scope,
+        string Limitations);
 
     private sealed record PlanetSpecialEventFocus(
         string Id, string Title, double ElapsedSeconds, double PlanetSeconds,
-        string Scale, string TimeRate, string Source, string Limitations);
+        string Scale, string TimeRate, string Source, string Authority,
+        string Trigger, string Uncertainty, string Limitations);
 }

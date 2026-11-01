@@ -1,6 +1,6 @@
 # PlanetForge — the journey milestone plan
 
-**Updated:** 2026-10-31  
+**Updated:** 2026-11-01  
 **Owner:** PlanetForge Earth-history and Life workstreams  
 **North star:** Start in orbit, travel along an enticing horizontal timeline of Earth's actual major transitions, and automatically dive into a **physically supported** local simulation when a key moment occurs. Eventually play the uncertain chemistry and evolution of life from molecule scale back to Earth scale.
 
@@ -13,6 +13,7 @@ This is the **delivery checklist and order of work**, not a replacement for the 
 - [x] Ordinary illustrative meteor impacts remain **ambient**; no artificial meteor impact is a milestone or automatic zoom trigger.
 - [x] A horizontal logarithmic time rail shows model-witnessed events. **Past states are not yet replayable.**
 - [x] A refreshed, more cinematic timeline treatment with distinct live cursor, touch-sized small-event balls, deep-time ticks, eon label and most recent milestone (E7 visual slice, pending live device review).
+- [x] E7-B first slice: an immutable three-event S0 catalogue with explicit model-observed authority, physics-state trigger, time-step interval, unresolved historical uncertainty, scope, priority and source. The latest-moment strip expands into an accessible recorded-event log, collapsed by default on mobile.
 - [ ] Regional ocean, hydrothermal vents, molecular simulation, life and land-animal interactions **are not implemented**.
 
 ## Delivery sequence
@@ -32,6 +33,36 @@ This is the **delivery checklist and order of work**, not a replacement for the 
 | **Playable loop** | **M7/M8 — Biosphere + game** | Feed local biological success/failure back to the planet. Observe/Experiment/Challenge controls, scientific codex, retry/share seed. | A fair full loop orbit → vent → pore → membrane/polymer → protocell → planet; no predetermined success, calibrated feedback and usability. |
 | **Deep-time life** | **M9–M11 — Evolution to land** | Microbial mats and oxygenic ecosystems; eukaryotes and multicellularity; marine animals, plants/arthropods on land, later tetrapods; events anchored to fossil/geochemical evidence. | Distinct first-life, ecosystem, oxygenation, animal, plant, arthropod and tetrapod zooms with relevant habitats and uncertainty; present-day Earth returns. |
 
+## E7-B catalogue contract (implemented first slice)
+
+An **active** marker is emitted only when a named S0 field transition is actually sampled during an integration step. Its JSON contract includes:
+
+- `authority`: currently `model-observed`; `reconstruction` or `hypothesis` are reserved for future content with reviewed evidence and an appropriate experience.
+- `trigger`, `source`, `limitations`: model field crossing and what the observation **cannot** establish historically.
+- `interval.startSeconds` / `interval.endSeconds`: the preceding and following simulated model times. The rail dot sits at the end of this **detection interval**, not at a claimed exact geological age.
+- `uncertainty`: interpretation limits distinct from the width of the integration step.
+- `scope`, `scale`, `priority`: today always global S0 observations, with no fictional physical local site.
+- `type: earth-milestone`: never `magma-impact`. Existing decorative impacts are separate diagnostics and cannot enter the event rail.
+
+The timeline exposes the newest marker as one compact row; opening **LOG** reveals all recorded markers with provenance, detected model interval and an honest “replay unavailable” notice. The list shows at most 64 records. It does **not** fabricate the unwitnessed past if a browser opens midway through the geological model, nor does it support past time travel until E7-C.
+
+### Later-event candidates — not markers yet
+
+| Candidate transition | Evidence/engine gate before release |
+| --- | --- |
+| Moon-forming giant impact | Vetted uncertain collision chronology, forcing and modeled global response; not routine ambient rocks |
+| Stable hydrosphere and regional ocean habitats | Water/atmosphere reconstruction plus S1 ocean heat/chemistry boundary fields |
+| First plausible prebiotic membranes and polymers | S2–S4 chemical networks; hypotheses clearly distinguished from historical claims |
+| Earliest microbial life and metabolic innovation | Geochemical/fossil evidence, confidence ranges and a playable non-unique origin pathway |
+| Oxygenic photosynthesis and Great Oxidation Event | Atmospheric/redox conservation and temporal evidence ranges |
+| Eukaryotic cells and multicellularity | Cell-state model, evolutionary branch and calibrated reconstruction uncertainty |
+| First animals and Cambrian ecosystems | Fossil window and habitat/locomotion interaction support |
+| First plants, arthropods and tetrapods on land | Differentiated shore/land habitats and evolutionary evidence gates |
+| Mass extinction and recovery episodes | Selective extinction forcing, biodiversity/evolution engine and uncertain event window |
+| Present day Earth and player impact | Supported reconstruction through late Earth history and explicit comparison to baseline |
+
+**These are a scientific/gameplay backlog, not simulated or dated events.** A proposed period without a physically supported view gets no automatic zoom.
+
 ## Experience rules
 
 1. **Only true turning points take the camera.** No zoom per routine meteor, eruption or sparkle. Exceptional Moon-forming/Chicxulub-like episodes require explicit scientific forcing and provenance before receiving a marker.
@@ -44,7 +75,8 @@ This is the **delivery checklist and order of work**, not a replacement for the 
 ## Immediate, actionable next three PRs
 
 - [ ] **E7 device polish:** review the newly styled timeline on a real iPhone and desktop, especially when two events are close, during focus, at time zero and after all three early thresholds. Adjust tap/labels only as evidence requires.
-- [ ] **E7 event architecture:** freeze the event schema (time uncertainty/source/priority/scale), add tests for no ambient meteor entries, max key moments and non-overlap/archival cues; add a readable event log below/behind the rail.
+- [x] **E7 event architecture (first slice):** immutable three-event S0 catalogue, bounded witnessed history, model-step time intervals with explicit limitations, and opt-in compact event log; no ambient meteor entries.
+- [ ] **E7 catalogue expansion:** historical sources and scientifically defensible uncertainty ranges for candidate reconstructions, once a corresponding physical simulation or reconstruction playback exists.
 - [ ] **M0 handoff specification + vertical slice:** implement one immutable planetary ocean snapshot, validated field units and deterministic enter/exit/restart; demonstrate **orbital → regional ocean view** without fictional chemistry.
 
 ## Release gates (every milestone)
