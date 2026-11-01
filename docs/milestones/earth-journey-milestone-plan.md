@@ -22,6 +22,8 @@ The player begins with **accretion of proto-Earth**, not a fully formed plate-co
 
 The post-impact magma ocean reuses the existing thermal and raft model. An **8-second visual-only blend** now opens with continuous turbulent silicate melt before the inherited cooling-raft texture fades in, so coherent seams do not masquerade as mature tectonic plates in the first hot frames. This blend is **not** a modeled geological cooling interval; on-device material/shader fidelity is still an acceptance gate. All F0 work must preserve the four-control mobile dock, proportional timeline, and model/reconstruction provenance.
 
+**F0 cinematic visual pass (0.0.58.2, pending real-device approval):** Replace flat protoplanet shading with multi-scale granular silicate/magma materials, a hotter post-collision Moon, a widening vapor-and-melt ejecta curtain and an optically richer orbital debris disk with thousands of GPU sprites. The portrait camera moves closer at peak collision. This aims for a plausible *visual reconstruction*, not a verified SPH fluid simulation or unique Moon-assembly route. NASA's 2022 high-resolution giant-impact simulations explicitly show alternative formation pathways; no single one is treated as definitive here. The CI screenshot gate captures approach, flash, ejecta, Moon and thermal handoff at 390px, but **human visual acceptance and device FPS remain open**.
+
 ## What exists today
 
 - [x] F0 first playable reconstructed accretion → exceptional giant impact → debris/Moon → magma-ocean handoff; high-fidelity visual and collision physics acceptance still open.
