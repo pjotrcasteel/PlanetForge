@@ -223,56 +223,73 @@ vec3 background(vec3 rd) {
     galaxy *= 0.012 + 0.02*fbm(rd*65.0);
     return vec3(0.0014,0.0018,0.0031) + galaxy*vec3(0.42,0.53,0.78) + glint*vec3(0.84,0.91,1.0);
 }
-// The first visual-quality gate is a single surface shot, not a new impact
-// simulation. Low albedo, non-periodic silicate scum, molten convection and
-// roughness-driven directional lighting read more like natural material than
-// uniformly orange polygonal "plates". Temperature hues remain tone-mapped
-// artistic approximations, not calibrated spectroscopy.
+// Pre-impact proto-Earth visual material. Small temporary quenched rafts
+// on a silicate melt ocean are rendered as dark irregular material separated
+// by narrow glowing convection channels. This remains a visual hypothesis,
+// not a plate-tectonic reconstruction or temperature-calibrated spectrum.
 vec3 protoEarthSurface(vec3 n, vec3 rd, float hot, float time) {
-    vec3 q = n*5.6 + vec3(uSeed*0.011,0.0,time*0.001);
-    float basins = fbm(q*0.74+4.2);
-    float convection = fbm(q*2.0+vec3(time*0.008,-time*0.004,11.3));
+    vec3 q = n*6.6 + vec3(uSeed*0.011,0.0,time*0.0015);
+    float basin = fbm(q*0.78+4.2);
+    float drift = fbm(q*1.48+vec3(time*0.007,-time*0.004,11.3));
     float grit = noise3(q*19.0+23.6);
-    float flecks = noise3(q*58.0+61.7);
-    float material = basins*0.70 + convection*0.30;
-    // Irregular, temporary quenched rafts. They are not tectonic plates.
-    float threshold = 0.43 + 0.045*clamp(hot,0.0,1.0);
-    float crust = smoothstep(threshold,threshold+0.11,material);
-    float rim = smoothstep(threshold-0.032,threshold+0.018,material)
-        * (1.0-smoothstep(threshold+0.030,threshold+0.11,material));
-    vec3 heightNoise = vec3(grit-0.5,
+    float pumice = noise3(q*52.0+61.7);
+
+    // Domain-warped non-polygonal flow lines: no Voronoi "plates", no
+    // concentric halos around round blobs, no repeated tiled crack grid.
+    vec3 warp = q + vec3(1.9*(basin-0.5),1.8*(drift-0.5),
+        1.6*(basin-drift));
+    float flowA = dot(warp,vec3(1.13,0.46,-0.83))*1.65
+        + 3.6*(drift-0.5);
+    float flowB = dot(warp,vec3(-0.47,1.07,0.93))*2.13
+        - 3.1*(basin-0.5);
+    float thinA = 1.0-smoothstep(0.025,0.14,abs(sin(flowA)));
+    float haloA = 1.0-smoothstep(0.075,0.37,abs(sin(flowA)));
+    float thinB = 1.0-smoothstep(0.020,0.12,abs(sin(flowB)));
+    float haloB = 1.0-smoothstep(0.065,0.33,abs(sin(flowB)));
+    // The second family is interrupted by convection, giving forks instead
+    // of an uninterrupted grid. Some transient molten pools open at junctions.
+    float branch = smoothstep(0.33,0.63,drift);
+    float channels = max(thinA,thinB*branch*0.78);
+    float surrounding = max(haloA,haloB*branch*0.70);
+    float pools = smoothstep(0.62,0.75,drift)*0.68;
+    float exposedMelt = clamp(channels+pools,0.0,1.0);
+
+    // Subtle roughness-driven shade changes break up the rock surface.
+    // Unlike the melt, the rafts rely on sunlight and go dark at night.
+    vec3 bump = vec3(grit-0.5,
         noise3(q*19.0+vec3(9.1,27.3,5.1))-0.5,
         noise3(q*19.0+vec3(17.8,3.4,29.7))-0.5);
-    // Bump normals affect the rock only; the molten pools stay smooth.
-    vec3 transverse = heightNoise-n*dot(heightNoise,n);
-    vec3 rockyNormal = normalize(n+transverse*0.50*crust);
-    vec3 sunlight = normalize(LIGHT);
-    float diffuse = max(dot(rockyNormal,sunlight),0.0);
-    float poreShadow = mix(0.58,1.0,smoothstep(0.24,0.80,convection));
-    vec3 basalt = mix(vec3(0.020,0.024,0.027),
-        vec3(0.145,0.128,0.115),clamp(0.65*basins+0.35*grit,0.0,1.0));
-    basalt *= (0.74+0.32*flecks)*poreShadow;
-    vec3 rock = basalt*(0.025+1.12*diffuse);
-    // Molten silicates radiate even on the dark side. Dark cherry-red pools
-    // and occasional yellow-orange overturning are more plausible than
-    // white-hot random filaments across the entire planet.
-    float temperature = clamp(0.25+0.72*hot
-        +0.16*(convection-0.5)+0.07*(flecks-0.5),0.0,1.0);
-    vec3 lavaTint = mix(vec3(0.38,0.013,0.002),
-        vec3(2.12,0.58,0.062),smoothstep(0.28,0.98,temperature));
-    float radiance = pow(smoothstep(0.16,1.0,temperature),2.5);
-    vec3 lava = lavaTint*radiance*(0.72+0.36*convection);
-    vec3 halfDirection = normalize(sunlight-rd);
-    float smoothGlint = pow(max(dot(n,halfDirection),0.0),80.0)
-        * max(dot(n,sunlight),0.0);
-    float rockGlint = pow(max(dot(rockyNormal,halfDirection),0.0),17.0)
-        * diffuse;
-    // Dark, rocky patches can obscure the underlying self-emission.
-    // Only the narrow molten raft margins glow from underneath.
-    vec3 materialColor = rock*crust + lava*(1.0-crust+rim*0.46);
-    materialColor += vec3(0.20,0.12,0.065)*smoothGlint*(1.0-crust)*0.14;
-    materialColor += vec3(0.09)*rockGlint*crust*0.045;
-    return max(materialColor,vec3(0.0));
+    vec3 tangentBump = bump-n*dot(n,bump);
+    vec3 rockyNormal = normalize(n+0.42*tangentBump);
+    vec3 sun = normalize(LIGHT);
+    float daylight = max(dot(rockyNormal,sun),0.0);
+    vec3 basalt = mix(vec3(0.035,0.039,0.043),
+        vec3(0.21,0.17,0.14),smoothstep(0.19,0.82,basin));
+    basalt *= 0.68 + 0.40*grit + 0.16*pumice;
+    vec3 solid = basalt*(0.025+1.20*daylight);
+
+    // Visible thermal palette is compressed for an SDR screen. It avoids
+    // the white-hot lava dots and uniform bright-orange planet of F0.5a v1.
+    float moltenHeat = clamp(0.24+0.64*hot+0.24*(drift-0.5),0.0,1.0);
+    vec3 meltTint = mix(vec3(0.38,0.013,0.003),
+        vec3(2.2,0.56,0.05),smoothstep(0.25,0.96,moltenHeat));
+    float thermal = pow(smoothstep(0.17,0.98,moltenHeat),2.3);
+    vec3 magma = meltTint*thermal*(0.78+0.25*pumice);
+    vec3 redHeat = vec3(0.22,0.015,0.003)*thermal;
+    float ambientRim = max(0.0,surrounding-channels);
+    vec3 color = solid*(1.0-exposedMelt)
+        + magma*exposedMelt + redHeat*ambientRim*0.35;
+
+    // Dielectric glints on the smoother melt; broad but faint mineral
+    // highlights on rough rafts. Do not light the night hemisphere.
+    vec3 halfVector = normalize(sun-rd);
+    float meltSpec = pow(max(dot(n,halfVector),0.0),85.0)
+        * max(dot(n,sun),0.0);
+    float roughSpec = pow(max(dot(rockyNormal,halfVector),0.0),16.0)
+        * daylight;
+    color += vec3(0.14,0.09,0.04)*meltSpec*exposedMelt*0.12;
+    color += vec3(0.10)*roughSpec*(1.0-exposedMelt)*0.022;
+    return max(color,vec3(0.0));
 }
 vec3 rockySurface(vec3 pos, vec3 norm, vec3 rd, float hot, float kind, float time) {
     // Multi-scale silicate materials: broad dark rock, granular regolith,
