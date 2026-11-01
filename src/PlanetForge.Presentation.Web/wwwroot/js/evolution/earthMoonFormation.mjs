@@ -223,6 +223,57 @@ vec3 background(vec3 rd) {
     galaxy *= 0.012 + 0.02*fbm(rd*65.0);
     return vec3(0.0014,0.0018,0.0031) + galaxy*vec3(0.42,0.53,0.78) + glint*vec3(0.84,0.91,1.0);
 }
+// The first visual-quality gate is a single surface shot, not a new impact
+// simulation. Low albedo, non-periodic silicate scum, molten convection and
+// roughness-driven directional lighting read more like natural material than
+// uniformly orange polygonal "plates". Temperature hues remain tone-mapped
+// artistic approximations, not calibrated spectroscopy.
+vec3 protoEarthSurface(vec3 n, vec3 rd, float hot, float time) {
+    vec3 q = n*5.6 + vec3(uSeed*0.011,0.0,time*0.001);
+    float basins = fbm(q*0.74+4.2);
+    float convection = fbm(q*2.0+vec3(time*0.008,-time*0.004,11.3));
+    float grit = noise3(q*19.0+23.6);
+    float flecks = noise3(q*58.0+61.7);
+    float material = basins*0.70 + convection*0.30;
+    // Irregular, temporary quenched rafts. They are not tectonic plates.
+    float threshold = 0.43 + 0.045*clamp(hot,0.0,1.0);
+    float crust = smoothstep(threshold,threshold+0.11,material);
+    float rim = smoothstep(threshold-0.032,threshold+0.018,material)
+        * (1.0-smoothstep(threshold+0.030,threshold+0.11,material));
+    vec3 heightNoise = vec3(grit-0.5,
+        noise3(q*19.0+vec3(9.1,27.3,5.1))-0.5,
+        noise3(q*19.0+vec3(17.8,3.4,29.7))-0.5);
+    // Bump normals affect the rock only; the molten pools stay smooth.
+    vec3 transverse = heightNoise-n*dot(heightNoise,n);
+    vec3 rockyNormal = normalize(n+transverse*0.50*crust);
+    vec3 sunlight = normalize(LIGHT);
+    float diffuse = max(dot(rockyNormal,sunlight),0.0);
+    float poreShadow = mix(0.58,1.0,smoothstep(0.24,0.80,convection));
+    vec3 basalt = mix(vec3(0.020,0.024,0.027),
+        vec3(0.145,0.128,0.115),clamp(0.65*basins+0.35*grit,0.0,1.0));
+    basalt *= (0.74+0.32*flecks)*poreShadow;
+    vec3 rock = basalt*(0.025+1.12*diffuse);
+    // Molten silicates radiate even on the dark side. Dark cherry-red pools
+    // and occasional yellow-orange overturning are more plausible than
+    // white-hot random filaments across the entire planet.
+    float temperature = clamp(0.25+0.72*hot
+        +0.16*(convection-0.5)+0.07*(flecks-0.5),0.0,1.0);
+    vec3 lavaTint = mix(vec3(0.38,0.013,0.002),
+        vec3(2.12,0.58,0.062),smoothstep(0.28,0.98,temperature));
+    float radiance = pow(smoothstep(0.16,1.0,temperature),2.5);
+    vec3 lava = lavaTint*radiance*(0.72+0.36*convection);
+    vec3 halfDirection = normalize(sunlight-rd);
+    float smoothGlint = pow(max(dot(n,halfDirection),0.0),80.0)
+        * max(dot(n,sunlight),0.0);
+    float rockGlint = pow(max(dot(rockyNormal,halfDirection),0.0),17.0)
+        * diffuse;
+    // Dark, rocky patches can obscure the underlying self-emission.
+    // Only the narrow molten raft margins glow from underneath.
+    vec3 materialColor = rock*crust + lava*(1.0-crust+rim*0.46);
+    materialColor += vec3(0.20,0.12,0.065)*smoothGlint*(1.0-crust)*0.14;
+    materialColor += vec3(0.09)*rockGlint*crust*0.045;
+    return max(materialColor,vec3(0.0));
+}
 vec3 rockySurface(vec3 pos, vec3 norm, vec3 rd, float hot, float kind, float time) {
     // Multi-scale silicate materials: broad dark rock, granular regolith,
     // irregular flowing melt. No Voronoi polygon "plate" outlines at F0.
@@ -362,7 +413,8 @@ void main() {
         if (uStage>0.5 && body<0.5)
             hot = mix(0.88,1.0,smoothstep(0.14,0.42,uProgress));
         if (body>1.5) hot = uStage>2.5 ? 0.36 : mix(0.86,0.45,uProgress);
-        col = rockySurface(pos,norm,ray,hot,body,uSeconds);
+        col = body<0.5 ? protoEarthSurface(norm,ray,hot,uSeconds)
+            : rockySurface(pos,norm,ray,hot,body,uSeconds);
         if (body>0.5 && body<1.5 && uStage>0.5) {
             // Theia fragments into an irregular cloud rather than fading as
             // a pristine, suddenly disappearing smooth ball.
@@ -371,7 +423,7 @@ void main() {
             col = mix(col,background(ray),
                 breakup*smoothstep(0.2,0.8,fragmentation)*0.85);
         }
-        float atmo = body<0.5 ? 0.24 : 0.0;
+        float atmo = 0.0; // The F0 pre-atmosphere world has no artificial rim haze.
         col += pow(1.0-max(dot(norm,-ray),0.0),4.0)*atmo*vec3(0.32,0.20,0.15);
     }
     // Glowing splashed mantle and a turbulent ejecta curtain at the grazing
