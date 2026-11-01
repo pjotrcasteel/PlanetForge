@@ -75,6 +75,24 @@ test('F0 mobile Earth-Moon formation renders proto-Earth, Theia collision, eject
         expect(graphics.height).toBeGreaterThan(0);
         expect(graphics.glError).toBe(0);
         const screenshot = await page.screenshot({ path: testInfo.outputPath('f0-' + scene.name + '.png') });
+        if (scene.name === 'proto-earth-accretion') {
+            // Single-surface quality gate: central planet pixels must contain
+            // natural material contrast, not a flat orange fill. Keep this
+            // tolerant of SwiftShader/mobile differences; human art review
+            // remains an explicit separate approval.
+            const png = PNG.sync.read(screenshot);
+            const reds = [];
+            for (let y = Math.floor(png.height / 2) - 54; y <= Math.floor(png.height / 2) + 54; y += 5) {
+                for (let x = Math.floor(png.width / 2) - 54; x <= Math.floor(png.width / 2) + 54; x += 5) {
+                    reds.push(png.data[(y * png.width + x) * 4]);
+                }
+            }
+            reds.sort((a, b) => a - b);
+            const p10 = reds[Math.floor(reds.length * 0.10)];
+            const p90 = reds[Math.floor(reds.length * 0.90)];
+            expect(p90 - p10, 'proto-Earth surface must retain rock/melt contrast')
+                .toBeGreaterThan(18);
+        }
         if (scene.stage === 'impact' || scene.stage === 'moon-assembly') {
             // Frame-composition assertion, not merely a WebGL compile smoke test:
             // the hot proto-Earth must occupy the centre of the phone viewport.
