@@ -32,8 +32,16 @@
                     <span data-testid="planet-seed">SEED @CurrentSeed</span>
                     @if (evolution is { } status)
                     {
-                        <span data-testid="formation-temperature">MANTLE Tp @($"{status.PotentialKelvin:0}") K · CRYSTALS @($"{status.CrystalFraction:P0}")</span>
-                        <span data-testid="formation-heat-flux">HEAT FLUX @FormatFlux(status.HeatFluxWattsPerSquareMeter)</span>
+                        @if (status.Regime == "formation")
+                        {
+                            <span data-testid="formation-temperature">EARTH–MOON RECONSTRUCTION · NOT AN SPH COLLISION</span>
+                            <span data-testid="formation-heat-flux">GIANT-IMPACT SCENARIO · EVENT AT T+60 MYR, AGE UNCERTAIN</span>
+                            <span data-testid="formation-crust">ACCRETION → THEIA IMPACT → EJECTA → HOT EARTH</span>
+                        }
+                        else
+                        {
+                            <span data-testid="formation-temperature">MANTLE Tp @($"{status.PotentialKelvin:0}") K · CRYSTALS @($"{status.CrystalFraction:P0}")</span>
+                            <span data-testid="formation-heat-flux">HEAT FLUX @FormatFlux(status.HeatFluxWattsPerSquareMeter)</span>
                         @if (status.Regime == "magma-ocean")
                         {
                             <span data-testid="formation-crust">CRUST LIFETIME @status.CrustLifetimeLabel · GLOWING @($"{status.GlowingFraction:P1}") · @status.Rafts RAFTS</span>
@@ -42,10 +50,13 @@
                         {
                             <span data-testid="formation-crust">PLATES @status.Plates · PLUMES @status.Plumes · HEAT PIPE @($"{status.HeatPipeShare:P0}")</span>
                         }
+                        }
                         @if (status.LidOnsetLabel is not null) { <span>LID FORMED @status.LidOnsetLabel</span> }
                         @if (status.PlateOnsetLabel is not null) { <span>PLATES BEGAN @status.PlateOnsetLabel</span> }
                         <span data-testid="formation-fps">@($"{status.FramesPerSecond:0}") FPS</span>
-                        <small>Dry airless Earth: atmosphere, water and life are future coupled processes.</small>
+                        <small>@(status.Regime == "formation"
+                            ? "Cinematic visualization of a proposed impact pathway; masses, debris trajectories and collision physics are not solved."
+                            : "Early Earth atmospheric and ocean evolution are represented by the subsequent thermal simulation.")</small>
                         <small>Display liberties:</small>
                         @foreach (var liberty in status.Liberties ?? [])
                         {
