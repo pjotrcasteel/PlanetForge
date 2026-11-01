@@ -192,7 +192,7 @@ test('Evolution_CoolsThroughLidIntoPlateTectonics_PausesAndRestarts', async ({ p
   expect(errors).toEqual([]);
 });
 
-test('Evolution_Portrait_ControlsFit', async ({ page }) => {
+test('Evolution_Portrait_ControlsFit', async ({ page }, testInfo) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto(url);
   await waitForReady(page);
@@ -207,14 +207,38 @@ test('Evolution_Portrait_ControlsFit', async ({ page }) => {
   expect(hudBox.height).toBeLessThan(85);
   expect(railBox.height).toBeLessThan(100);
   await expect(page.getByTestId('timeline-planned-node')).toHaveCount(8);
+  await expect(page.getByTestId('timeline-overview-node')).toHaveCount(10);
   await expect(page.getByTestId('timeline-origin-node')).toHaveCount(1);
   await expect(page.getByTestId('timeline-present-node')).toHaveCount(1);
+  const controls = await page.locator('.formation-controls button').evaluateAll(buttons =>
+    buttons.map(button => {
+      const bounds = button.getBoundingClientRect();
+      return { left: bounds.left, top: bounds.top, bottom: bounds.bottom };
+    }));
+  expect(controls).toHaveLength(4);
+  for (const control of controls) expect(control.left).toBeGreaterThan(310);
+  for (let i = 1; i < controls.length; i++) expect(controls[i].top).toBeGreaterThan(controls[i - 1].bottom);
+  expect(controls[3].bottom).toBeLessThan(railBox.y);
+
+  // The entire 4.567-Gyr overview must be linearly spaced, including late-life anchors.
+  const anchors = await page.getByTestId('timeline-overview-node').evaluateAll(nodes => nodes.map(node => ({
+    name: node.dataset.chapter,
+    years: Number(node.dataset.years),
+    percent: Number.parseFloat(node.style.left)
+  })));
+  for (const anchor of anchors)
+    expect(anchor.percent).toBeCloseTo(anchor.years / 4_567_000_000 * 100, 4);
+  expect(anchors[0].name).toBe('formation');
+  expect(anchors.at(-1).name).toBe('present');
+
   const speedBefore = await page.getByTestId('formation-speed').innerText();
   await page.getByTestId('formation-speed').click();
   expect(await page.getByTestId('formation-speed').innerText()).not.toBe(speedBefore);
   const timeBefore = (await evolutionStatus(page)).timeSeconds;
-  await page.getByTestId('timeline-planned-node').nth(3).click();
-  await expect(page.getByTestId('timeline-planned-preview')).toContainText('First life');
+  // The future chapter is currently beyond the magnified physical window.
+  // Querying it via synthetic DOM click tests its non-seeking information panel.
+  await page.getByTestId('timeline-planned-node').nth(3).evaluate(element => element.click());
+  await expect(page.getByTestId('timeline-planned-preview')).toContainText('Earliest life evidence');
   expect((await evolutionStatus(page)).timeSeconds).toBe(timeBefore);
   await page.getByTestId('formation-restart').click();
   await expect(page.getByTestId('formation-restart-overlay')).toBeVisible();
@@ -222,6 +246,34 @@ test('Evolution_Portrait_ControlsFit', async ({ page }) => {
   await expect(page.getByTestId('formation-restart-overlay')).toHaveCount(0);
   expect((await evolutionStatus(page)).timeSeconds).toBe(timeBefore);
   expect((await canvasStatistics(page)).glError).toBe(0);
+  await page.screenshot({ path: testInfo.outputPath('planetforge-mobile-right-dock-linear-time.png') });
+
+  // UI-only lens probe: inject a model clock sample into this disposable paused
+  // browser test (not production simulation) to verify camera panning and scale.
+  await page.evaluate(async () => {
+    const renderer = await import('/js/planetRenderer.js');
+    renderer.getEvolutionDebug().thermal.timeSeconds = 1_250_000_000 * 31_557_600;
+  });
+  const rail = page.getByTestId('special-event-rail');
+  await expect.poll(async () => Number(await rail.getAttribute('data-window-now-years')),
+    { timeout: 15_000 }).toBeGreaterThan(1_200_000_000);
+  const lens = await rail.evaluate(element => ({
+    start: Number(element.dataset.windowStartYears),
+    span: Number(element.dataset.windowSpanYears),
+    now: Number(element.dataset.windowNowYears)
+  }));
+  expect(lens.start).toBeGreaterThan(0);
+  expect(lens.span).toBeGreaterThan(25_000);
+  expect(lens.now).toBeGreaterThanOrEqual(lens.start);
+  expect(lens.now).toBeLessThanOrEqual(lens.start + lens.span);
+  for (const name of ['first-life', 'oxygen']) {
+    const node = page.locator(`[data-testid="timeline-planned-node"][data-chapter="${name}"]`);
+    const point = await node.evaluate(element => ({
+      year: Number(element.dataset.years),
+      percent: Number.parseFloat(element.style.left)
+    }));
+    expect(point.percent).toBeCloseTo((point.year - lens.start) / lens.span * 100, 3);
+  }
 });
 
 
@@ -254,7 +306,8 @@ test('Evolution_KeyMilestone_AutoZooms_WhileOrdinaryImpactsStayAmbient', async (
   const rail = page.getByTestId('special-event-rail');
   await expect(timeline).toBeVisible();
   await expect(timeline).toContainText('MILESTONES');
-  await expect(timeline).toContainText('NOT TO SCALE');
+  await expect(timeline).toContainText('LINEAR TIME');
+  await expect(page.getByTestId('timeline-overview-node')).toHaveCount(10);
   await expect(page.getByTestId('timeline-present-node')).toHaveCount(1);
   const railBox = await rail.boundingBox();
   expect(railBox.width).toBeGreaterThan(railBox.height * 5);
