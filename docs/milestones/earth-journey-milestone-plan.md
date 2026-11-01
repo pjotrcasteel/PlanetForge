@@ -6,8 +6,25 @@
 
 This is the **delivery checklist and order of work**, not a replacement for the scientific designs in [Earth history](earth-history-roadmap.md), [special-event policy](special-events-realtime-timeline.md), and [origin-of-life zoom](origin-of-life-zoom-roadmap.md). IDs **E0–E7** and **M0–M11** retain their original meanings.
 
+## F0 — Birth of Earth and Moon (new opening; 2026-11-01)
+
+The player begins with **accretion of proto-Earth**, not a fully formed plate-covered globe. A single **exceptional Moon-forming giant impact** is presented as a scientifically informed **reconstruction**, followed by orbital ejecta, Moon assembly and a hot post-impact Earth. This is fundamentally separate from the model's routine background impact effects.
+
+| Gate | Status | Technical/scientific contract |
+| --- | --- | --- |
+| **F0.1 Accretion** | [x] First visual slice | Deterministic seed, growth phase, time proportional to 1×–50× control, mobile WebGL two-body framing. Visual growth is scenario-driven, not an N-body accretion solver. |
+| **F0.2 Giant impact** | [x] First visual slice | Theia-sized collider, incandescent collision close-up, GPU ejecta, unique explicit reconstruction event at selected +60 Myr (uncertain, not a model observation). Planetary time pauses during the short cinematic. |
+| **F0.3 Moon assembly** | [x] First visual slice | Ejecta disk and separate Moon visual, seeded deterministic 12-second display sequence. Body composition, angular momentum and trajectories are artistic reconstructions, not SPH/gravitation output. |
+| **F0.4 Thermal handoff** | [x] First integration slice | Geological clock hands off at +82 Myr to the existing GPU magma ocean, preserving total Earth-history chronology. Thermal state is an initial hot scenario, **not** conserved output from simulated collision energetics. |
+| **F0.5 Scientific + visual acceptance** | [ ] **OPEN** | On-device iPhone and desktop screenshots/recording; robust WebGL shader compile, framing, cinematic lighting and FPS; a vetted conservation-calibrated impact model or independently sourced reference reconstruction, and science review of uncertain Moon chronology. |
+
+**Timing is scenario-based.** A +60 Myr event within a broad `50–150 Myr` plausible range is **not** a measured exact date. The Moon may have emerged from a post-impact disk or by a much faster dynamical pathway; current implementation does not choose between those as a scientific conclusion. NASA Moon Formation and National Academies (2023) Q3.3 are the review references. The first-pass handoff at +82 Myr is a **display and model coupling choice**, not an established physical time for Moon accretion.
+
+The post-impact magma ocean reuses the existing thermal and raft model. Coherent glowing raft seams should **not** appear as established tectonic plates in the first hot frames: this remains a material/shader fidelity gate. Any F0 improvement must keep the mobile four-control dock and linear moving geological timeline untouched, and retain Earth model observation/reconstruction provenance.
+
 ## What exists today
 
+- [x] F0 first playable reconstructed accretion → exceptional giant impact → debris/Moon → magma-ocean handoff; high-fidelity visual and collision physics acceptance still open.
 - [x] An evolving GPU Earth with early conditions and a long-run Earth-history reconstruction (E0–E4 first passes; later fidelity still open).
 - [x] A state-derived, automatic **planet-wide** 1× close-up for rock-lid formation, the model's 50% ocean-inventory condensation, and simplified plate-regime onset (E7 first slice).
 - [x] Ordinary illustrative meteor impacts remain **ambient**; no artificial meteor impact is a milestone or automatic zoom trigger.
