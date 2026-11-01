@@ -14,6 +14,7 @@ This is the **delivery checklist and order of work**, not a replacement for the 
 - [x] A horizontal logarithmic time rail shows model-witnessed events. **Past states are not yet replayable.**
 - [x] A refreshed, more cinematic timeline treatment with distinct live cursor, touch-sized small-event balls, deep-time ticks, eon label and most recent milestone (E7 visual slice, pending live device review).
 - [x] E7-B first slice: an immutable three-event S0 catalogue with explicit model-observed authority, physics-state trigger, time-step interval, unresolved historical uncertainty, scope, priority and source. The latest-moment strip expands into an accessible recorded-event log, collapsed by default on mobile.
+- [x] E7-A second mobile pass (0.0.55.0): compact top phase chip; four icon/preset controls with confirmation before restart; compact chapter rail with pre-placed planned milestones and a distinct final Present-day dot. Event-based zoom behavior is unchanged. **Real-device visual acceptance remains open.**
 - [ ] Regional ocean, hydrothermal vents, molecular simulation, life and land-animal interactions **are not implemented**.
 
 ## Delivery sequence
@@ -32,6 +33,14 @@ This is the **delivery checklist and order of work**, not a replacement for the 
 | **Life experiment C** | **M6 — Protocells** | Encapsulation, replicator error, osmotic growth, competition, inheritance and possible collapse. | First viable protocell is a **run-specific outcome**, never presented as the proven first life on Earth. |
 | **Playable loop** | **M7/M8 — Biosphere + game** | Feed local biological success/failure back to the planet. Observe/Experiment/Challenge controls, scientific codex, retry/share seed. | A fair full loop orbit → vent → pore → membrane/polymer → protocell → planet; no predetermined success, calibrated feedback and usability. |
 | **Deep-time life** | **M9–M11 — Evolution to land** | Microbial mats and oxygenic ecosystems; eukaryotes and multicellularity; marine animals, plants/arthropods on land, later tetrapods; events anchored to fossil/geochemical evidence. | Distinct first-life, ecosystem, oxygenation, animal, plant, arthropod and tetrapod zooms with relevant habitats and uncertainty; present-day Earth returns. |
+
+## E7-A mobile layout revision (0.0.55.0)
+
+The milestone rail is an **ordinal journey, not a mathematical time axis**. Ten chapters are spaced for touch readability: Formation, rocky lid, first oceans, model plate regime, first life, oxygenation, complex cells, animals, life on land, and Present day. Their on-screen spacing does **not** imply equal geological duration or a source-backed event age. The caption says “NOT TO SCALE.” Future chapters have muted hollow markers; tapping one discloses “PLANNED · NO SIMULATION YET” without changing the model clock or faking a zoom. Only actual `earth-milestone` crossings become golden recorded dots and can trigger an S0 automatic inspection. The final Present-day dot is distinct cyan and is not a false simulated milestone.
+
+The phase HUD is one compact title/time chip with diagnostics behind a details icon. Four controls are Play/Pause, 1×/5×/10×/20×/50×, Clouds and Restart. The `×` is a multiplier of the existing `1 Myr/s` model-speed cap, **not** real-time evolution. The restart icon first opens a confirmation overlay; cancelling preserves the state and witnessed history.
+
+This deliberately defers a quantitative interactive zoomable geological-time scale to E7-C, where eras and snapshots will give accurate context. It removes the earlier misleading logarithmic `1 kyr / 1 Myr / 1 Gyr` tick design.
 
 ## E7-B catalogue contract (implemented first slice)
 
@@ -74,7 +83,7 @@ The timeline exposes the newest marker as one compact row; opening **LOG** revea
 
 ## Immediate, actionable next three PRs
 
-- [ ] **E7 device polish:** review the newly styled timeline on a real iPhone and desktop, especially when two events are close, during focus, at time zero and after all three early thresholds. Adjust tap/labels only as evidence requires.
+- [ ] **E7 device polish:** review the compact 0.0.55.0 chapter rail and icon-only controls on a real iPhone and desktop, including focus/confirmation overlays and 10 milestone dots at 375px. Check touch targets, text truncation, and no overlay collisions.
 - [x] **E7 event architecture (first slice):** immutable three-event S0 catalogue, bounded witnessed history, model-step time intervals with explicit limitations, and opt-in compact event log; no ambient meteor entries.
 - [ ] **E7 catalogue expansion:** historical sources and scientifically defensible uncertainty ranges for candidate reconstructions, once a corresponding physical simulation or reconstruction playback exists.
 - [ ] **M0 handoff specification + vertical slice:** implement one immutable planetary ocean snapshot, validated field units and deterministic enter/exit/restart; demonstrate **orbital → regional ocean view** without fictional chemistry.
