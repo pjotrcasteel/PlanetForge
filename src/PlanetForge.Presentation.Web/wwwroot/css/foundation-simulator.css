@@ -551,7 +551,7 @@
 .formation-restart-actions .is-confirm { background: #cc9255; border-color: #e2b27a; color: #1b140d; font-weight: 700; }
 .formation-restart-actions button:focus-visible { outline: 2px solid #9fe5df; outline-offset: 3px; }
 @media (max-width: 600px) {
-    .formation-simulation .formation-hud { top: calc(env(safe-area-inset-top, 0px) + 10px); left: 11px; width: min(276px, calc(100vw - 94px)); }
+    .formation-simulation .formation-hud { top: calc(env(safe-area-inset-top, 0px) + 10px); left: 11px; width: min(274px, calc(100vw - 116px)); }
     .formation-controls {
         /* Match the phase HUD's exact mobile top edge. */
         top: calc(env(safe-area-inset-top, 0px) + 10px);
@@ -882,7 +882,7 @@
     .formation-event-timeline {
         bottom: calc(env(safe-area-inset-bottom, 0px) + 34px);
         width: calc(100vw - 16px);
-        padding: 7px 10px 6px;
+        padding: 5px 10px 4px;
         border-radius: 12px;
     }
     .formation-event-context { font-size: 8px; letter-spacing: .055em; }
@@ -891,8 +891,8 @@
     .formation-event-eon { font-size: 8px; }
     .formation-event-epoch-readout > strong { font-size: 11px; }
     .formation-time-track { height: 34px; margin: 0 13px; }
-    .formation-time-ruler { margin: 0 13px 1px; font-size: 8px; }
-    .formation-event-recent { margin-top: 2px; border-color: #bf925022; background: #a8774020; }
+    .formation-time-ruler { margin: 0 13px 0; font-size: 8px; }
+    .formation-event-recent { margin-top: 0; border-color: #bf925022; background: #a8774020; }
     .formation-event-recent > summary { gap: 5px; padding: 3px 6px; }
     .formation-event-recent > summary strong { font-size: 10px; }
     .formation-event-recent-epoch { display: none; }
@@ -906,7 +906,7 @@
 @media (max-width: 425px) {
     .formation-event-context small { letter-spacing: 0; }
     .formation-time-track { margin: 0 12px; }
-    .formation-time-overview { margin: 5px 12px 1px; }
+    .formation-time-overview { margin: 3px 12px 0; }
     .formation-chapter-preview span { font-size: 8px; }
     .formation-event-recent { border: 0; background: transparent; }
     .formation-event-recent > summary { padding: 2px 0 0; }

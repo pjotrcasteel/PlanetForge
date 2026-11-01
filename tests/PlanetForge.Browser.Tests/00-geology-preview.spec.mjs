@@ -71,8 +71,8 @@ test('GeologyPreview_AuditedTimelineDrawsMeasuredGlobalMapsWithoutTouchingMainPl
     await expect(page.getByTestId('geology-preview-scale')).toContainText('Measured map range');
 
     await openStableBlazorPage(page, '/', '#planet-canvas');
-    await expect(page.getByTestId('formation-phase')).toHaveText('Magma ocean · incandescent surface', { timeout: 60_000 });
-    // The imported main globe advances continuously; the HUD reports physical
+    await expect(page.getByTestId('formation-phase')).toHaveText('Proto-Earth · gravitational accretion', { timeout: 60_000 });
+    // The new formation prologue advances continuously; the HUD reports physical
     // duration and playback rate, not the old stopped T+00:00:00 clock.
     await expect(page.getByTestId('formation-time')).toHaveText(/^\d+(?:\.\d+)? (?:s|min|h|days|yr|kyr|Myr|Gyr) · .+/);
 });

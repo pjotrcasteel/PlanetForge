@@ -6,6 +6,7 @@ import {
 import { createThermalRadianceData, thermalTextureSize, thermalMaterialShader } from './thermalRadiance.js';
 import { clearRetainedSurfaceGeometry, retainSurfaceGeometry } from './surfaceGeometryStore.js';
 import { captureEarthMilestoneEvents, snapshotEarthMilestoneState, orbitForEvent, advanceRealtimeSeconds, eventFocusCameraBlend, AUTOMATIC_EVENT_FOCUS_SECONDS } from './evolution/specialEvents.mjs';
+import { earthMoonFormationStatus, moonFormationImpactEvent, SECONDS_PER_YEAR } from './evolution/earthMoonFormation.mjs';
 import {
     createEvolution, disposeEvolution, stepEvolution, renderEvolutionGlobe, evolutionStatus,
     setEvolutionPlaying as setEvolutionModelPlaying, setEvolutionSpeed as setEvolutionModelSpeed,
@@ -1325,15 +1326,28 @@ function render() {
             recordPerformanceSample('visibleFrameIntervalMs', dt * 1000);
             state.evolutionFps = (state.evolutionFps ?? 60) * 0.95 + 0.05 / Math.max(dt, 1e-3);
             const stepStartedAt = performanceMarkStart();
-            const stepStartSeconds = state.evolution.thermal.timeSeconds;
+            const formation = state.evolution.formation;
+            const stepStartSeconds = formation && !formation.complete
+                ? earthMoonFormationStatus(formation).timeSeconds
+                : state.evolution.thermal.timeSeconds;
             const before = snapshotEarthMilestoneState(state.evolution);
-            if (stepEvolution(state.evolution, dt)) state.dirty = true;
             const previouslyWitnessedId = state.eventHistory.at(-1)?.id;
+            if (stepEvolution(state.evolution, dt)) state.dirty = true;
+            if (formation?.impactJustBegun) {
+                // Reconstruction marker: the explicitly selected Theia scenario,
+                // not an ambient meteor or a claim of simulated SPH physics.
+                const impactEvent = moonFormationImpactEvent(state.evolution.seed);
+                if (!state.eventHistory.some(event => event.id === impactEvent.id))
+                    state.eventHistory.push(impactEvent);
+                formation.impactJustBegun = false;
+            }
             state.eventHistory = captureEarthMilestoneEvents(state.eventHistory, before,
                 snapshotEarthMilestoneState(state.evolution),
-                state.evolution.thermal.timeSeconds, state.evolution.seed, stepStartSeconds);
+                formation && !formation.complete ? earthMoonFormationStatus(formation).timeSeconds : state.evolution.thermal.timeSeconds,
+                state.evolution.seed, stepStartSeconds);
             const newestEvent = state.eventHistory.at(-1);
-            if (newestEvent && newestEvent.id !== previouslyWitnessedId && state.evolution.playing) {
+            if (newestEvent && newestEvent.id !== previouslyWitnessedId && state.evolution.playing
+                && newestEvent.authority === 'model-observed') {
                 // Geological turning points focus their actual resolved scale/region.
                 // Ordinary impacts keep rendering without hijacking the camera.
                 enterSpecialEvent(newestEvent.id);
@@ -1374,7 +1388,18 @@ function renderEvolution(s) {
     prepareFrame(gl, canvas);
     const aspect = canvas.width / Math.max(canvas.height, 1);
     const projection = perspective(verticalFieldOfViewRadians, aspect, 0.002, 20);
-    const eye = orbitEye(s.yaw, s.pitch, s.distance);
+    const formation = s.evolution?.formation;
+    let cameraDistance = s.distance;
+    if (formation && !formation.complete) {
+        // The wider two-body shot keeps both proto-Earth and Theia in the
+        // mobile viewport. The aftermath eases back toward the globe view.
+        const stagingDistance = aspect < 0.75 ? 11.8 : 5.8;
+        const reunion = formation.stage === 'aftermath'
+            ? Math.min(1, formation.stageSeconds / 3) : 0;
+        const eased = reunion * reunion * (3 - 2 * reunion);
+        cameraDistance = stagingDistance + (s.distance - stagingDistance) * eased;
+    }
+    const eye = orbitEye(s.yaw, s.pitch, cameraDistance);
     const viewProjection = multiply(projection, lookAt(eye, [0, 0, 0], [0, 1, 0]));
     // Sun fixed relative to the camera (upper left, ~60 deg off the view
     // axis) so a terminator and low-angle relief are always in view.

@@ -19,6 +19,10 @@ import { createRaftSystem, advanceRafts, mulberry32, randomDirection, maximumRaf
 import { emissionLinearRadiance, thermalMaterialShader } from '../thermalRadiance.js';
 import { selectFirstPlateFocus } from './specialEvents.mjs';
 import {
+    createEarthMoonFormation, stepEarthMoonFormation, earthMoonFormationStatus,
+    renderEarthMoonFormation, disposeEarthMoonFormation, HANDOFF_AGE_YEARS,
+} from './earthMoonFormation.mjs';
+import {
     EARTH_LIBERTIES, loadEarthAssets, createEarthHistory, prepareEarthHistory, disposeEarthHistory, startEarthHistory,
     stepEarthHistory, deriveEarthHistory, earthHistoryStatus, earthLatestStartMyr,
 } from './earthHistory.js';
@@ -593,6 +597,7 @@ uniform vec3 uLight;
 uniform vec3 uCamera;
 uniform float uExposure;
 uniform float uMagmaWeight;
+uniform float uPostImpactFreshness;
 uniform float uLithosphereWeight;
 uniform float uRadiusMeters;
 uniform float uMeltKelvin;
@@ -1046,15 +1051,21 @@ void main() {
         // Convection shows only where melt is exposed; it fades as crust forms.
         vec3 meltRadiance = thermalRadiance(uMeltKelvin).rgb;
         float exposed = clamp(dot(crust.emission, vec3(0.2, 0.7, 0.1)) / max(dot(meltRadiance, vec3(0.2, 0.7, 0.1)), 1e-6), 0.0, 1.0);
-        float k = exp(1.0 * convect * exposed);
-        vec3 magma = crust.emission * pow(vec3(k), vec3(0.6, 1.0, 1.8)) * 0.9;
+        // A newborn post-Theia globe is still a largely continuous incandescent
+        // silicate ocean. Fade the inherited raft tessellation in over a short
+        // *display* interval, so cooling cracks do not masquerade as tectonics.
+        // This visual blend is not a calculated geological cooling duration.
+        float freshness = clamp(uPostImpactFreshness, 0.0, 1.0);
+        float k = exp(1.0 * convect * mix(exposed, 1.0, freshness));
+        vec3 magma = mix(crust.emission, meltRadiance, freshness)
+            * pow(vec3(k), vec3(0.6, 1.0, 1.8)) * 0.9;
         // Limb darkening: the hot silicate-vapour atmosphere absorbs along
         // slant paths (redder and dimmer towards the limb).
         float muView = max(dot(p, view), 0.05);
         magma *= exp(-vec3(0.12, 0.2, 0.35) * (1.0 / muView - 1.0));
         // Skins in the lanes: a dark rim crusts over the coolest melt.
         float skin = smoothstep(0.55, 0.95, lane * (0.6 + 0.8 * fbm5(p * 30.0 + drift)));
-        magma *= 1.0 - 0.6 * skin * exposed * uMagmaWeight;
+        magma *= 1.0 - 0.6 * skin * exposed * uMagmaWeight * (1.0 - freshness);
         vec3 crustNormal = crust.normal;
         float crustAlbedo = crust.albedo;
         // Asteroid impacts into the magma ocean (Hadean bombardment).
@@ -1098,7 +1109,7 @@ void main() {
         float veil = uSteam > 0.001 && uClouds > 0.5 ? steamDeck(p) : 0.0;
         float sunUp = smoothstep(-0.05, 0.25, dot(p, light)) * max(dot(p, light), 0.04);
         emitted += magma * uMagmaWeight * (1.0 - 0.85 * veil);
-        reflected += mix((vec3(crustAlbedo) * nl + vec3(glossy) * nl), vec3(0.74, 0.71, 0.66) * sunUp, veil) * uSolar * uMagmaWeight;
+        reflected += mix((vec3(crustAlbedo) * nl + vec3(glossy) * nl), vec3(0.74, 0.71, 0.66) * sunUp, veil) * uSolar * uMagmaWeight * (1.0 - freshness);
     }
     if (uLithosphereWeight > 0.001) {
         vec2 uv = uvFromDir(p);
@@ -1400,7 +1411,8 @@ export function createEvolution(gl, seed, createProgram, options = {}) {
     const vao = gl.createVertexArray();
 
     const evo = {
-        gl, seed, random, programs, vao,
+        gl, seed, random, programs, vao, createProgram,
+        formation: createEarthMoonFormation(seed),
         textures: { state0, state1, compose0, compose1, derived, raftPosition, raftVelocity, raftFrame, raftLink, bins, ageTable },
         targets, current: 0,
         uniforms: {
@@ -1412,7 +1424,7 @@ export function createEvolution(gl, seed, createProgram, options = {}) {
             derived: uniforms(gl, programs.derived, ['uC0', 'uC1', 'uTimeMyr', 'uGlowWindowMyr']),
             stars: uniforms(gl, programs.stars, ['uInverseViewProjection', 'uCamera', 'uViewport']),
             globe: uniforms(gl, programs.globe, ['uViewProjection', 'uDerived', 'uReliefScale', 'uLithosphereWeight', 'uDatumKm', 'uLight',
-                'uCamera', 'uExposure', 'uMagmaWeight', 'uRadiusMeters', 'uMeltKelvin', 'uRenewalVelocity', 'uDisplaySpeed', 'uSolar', 'uRaftCount', 'uBinGrid',
+                'uCamera', 'uExposure', 'uMagmaWeight', 'uPostImpactFreshness', 'uRadiusMeters', 'uMeltKelvin', 'uRenewalVelocity', 'uDisplaySpeed', 'uSolar', 'uRaftCount', 'uBinGrid',
                 'uRaftPosition', 'uRaftVelocity', 'uRaftFrame', 'uRaftLink', 'uMaterialScale', 'uBins', 'uAgeTable', 'uThermalRadianceTexture', 'uVolcanicGlowKelvin',
                 'uSeaLevel', 'uShoreKm', 'uWater', 'uSteam', 'uLife', 'uClimateK', 'uOxic', 'uCloudPhase', 'uShell', 'uClouds', 'uSeamShare', 'uRaftSpacing',
                 'uMagmaImpactCount', 'uMagmaImpacts', 'uMagmaImpactInfo', 'uPlateState', 'uPlateInspectionId', 'uPlateInspectionDirection']),
@@ -1490,6 +1502,7 @@ export function disposeEvolution(evo) {
     const gl = evo.gl;
     evo.disposed = true;
     disposeEarthHistory(evo.earth);
+    disposeEarthMoonFormation(evo.formation, gl);
     for (const program of Object.values(evo.programs)) gl.deleteProgram(program);
     const t = evo.textures;
     for (const texture of [...t.state0, ...t.state1, t.compose0, t.compose1, t.derived, t.raftPosition, t.raftVelocity, t.raftFrame, t.raftLink, t.bins, t.ageTable]) {
@@ -1988,6 +2001,18 @@ export function setEvolutionSpeed(evo, yearsPerSecond) {
 
 export function stepEvolution(evo, wallDtSeconds) {
     if (!evo.playing) return false;
+    // Formation is a separate reconstructed era, not an acceleration of the
+    // magma-ocean solver. Geological time meets the solver just after +60 Myr.
+    if (evo.formation && !evo.formation.complete) {
+        const advanced = stepEarthMoonFormation(evo.formation, wallDtSeconds, evo.maximumYearsPerSecond);
+        if (advanced && evo.formation.complete) {
+            evo.thermal.timeSeconds = HANDOFF_AGE_YEARS * SECONDS_PER_YEAR;
+            evo.postImpactStartSeconds = evo.thermal.timeSeconds;
+            evo.postImpactWallTime = evo.wallTime;
+            evo.rate = 0;
+        }
+        return advanced;
+    }
     const elapsedWallDt = Math.min(Math.max(wallDtSeconds, 0), 1.0);
     // GPU raft motion remains bounded per frame; thermal time must not be lost
     // merely because a device cannot sustain 10 WebGL frames per second.
@@ -2233,6 +2258,10 @@ function renderStars(evo, frame) {
 
 export function renderEvolutionGlobe(evo, frame) {
     const gl = evo.gl;
+    if (evo.formation && !evo.formation.complete) {
+        renderEarthMoonFormation(evo.formation, gl, evo.createProgram, frame);
+        return;
+    }
     const starsStartedAt = performanceMarkStart();
     renderStars(evo, frame);
     recordPerformanceDuration('starsCpuSubmissionMs', starsStartedAt);
@@ -2246,6 +2275,12 @@ export function renderEvolutionGlobe(evo, frame) {
     gl.uniform3fv(u.uCamera, frame.camera);
     gl.uniform1f(u.uExposure, evo.exposure);
     gl.uniform1f(u.uMagmaWeight, evo.magmaWeight);
+    // Hold only as long as the viewer actually observes this model era. The
+    // interval smooths cinematic handoff, not time measured by the thermal solver.
+    const timeSinceImpactDisplay = evo.postImpactWallTime === undefined
+        ? Infinity : Math.max(0, evo.wallTime - evo.postImpactWallTime);
+    const newbornMeltBlend = Math.max(0, Math.min(1, (8 - timeSinceImpactDisplay) / 8));
+    gl.uniform1f(u.uPostImpactFreshness, newbornMeltBlend);
     gl.uniform1f(u.uLithosphereWeight, evo.lithosphereWeight);
     gl.uniform1f(u.uRadiusMeters, PARAMETERS.radiusMeters);
     gl.uniform1f(u.uMeltKelvin, evo.thermal.potentialKelvin);
@@ -2358,6 +2393,30 @@ function livePlates(evo) {
 
 export function evolutionStatus(evo) {
     const t = evo.thermal;
+    if (evo.formation && !evo.formation.complete) {
+        const formation = earthMoonFormationStatus(evo.formation);
+        return {
+            timeSeconds: formation.timeSeconds,
+            timeLabel: formatDuration(formation.timeSeconds),
+            rateLabel: formation.rateLabel,
+            regime: 'formation',
+            phase: formation.phase,
+            playing: evo.playing,
+            potentialKelvin: 0,
+            crystalFraction: 0,
+            heatFluxWattsPerSquareMeter: 0,
+            crustLifetimeLabel: null,
+            glowingFraction: 0,
+            convectionVelocity: 0,
+            rafts: 0, plates: 0, plumes: 0, impacts: 0,
+            landFraction: 0, felsicFraction: 0, heatPipeShare: 0,
+            lidOnsetLabel: null, plateOnsetLabel: null,
+            rheologicalTransitionKelvin: rheologicalTransitionKelvin(),
+            exposure: 1, earthHistory: null,
+            liberties: [formation.limitations],
+            formation,
+        };
+    }
     const phi = crystalFraction(t.potentialKelvin);
     let phase;
     if (evo.earth?.active && t.regime !== 'magma-ocean' && evo.steam <= 0.2) {

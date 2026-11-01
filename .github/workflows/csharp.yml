@@ -52,6 +52,11 @@ jobs:
       - name: Validate special-event clock and seeded bookmarks
         run: node --test tests/PlanetForge.Browser.Tests/evolution/special-events.test.mjs
 
+      - name: Validate Earth-Moon formation module and chronological handoff
+        run: |
+          node --check src/PlanetForge.Presentation.Web/wwwroot/js/evolution/earthMoonFormation.mjs
+          node --test tests/PlanetForge.Browser.Tests/evolution/earth-moon-formation.test.mjs
+
       - name: Validate thermal playback across slow and fast frames
         run: node --test tests/PlanetForge.Browser.Tests/evolution-thermal-playback.test.mjs
 
@@ -135,5 +140,49 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: generator-visual-regression-shard-${{ matrix.shard }}
+          path: tests/PlanetForge.Browser.Tests/artifacts
+          if-no-files-found: ignore
+
+  formation-visual-smoke:
+    name: F0 mobile WebGL shader and screenshot smoke
+    needs: fast-checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+
+      - name: Download compiled app
+        uses: actions/download-artifact@v4
+        with:
+          name: planetforge-debug-web
+          path: ./artifacts/web/wwwroot
+
+      - name: Install Chromium
+        working-directory: tests/PlanetForge.Browser.Tests
+        run: |
+          npm install --no-audit --no-fund
+          npx playwright install --with-deps chromium
+
+      - name: Capture four actual F0 WebGL stages
+        run: |
+          python3 -m http.server 4173 --directory ./artifacts/web/wwwroot > /tmp/planetforge-f0-http.log 2>&1 &
+          for attempt in {1..20}; do
+            if curl --fail --silent http://127.0.0.1:4173/ > /dev/null; then break; fi
+            sleep 1
+          done
+          cd tests/PlanetForge.Browser.Tests
+          npx playwright test earth-moon-formation.spec.mjs
+
+      - name: Upload F0 mobile screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: planetforge-f0-mobile-frames
           path: tests/PlanetForge.Browser.Tests/artifacts
           if-no-files-found: ignore

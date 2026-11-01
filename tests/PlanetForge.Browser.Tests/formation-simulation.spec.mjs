@@ -52,6 +52,23 @@ async function waitForReady(page) {
   await expect(page.getByTestId('formation-restart-overlay')).toBeVisible();
   await page.getByTestId('formation-restart-confirm').click();
   await expect(page.getByTestId('formation-restart-overlay')).toHaveCount(0);
+  // These legacy tests intentionally exercise S0 thermal physics. Advance
+  // the separate F0 reconstruction deterministically without waiting through
+  // its collision cinema; a dedicated spec captures the actual F0 visuals.
+  await page.evaluate(async () => {
+    const renderer = await import('/js/planetRenderer.js');
+    const engine = await import('/js/evolution/planetEvolution.js');
+    const model = renderer.getEvolutionDebug();
+    const originalRate = model.maximumYearsPerSecond;
+    model.maximumYearsPerSecond = 50e6;
+    model.playing = true;
+    let steps = 0;
+    while (!model.formation.complete && steps++ < 40) engine.stepEvolution(model, 1);
+    model.playing = false;
+    model.maximumYearsPerSecond = originalRate;
+    renderer.setEvolutionClouds(model.showClouds); // schedules the real S0 draw
+    if (!model.formation.complete) throw new Error('F0 did not reach thermal handoff.');
+  });
   await expect.poll(async () => (await evolutionStatus(page))?.regime, { timeout: 60_000 }).toBe('magma-ocean');
 }
 
@@ -221,8 +238,8 @@ test('Evolution_CoolsThroughLidIntoPlateTectonics_PausesAndRestarts', async ({ p
   await page.getByTestId('formation-restart').click();
   await expect(page.getByTestId('formation-restart-overlay')).toBeVisible();
   await page.getByTestId('formation-restart-confirm').click();
-  await expect.poll(async () => (await evolutionStatus(page)).regime, { timeout: 60_000 }).toBe('magma-ocean');
-  await expect(page.getByTestId('formation-phase')).toContainText('Magma ocean');
+  await expect.poll(async () => (await evolutionStatus(page)).regime, { timeout: 60_000 }).toBe('formation');
+  await expect(page.getByTestId('formation-phase')).toContainText('Proto-Earth');
   expect(errors).toEqual([]);
 });
 
@@ -373,7 +390,7 @@ test('Evolution_KeyMilestone_AutoZooms_WhileOrdinaryImpactsStayAmbient', async (
       const focusHud = document.querySelector('[data-testid="special-event-focus"]');
       probe.sawFocusHud ||= Boolean(focusHud?.textContent?.includes('Model-state threshold'));
       probe.sawDisabledControls ||= Boolean(document.querySelector('[data-testid="formation-play"]')?.disabled);
-      const dot = document.querySelector('[data-testid="special-event-enter"]');
+      const dot = document.querySelector('[data-testid="special-event-enter"][aria-label*="Persistent rocky lid forms"]');
       if (dot && !probe.dotSize) {
         const bounds = dot.getBoundingClientRect();
         const sphere = window.getComputedStyle(dot, '::before');
@@ -423,7 +440,7 @@ test('Evolution_KeyMilestone_AutoZooms_WhileOrdinaryImpactsStayAmbient', async (
   expect(probe.dotSize.width).toBeGreaterThanOrEqual(36);
   expect(probe.dotSize.sphereWidth).toBeLessThanOrEqual(16);
   expect(Math.abs(probe.dotSize.sphereWidth - probe.dotSize.sphereHeight)).toBeLessThan(2);
-  const marker = page.getByTestId('special-event-enter').first();
+  const marker = page.locator('[data-testid="special-event-enter"][aria-label*="Persistent rocky lid forms"]');
   await expect(marker).toHaveAttribute('aria-label', /Persistent rocky lid forms/);
   // Software WebGL may stall 75-ms probes for the entire cinematic hold.
   // One witnessed focus, frozen parent model, and restored original orbit
@@ -432,9 +449,16 @@ test('Evolution_KeyMilestone_AutoZooms_WhileOrdinaryImpactsStayAmbient', async (
   expect(probe.samples[0].title).toBe('Persistent rocky lid forms');
   expect(probe.samples[0].source).toMatch(/^Model-state threshold/);
   expect(probe.samples[0].scale).toMatch(/Planetary orbital close-up/);
-  expect(probe.timelineEvents.every(event => !/impact/i.test(event.title))).toBe(true);
-  expect(probe.timelineEvents.every(event =>
-    event.authority === 'model-observed' &&
+  // One labelled Moon-impact reconstruction remains in the history; the ambient
+  // seeded impacts still must not generate zoomable milestone records.
+  const reconstructions = probe.timelineEvents.filter(event => event.authority === 'reconstruction');
+  expect(reconstructions).toHaveLength(1);
+  expect(reconstructions[0].title).toMatch(/Moon-forming giant impact/);
+  expect(reconstructions[0].limitations).toMatch(/illustrative reconstruction/i);
+  const modelObservations = probe.timelineEvents.filter(event => event.authority === 'model-observed');
+  expect(modelObservations.length).toBeGreaterThan(0);
+  expect(modelObservations.every(event => !/impact/i.test(event.title))).toBe(true);
+  expect(modelObservations.every(event =>
     event.scope === 'global' &&
     event.interval.startSeconds <= event.planetSeconds &&
     event.interval.endSeconds === event.planetSeconds &&
