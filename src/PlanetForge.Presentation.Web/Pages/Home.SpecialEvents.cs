@@ -10,9 +10,13 @@ public partial class Home
     {
         const double secondsPerYear = 31_557_600.0;
         var years = seconds / secondsPerYear;
-        return years >= 1_000_000.0 ? $"T+{years / 1_000_000.0:0.###} Myr"
-            : years >= 1_000.0 ? $"T+{years / 1_000.0:0.##} kyr"
-            : years >= 1.0 ? $"T+{years:0.##} years" : $"T+{seconds:0} s";
+        if (years >= 1_000_000.0) return $"T+{years / 1_000_000.0:0.###} Myr";
+        if (years >= 1_000.0) return $"T+{years / 1_000.0:0.##} kyr";
+        if (years >= 1.0) return $"T+{years:0.##} years";
+        if (seconds >= 86_400.0) return $"T+{seconds / 86_400.0:0.#} days";
+        if (seconds >= 3_600.0) return $"T+{seconds / 3_600.0:0.#} hours";
+        if (seconds >= 60.0) return $"T+{seconds / 60.0:0.#} min";
+        return $"T+{seconds:0} s";
     }
 
     // Geological eons are display context, derived from elapsed model time
@@ -29,17 +33,53 @@ public partial class Home
             : remainingGa >= 0.5388 ? "PROTEROZOIC" : "PHANEROZOIC";
     }
 
-    // A linear 4.567-Gyr rail hides early impacts at one pixel. Log time
-    // distributes witnessed events without changing their real epochs.
-    private static string TimelinePosition(double planetSeconds)
+    // E7-A: the chapter rail is deliberately ordinal, not a fake time scale.
+    // Exact sampled model times remain available in each recorded-event log.
+    private sealed record TimelineChapter(
+        string Key, string Title, int PositionPercent, bool IsPresent = false, bool IsModeled = false);
+
+    private static readonly TimelineChapter[] TimelineChapters =
+    [
+        new("formation", "Earth forms", 0),
+        new("solid-lid", "Rocky lid", 11, IsModeled: true),
+        new("ocean-rainout", "First oceans", 22, IsModeled: true),
+        new("plate-onset", "Plate regime (model)", 33, IsModeled: true),
+        new("first-life", "First life", 44),
+        new("oxygen", "Atmospheric oxygenation", 55),
+        new("complex-cells", "Complex cells", 66),
+        new("animals", "First animals", 77),
+        new("life-on-land", "Life on land", 88),
+        new("present", "Present day", 100, true)
+    ];
+
+    private TimelineChapter? selectedTimelineChapter;
+
+    private PlanetSpecialEvent? GetRecordedEventForChapter(TimelineChapter chapter)
     {
-        const double secondsPerYear = 31_557_600.0;
-        const double earthAgeYears = 4_567_000_000.0;
-        var years = double.IsFinite(planetSeconds)
-            ? Math.Clamp(planetSeconds / secondsPerYear, 0.0, earthAgeYears) : 0.0;
-        var percent = 100.0 * Math.Log10(1.0 + years) / Math.Log10(1.0 + earthAgeYears);
-        return percent.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture) + "%";
+        if (chapter.Key is "formation" or "present" || specialEventsStatus?.Events is null)
+        {
+            return null;
+        }
+
+        return Array.Find(specialEventsStatus.Events,
+            recorded => recorded.Id.EndsWith("-" + chapter.Key, StringComparison.Ordinal));
     }
+
+    private string TimelineNowPosition()
+    {
+        var latestPercent = 0;
+        foreach (var chapter in TimelineChapters)
+        {
+            if (GetRecordedEventForChapter(chapter) is not null)
+            {
+                latestPercent = Math.Max(latestPercent, chapter.PositionPercent);
+            }
+        }
+        return latestPercent.ToString(System.Globalization.CultureInfo.InvariantCulture) + "%";
+    }
+
+    private void SelectTimelineChapter(TimelineChapter chapter) => selectedTimelineChapter = chapter;
+    private void DismissTimelineChapter() => selectedTimelineChapter = null;
 
     private async Task EnterSpecialEventAsync(string eventId)
     {
