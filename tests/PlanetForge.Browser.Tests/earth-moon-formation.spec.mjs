@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { PNG } from 'pngjs';
 
 // Genuine WebGL frames from the running game, uploaded as CI visual artifacts.
 // The visual QA inspection samples named deterministic F0 states; it does not
@@ -15,6 +16,34 @@ test('F0 mobile Earth-Moon formation renders proto-Earth, Theia collision, eject
     await page.evaluate(async () => {
         (await import('/js/planetRenderer.js')).setEvolutionPlaying(false);
     });
+    // A 3.4-second slow frame must advance the cinematic by 3.4 seconds,
+    // including any leftover time when it crosses a scene boundary.
+    const clock = await page.evaluate(async () => {
+        const formation = await import('/js/evolution/earthMoonFormation.mjs');
+        const state = formation.createEarthMoonFormation(7);
+        state.stage = 'impact';
+        state.ageYears = formation.IMPACT_AGE_YEARS;
+        formation.stepEarthMoonFormation(state, 3.4, 20e6);
+        const afterSlowFrame = state.stageSeconds;
+        const afterSlowFrameLabel = formation.earthMoonFormationStatus(state).rateLabel;
+        formation.stepEarthMoonFormation(state, 9, 20e6);
+        const afterBoundary = { stage: state.stage, seconds: state.stageSeconds };
+        formation.stepEarthMoonFormation(state, 40, 20e6);
+        const finished = state.complete && state.ageYears === formation.HANDOFF_AGE_YEARS;
+        const crossing = formation.createEarthMoonFormation(8);
+        crossing.ageYears = 59e6;
+        formation.stepEarthMoonFormation(crossing, 12, 20e6);
+        return { afterSlowFrame, afterSlowFrameLabel, afterBoundary, finished,
+            accretionBoundary: { stage: crossing.stage, seconds: crossing.stageSeconds } };
+    });
+    expect(clock.afterSlowFrame).toBeCloseTo(3.4, 5);
+    expect(clock.afterSlowFrameLabel).toContain('3.4 / 9 s');
+    expect(clock.afterBoundary.stage).toBe('moon-assembly');
+    expect(clock.afterBoundary.seconds).toBeCloseTo(3.4, 5);
+    expect(clock.finished).toBe(true);
+    expect(clock.accretionBoundary.stage).toBe('moon-assembly');
+    expect(clock.accretionBoundary.seconds).toBeCloseTo(2.95, 5);
+
     const cases = [
         { name: 'proto-earth-accretion', stage: 'accretion', years: 45e6, seconds: 7, progress: 0 },
         { name: 'theia-giant-impact', stage: 'impact', years: 60e6, seconds: 3.2, progress: 3.2 },
@@ -43,7 +72,25 @@ test('F0 mobile Earth-Moon formation renders proto-Earth, Theia collision, eject
         expect(graphics.width).toBeGreaterThan(0);
         expect(graphics.height).toBeGreaterThan(0);
         expect(graphics.glError).toBe(0);
-        await page.screenshot({ path: testInfo.outputPath('f0-' + scene.name + '.png') });
+        const screenshot = await page.screenshot({ path: testInfo.outputPath('f0-' + scene.name + '.png') });
+        if (scene.stage === 'impact' || scene.stage === 'moon-assembly') {
+            // Frame-composition assertion, not merely a WebGL compile smoke test:
+            // the hot proto-Earth must occupy the centre of the phone viewport.
+            // Previously the full-screen triangle halved vUv, moving Earth
+            // entirely into the upper-right corner while screenshots still passed.
+            const { width, height, data } = PNG.sync.read(screenshot);
+            const reds = [];
+            for (const dx of [-5, 0, 5]) {
+                for (const dy of [-5, 0, 5]) {
+                    const x = Math.floor(width / 2) + dx;
+                    const y = Math.floor(height / 2) + dy;
+                    reds.push(data[(y * width + x) * 4]);
+                }
+            }
+            const meanRed = reds.reduce((sum, value) => sum + value, 0) / reds.length;
+            expect(meanRed, scene.name + ' must show incandescent Earth in frame centre')
+                .toBeGreaterThan(55);
+        }
     }
     // Inspect the true first post-impact thermal renderer, too. The formation
     // cinematic has its own shader, so without this check a handoff shader

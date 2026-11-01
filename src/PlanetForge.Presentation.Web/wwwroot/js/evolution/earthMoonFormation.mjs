@@ -26,52 +26,72 @@ export function stepEarthMoonFormation(formation, elapsedSeconds, maximumYearsPe
     if (!Number.isFinite(elapsedSeconds) || elapsedSeconds < 0) throw new RangeError('Invalid formation elapsed time.');
     if (!Number.isFinite(maximumYearsPerSecond) || maximumYearsPerSecond <= 0)
         throw new RangeError('Invalid formation time rate.');
-    const dt = Math.min(elapsedSeconds, 1);
-    if (dt === 0) return false;
-    formation.visualSeconds += dt;
-    switch (formation.stage) {
-        case 'accretion': {
-            // Respect the visible 1×/5×/.../50× speed exactly. Fast
-            // playback may skip ambient collisions, never the giant-impact scene.
-            const yearsPerSecond = maximumYearsPerSecond;
-            formation.playbackYearsPerSecond = yearsPerSecond;
-            formation.ageYears = Math.min(IMPACT_AGE_YEARS, formation.ageYears + dt * yearsPerSecond);
-            if (formation.ageYears >= IMPACT_AGE_YEARS) {
-                formation.stage = 'impact';
-                formation.stageSeconds = 0;
-                formation.impactJustBegun = true;
+    // On low-FPS phones a single WebGL frame can take longer than a second.
+    // Preserve actual foreground elapsed time; the previous 1-second cap made
+    // a 9-second impact cinematic take minutes on overloaded GPUs.
+    let remaining = Math.min(elapsedSeconds, 120);
+    if (remaining === 0) return false;
+    formation.visualSeconds += remaining;
+    // Consume leftover time at each scene boundary so a stalled frame does
+    // not stretch or repeat a cinematic. At most four distinct stages exist.
+    for (let transitions = 0; transitions < 4 && remaining > 0 && !formation.complete; transitions++) {
+        switch (formation.stage) {
+            case 'accretion': {
+                const untilImpact = Math.max(0, (IMPACT_AGE_YEARS - formation.ageYears) / maximumYearsPerSecond);
+                const spent = Math.min(remaining, untilImpact);
+                formation.playbackYearsPerSecond = maximumYearsPerSecond;
+                formation.ageYears = Math.min(IMPACT_AGE_YEARS, formation.ageYears + spent * maximumYearsPerSecond);
+                remaining -= spent;
+                if (formation.ageYears >= IMPACT_AGE_YEARS - 1e-6) {
+                    formation.stage = 'impact';
+                    formation.stageSeconds = 0;
+                    formation.impactJustBegun = true;
+                } else {
+                    remaining = 0;
+                }
+                break;
             }
-            break;
+            case 'impact': {
+                const spent = Math.min(remaining, Math.max(0, IMPACT_SCENE_SECONDS - formation.stageSeconds));
+                formation.playbackYearsPerSecond = 0;
+                formation.stageSeconds += spent;
+                remaining -= spent;
+                if (formation.stageSeconds >= IMPACT_SCENE_SECONDS) {
+                    formation.stage = 'moon-assembly';
+                    formation.stageSeconds = 0;
+                } else {
+                    remaining = 0;
+                }
+                break;
+            }
+            case 'moon-assembly': {
+                const spent = Math.min(remaining, Math.max(0, MOON_SCENE_SECONDS - formation.stageSeconds));
+                formation.stageSeconds += spent;
+                remaining -= spent;
+                formation.ageYears = IMPACT_AGE_YEARS + (HANDOFF_AGE_YEARS - IMPACT_AGE_YEARS)
+                    * smooth(formation.stageSeconds / MOON_SCENE_SECONDS);
+                formation.playbackYearsPerSecond = (HANDOFF_AGE_YEARS - IMPACT_AGE_YEARS)
+                    / MOON_SCENE_SECONDS;
+                if (formation.stageSeconds >= MOON_SCENE_SECONDS) {
+                    formation.stage = 'aftermath';
+                    formation.stageSeconds = 0;
+                } else {
+                    remaining = 0;
+                }
+                break;
+            }
+            case 'aftermath': {
+                const spent = Math.min(remaining, Math.max(0, AFTERMATH_SECONDS - formation.stageSeconds));
+                formation.playbackYearsPerSecond = 0;
+                formation.ageYears = HANDOFF_AGE_YEARS;
+                formation.stageSeconds += spent;
+                remaining -= spent;
+                if (formation.stageSeconds >= AFTERMATH_SECONDS) formation.complete = true;
+                break;
+            }
+            default:
+                throw new Error('Unknown Earth-Moon formation stage.');
         }
-        case 'impact':
-            // Dedicated cinematic seconds; no billions of geological years
-            // pass during the collision close-up.
-            formation.playbackYearsPerSecond = 0;
-            formation.stageSeconds = Math.min(IMPACT_SCENE_SECONDS, formation.stageSeconds + dt);
-            if (formation.stageSeconds >= IMPACT_SCENE_SECONDS) {
-                formation.stage = 'moon-assembly';
-                formation.stageSeconds = 0;
-            }
-            break;
-        case 'moon-assembly':
-            formation.stageSeconds = Math.min(MOON_SCENE_SECONDS, formation.stageSeconds + dt);
-            formation.ageYears = IMPACT_AGE_YEARS + (HANDOFF_AGE_YEARS - IMPACT_AGE_YEARS)
-                * smooth(formation.stageSeconds / MOON_SCENE_SECONDS);
-            formation.playbackYearsPerSecond = (HANDOFF_AGE_YEARS - IMPACT_AGE_YEARS)
-                / MOON_SCENE_SECONDS;
-            if (formation.stageSeconds >= MOON_SCENE_SECONDS) {
-                formation.stage = 'aftermath';
-                formation.stageSeconds = 0;
-            }
-            break;
-        case 'aftermath':
-            formation.playbackYearsPerSecond = 0;
-            formation.ageYears = HANDOFF_AGE_YEARS;
-            formation.stageSeconds = Math.min(AFTERMATH_SECONDS, formation.stageSeconds + dt);
-            if (formation.stageSeconds >= AFTERMATH_SECONDS) formation.complete = true;
-            break;
-        default:
-            throw new Error('Unknown Earth-Moon formation stage.');
     }
     return true;
 }
@@ -87,13 +107,21 @@ export function earthMoonFormationStatus(formation) {
         : formation.stage === 'impact' ? formation.stageSeconds / IMPACT_SCENE_SECONDS
             : formation.stage === 'moon-assembly' ? formation.stageSeconds / MOON_SCENE_SECONDS
                 : formation.stageSeconds / AFTERMATH_SECONDS;
+    const localSceneDuration = {
+        impact: IMPACT_SCENE_SECONDS,
+        'moon-assembly': MOON_SCENE_SECONDS,
+        aftermath: AFTERMATH_SECONDS,
+    }[formation.stage];
+    const rateLabel = formation.stage === 'accretion'
+        ? (formation.playbackYearsPerSecond / 1e6).toFixed(1) + ' Myr / s'
+        : 'scene ' + formation.stageSeconds.toFixed(1) + ' / ' + localSceneDuration + ' s';
     return {
         phase, progress: clamp(progress), ageYears: formation.ageYears,
         timeSeconds: formation.ageYears * SECONDS_PER_YEAR,
         stage: formation.stage,
-        // The time ratio is explicitly 0 during the short-lived collision.
-        rateLabel: formation.stage !== 'accretion' ? 'local impact-time close-up'
-            : (formation.playbackYearsPerSecond / 1e6).toFixed(1) + ' Myr / s',
+        // The planetary clock pauses during the local collision; show visible
+        // real-time scene progress so T+60 Myr cannot look permanently stalled.
+        rateLabel,
         authority: 'reconstruction',
         source: 'NASA Moon Formation; National Academies 2023 Earth-Moon formation',
         limitations: 'Illustrative impact scenario; not a hydrodynamic/N-body solution. The 60 Myr event age, debris, and Moon assembly path are uncertain.',
@@ -124,7 +152,9 @@ precision highp float;
 out vec2 vUv;
 void main() {
     vec2 p = vec2((gl_VertexID << 1) & 2, gl_VertexID & 2);
-    vUv = p * 0.5;
+    // p spans 0..2 on the oversized full-screen triangle; the viewport
+    // samples 0..1. Halving p projected the planet into the upper-right corner.
+    vUv = p;
     gl_Position = vec4(p * 2.0 - 1.0, 0.0, 1.0);
 }`;
 
