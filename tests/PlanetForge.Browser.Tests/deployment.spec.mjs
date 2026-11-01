@@ -164,7 +164,9 @@ test('DeployedFormation_UsesCurrentMainPageAndAdvancesItsEvolutionClock', async 
   // Live release autoplay can leave the magma era during slow WebGL startup.
   // Pause/restart through the UI to verify the *initial* planet deterministically.
   await expect(page.getByTestId('special-event-rail')).toBeVisible();
-  await expect(page.getByTestId('timeline-present-node')).toBeVisible();
+  await expect(page.getByTestId('timeline-present-node')).toHaveCount(1);
+  await expect(page.getByTestId('timeline-overview-node')).toHaveCount(10);
+  await expect(page.getByTestId('timeline-overview')).toBeVisible();
   await expect(page.getByTestId('formation-speed')).toHaveText(/^(1|5|10|20|50)×$/);
   await expect(play).toHaveAttribute('aria-pressed', 'true');
   await play.click();
