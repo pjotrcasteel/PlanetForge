@@ -177,6 +177,7 @@
 
         @if (continuousSimulation)
         {
+            var timelineLens = CurrentTimelineLens();
             <div class="formation-controls" aria-label="Simulation controls">
                 <button type="button" class="formation-control-play" data-testid="formation-play"
                         disabled="@(!formationRendererReady || specialEventsStatus?.Focus is not null)"
@@ -239,7 +240,6 @@
                     </div>
                 </div>
             }
-            @{ var timelineLens = CurrentTimelineLens(); }
             <section class="formation-event-timeline @(specialEventsStatus?.Focus is not null ? "is-inspecting" : "")"
                      aria-label="Moving, linearly scaled geological timeline" data-testid="special-events-timeline">
                 <div class="formation-event-header">
