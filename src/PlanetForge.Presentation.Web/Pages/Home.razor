@@ -177,6 +177,7 @@
 
         @if (continuousSimulation)
         {
+            var timelineLens = CurrentTimelineLens();
             <div class="formation-controls" aria-label="Simulation controls">
                 <button type="button" class="formation-control-play" data-testid="formation-play"
                         disabled="@(!formationRendererReady || specialEventsStatus?.Focus is not null)"
@@ -240,9 +241,9 @@
                 </div>
             }
             <section class="formation-event-timeline @(specialEventsStatus?.Focus is not null ? "is-inspecting" : "")"
-                     aria-label="Ordered planetary milestone journey" data-testid="special-events-timeline">
+                     aria-label="Moving, linearly scaled geological timeline" data-testid="special-events-timeline">
                 <div class="formation-event-header">
-                    <span class="formation-event-context">MILESTONES <small>· NOT TO SCALE</small></span>
+                    <span class="formation-event-context">MILESTONES <small>· LINEAR TIME</small></span>
                     <div class="formation-event-epoch-readout">
                         <span class="formation-event-eon">@TimelineEon(evolution?.TimeSeconds ?? 0)</span>
                         <strong data-testid="special-event-epoch">@FormatEventEpoch(evolution?.TimeSeconds ?? 0)</strong>
@@ -262,58 +263,93 @@
                         </details>
                     </div>
                 }
-                <div class="formation-time-track" role="group"
-                     aria-label="Ordered milestones, spaced for visibility rather than proportional geological time"
-                     data-testid="special-event-rail">
-                    <div class="formation-time-progress" style="@($"width: {TimelineNowPosition()};")"></div>
-                    <span class="formation-time-playhead" style="@($"left: {TimelineNowPosition()};")"
-                          aria-label="@($"Current milestone progress: {FormatEventEpoch(evolution?.TimeSeconds ?? 0)}")"></span>
+                <div class="formation-time-overview" role="img"
+                     aria-label="Full Earth history, 4.567 billion years, with historical milestones to scale"
+                     data-testid="timeline-overview">
+                    <span class="formation-time-overview-window"
+                          style="@($"left: {GlobalTimelinePosition(timelineLens.StartYears)}; width: {GlobalTimelinePosition(timelineLens.SpanYears)};")"></span>
                     @foreach (var chapter in TimelineChapters)
                     {
-                        @if (GetRecordedEventForChapter(chapter) is { } item)
-                        {
-                            <button type="button" @key="item.Id"
-                                    class="formation-time-dot @(specialEventsStatus?.Focus?.Id == item.Id ? "is-focused" : item.Inspectable ? "is-live" : "is-past")"
-                                    data-testid="special-event-enter"
-                                    style="@($"left: {chapter.PositionPercent}%;")"
-                                    disabled="@(!item.Inspectable || specialEventsStatus?.Focus is not null)"
-                                    title="@($"{item.Title} · {FormatEventEpoch(item.PlanetSeconds)} · {EventAuthorityLabel(item.Authority)}")"
-                                    aria-label="@($"{item.Title}, {FormatEventEpoch(item.PlanetSeconds)}, {EventAuthorityLabel(item.Authority)}. {(item.Inspectable ? "Inspect live transition" : "Past model state not replayable")}")"
-                                    @onclick="() => EnterSpecialEventAsync(item.Id)"></button>
-                        }
-                        else if (chapter.Key == "formation")
-                        {
-                            <span @key="chapter.Key" class="formation-time-origin" role="img"
-                                  data-testid="timeline-origin-node"
-                                  style="@($"left: {chapter.PositionPercent}%;")"
-                                  title="Earth forms · starting point"
-                                  aria-label="Earth forms, starting point"></span>
-                        }
-                        else if (chapter.IsPresent)
-                        {
-                            <span @key="chapter.Key" class="formation-time-present" role="img"
-                                  data-testid="timeline-present-node"
-                                  style="@($"left: {chapter.PositionPercent}%;")"
-                                  title="Present day · journey destination"
-                                  aria-label="Present day, journey destination"></span>
-                        }
-                        else
-                        {
-                            <button type="button" @key="chapter.Key"
-                                    class="formation-time-planned @(chapter.IsModeled ? "is-modeled" : "is-future") @(selectedTimelineChapter?.Key == chapter.Key ? "is-selected" : "")"
-                                    data-testid="timeline-planned-node"
-                                    style="@($"left: {chapter.PositionPercent}%;")"
-                                    aria-label="@($"{chapter.Title}. {(chapter.IsModeled ? "Upcoming model transition" : "Future planned milestone, not implemented")}. Show information.")"
-                                    title="@($"{chapter.Title} · {(chapter.IsModeled ? "Upcoming model event" : "Planned, not implemented")}")"
-                                    @onclick="() => SelectTimelineChapter(chapter)"></button>
-                        }
+                        <span @key="chapter.Key" class="formation-overview-dot @(chapter.IsPresent ? "is-present" : "")"
+                              data-testid="timeline-overview-node" data-chapter="@chapter.Key" data-years="@chapter.ElapsedYears"
+                              style="@($"left: {GlobalTimelinePosition(chapter.ElapsedYears)};")"
+                              title="@($"{chapter.Title} · {AgeOfChapter(chapter)}")" aria-hidden="true"></span>
                     }
+                    <span class="formation-time-overview-now"
+                          style="@($"left: {GlobalTimelinePosition(timelineLens.NowYears)};")" aria-hidden="true"></span>
+                </div>
+                <div class="formation-time-window">
+                    <div class="formation-time-track" role="group"
+                         aria-label="Geological years to scale inside the moving time window"
+                         data-testid="special-event-rail"
+                         data-window-start-years="@timelineLens.StartYears"
+                         data-window-span-years="@timelineLens.SpanYears"
+                         data-window-now-years="@timelineLens.NowYears">
+                        <div class="formation-time-progress" style="@($"width: {timelineLens.CssPosition(timelineLens.NowYears)};")"></div>
+                        <span class="formation-time-playhead" style="@($"left: {timelineLens.CssPosition(timelineLens.NowYears)};")"
+                              aria-label="@($"Current model time: {FormatEventEpoch(evolution?.TimeSeconds ?? 0)}")"></span>
+                        @if (specialEventsStatus?.Events is { Length: > 0 } recordedTimelineEvents)
+                        {
+                            @foreach (var item in recordedTimelineEvents)
+                            {
+                                @if (timelineLens.Contains(item.PlanetSeconds / TimelineSecondsPerYear))
+                                {
+                                    <button type="button" @key="item.Id"
+                                            class="formation-time-dot @(specialEventsStatus?.Focus?.Id == item.Id ? "is-focused" : item.Inspectable ? "is-live" : "is-past")"
+                                            data-testid="special-event-enter" data-event-time-years="@(item.PlanetSeconds / TimelineSecondsPerYear)"
+                                            style="@($"left: {timelineLens.CssPosition(item.PlanetSeconds / TimelineSecondsPerYear)};")"
+                                            disabled="@(!item.Inspectable || specialEventsStatus?.Focus is not null)"
+                                            title="@($"{item.Title} · {FormatEventEpoch(item.PlanetSeconds)} · {EventAuthorityLabel(item.Authority)}")"
+                                            aria-label="@($"{item.Title}, {FormatEventEpoch(item.PlanetSeconds)}, {EventAuthorityLabel(item.Authority)}. {(item.Inspectable ? "Inspect live transition" : "Past model state not replayable")}")"
+                                            @onclick="() => EnterSpecialEventAsync(item.Id)"></button>
+                                }
+                            }
+                        }
+                        @foreach (var chapter in TimelineChapters)
+                        {
+                            @if (chapter.Key == "formation")
+                            {
+                                <span @key="chapter.Key" class="formation-time-origin" role="img"
+                                      data-testid="timeline-origin-node" data-chapter="@chapter.Key"
+                                      style="@($"left: {timelineLens.CssPosition(chapter.ElapsedYears)};")"
+                                      aria-hidden="@(!timelineLens.Contains(chapter.ElapsedYears))"
+                                      title="Earth forms · starting point"
+                                      aria-label="Earth forms, starting point"></span>
+                            }
+                            else if (chapter.IsPresent)
+                            {
+                                <span @key="chapter.Key" class="formation-time-present" role="img"
+                                      data-testid="timeline-present-node" data-chapter="@chapter.Key"
+                                      style="@($"left: {timelineLens.CssPosition(chapter.ElapsedYears)};")"
+                                      aria-hidden="@(!timelineLens.Contains(chapter.ElapsedYears))"
+                                      title="Present day · journey destination"
+                                      aria-label="Present day, journey destination"></span>
+                            }
+                            else
+                            {
+                                <button type="button" @key="chapter.Key"
+                                        class="formation-time-planned @(chapter.ElapsedYears < timelineLens.NowYears ? "is-past-reference" : "") @(selectedTimelineChapter?.Key == chapter.Key ? "is-selected" : "")"
+                                        data-testid="timeline-planned-node" data-chapter="@chapter.Key" data-years="@chapter.ElapsedYears"
+                                        style="@($"left: {timelineLens.CssPosition(chapter.ElapsedYears)};")"
+                                        tabindex="@(timelineLens.Contains(chapter.ElapsedYears) ? 0 : -1)"
+                                        aria-hidden="@(!timelineLens.Contains(chapter.ElapsedYears))"
+                                        aria-label="@($"{chapter.Title}, approximately {AgeOfChapter(chapter)}. Historical reference; not simulated. Show information.")"
+                                        title="@($"{chapter.Title} · {AgeOfChapter(chapter)} · historical reference")"
+                                        @onclick="() => SelectTimelineChapter(chapter)"></button>
+                            }
+                        }
+                    </div>
+                </div>
+                <div class="formation-time-ruler" data-testid="timeline-window-labels">
+                    <span>@FormatTimelineYears(timelineLens.StartYears)</span>
+                    <span class="formation-time-ruler-window">@FormatTimelineYears(timelineLens.SpanYears) VIEW</span>
+                    <span>@FormatTimelineYears(timelineLens.EndYears)</span>
                 </div>
                 @if (selectedTimelineChapter is { } selectedChapter && specialEventsStatus?.Focus is null)
                 {
                     <div class="formation-chapter-preview" data-testid="timeline-planned-preview" role="status">
-                        <strong>@selectedChapter.Title</strong>
-                        <span>@(selectedChapter.IsModeled ? "UPCOMING · MODEL TRIGGER" : "PLANNED · NO SIMULATION YET")</span>
+                        <strong>@selectedChapter.Title · @AgeOfChapter(selectedChapter)</strong>
+                        <span>@selectedChapter.EvidenceNote · HISTORICAL REFERENCE, NOT SIMULATED</span>
                         <button type="button" aria-label="Close milestone information" @onclick="DismissTimelineChapter">×</button>
                     </div>
                 }

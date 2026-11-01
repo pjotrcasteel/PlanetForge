@@ -1,6 +1,6 @@
 # E7 / Life-M0 — curated geological turning points and future life zooms
 
-**Workstream:** PF-EARTH-20261013-A. **Status:** E7 model-triggered turning points and 1× S0 camera handoff shipped in 0.0.51.0; E7-A timeline shipped in 0.0.53.0 (device review pending); E7-B first-slice catalogue and opt-in event log in 0.0.54.0; E7-A compact controls and milestone-order rail in 0.0.55.0 (real-device sign-off pending). Follow delivery order and acceptance gates in [the journey milestone plan](earth-journey-milestone-plan.md).
+**Workstream:** PF-EARTH-20261013-A. **Status:** E7 model-triggered turning points and 1× S0 camera handoff shipped in 0.0.51.0; E7-A timeline shipped in 0.0.53.0 (device review pending); E7-B first-slice catalogue and opt-in event log in 0.0.54.0; E7-A right-edge control dock and physically scaled moving time lens in 0.0.56.0 (real-device sign-off pending). Follow delivery order and acceptance gates in [the journey milestone plan](earth-journey-milestone-plan.md).
 
 ## Accepted interaction
 
@@ -10,14 +10,24 @@ illustrative, viewer-biased display hypothesis, not a measured bombardment recor
 Those ordinary impact flashes continue as **ambient planet activity**: no marker,
 no automatic camera hijack, no false “historic meteor event.”
 
-The compact horizontal rail is a **milestone sequence, explicitly NOT TO SCALE**.
-Ten pre-placed chapter dots preserve narrative order but are deliberately spaced
-for touch visibility; future chapters stay hollow and labelled planned. Golden
-markers replace a chapter dot only when a model transition was actually witnessed.
-The final Present-day dot is visually distinct. A cyan marker indicates the last
-reached chapter; the independently shown geological age and recorded-event log
-retain their actual model times. This is no longer represented as a quantitative
-logarithmic time axis; E7-C will provide such a time lens with real replay state.
+The compact horizontal UI has **two coupled, quantitatively linear time scales**.
+The slim overview puts ten evidence-based reference anchors at their actual approximate
+elapsed ages over Earth's 4.567-Gyr history. The larger rail is a continuously moving
+**linear magnifying window** from 25 kyr to 1.5 Gyr wide. Equal distances on each
+rail mean equal elapsed time on that rail; the camera's visible start/end years
+and scale are labeled. The *now* marker follows actual model time and the contents
+flow past it. The overview highlights the current visible section, including
+while the entire history cannot fit inside one mobile magnification.
+
+Ancient formation, the Moon, crust, oceans, life, oxygenation, complex cells,
+animals, land animals and Present day are **rough historical age estimates**,
+not observed events in S0. The cyan Present-day reference is distinctive. Only
+physically witnessed S0 transition markers are gold; each is placed by the
+actual model `planetSeconds`, including when it does not match an archaeological
+or geological evidence-based anchor. Historical estimates never auto-zoom,
+start a simulation or claim replay support. The independently sampled model
+events retain their exact detection intervals and authority labels.
+
 Key moments remain material changes, never arbitrary timed cutscenes.
 
 | Class | Trigger | Auto zoom? | Scientific claim |
@@ -49,12 +59,12 @@ Older dots are archival until physical snapshot/replay support exists. Restartin
 the seeded planet resets the milestone history. The key-moment list is bounded
 to 64 markers; ordinary impacts do not consume slots.
 
-## 0.0.55.0 mobile-control acceptance
+## 0.0.56.0 proportional-time and mobile-control acceptance
 
 - Phase chip has no oversized PlanetForge heading and keeps numerical time/rate and diagnostics accessible.
-- Four buttons: Play/Pause, speed cycle 1×→5×→10×→20×→50×→1× (1× = model cap of 1 Myr/s), cloud toggle with on/off icon, and Restart with a two-action confirmation overlay.
+- Four buttons in a slim **right-side vertical dock**: Play/Pause, speed cycle 1×→5×→10×→20×→50×→1× (1× = model cap of 1 Myr/s), cloud toggle with on/off icon, and Restart with a two-action confirmation overlay. The bottom control strip is gone.
 - No pre-placed candidate dot may start a camera inspection or alter model time. Only observed model milestones get that privilege.
-- Browser regression at a 390px viewport asserts controls stay visible, a compact phase HUD/timeline, pre-placed chapters, and planned-node preview. Real Safari iPhone review remains an explicit open gate.
+- Browser regression at a 390px viewport asserts controls stack on the right without overlapping the rail, the 10 overview anchors have mathematically proportional positions, the lens follows model-time samples, and previews do not seek into unwitnessed states. Real Safari iPhone review remains an explicit open gate.
 
 ## Acceptance gates
 
