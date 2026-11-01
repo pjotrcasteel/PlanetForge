@@ -92,7 +92,7 @@ export const EARTH_EVENT_CATALOG = Object.freeze([
         priority: 2,
         source: 'Model-state threshold · S0 plate regime',
         uncertainty: 'Model integration-step interval only. The onset of modern-style Earth plate tectonics remains debated.',
-        limitations: 'Simplified S0 thermal regime transition. The real onset of modern-style plate tectonics is debated; this does not identify a local plate boundary.'
+        limitations: 'S0 starts several synthetic plates together. The highlighted boundary belongs to this simulation, not a historically located first plate; the real onset of modern-style tectonics remains debated.'
     })
 ]);
 
@@ -141,6 +141,56 @@ export function captureEarthMilestoneEvents(history, before, after, planetSecond
         }
     }
     return next;
+}
+
+// At the global mobile-lid transition S0 partitions its actual GPU surface
+// into plates. Select a boundary on the first seeded plate using the ownership
+// map read back by physics during consolidation; never invent a geographic
+// target or use the incidental camera direction. Nearby thick crust biases the
+// camera toward more legible terrain, but an oceanic boundary is still valid.
+export function selectFirstPlateFocus({ width, height, data } = {}) {
+    if (!Number.isInteger(width) || width < 16 || !Number.isInteger(height) ||
+        height < 16 || !data || data.length !== width * height * 4)
+        return null;
+    const step = Math.max(1, Math.floor(width / 256));
+    let best = null;
+    for (let y = step; y < height - step; y += step) {
+        const latitude = (y + 0.5) / height - 0.5;
+        // Avoid the poles: a nearly tangential camera hides the boundary.
+        if (Math.abs(latitude) > 0.43) continue;
+        for (let x = 0; x < width; x += step) {
+            const i = y * width + x;
+            if (Math.round(data[i * 4]) !== 0) continue;
+            const neighbours = [
+                y * width + (x + step) % width,
+                y * width + (x + width - step) % width,
+                Math.min(height - 1, y + step) * width + x,
+                Math.max(0, y - step) * width + x
+            ];
+            for (const n of neighbours) {
+                const adjacentPlateId = Math.round(data[n * 4]);
+                if (adjacentPlateId < 1) continue;
+                const crustKm = Math.max(0, Number(data[i * 4 + 2]) || 0,
+                    Number(data[n * 4 + 2]) || 0);
+                const score = Math.min(crustKm, 30) * 0.09
+                    + (1 - Math.abs(latitude) * 2) * 1.1;
+                if (best && score <= best.score) continue;
+                const longitude = ((x + 0.5) / width - 0.5) * 2 * Math.PI;
+                const lat = latitude * Math.PI;
+                best = {
+                    direction: [Math.cos(lat) * Math.cos(longitude),
+                        Math.sin(lat), Math.cos(lat) * Math.sin(longitude)],
+                    plateId: 0, adjacentPlateId, gridX: x, gridY: y, score
+                };
+            }
+        }
+    }
+    return best && {
+        direction: best.direction, plateId: best.plateId,
+        adjacentPlateId: best.adjacentPlateId,
+        gridX: best.gridX, gridY: best.gridY,
+        basis: 'S0 GPU plate-ownership boundary at regime onset'
+    };
 }
 
 export function orbitForEvent(direction, distance = 1.125) {
