@@ -20,7 +20,7 @@ The player begins with **accretion of proto-Earth**, not a fully formed plate-co
 
 **Timing is scenario-based.** A +60 Myr event within a broad `50–150 Myr` plausible range is **not** a measured exact date. The Moon may have emerged from a post-impact disk or by a much faster dynamical pathway; current implementation does not choose between those as a scientific conclusion. NASA Moon Formation and National Academies (2023) Q3.3 are the review references. A scenario-local year is shown during Moon assembly. The precise duration and physical route remain uncertain; the handoff just after +60 Myr is a **model-coupling choice**, not an established formation date.
 
-The post-impact magma ocean reuses the existing thermal and raft model. Coherent glowing raft seams should **not** appear as established tectonic plates in the first hot frames: this remains a material/shader fidelity gate. Any F0 improvement must keep the mobile four-control dock and linear moving geological timeline untouched, and retain Earth model observation/reconstruction provenance.
+The post-impact magma ocean reuses the existing thermal and raft model. An **8-second visual-only blend** now opens with continuous turbulent silicate melt before the inherited cooling-raft texture fades in, so coherent seams do not masquerade as mature tectonic plates in the first hot frames. This blend is **not** a modeled geological cooling interval; on-device material/shader fidelity is still an acceptance gate. All F0 work must preserve the four-control mobile dock, proportional timeline, and model/reconstruction provenance.
 
 ## What exists today
 
