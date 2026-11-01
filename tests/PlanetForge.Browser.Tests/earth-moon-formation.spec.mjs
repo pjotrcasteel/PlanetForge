@@ -45,6 +45,29 @@ test('F0 mobile Earth-Moon formation renders proto-Earth, Theia collision, eject
         expect(graphics.glError).toBe(0);
         await page.screenshot({ path: testInfo.outputPath('f0-' + scene.name + '.png') });
     }
+    // Inspect the true first post-impact thermal renderer, too. The formation
+    // cinematic has its own shader, so without this check a handoff shader
+    // regression could hide until the scene finishes on a player's phone.
+    const handoff = await page.evaluate(async () => {
+        const renderer = await import('/js/planetRenderer.js');
+        const model = renderer.getEvolutionDebug();
+        model.formation.complete = true;
+        model.thermal.timeSeconds = (60e6 + 1) * 365.25 * 24 * 3600;
+        model.postImpactStartSeconds = model.thermal.timeSeconds;
+        model.postImpactWallTime = model.wallTime;
+        renderer.setEvolutionClouds(model.showClouds);
+        return { freshness: model.postImpactWallTime === model.wallTime, completed: model.formation.complete };
+    });
+    expect(handoff).toEqual({ freshness: true, completed: true });
+    await page.waitForTimeout(1_200);
+    const handoffGraphics = await page.evaluate(() => {
+        const canvas = document.getElementById('planet-canvas');
+        return { glError: canvas.getContext('webgl2').getError(), width: canvas.width };
+    });
+    expect(handoffGraphics.glError).toBe(0);
+    expect(handoffGraphics.width).toBeGreaterThan(0);
+    await page.screenshot({ path: testInfo.outputPath('f0-newborn-molten-handoff.png') });
+
     await expect(page.getByTestId('formation-hud')).toBeVisible();
     await expect(page.getByTestId('special-events-timeline')).toBeVisible();
     const hud = await page.getByTestId('formation-hud').boundingBox();
