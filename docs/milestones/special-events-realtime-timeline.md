@@ -1,6 +1,6 @@
 # E7 / Life-M0 — curated geological turning points and future life zooms
 
-**Workstream:** PF-EARTH-20261013-A. **Status:** E7 model-triggered turning points and 1× S0 camera handoff shipped in 0.0.51.0; E7-A timeline shipped in 0.0.53.0 (device review pending); E7-B first-slice catalogue and opt-in event log in 0.0.54.0; E7-A right-edge control dock and physically scaled moving time lens in 0.0.56.0 (real-device sign-off pending). Follow delivery order and acceptance gates in [the journey milestone plan](earth-journey-milestone-plan.md).
+**Workstream:** PF-EARTH-20261013-A. **Status:** E7 model-triggered turning points and 1× S0 camera handoff shipped in 0.0.51.0; E7-A timeline shipped in 0.0.53.0 (device review pending); E7-B first-slice catalogue and opt-in event log in 0.0.54.0; E7-A right-edge control dock and physically scaled moving time lens in 0.0.56.0 (real-device sign-off pending); plate-boundary-targeted inspection in 0.0.57.0. Follow delivery order and acceptance gates in [the journey milestone plan](earth-journey-milestone-plan.md).
 
 ## Accepted interaction
 
@@ -33,7 +33,7 @@ Key moments remain material changes, never arbitrary timed cutscenes.
 | Class | Trigger | Auto zoom? | Scientific claim |
 | --- | --- | --- | --- |
 | Ambient (ordinary impacts, eruptions) | Existing visual emitter | No | Display hypothesis only |
-| Planetary turning point (first slice) | Actual S0 rocky-lid formation, 50% ocean-inventory rain-out, simplified plate-regime onset | Yes, planetary orbital close-up | Exact **model** threshold, not a historically observed location |
+| Planetary turning point (first slice) | Actual S0 rocky-lid formation, 50% ocean-inventory rain-out, simplified plate-regime onset | Yes, global close-up; plate onset also shows a targeted model-boundary interpretation overlay | Exact **model** threshold, not a historically observed location |
 | Exceptional geological occurrence (future) | Documented Moon-forming/Chicxulub-scale event plus appropriate forcing/location | Only with state/reconstruction handoff | Label inference, reconstruction, and date uncertainty |
 | Origin-of-life experiment (future) | M2–M6 local environment and kinetic thresholds | Only once the real S1–S4 solver exists | A **hypothesis-dependent outcome**, never Earth's proven one-time historical origin |
 | Evolutionary landmark (future) | Biosphere model or sourced historical constraint with geographic context | Only with corresponding habitat/organism simulation | Distinguish reconstruction, fossil evidence, and model hypothesis |
@@ -49,7 +49,15 @@ Key moments remain material changes, never arbitrary timed cutscenes.
 The camera eases from the existing orbit toward a closer view of the **same**
 GPU planet for 14 visible local seconds (1.2 s approach, 2 s retreat). An event
 without a local spatial coordinate gets a **planet-wide** close-up—not a fabricated
-specific ocean, rock formation, vent or tectonic boundary. Parent geological
+specific ocean, rock formation or vent. At plate-onset the model *does* have
+spatial evidence: its GPU ownership grid partitions the surface into 9–12
+simultaneously seeded plates. The camera picks a genuine boundary of plate 0
+using the very same GPU readback already used for geological consolidation,
+preferring any thicker nearby crust. It displays a temporary, clearly
+interpretive gold outline of that synthetic plate, muted cyan outlines of its
+neighbours and a subtle target halo, even where seawater hides rock. This is
+**not** a claim to have located the first real Earth plate, a visible ocean
+ridge, or the historical origin of plate tectonics. Parent geological
 time is frozen; the independent inspection clock runs 1× only while visible.
 On exit, the original camera, geological playback and ambient-impact countdown
 resume. Past states cannot be replayed without a stored physical checkpoint.
@@ -65,6 +73,18 @@ to 64 markers; ordinary impacts do not consume slots.
 - Four buttons in a slim **right-side vertical dock**: Play/Pause, speed cycle 1×→5×→10×→20×→50×→1× (1× = model cap of 1 Myr/s), cloud toggle with on/off icon, and Restart with a two-action confirmation overlay. The bottom control strip is gone.
 - No pre-placed candidate dot may start a camera inspection or alter model time. Only observed model milestones get that privilege.
 - Browser regression at a 390px viewport asserts controls stack on the right without overlapping the rail, the 10 overview anchors have mathematically proportional positions, the lens follows model-time samples, and previews do not seek into unwitnessed states. Real Safari iPhone review remains an explicit open gate.
+
+## 0.0.57.0 plate-onset focus acceptance
+
+- At the actual S0 plates transition, derive a local boundary from the settled
+  plate-owner texture. If no boundary exists, keep a global close-up rather than
+  inventing coordinates. Only the plate event gets local camera steering.
+- The S0 model's first seeded plate and its neighbouring boundary are outlined
+  for the 14-second inspection. Underwater lines are explanatory graphics, not
+  literal observed surface relief. The historical origin remains unknown.
+- Unit tests prove determinism, valid direction, actual adjacent plate IDs and
+  the single-lid fallback. Browser tests sample the GPU owner map at onset,
+  verify the focus, and capture a screenshot.
 
 ## Acceptance gates
 

@@ -134,6 +134,40 @@ test('Evolution_CoolsThroughLidIntoPlateTectonics_PausesAndRestarts', async ({ p
   await page.waitForTimeout(5_000);
   const status = await evolutionStatus(page);
   expect(status.plates).toBeGreaterThanOrEqual(3);
+  // The onset inspection must land on the simulation's first plate boundary.
+  // Verify against the *real* GPU ownership field, not a hard-coded position.
+  const plateFeature = await page.evaluate(async () => {
+    const renderer = await import('/js/planetRenderer.js');
+    const evolution = await import('/js/evolution/planetEvolution.js');
+    const model = renderer.getEvolutionDebug();
+    const feature = model.firstPlateFocus;
+    const event = renderer.getSpecialEventStatus().events.find(e => e.id.endsWith('-plate-onset'));
+    if (!feature || !event) return null;
+    const field = event.inspectable ? evolution.readEvolutionField(model, 'state0', true) : null;
+    const at = (x, y) => Math.round(field.data[(y * field.width + (x + field.width) % field.width) * 4]);
+    const x = feature.gridX, y = feature.gridY;
+    const owner = field ? at(x, y) : null;
+    const near = field ? [at(x + 4, y), at(x - 4, y),
+      at(x, Math.min(field.height - 1, y + 4)), at(x, Math.max(0, y - 4))] : [];
+    // Geological playback may have advanced before the slow software-GPU
+    // test can poll it. Never request a rewind to an archived event.
+    if (event.inspectable) renderer.enterSpecialEvent(event.id);
+    const focus = renderer.getSpecialEventStatus().focus;
+    return { feature, owner, near, focus, inspectable: event.inspectable };
+  });
+  expect(plateFeature).not.toBeNull();
+  expect(plateFeature.feature.plateId).toBe(0);
+  expect(plateFeature.feature.adjacentPlateId).toBeGreaterThan(0);
+  if (plateFeature.inspectable) {
+    // Only compare a live GPU texture to the captured point while the
+    // geological epoch has *not* advanced away from onset.
+    expect(plateFeature.owner).toBe(0);
+    expect(plateFeature.near).toContain(plateFeature.feature.adjacentPlateId);
+    expect(plateFeature.focus.scale).toContain('S0 first modeled plate boundary');
+    await page.waitForTimeout(1_600);
+    await page.screenshot({ path: testInfo.outputPath('evolution-first-tectonic-plate-focus.png') });
+    await page.evaluate(async () => (await import('/js/planetRenderer.js')).exitSpecialEvent());
+  }
   expect(status.framesPerSecond).toBeGreaterThan(20);
   const stats = await canvasStatistics(page);
   expect(stats.glError).toBe(0);

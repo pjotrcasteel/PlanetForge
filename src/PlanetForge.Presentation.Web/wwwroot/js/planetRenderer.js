@@ -85,9 +85,11 @@ export function getSpecialEventStatus() {
             title: state.eventFocus.title,
             elapsedSeconds: state.eventFocus.elapsedSeconds,
             planetSeconds: state.eventFocus.planetSeconds,
-            scale: state.eventFocus.scope === 'global'
-                ? 'Planetary orbital close-up · same S0 GPU globe, no site-specific geometry'
-                : 'Regional orbital close-up · GPU surface ~39 km/texel',
+            scale: Number.isInteger(state.eventFocus.focusPlateId)
+                ? 'S0 first modeled plate boundary · ownership-map interpretation overlay'
+                : state.eventFocus.scope === 'global'
+                    ? 'Planetary orbital close-up · same S0 GPU globe, no site-specific geometry'
+                    : 'Regional orbital close-up · GPU surface ~39 km/texel',
             source: state.eventFocus.source,
             authority: state.eventFocus.authority, trigger: state.eventFocus.trigger,
             uncertainty: state.eventFocus.uncertainty,
@@ -103,15 +105,23 @@ export function enterSpecialEvent(id) {
     if (!event) throw new Error('This event is no longer in the bounded timeline.');
     if (!isEventInspectable(state, event))
         throw new Error('The model cannot rewind to a past event without a saved physical state.');
-    const target = event.scope === 'global'
-        ? { yaw: state.yaw, pitch: state.pitch, distance: Math.min(state.distance, 1.35) }
-        : orbitForEvent(event.direction);
+    // Plate onset is a global physical threshold with a real, simulation-local
+    // map of newborn plates. Focus its first plate boundary, not whichever
+    // hemisphere happened to be facing the camera (often blank ocean).
+    const firstPlateFocus = event.key === 'plate-onset' ? state.evolution.firstPlateFocus : null;
+    const target = firstPlateFocus
+        ? orbitForEvent(firstPlateFocus.direction, 1.32)
+        : event.scope === 'global'
+            ? { yaw: state.yaw, pitch: state.pitch, distance: Math.min(state.distance, 1.35) }
+            : orbitForEvent(event.direction);
     state.eventFocus = {
         id: event.id, title: event.title, planetSeconds: event.planetSeconds,
         scope: event.scope, source: event.source ?? 'Model event',
         authority: event.authority, trigger: event.trigger,
         uncertainty: event.uncertainty,
         limitations: event.limitations, elapsedSeconds: 0, target,
+        focusPlateId: firstPlateFocus?.plateId ?? null,
+        focusPlateDirection: firstPlateFocus?.direction ?? null,
         origin: { yaw: state.yaw, pitch: state.pitch, distance: state.distance },
         wasPlaying: state.evolution.playing
     };
@@ -1324,7 +1334,7 @@ function render() {
                 state.evolution.thermal.timeSeconds, state.evolution.seed, stepStartSeconds);
             const newestEvent = state.eventHistory.at(-1);
             if (newestEvent && newestEvent.id !== previouslyWitnessedId && state.evolution.playing) {
-                // Geological turning points can enter a planet-wide inspection.
+                // Geological turning points focus their actual resolved scale/region.
                 // Ordinary impacts keep rendering without hijacking the camera.
                 enterSpecialEvent(newestEvent.id);
             }
@@ -1379,6 +1389,9 @@ function renderEvolution(s) {
     renderEvolutionGlobe(s.evolution, {
         viewProjection, light, camera: eye, tiles: s.tiles, thermalRadianceTexture: s.thermalRadianceTexture,
         viewportWidth: canvas.width, viewportHeight: canvas.height,
+        plateInspection: Number.isInteger(s.eventFocus?.focusPlateId)
+            ? { plateId: s.eventFocus.focusPlateId, direction: s.eventFocus.focusPlateDirection }
+            : null,
     });
 }
 
