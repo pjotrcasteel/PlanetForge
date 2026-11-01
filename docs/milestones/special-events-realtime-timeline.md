@@ -1,6 +1,6 @@
 # E7 / Life-M0 — curated geological turning points and future life zooms
 
-**Workstream:** PF-EARTH-20261013-A. **Status:** E7 model-triggered turning points and 1× S0 camera handoff shipped in 0.0.51.0; the more expressive horizontal timeline is the next visual slice, pending iPhone/desktop review. Follow delivery order and acceptance gates in [the journey milestone plan](earth-journey-milestone-plan.md).
+**Workstream:** PF-EARTH-20261013-A. **Status:** E7 model-triggered turning points and 1× S0 camera handoff shipped in 0.0.51.0; E7-A timeline shipped in 0.0.53.0 (device review pending); E7-B first-slice catalogue and opt-in event log in 0.0.54.0. Follow delivery order and acceptance gates in [the journey milestone plan](earth-journey-milestone-plan.md).
 
 ## Accepted interaction
 
@@ -84,3 +84,9 @@ to 64 markers; ordinary impacts do not consume slots.
 
 No synthetic vents, plausible-looking polymers, arbitrary molecule success or apparent geological
 time advancement are accepted as implemented features at this first gate.
+
+## E7-B implementation (0.0.54.0)
+
+Only actual `captureEarthMilestoneEvents` transitions enter the frozen S0 event catalogue. Each entry carries an authority (`model-observed` today), model-field trigger, priority, global scope/scale, source and scientific interpretation limits. The capture records a bounded integration interval `[stepStartSeconds, planetSeconds]`: the right edge is the recorded marker time, not a known historical date.
+
+The collapsed **LATEST / LOG** row is deliberately one line on phones. Expanding it shows newest-first recorded observations with evidence class and uncertainty; old events are archival but cannot be zoomed into until E7-C physical-state replay exists. The first-life and land-evolution aspirations remain gated candidates, **never fake live S0 events**. See the [journey plan](earth-journey-milestone-plan.md#e7-b-catalogue-contract-implemented-first-slice) for their evidence/engine gates.
