@@ -1393,11 +1393,16 @@ function renderEvolution(s) {
     if (formation && !formation.complete) {
         // The wider two-body shot keeps both proto-Earth and Theia in the
         // mobile viewport. The aftermath eases back toward the globe view.
-        const stagingDistance = aspect < 0.75 ? 11.8 : 5.8;
+        // A larger, cinematic mobile framing makes Earth's incandescent
+        // surface legible, while the impactor flies in from the side.
+        const stagingDistance = aspect < 0.75 ? 9.6 : 5.8;
         const reunion = formation.stage === 'aftermath'
             ? Math.min(1, formation.stageSeconds / 3) : 0;
         const eased = reunion * reunion * (3 - 2 * reunion);
-        cameraDistance = stagingDistance + (s.distance - stagingDistance) * eased;
+        const impactPunch = formation.stage === 'impact'
+            ? Math.sin(Math.PI * Math.min(1, formation.stageSeconds / 9)) : 0;
+        cameraDistance = stagingDistance + (s.distance - stagingDistance) * eased
+            - impactPunch * (aspect < 0.75 ? 1.1 : 0.55);
     }
     const eye = orbitEye(s.yaw, s.pitch, cameraDistance);
     const viewProjection = multiply(projection, lookAt(eye, [0, 0, 0], [0, 1, 0]));
