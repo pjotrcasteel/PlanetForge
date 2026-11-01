@@ -29,7 +29,8 @@ public partial class Home
         var elapsedYears = double.IsFinite(planetSeconds)
             ? Math.Clamp(planetSeconds / secondsPerYear, 0.0, earthAgeYears) : 0.0;
         var remainingGa = (earthAgeYears - elapsedYears) / 1_000_000_000.0;
-        return remainingGa >= 4.0 ? "HADEAN"
+        return elapsedYears < 60_000_000.0 ? "ACCRETION"
+            : remainingGa >= 4.0 ? "HADEAN"
             : remainingGa >= 2.5 ? "ARCHEAN"
             : remainingGa >= 0.5388 ? "PROTEROZOIC" : "PHANEROZOIC";
     }
@@ -45,9 +46,9 @@ public partial class Home
 
     private static readonly TimelineChapter[] TimelineChapters =
     [
-        new("formation", "Earth forms", 0, "Reference start of Earth's 4.567-billion-year history."),
+        new("formation", "Accretion begins", 0, "First Solar System solids ~4.567 Ga; proto-Earth grows over tens of millions of years."),
         new("moon", "Moon-forming collision", 60_000_000,
-            "Approximate timing within Earth's first 100 million years; the impact is not simulated."),
+            "The 60 Myr playback is a selected reconstruction. Actual giant-impact timing and Moon assembly remain uncertain; no SPH collision is solved."),
         new("first-crust", "Ancient crust evidence", 167_000_000,
             "Jack Hills zircons are about 4.4 billion years old; the first crust may be older."),
         new("early-oceans", "Early oceans", 267_000_000,
