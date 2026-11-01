@@ -244,6 +244,10 @@ test('Evolution_Portrait_ControlsFit', async ({ page }, testInfo) => {
   await expect(page.getByTestId('timeline-overview-node')).toHaveCount(10);
   await expect(page.getByTestId('timeline-origin-node')).toHaveCount(1);
   await expect(page.getByTestId('timeline-present-node')).toHaveCount(1);
+  const dockBox = await page.locator('.formation-controls').boundingBox();
+  expect(dockBox.y).toBeGreaterThanOrEqual(hudBox.y);
+  expect(dockBox.y - hudBox.y).toBeLessThan(65);
+  expect(dockBox.y + dockBox.height).toBeLessThan(railBox.y);
   const controls = await page.locator('.formation-controls button').evaluateAll(buttons =>
     buttons.map(button => {
       const bounds = button.getBoundingClientRect();
@@ -281,6 +285,12 @@ test('Evolution_Portrait_ControlsFit', async ({ page }, testInfo) => {
   expect((await evolutionStatus(page)).timeSeconds).toBe(timeBefore);
   expect((await canvasStatistics(page)).glError).toBe(0);
   await page.screenshot({ path: testInfo.outputPath('planetforge-mobile-right-dock-linear-time.png') });
+  // The top-aligned dock must never cover the phase chip on a 320 px phone.
+  await page.setViewportSize({ width: 320, height: 700 });
+  const compactHud = await page.getByTestId('formation-hud').boundingBox();
+  const compactDock = await page.locator('.formation-controls').boundingBox();
+  expect(compactHud.x + compactHud.width + 8).toBeLessThanOrEqual(compactDock.x);
+  await page.setViewportSize({ width: 390, height: 844 });
 
   // UI-only lens probe: inject a model clock sample into this disposable paused
   // browser test (not production simulation) to verify camera panning and scale.
