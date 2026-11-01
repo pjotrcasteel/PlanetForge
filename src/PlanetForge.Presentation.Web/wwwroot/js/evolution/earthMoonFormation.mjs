@@ -107,13 +107,21 @@ export function earthMoonFormationStatus(formation) {
         : formation.stage === 'impact' ? formation.stageSeconds / IMPACT_SCENE_SECONDS
             : formation.stage === 'moon-assembly' ? formation.stageSeconds / MOON_SCENE_SECONDS
                 : formation.stageSeconds / AFTERMATH_SECONDS;
+    const localSceneDuration = {
+        impact: IMPACT_SCENE_SECONDS,
+        'moon-assembly': MOON_SCENE_SECONDS,
+        aftermath: AFTERMATH_SECONDS,
+    }[formation.stage];
+    const rateLabel = formation.stage === 'accretion'
+        ? (formation.playbackYearsPerSecond / 1e6).toFixed(1) + ' Myr / s'
+        : 'scene ' + formation.stageSeconds.toFixed(1) + ' / ' + localSceneDuration + ' s';
     return {
         phase, progress: clamp(progress), ageYears: formation.ageYears,
         timeSeconds: formation.ageYears * SECONDS_PER_YEAR,
         stage: formation.stage,
-        // The time ratio is explicitly 0 during the short-lived collision.
-        rateLabel: formation.stage !== 'accretion' ? 'local impact-time close-up'
-            : (formation.playbackYearsPerSecond / 1e6).toFixed(1) + ' Myr / s',
+        // The planetary clock pauses during the local collision; show visible
+        // real-time scene progress so T+60 Myr cannot look permanently stalled.
+        rateLabel,
         authority: 'reconstruction',
         source: 'NASA Moon Formation; National Academies 2023 Earth-Moon formation',
         limitations: 'Illustrative impact scenario; not a hydrodynamic/N-body solution. The 60 Myr event age, debris, and Moon assembly path are uncertain.',
