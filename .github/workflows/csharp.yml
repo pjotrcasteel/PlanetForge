@@ -52,6 +52,11 @@ jobs:
       - name: Validate special-event clock and seeded bookmarks
         run: node --test tests/PlanetForge.Browser.Tests/evolution/special-events.test.mjs
 
+      - name: Validate Earth-Moon formation module and chronological handoff
+        run: |
+          node --check src/PlanetForge.Presentation.Web/wwwroot/js/evolution/earthMoonFormation.mjs
+          node --test tests/PlanetForge.Browser.Tests/evolution/earth-moon-formation.test.mjs
+
       - name: Validate thermal playback across slow and fast frames
         run: node --test tests/PlanetForge.Browser.Tests/evolution-thermal-playback.test.mjs
 
