@@ -1,6 +1,6 @@
 # E7 / Life-M0 — curated geological turning points and future life zooms
 
-**Workstream:** PF-EARTH-20261013-A. **Status:** E7 model-triggered turning points and 1× S0 camera handoff shipped in 0.0.51.0; E7-A timeline shipped in 0.0.53.0 (device review pending); E7-B first-slice catalogue and opt-in event log in 0.0.54.0. Follow delivery order and acceptance gates in [the journey milestone plan](earth-journey-milestone-plan.md).
+**Workstream:** PF-EARTH-20261013-A. **Status:** E7 model-triggered turning points and 1× S0 camera handoff shipped in 0.0.51.0; E7-A timeline shipped in 0.0.53.0 (device review pending); E7-B first-slice catalogue and opt-in event log in 0.0.54.0; E7-A compact controls and milestone-order rail in 0.0.55.0 (real-device sign-off pending). Follow delivery order and acceptance gates in [the journey milestone plan](earth-journey-milestone-plan.md).
 
 ## Accepted interaction
 
@@ -10,11 +10,15 @@ illustrative, viewer-biased display hypothesis, not a measured bombardment recor
 Those ordinary impact flashes continue as **ambient planet activity**: no marker,
 no automatic camera hijack, no false “historic meteor event.”
 
-The horizontal rail shows a moving epoch indicator and small circular markers on a
-clearly labelled logarithmic scale from planetary formation to 4.567 Gyr of elapsed
-history. Each admitted event has a source classification and its actual model or
-reconstructed epoch. Key moments are limited to material changes, not arbitrary
-timed cutscenes.
+The compact horizontal rail is a **milestone sequence, explicitly NOT TO SCALE**.
+Ten pre-placed chapter dots preserve narrative order but are deliberately spaced
+for touch visibility; future chapters stay hollow and labelled planned. Golden
+markers replace a chapter dot only when a model transition was actually witnessed.
+The final Present-day dot is visually distinct. A cyan marker indicates the last
+reached chapter; the independently shown geological age and recorded-event log
+retain their actual model times. This is no longer represented as a quantitative
+logarithmic time axis; E7-C will provide such a time lens with real replay state.
+Key moments remain material changes, never arbitrary timed cutscenes.
 
 | Class | Trigger | Auto zoom? | Scientific claim |
 | --- | --- | --- | --- |
@@ -44,6 +48,13 @@ A current event marker can be inspected while its model state is still current.
 Older dots are archival until physical snapshot/replay support exists. Restarting
 the seeded planet resets the milestone history. The key-moment list is bounded
 to 64 markers; ordinary impacts do not consume slots.
+
+## 0.0.55.0 mobile-control acceptance
+
+- Phase chip has no oversized PlanetForge heading and keeps numerical time/rate and diagnostics accessible.
+- Four buttons: Play/Pause, speed cycle 1×→5×→10×→20×→50×→1× (1× = model cap of 1 Myr/s), cloud toggle with on/off icon, and Restart with a two-action confirmation overlay.
+- No pre-placed candidate dot may start a camera inspection or alter model time. Only observed model milestones get that privilege.
+- Browser regression at a 390px viewport asserts controls stay visible, a compact phase HUD/timeline, pre-placed chapters, and planned-node preview. Real Safari iPhone review remains an explicit open gate.
 
 ## Acceptance gates
 

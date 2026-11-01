@@ -49,6 +49,9 @@ async function waitForReady(page) {
   await expect(play).toBeEnabled({ timeout: 30_000 });
   await expect(play).toHaveAttribute('aria-pressed', 'false', { timeout: 30_000 });
   await page.getByTestId('formation-restart').click();
+  await expect(page.getByTestId('formation-restart-overlay')).toBeVisible();
+  await page.getByTestId('formation-restart-confirm').click();
+  await expect(page.getByTestId('formation-restart-overlay')).toHaveCount(0);
   await expect.poll(async () => (await evolutionStatus(page))?.regime, { timeout: 60_000 }).toBe('magma-ocean');
 }
 
@@ -88,6 +91,9 @@ test('Evolution_ColdStartKeepsControlsDisabledUntilRendererIsReady', async ({ pa
 });
 
 test('Evolution_CoolsThroughLidIntoPlateTectonics_PausesAndRestarts', async ({ page }, testInfo) => {
+  // A full S0 lid→plates integration is variable under CI software WebGL.
+  // Keep a per-test safety margin without relaxing assertion-level deadlines.
+  test.setTimeout(420_000);
   // SwiftShader's 1440x900 planetary fragment pass can starve browser input
   // for minutes. This test covers stage transitions at a normal 960x600
   // viewport; dedicated visual tests still exercise desktop/portrait sizes.
@@ -95,7 +101,9 @@ test('Evolution_CoolsThroughLidIntoPlateTectonics_PausesAndRestarts', async ({ p
   const errors = []; page.on('pageerror', e => errors.push(e.message));
   await page.goto(url);
   await waitForReady(page);
-  await page.getByTestId('formation-speed').selectOption('50');
+  const speed = page.getByTestId('formation-speed');
+  for (let i = 0; i < 5 && (await speed.innerText()).trim() !== '50×'; i++) await speed.click();
+  await expect(speed).toHaveText('50×');
   await page.getByTestId('formation-play').click();
   await expect(page.getByTestId('formation-play')).toHaveAttribute('aria-pressed', 'true');
   await expect.poll(async () => (await evolutionStatus(page)).regime, { timeout: 120_000, intervals: [1_000] }).toBe('stagnant-lid');
@@ -162,11 +170,11 @@ test('Evolution_CoolsThroughLidIntoPlateTectonics_PausesAndRestarts', async ({ p
   await expect(page.getByTestId('formation-play')).toHaveAttribute('aria-pressed', 'false', { timeout: 15_000 });
 
   const clouds = page.getByTestId('formation-clouds');
-  await expect(clouds).toHaveText('Clouds on');
+  await expect(clouds).toHaveAttribute('aria-pressed', 'true');
   await clouds.click();
-  await expect(clouds).toHaveText('Clouds off');
+  await expect(clouds).toHaveAttribute('aria-pressed', 'false');
   await clouds.click();
-  await expect(clouds).toHaveText('Clouds on');
+  await expect(clouds).toHaveAttribute('aria-pressed', 'true');
 
   // Explicitly leave any auto-inspection before invoking the real Restart
   // button; accelerated geology tests must not race its disabled state.
@@ -177,6 +185,8 @@ test('Evolution_CoolsThroughLidIntoPlateTectonics_PausesAndRestarts', async ({ p
   });
   await expect(page.getByTestId('formation-restart')).toBeEnabled({ timeout: 30_000 });
   await page.getByTestId('formation-restart').click();
+  await expect(page.getByTestId('formation-restart-overlay')).toBeVisible();
+  await page.getByTestId('formation-restart-confirm').click();
   await expect.poll(async () => (await evolutionStatus(page)).regime, { timeout: 60_000 }).toBe('magma-ocean');
   await expect(page.getByTestId('formation-phase')).toContainText('Magma ocean');
   expect(errors).toEqual([]);
@@ -186,7 +196,31 @@ test('Evolution_Portrait_ControlsFit', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto(url);
   await waitForReady(page);
-  for (const id of ['formation-play', 'formation-speed', 'formation-clouds', 'formation-restart']) await expect(page.getByTestId(id)).toBeInViewport();
+  for (const id of ['formation-play', 'formation-speed', 'formation-clouds', 'formation-restart']) {
+    await expect(page.getByTestId(id)).toBeInViewport();
+    const dimensions = await page.getByTestId(id).boundingBox();
+    expect(dimensions.width).toBeGreaterThanOrEqual(42);
+    expect(dimensions.height).toBeGreaterThanOrEqual(42);
+  }
+  const hudBox = await page.getByTestId('formation-hud').boundingBox();
+  const railBox = await page.getByTestId('special-events-timeline').boundingBox();
+  expect(hudBox.height).toBeLessThan(85);
+  expect(railBox.height).toBeLessThan(100);
+  await expect(page.getByTestId('timeline-planned-node')).toHaveCount(8);
+  await expect(page.getByTestId('timeline-origin-node')).toHaveCount(1);
+  await expect(page.getByTestId('timeline-present-node')).toHaveCount(1);
+  const speedBefore = await page.getByTestId('formation-speed').innerText();
+  await page.getByTestId('formation-speed').click();
+  expect(await page.getByTestId('formation-speed').innerText()).not.toBe(speedBefore);
+  const timeBefore = (await evolutionStatus(page)).timeSeconds;
+  await page.getByTestId('timeline-planned-node').nth(3).click();
+  await expect(page.getByTestId('timeline-planned-preview')).toContainText('First life');
+  expect((await evolutionStatus(page)).timeSeconds).toBe(timeBefore);
+  await page.getByTestId('formation-restart').click();
+  await expect(page.getByTestId('formation-restart-overlay')).toBeVisible();
+  await page.getByTestId('formation-restart-cancel').click();
+  await expect(page.getByTestId('formation-restart-overlay')).toHaveCount(0);
+  expect((await evolutionStatus(page)).timeSeconds).toBe(timeBefore);
   expect((await canvasStatistics(page)).glError).toBe(0);
 });
 
@@ -219,9 +253,9 @@ test('Evolution_KeyMilestone_AutoZooms_WhileOrdinaryImpactsStayAmbient', async (
   const timeline = page.getByTestId('special-events-timeline');
   const rail = page.getByTestId('special-event-rail');
   await expect(timeline).toBeVisible();
-  await expect(timeline).toContainText('EARTH HISTORY');
-  await expect(timeline).toContainText('ZOOM MOMENT');
-  await expect(timeline).toContainText('Routine impacts stay in the background');
+  await expect(timeline).toContainText('MILESTONES');
+  await expect(timeline).toContainText('NOT TO SCALE');
+  await expect(page.getByTestId('timeline-present-node')).toHaveCount(1);
   const railBox = await rail.boundingBox();
   expect(railBox.width).toBeGreaterThan(railBox.height * 5);
   const before = await page.evaluate(async () =>

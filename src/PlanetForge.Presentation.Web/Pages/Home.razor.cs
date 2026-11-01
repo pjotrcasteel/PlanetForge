@@ -27,11 +27,33 @@ public partial class Home
         await rendererModule.InvokeVoidAsync("setEvolutionClouds", disposeCancellationTokenSource.Token, formationClouds);
     }
 
-    private async Task ChangeFormationSpeedAsync(ChangeEventArgs change)
+    private static readonly int[] FormationSpeedMultipliers = [1, 5, 10, 20, 50];
+    private bool restartConfirmationOpen;
+
+    private async Task CycleFormationSpeedAsync()
     {
-        if (!int.TryParse(change.Value?.ToString(), out var myrPerSecond) || myrPerSecond <= 0 || rendererModule is null || specialEventsStatus?.Focus is not null) return;
-        formationMaximumMyrPerSecond = myrPerSecond;
-        await rendererModule.InvokeVoidAsync("setEvolutionSpeed", disposeCancellationTokenSource.Token, myrPerSecond * 1e6);
+        if (!formationRendererReady || rendererModule is null || specialEventsStatus?.Focus is not null) return;
+        var currentIndex = Array.IndexOf(FormationSpeedMultipliers, formationMaximumMyrPerSecond);
+        var nextIndex = (currentIndex + 1) % FormationSpeedMultipliers.Length;
+        formationMaximumMyrPerSecond = FormationSpeedMultipliers[nextIndex];
+        await rendererModule.InvokeVoidAsync("setEvolutionSpeed", disposeCancellationTokenSource.Token,
+            formationMaximumMyrPerSecond * 1e6);
+    }
+
+    private void RequestFormationRestart()
+    {
+        if (!formationRendererReady || formationBusy || !continuousSimulation || specialEventsStatus?.Focus is not null) return;
+        restartConfirmationOpen = true;
+    }
+
+    private void CancelFormationRestart() => restartConfirmationOpen = false;
+
+    private async Task ConfirmFormationRestartAsync()
+    {
+        if (!restartConfirmationOpen) return;
+        restartConfirmationOpen = false;
+        selectedTimelineChapter = null;
+        await RestartFormationAsync();
     }
 
     // The planet evolves on the GPU every animation frame; Blazor only polls
