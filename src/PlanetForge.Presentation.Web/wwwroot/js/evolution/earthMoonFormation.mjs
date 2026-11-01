@@ -227,7 +227,7 @@ vec3 background(vec3 rd) {
 // silicate melt ocean with dark transient quenched scum. No stable tectonic
 // plates are implied. The spectrum and coverage are visual reconstructions.
 vec3 protoEarthSurface(vec3 n, vec3 rd, float hot, float time) {
-    vec3 q=n*6.2+vec3(uSeed*0.011,0.0,time*0.0012);
+    vec3 q=n*6.2+vec3(mod(uSeed,997.0)*0.011,0.0,time*0.0012);
     // Multi-scale turbulent domains instead of circles, cellular polygons,
     // crosshatched sine lines or expensive per-pixel nearest-cell loops.
     float warp=fbm(q*0.71+vec3(4.2,1.1,6.3));
@@ -238,10 +238,10 @@ vec3 protoEarthSurface(vec3 n, vec3 rd, float hot, float time) {
     float grit=noise3(q*23.0+31.5);
     float ash=noise3(q*67.0+61.7);
     // Cooling rafts are mottled and partially broken, not outlined in neon.
-    float crust=smoothstep(0.38+hot*0.018,0.58+hot*0.018,
-        crustField*0.72+flow*0.28);
+    float materialField=crustField*0.72+flow*0.28+0.10*(grit-0.5);
+    float crust=smoothstep(0.465+hot*0.010,0.515+hot*0.010,materialField);
     float fracture=1.0-smoothstep(0.018,0.094,abs(flow-0.49));
-    float molten=clamp((1.0-crust)*0.92+fracture*crust*0.21,0.0,1.0);
+    float molten=clamp((1.0-crust)*0.98+fracture*crust*0.27,0.0,1.0);
     vec3 bump=vec3(grit-0.5,
         noise3(q*23.0+vec3(19.7,4.2,32.5))-0.5,
         noise3(q*23.0+vec3(4.1,23.2,11.9))-0.5);
