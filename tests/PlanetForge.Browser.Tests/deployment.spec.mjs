@@ -161,8 +161,8 @@ test('DeployedFormation_UsesCurrentMainPageAndAdvancesItsEvolutionClock', async 
   await page.goto(process.env.PLANETFORGE_BASE_URL + '/?visualTest=1&seed=24061984', { waitUntil: 'domcontentloaded' });
   const play = page.getByTestId('formation-play');
   await expect(play).toBeEnabled({ timeout: 90_000 });
-  // Live release autoplay can leave the magma era during slow WebGL startup.
-  // Pause/restart through the UI to verify the *initial* planet deterministically.
+  // Live release autoplay can advance accretion during slow WebGL startup.
+  // Pause/restart through the UI to verify the new Proto-Earth opening deterministically.
   await expect(page.getByTestId('special-event-rail')).toBeVisible();
   await expect(page.getByTestId('timeline-present-node')).toHaveCount(1);
   await expect(page.getByTestId('timeline-overview-node')).toHaveCount(10);
@@ -175,7 +175,7 @@ test('DeployedFormation_UsesCurrentMainPageAndAdvancesItsEvolutionClock', async 
   await expect(page.getByTestId('formation-restart-overlay')).toBeVisible();
   await page.getByTestId('formation-restart-confirm').click();
   await expect(page.getByTestId('formation-restart-overlay')).toHaveCount(0);
-  await expect(page.getByTestId('formation-phase')).toContainText('Magma ocean', { timeout: 90_000 });
+  await expect(page.getByTestId('formation-phase')).toContainText('Proto-Earth', { timeout: 90_000 });
   const badge = page.locator('#planetforge-build-badge');
   await expect(badge).toHaveText(/^PF \d+\.\d+\.\d+(?:\.\d+)? · [a-f0-9]{7}$/);
   if (process.env.PLANETFORGE_EXPECTED_SHA) {
