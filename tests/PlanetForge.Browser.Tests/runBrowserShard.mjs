@@ -10,7 +10,7 @@ import { fileURLToPath } from 'node:url';
 const directory = dirname(fileURLToPath(import.meta.url));
 const groups = [
   ['01-main-planet-geology.spec.mjs'],
-  ['foundation.spec.mjs', 'airless-reference.spec.mjs', 'regional-rock.spec.mjs', 'formation-simulation.spec.mjs', 'earth-moon-formation.spec.mjs'],
+  ['foundation.spec.mjs', 'airless-reference.spec.mjs', 'regional-rock.spec.mjs', 'formation-simulation.spec.mjs'],
   [
     '00-geology-preview.spec.mjs',
     'camera-region-streaming.spec.mjs',
@@ -25,7 +25,9 @@ const groups = [
 ];
 
 const discovered = readdirSync(directory).filter(name => name.endsWith('.spec.mjs')).sort();
-const assigned = groups.flat().sort();
+// The F0 scene has its own fail-fast GPU shader/screenshot job.
+const dedicated = ['earth-moon-formation.spec.mjs'];
+const assigned = [...groups.flat(), ...dedicated].sort();
 if (discovered.length !== assigned.length || discovered.some((name, index) => name !== assigned[index])) {
   console.error('Browser shard inventory does not match actual *.spec.mjs files.');
   console.error('Discovered:', discovered);
