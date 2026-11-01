@@ -17,6 +17,7 @@ import {
 } from './thermalHistory.js';
 import { createRaftSystem, advanceRafts, mulberry32, randomDirection, maximumRafts, binSlots } from './crustRafts.js';
 import { emissionLinearRadiance, thermalMaterialShader } from '../thermalRadiance.js';
+import { selectFirstPlateFocus } from './specialEvents.mjs';
 import {
     EARTH_LIBERTIES, loadEarthAssets, createEarthHistory, prepareEarthHistory, disposeEarthHistory, startEarthHistory,
     stepEarthHistory, deriveEarthHistory, earthHistoryStatus, earthLatestStartMyr,
@@ -623,6 +624,9 @@ uniform float uShell;
 uniform float uClouds;
 uniform float uSeamShare;
 uniform float uRaftSpacing;
+uniform highp sampler2D uPlateState;
+uniform int uPlateInspectionId;
+uniform vec3 uPlateInspectionDirection;
 uniform int uMagmaImpactCount;
 uniform vec4 uMagmaImpacts[${MAX_MAGMA_IMPACTS}];
 uniform vec4 uMagmaImpactInfo[${MAX_MAGMA_IMPACTS}];
@@ -1276,7 +1280,33 @@ void main() {
     }
     vec3 linear = (emitted + reflected) * uExposure;
     linear /= 1.0 + max(linear.r, max(linear.g, linear.b));
-    outColor = vec4(displaySrgb(linear), 1.0);
+    vec3 color = displaySrgb(linear);
+    if (uPlateInspectionId >= 0 && uLithosphereWeight > 0.99) {
+        // Interpretation overlay, not a claimed visible ridge or real-world
+        // coordinate: highlight the *modeled* first plate, including portions
+        // hidden by the ocean. Read its actual GPU ownership map.
+        vec2 uv = uvFromDir(p);
+        vec2 texel = 1.0 / vec2(textureSize(uPlateState, 0));
+        float owner = floor(texture(uPlateState, uv).r + 0.5);
+        bool selected = abs(owner - float(uPlateInspectionId)) < 0.1;
+        float east = floor(texture(uPlateState, uv + vec2(texel.x * 1.4, 0.0)).r + 0.5);
+        float west = floor(texture(uPlateState, uv - vec2(texel.x * 1.4, 0.0)).r + 0.5);
+        float north = floor(texture(uPlateState, uv + vec2(0.0, texel.y * 1.4)).r + 0.5);
+        float south = floor(texture(uPlateState, uv - vec2(0.0, texel.y * 1.4)).r + 0.5);
+        bool boundary = owner != east || owner != west || owner != north || owner != south;
+        bool selectedBoundary = boundary && (
+            selected || abs(east - float(uPlateInspectionId)) < 0.1 ||
+            abs(west - float(uPlateInspectionId)) < 0.1 ||
+            abs(north - float(uPlateInspectionId)) < 0.1 ||
+            abs(south - float(uPlateInspectionId)) < 0.1);
+        if (selected) color = mix(color, vec3(0.14, 0.55, 0.66), 0.16);
+        if (boundary) color = mix(color, vec3(0.28, 0.70, 0.73), 0.55);
+        if (selectedBoundary) color = mix(color, vec3(1.0, 0.71, 0.34), 0.93);
+        float radians = acos(clamp(dot(p, normalize(uPlateInspectionDirection)), -1.0, 1.0));
+        float locator = 1.0 - smoothstep(0.002, 0.009, abs(radians - 0.075));
+        color = mix(color, vec3(1.0, 0.85, 0.58), locator * 0.92);
+    }
+    outColor = vec4(color, 1.0);
 }`;
 
 // ---------------------------------------------------------------- helpers --
@@ -1385,7 +1415,7 @@ export function createEvolution(gl, seed, createProgram, options = {}) {
                 'uCamera', 'uExposure', 'uMagmaWeight', 'uRadiusMeters', 'uMeltKelvin', 'uRenewalVelocity', 'uDisplaySpeed', 'uSolar', 'uRaftCount', 'uBinGrid',
                 'uRaftPosition', 'uRaftVelocity', 'uRaftFrame', 'uRaftLink', 'uMaterialScale', 'uBins', 'uAgeTable', 'uThermalRadianceTexture', 'uVolcanicGlowKelvin',
                 'uSeaLevel', 'uShoreKm', 'uWater', 'uSteam', 'uLife', 'uClimateK', 'uOxic', 'uCloudPhase', 'uShell', 'uClouds', 'uSeamShare', 'uRaftSpacing',
-                'uMagmaImpactCount', 'uMagmaImpacts', 'uMagmaImpactInfo']),
+                'uMagmaImpactCount', 'uMagmaImpacts', 'uMagmaImpactInfo', 'uPlateState', 'uPlateInspectionId', 'uPlateInspectionDirection']),
         },
         globePosition: gl.getAttribLocation(programs.globe, 'aPosition'),
         maximumYearsPerSecond: options.maximumYearsPerSecond ?? 20e6,
@@ -1699,6 +1729,12 @@ function consolidatePlates(evo, continentMinority = 0.3) {
     const ids = evo.plateIdsScratch ?? (evo.plateIdsScratch = new Int16Array(N));
     for (let i = 0; i < N; i++) ids[i] = Math.round(data[i * 4]);
     const unified = unifyContinents(evo, data, ids, continentMinority);
+    // Reuse the physics readback at the initial partition. No extra GPU
+    // synchronization is needed when the event camera asks for its target.
+    const rememberFocus = () => {
+        if (evo.thermal.regime === 'plates' && !evo.firstPlateFocus)
+            evo.firstPlateFocus = selectFirstPlateFocus({ width: W, height: H, data });
+    };
     const label = evo.labelScratch ?? (evo.labelScratch = new Int32Array(N));
     const stack = evo.stackScratch ?? (evo.stackScratch = new Int32Array(N));
     label.fill(-1);
@@ -1729,7 +1765,7 @@ function consolidatePlates(evo, continentMinority = 0.3) {
     for (let k = 0; k < sizes.length; k++) if (largest.get(owners[k]) !== k && owners[k] >= 0) strays.set(k, new Map());
     const areas = new Float64Array(MAX_PLATES);
     for (let k = 0; k < sizes.length; k++) if (owners[k] >= 0 && owners[k] < MAX_PLATES) areas[owners[k]] += sizes[k];
-    if (strays.size === 0 && unified === 0) { evo.plateAreas = Array.from(areas, a => a / N); return 0; }
+    if (strays.size === 0 && unified === 0) { evo.plateAreas = Array.from(areas, a => a / N); rememberFocus(); return 0; }
     for (let i = 0; i < N; i++) {
         const votes = strays.get(label[i]);
         if (!votes) continue;
@@ -1754,6 +1790,7 @@ function consolidatePlates(evo, continentMinority = 0.3) {
         areas[to]++;
     }
     evo.plateAreas = Array.from(areas, a => a / N);
+    rememberFocus();
     if (moved + unified === 0) return 0;
     gl.bindTexture(gl.TEXTURE_2D, evo.textures.state0[evo.current]);
     gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, W, H, gl.RGBA, gl.FLOAT, data);
@@ -2237,6 +2274,9 @@ export function renderEvolutionGlobe(evo, frame) {
     gl.uniform1f(u.uSeamShare, evo.rafts.seamShare ?? 1);
     gl.uniform1f(u.uRaftSpacing, evo.rafts.spacing ?? 0.05);
     gl.uniform1f(u.uShell, 0);
+    const plateInspection = frame.plateInspection;
+    gl.uniform1i(u.uPlateInspectionId, plateInspection?.plateId ?? -1);
+    gl.uniform3fv(u.uPlateInspectionDirection, plateInspection?.direction ?? [0, 0, 1]);
     const impactPositions = new Float32Array(MAX_MAGMA_IMPACTS * 4), impactInfo = new Float32Array(MAX_MAGMA_IMPACTS * 4);
     evo.magmaImpacts.forEach((impact, i) => {
         impactPositions.set([...impact.direction, impact.radius], i * 4);
@@ -2253,6 +2293,7 @@ export function renderEvolutionGlobe(evo, frame) {
     bindTexture(gl, 10, frame.thermalRadianceTexture, u.uThermalRadianceTexture);
     bindTexture(gl, 11, evo.textures.raftFrame, u.uRaftFrame);
     bindTexture(gl, 12, evo.textures.raftLink, u.uRaftLink);
+    bindTexture(gl, 13, evo.textures.state0[evo.current], u.uPlateState);
     gl.uniform1f(u.uMaterialScale, evo.rafts.initialSpacing ?? 0.05);
     gl.bindVertexArray(evo.vao);
     gl.enableVertexAttribArray(evo.globePosition);
