@@ -58,6 +58,8 @@ jobs:
           sed -i "s#css/hydrology-foundation.css\"#css/hydrology-foundation.css?v=${GITHUB_SHA}\"#" "$INDEX"
           sed -i "s#css/foundation-simulator.css\"#css/foundation-simulator.css?v=${GITHUB_SHA}\"#" "$INDEX"
           sed -i "s#js/buildVersion.js\"#js/buildVersion.js?v=${GITHUB_SHA}\"#" "$INDEX"
+          # In .NET 10 the app boot manifest is linked from framework JS. Force its refresh on each release.
+          sed -i "s#_framework/blazor.webassembly.js\"#_framework/blazor.webassembly.js?v=${GITHUB_SHA}\"#" "$INDEX"
           sed -i "s#PlanetForge.Presentation.Web.styles.css\"#PlanetForge.Presentation.Web.styles.css?v=${GITHUB_SHA}\"#" "$INDEX"
           sed -i "s#__BUILD_SHA_SHORT__#${SHORT_SHA}#g" "$INDEX"
           sed -i "s#__BUILD_VERSION__#${BUILD_VERSION}#g" "$INDEX"
@@ -66,6 +68,7 @@ jobs:
           grep -q '<base href="/PlanetForge/" />' "$INDEX"
           grep -q "hydrology-foundation.css?v=${GITHUB_SHA}" "$INDEX"
           grep -q "foundation-simulator.css?v=${GITHUB_SHA}" "$INDEX"
+          grep -q "blazor.webassembly.js?v=${GITHUB_SHA}" "$INDEX"
           test -s ./artifacts/web/wwwroot/PlanetForge.Presentation.Web.styles.css
           grep -Fq "PlanetForge.Presentation.Web.styles.css?v=${GITHUB_SHA}" "$INDEX"
           grep -Fq "PF ${BUILD_VERSION} · ${SHORT_SHA}" "$INDEX"
