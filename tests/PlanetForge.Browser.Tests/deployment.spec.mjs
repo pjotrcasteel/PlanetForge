@@ -163,15 +163,24 @@ test('DeployedFormation_UsesCurrentMainPageAndAdvancesItsEvolutionClock', async 
   await expect(play).toBeEnabled({ timeout: 90_000 });
   // Live release autoplay can leave the magma era during slow WebGL startup.
   // Pause/restart through the UI to verify the *initial* planet deterministically.
+  await expect(page.getByTestId('special-event-rail')).toBeVisible();
+  await expect(page.getByTestId('timeline-present-node')).toBeVisible();
+  await expect(page.getByTestId('formation-speed')).toHaveText(/^(1|5|10|20|50)×$/);
   await expect(play).toHaveAttribute('aria-pressed', 'true');
   await play.click();
   await expect(play).toHaveAttribute('aria-pressed', 'false');
   await page.getByTestId('formation-restart').click();
+  await expect(page.getByTestId('formation-restart-overlay')).toBeVisible();
+  await page.getByTestId('formation-restart-confirm').click();
+  await expect(page.getByTestId('formation-restart-overlay')).toHaveCount(0);
   await expect(page.getByTestId('formation-phase')).toContainText('Magma ocean', { timeout: 90_000 });
   const badge = page.locator('#planetforge-build-badge');
   await expect(badge).toHaveText(/^PF \d+\.\d+\.\d+(?:\.\d+)? · [a-f0-9]{7}$/);
-  if (process.env.PLANETFORGE_EXPECTED_SHA)
+  if (process.env.PLANETFORGE_EXPECTED_SHA) {
     await expect(badge).toContainText(process.env.PLANETFORGE_EXPECTED_SHA.slice(0, 7));
+    const loaderUrl = await page.locator('script[src*="blazor.webassembly.js"]').getAttribute('src');
+    expect(loaderUrl).toContain(`?v=${process.env.PLANETFORGE_EXPECTED_SHA}`);
+  }
   // Verify that the actual published build can resume and advance.
   await play.click();
   await expect(play).toHaveAttribute('aria-pressed', 'true');
