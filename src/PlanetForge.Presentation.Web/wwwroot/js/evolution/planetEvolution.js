@@ -1995,7 +1995,7 @@ export function setEvolutionSpeed(evo, yearsPerSecond) {
 export function stepEvolution(evo, wallDtSeconds) {
     if (!evo.playing) return false;
     // Formation is a separate reconstructed era, not an acceleration of the
-    // magma-ocean solver. Its geological clock meets that solver at 82 Myr.
+    // magma-ocean solver. Geological time meets the solver just after +60 Myr.
     if (evo.formation && !evo.formation.complete) {
         const advanced = stepEarthMoonFormation(evo.formation, wallDtSeconds, evo.maximumYearsPerSecond);
         if (advanced && evo.formation.complete) {
@@ -2399,7 +2399,7 @@ export function evolutionStatus(evo) {
             lidOnsetLabel: null, plateOnsetLabel: null,
             rheologicalTransitionKelvin: rheologicalTransitionKelvin(),
             exposure: 1, earthHistory: null,
-            liberties: [formation.limitations, ...DEMO_LIBERTIES],
+            liberties: [formation.limitations],
             formation,
         };
     }
